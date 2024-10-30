@@ -1,143 +1,58 @@
-name: Build & Deploy BioSpring
+name: Build & Test
 
 on:
   push:
-    branches:
-      - develop
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  pull_request:
+  release:
 
 
 jobs:
-  build-test-biospring:
-    name: Build & Test BioSpring
+  build_and_test:
     runs-on: ubuntu-latest
     steps:
       - name: Install dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -qq \
-            cmake \
-            libnetcdf-c++4-dev \
+          sudo apt install -y cmake libnetcdf-c++4-dev g++
+
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
-      # Build & Test BioSpring -------------------------------------------------
-      - name: Build BioSpring
-        run: |
-          cmake . -B build -DBUILD_TESTS=ON
-          make -C build -j$(nproc)
-      
-      - name: Test BioSpring
-        run: make -C build test
 
-  get-mddriver-freesasa:
-    name: Get MDDriver & FreeSASA
-    runs-on: ubuntu-latest
-    needs: build-test-biospring
-
-    steps:
-      # - Get MDDriver ---------------------------------------------------------
       - name: Checkout MDDriver
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4
         with:
           repository: LBT-CNRS/MDDriver
-          path: mddriver_src
+          ref: master
+          path: mddriver-source
 
-      - name: Upload MDDriver Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: mddriver_src
-          path: mddriver_src
+      - name: Compile MDDriver
+        run: |
+          cd mddriver-source
+          cmake -S . -B build -DCMAKE_INSTALL_PREFIX=/mddriver
+          cmake --build build
+          sudo cmake --install build
 
-      # - Get FreeSASA ---------------------------------------------------------
       - name: Checkout FreeSASA
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4
         with:
           repository: mittinatten/freesasa
-          path: freesasa_src
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -qq \
-            git \
-            cmake \
-            autoconf \
-            libtool \
-            pkg-config \
+          ref: '2.1.2'
+          path: freesasa-source
 
-      - name: Configure FreeSASA
+      - name: Compile FreeSASA
         run: |
-          cd freesasa_src
+          cd freesasa-source
           git submodule init
           git submodule update
-          
-      - name: Upload FreeSASA Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: freesasa_src
-          path: freesasa_src
+          autoreconf -i
+          ./configure --prefix /freesasa --disable-json --disable-xml
+          make -j$(nproc) && sudo make install
 
 
-  deploy-docker-image:
-    name: Deploy Docker Image
-    runs-on: ubuntu-latest
-    needs: get-mddriver-freesasa
+      - name: Build BioSpring
+        run: |
+          cmake . -B build -DBUILD_TESTS=ON -DMDDRIVER_SUPPORT=ON -DMDDriver_DIR=/mddriver/share/cmake/ \
+            -DFREESASA_SUPPORT=ON -DFREESASA_PREFIX=/freesasa
+          make -C build -j$(nproc)
 
-    # Sets the permissions granted to the GITHUB_TOKEN for the actions in this job.
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4.2.2
-      
-      - name: Download MDDriver Artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: mddriver_src
-          path: mddriver_src
-
-      - name: Download FreeSASA Artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: freesasa_src
-          path: freesasa_src
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3.3.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5.5.1
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
-      - name: List project files
-        run: ls -la
-
-      - name: Build and push Docker image
-        id: push
-        uses: docker/build-push-action@v6.9.0
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v1.4.3
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
-      # ------------------------------------------------------------------------
+      - name: Test BioSpring
+        run: make -C build test
