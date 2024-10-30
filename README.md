@@ -47,25 +47,25 @@ Here is a list of the most important features added in this branch:
 
 ### Compilation
 
-### Dependencies
+### MacOS & Windows
+
+On these operating systems, we suggest you to use `conda` to install biopsring:
+
+    conda env create -f conda-env.yml -n biospring
+    conda activate biospring
+
+
+### Linux
 
 Cmake & NetCDF library installation is straightforward on Linux:
 
     apt install cmake libnetcdf-c++4-dev
 
-On macOS, it's quite convenient to use a dedicated conda environment:
-
-    conda env create -f conda-env.yml -n biospring
-    conda activate biospring
-
-### BioSpring
+Then, for BioSpring:
 
 ```
 git clone https://github.com/LBT-CNRS/biospring
 cd biospring/
-
-# On Windows with Microsoft Visual Studio 16 for example
-cmake -S . -B build -DCMAKE_INSTALL_PREFIX:PATH=/path/to/biospring/installation -G "Visual Studio 16 2019"
 
 # On Mac/Linux
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX:PATH=/path/to/biospring/installation
