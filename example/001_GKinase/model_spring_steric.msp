@@ -1,0 +1,44 @@
+#Molecular Simulation Parameter file
+# be careful of the syntax : parameter<space>=<space>value
+
+enableviscosity = true
+
+#in Da.fs-1
+viscosity = 0.1
+
+#in fs
+timestep  = 2.5
+nbsteps = -1 
+enablespring = true
+
+#samplerate = 1
+
+#pdbtrajfilename = traj.pdb
+#pdbtrajfreq = 1
+
+#csvsamplefilename = sample.csv
+#csvsamplefreq = 1
+
+
+## steric can be [disable, linear, lennard-jones-8-6Lewitt, lennard-jones-8-6Zacharias, lennard-jones-8-6Amber]
+steric = linear
+##in A
+stericcutoff = 8.0
+#
+#enablecoulomb = false
+#dielectric = 40.0
+##in A
+#coulombcutoff = 16.0
+
+springscale = 1.0
+coulombscale = 1.0
+stericscale = 1.0
+
+
+#enableconstraint = true
+#constraintsrc = arg_41_selection
+#constraintdest = thr_138_selection
+
+#in Da.A.fs-2
+#constraintmodule = 0.001 
+

@@ -1,0 +1,100 @@
+netcdf SpringNetwork {
+
+dimensions:
+	spatialdim = 3;
+	particle_number = $particlesnumber;
+	particlename_length = 4;
+	chainname_length = 4;
+	resname_length = 4;
+
+	springdim = 2; 
+	spring_number = $springsnumber;
+
+variables:
+	float   coordinates(particle_number, spatialdim); 
+	        coordinates:units = "angstrom" ;
+	        coordinates:long_name = "Particle coordinates";
+
+	int     particleids(particle_number); 
+	        particleids:long_name = "Particle ids in source database";
+
+	char    particlenames(particle_number,particlename_length); 
+	        particlenames:long_name = "Particle name";
+
+	float   charges(particle_number);
+	        charges:long_name = "Particle charge id";
+	        charges:units = "electron" ;
+
+	float   radii(particle_number);
+	        radii:units = "A" ;
+	        radii:long_name = "Particle radius";
+
+	float   epsilon(particle_number);
+	        epsilon:units = "kJ.mol-1" ;
+	        epsilon:long_name = "Particle epsilon for Lennard-Jones";
+
+	float   mass(particle_number);
+	        mass:units = "Da" ;
+	        mass:long_name = "Particle mass";
+
+	float   surfaceaccessibility(particle_number);
+	        surfaceaccessibility:units = "A2 or percent" ;
+	        surfaceaccessibility:long_name = "Particle surface accessibility";
+
+	float   hydrophobicityscale(particle_number);
+	        hydrophobicityscale:units = "kJ.mol-1" ;
+	        hydrophobicityscale:long_name = "Particle hydrophobicity scale (transfer energy)";
+
+	char    resnames(particle_number,resname_length); 
+	        resnames:long_name = "particle residue name";
+
+	int     resids(particle_number); 
+	        resids:long_name = "particle residue id";
+
+	char    chainnames(particle_number,chainname_length); 
+	        chainnames:long_name = "Chain name ";
+
+	byte    dynamicstate(particle_number); 
+	        dynamicstate:long_name = "particle dynamic state (static 0 or dynamic 1)";
+
+	int     springs(spring_number,springdim); 
+	        springs:long_name = "Spring between particle referenced by 2 particle ids"; 
+
+	float   springsstiffness(spring_number); 
+	        springsstiffness:long_name = "Spring stiffness";
+	float   springsequilibrium(spring_number); 
+	        springsequilibrium:long_name = "Spring distance equilibrium";
+data:
+	particleids = 
+$particleids ;
+	coordinates = 
+$coordinates ;
+	charges = 
+$charges ;
+	radii = 
+$radii ;
+	epsilon = 
+$epsilon ;
+	mass = 
+$mass ;
+	surfaceaccessibility = 
+$surfaceaccessibility ; 
+	hydrophobicityscale = 
+$hydrophobicityscale ;
+	particlenames = 
+$particlenames ;
+	resnames = 
+$resnames ;
+	resids = 
+$resids ;
+	chainnames = 
+$chainnames ;
+	dynamicstate = 
+$dynamicstate ;
+	springs = 
+$springs ; 
+	springsstiffness = 
+$springsstiffness ;
+	springsequilibrium = 
+$springsequilibrium ;
+}

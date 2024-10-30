@@ -1,0 +1,9 @@
+Language: Cpp
+BasedOnStyle: Microsoft
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: true
+PointerAlignment: Middle
+ReferenceAlignment: Middle
+AccessModifierOffset: -2
+IndentAccessModifiers: false

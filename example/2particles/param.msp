@@ -1,0 +1,14 @@
+#Molecular Simulation Parameter file
+
+#in fs
+simulation.nbsteps = -1
+simulation.timestep = 0.1
+simulation.samplerate = 10000
+
+spring.enable = 1
+spring.scale = 25
+
+#in Da.fs-1
+viscosity.enable = 1
+viscosity.value = 1
+

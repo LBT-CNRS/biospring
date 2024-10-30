@@ -1,0 +1,16 @@
+
+#ifndef __VERSION_H__
+#define __VERSION_H__
+
+
+#include <string>
+
+namespace biospring
+{
+
+static const std::string VERSION_STRING = "@BIOSPRING_VERSION@";
+
+} // namespace biospring
+
+
+#endif // __VERSION_H__

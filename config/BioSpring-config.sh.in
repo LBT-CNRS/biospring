@@ -1,0 +1,14 @@
+#!/bin/sh
+
+export BioSpring_ROOT="@CMAKE_INSTALL_PREFIX@"
+export BioSpring_PATH="${BioSpring_ROOT}/@BIN_INSTALL_DIR@"
+export BioSpring_DATA_PATH="${BioSpring_ROOT}/@DATA_INSTALL_DIR@"
+export BioSpring_SCRIPTS_PATH="${BioSpring_ROOT}/@SCRIPTS_INSTALL_DIR@"
+export BioSpring_DIR="${BioSpring_ROOT}/@CMAKEMOD_INSTALL_DIR@" 
+export BioSpring_LIBRARY_DIR="${BioSpring_ROOT}/@LIB_INSTALL_DIR@" 
+export BioSpring_INCLUDE_DIR="${BioSpring_ROOT}/@INCLUDE_INSTALL_DIR@" 
+export BioSpring_CONDA_LIBRARY_DIR="${CONDA_PREFIX}/lib"
+
+export PATH="${BioSpring_PATH}:${PATH}"
+export LD_LIBRARY_PATH="${BioSpring_LIBRARY_DIR}:${BioSpring_CONDA_LIBRARY_DIR}:${LD_LIBRARY_PATH}"
+export DYLD_LIBRARY_PATH="${BioSpring_LIBRARY_DIR}:${BioSpring_CONDA_LIBRARY_DIR}:${DYLD_LIBRARY_PATH}"

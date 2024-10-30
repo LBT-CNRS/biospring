@@ -1,0 +1,306 @@
+<center>
+![logo][]
+</center>
+
+[BioSpring][bs] Tutorial #1: Guanylate Kinase enzyme gymnastics
+==========================
+
+$Id$
+
+Welcome to the Guanylate Kinase (GK) tutorial for the [BioSpring][bs] software.
+
+You are about to study the Guanylate Kinase protein. This enzyme catalyzes the chemical monophosphate transfer reaction
+	
+	ATP + GMP -> ADP + GDP
+
+<center>
+![gksnap1][]
+</center>
+
+The GK protein has an open state, during which it waits for the binding of both an ATP and a GMP molecule, and a closed state during which the catalysis occurs. Each ligand binds to one tip of the crescent shape protein. To achieve catalysis, the two tips must come close together. These conformational changes are induced by ligand binding. Here we will see that GK's mechanical properties as well as its electrostatic interactions help to predetermine this behaviour.
+
+In this tutorial we use a coarse-grained (CG) model to represent the shape and surface properties of GK, strenghtened by a spring network to maintain the main structural properties. In addition to the standard elastic network model, a forcefield simulates the short and long range interactions between particles.
+
+To build this model and run the simulation, we will use ready-to-use *make* commands. You can of course take a look in the Makefile, where the detailed commands for each step are written, to see what is really happening. If you want to start over, type *make clean*.
+
+[BioSpring][bs] basics
+-------------
+
+The main goal of BioSpring is to enable the user to interactively explore the biomechanical properties of biomolecules using a spring network model at different scales (all atom, coarsed grain, CA, ...). There is currently no specific paper about BioSpring, but both Saladin et al. 2010 and Delalande et al. 2010 provide complementary descriptions of the methods used within BioSpring.
+Biospring is a simulation program which takes two files as input. The first one describes the structure and the biophysical properties of the system you want to study 
+using the binary NetCDF file format (.nc). The second one is a text file which describes the parameters and settings for the spring network simulation (.msp).
+
+### NetCDL file formats: .cdl and .nc 
+
+We chose NetCDF as file format to describe the structure and biophysical properties of the simulation system because it is well adapted to encode arrays such as positions, charges, radii, ... of an atom set. The format allows to quickly load a large quantity of data.
+
+There are two NetCDF formats: a human-readable one with .cdl extension and a binary one with .nc extension. A specific tool called *ncgen* exists within the netCDF library to convert a human-readable file *model.cdl* to the binary file *model.nc* using this command line :
+ 
+        ncgen -b -o model.nc model.cdl
+
+The .cdl file could as well be generated with your own tools.
+ 
+
+### BioSpring simulation parameter file .msp
+
+ * Example .msp file for BioSpring
+ 
+        #Molecular Simulation Parameter file
+        # be carefull on the syntax : parameter<space>=<space>value
+        
+        enableviscosity = true
+        
+        #Da.fs-1
+        viscosity = 0.1
+
+        #en kJ.mol-1.A-2
+        globalspringstiffness = 2.508
+
+        #fs
+        timestep  = 2.0
+        nbsteps = 1000
+        enablespring = true
+
+The Pipeline
+-------------
+
+As the input file format of BioSpring is a .nc file (binary NetCDF format), you need to use specific tools to convert .pdb or .pqr files to the .nc file format. These tools enable the user to provide rules to convert all atom representations (AA) to reduced coarse-grain (CG)  or carbon-alpha (CA) representions, before creating a spring network according to a distance cutoff.
+
+	atomistic (pdb) --> c-alpha CG model (pqr) (for visualization)
+			--> spring network (cdl) --> binary file (nc)
+
+Here, these conversions will be done for you by *make* commands. At the end of this tutorial you can find a more detailed discussion of this process.
+First, make sure to configure your environment and initiate BioSpring variables
+
+	source biospring_install_path/bin/BioSpring-config.sh
+
+where *biospring_install_path* is the path to the directory where BioSpring was installed. This could be something like *~/baaden/0_exe/biospring_install_CentOS_5.7_32bits/BioSpring*
+
+Generate the Coarse-Grained Model
+----------------------
+
+You need the following input files to create a coarse-grained representation of the protein:
+
+* model.pdb: the pdb file of GK's atomistic structure
+* model.grp: a dictionary file used to construct a reduced representation from an atomistic structure. Here, the translation is a simple residue to C-alpha mapping.
+* model.ff: the forcefield parameters for the particles created with *model.grp*. This will replace the carbon alpha atoms by a sphere with the average volume of
+the amino acid. The amino acid volumes were adapted from Counterman et
+al. 1999 and Linstrom and Mallard 2005.
+
+
+Check that you have all these files in the directory (and have a look at them, if you are curious). Then type
+
+	make model.pqr
+
+You should now be able to open and visualize the newly created file. Here we will use the [VMD][vmd] software. Open *model.pqr* with VMD and have a look at the CG model. Keep this file, it will be used to watch the running simulation.
+
+Generate the Spring Network
+------------------
+
+To create the spring network, type:
+
+	make model.cdl
+
+The generated cdl file contains the full topology of the system in a human readable format (e.g. you could modify the cdl file by hand). BioSpring reads a binary version of this file that can be generated by:
+	
+	make model.nc
+
+Actually, typing this last command runs all the necessary steps in cascade. 
+
+Running an Interactive Simulation
+--------------
+
+Please check that the file *model.msp* is present in the tutorial directory.
+It contains the simulation parameters for BioSpring.
+You can now launch your first run:
+
+	make run
+
+The run doesn't start immediately. It waits for an external viewer to connect to and interact with the simulation.
+
+Open *model.pqr* with VMD, set the representation to VDW and color by ResType. Then launch *IMD connect* in the Extensions->Simulation menu. The hostname should in most cases be *localhost* and the port will be 3000 by default. Click *connect*. (Note that there is actually a shortcut for all this by typing *make vis*).
+
+The simulation should start and... again, nothing happens in the viewer ! Is this expected ?
+
+Remember that by construction the starting structure will be the global minimum for the spring network, so actually the springs are at rest when you start the simulation. Furthermore, if you check the simulation parameters (*model.msp* file), you will notice that no forcefield features are activated. If you want to make the structure move, you need an external force to disrupt the resting system. To do so, activate the Force mode in VMD (Mouse -> Force -> Residue or keyboard shortcut "^") and add a force by clicking and dragging with the mouse on a particle. Try to play a bit with the system to get a feeling of how the spring network reacts and how it conserves the structure of the protein.
+
+<center>
+![gksnap2][]
+</center>
+
+You can now try to activate steric interactions. Stop the run (*Ctrl-c* in the console) and open the *model.msp* file. Set *steric* to linear. Re-run a simulation and try to push one particle into another. They should repel each other. Depending on the value of the *stericscale* parameter, you can observe violent interaction between the particles. If the simulation is too slow, increase the number of threads used for the simulation by typing the following environment variable setting in the console:
+
+	export OMP_NUM_THREADS=4
+
+The maximum number of threads depends on your computer. Try to keep at least one thread available for VMD.
+
+You can now activate the electrostatic interactions. Set *enablecoulomb* to *true*. Now you should observe attraction between oppositely charged residues. Try to stick the two tips of the structure together. You can increase the *coulombscale* value to observe the effect on the simulation.
+
+Automatic Simulation
+--------------------
+You can define automatic constraints to push a group of particles towards each other (or away) without manual interaction.  
+To do that, you can use the script *addselection2cdl.py* to add residue selections to the .cdl file. Open the model.pqr file and check the particle ids of residues ARG41 and THR138.
+Run the addselection2cdl.py script:
+	
+	./addselection2cdl.py model.cdl modelWsel.cdl arg41 thr138
+	
+The script will ask for the ids of the selections and create the *modelWsel.cdl* file. You can look at the difference between the two cdl files to see what has been added. Now you have to create a binary .nc file for BioSpring:
+	
+	ncgen -b -o modelWsel.nc modelWsel.cdl
+
+You have to define the constraints in the *.msp* file (they should already be defined, but not enabled).
+	
+	enableconstraint = true
+	constraintsrc = arg_41_selection
+	constraintdest = thr_138_selection
+	constraintmodule = 0.005	
+
+Now run BioSpring:
+
+	biospring -nc modelWsel.nc -msp model.msp -wait 1 -port 3000
+
+and connect a VMD session (using model.pqr) to the simulation.
+
+The two tips of the structure should get closer together. Try to play with the *constraintmodule* parameter to see how the spring network and forcefield can interfere with the constraint (and vice versa).
+
+Analyzing log files and trajectories
+--------------------
+So far we have mainly looked at the behavior of the molecule on the screen. More quantitative studies can be carried out by using log files and simulation trajectories. For this purpose, edit the model.msp file and uncomment the following lines:
+
+	pdbtrajfilename = traj.pdb
+	pdbtrajfreq = 1
+	csvsamplefilename = sample.csv
+	csvsamplefreq = 1
+
+In this example we write out every step, so the files will grow very big very quickly. For that reason, you better just do a short run and manipulate your structure, maybe opening and closing the U-shaped protein. The generated trajectory file will be called *traj.pdb*. You can open it with VMD and calculate properties such as RMSD for example. The *sample.csv* file contains three measurements: framerate, kinetic energy and spring energy. You can visualize these quantities with xmgrace by typing:
+
+	xmgrace -nxy sample.csv
+
+The data that can be written out will soon be extended to include forces and other
+interesting details. Right now, this can be achieved by using the *-debug 2* flag
+of BioSpring, which will generate an extensive log of the simulation on the standard
+output.
+
+Below you can see an example application (unpublished data courtesy of O. Delalande),
+where the RMSD of an interactive manipulation with BioSpring is mapped against available crystal structures, ordered from open to closed conformations of the adenylate kinase enzyme, very closely related to GK (see Beckstein et al. 2009).
+
+<center>
+![gksnap3][]
+</center>
+
+Conclusion
+----------
+Now you know the basics of [BioSpring][bs]. You can try more features in the other BioSpring tutorials about docking, membrane insertion and sidechain rotamers.
+
+Appendix: Prepare BioSpring input files using pdb2cdl
+----------------------------
+In the tutorial directory, you can find three files used to generate the *model.cdl* file needed by BioSpring as input. The first one is the *model.pdb* file, that describes the molecular conformation of the system you want to study.
+The second one is the *model.grp* file, which contains rules to convert all atom (AA) representations in the .pdb file to Carbon Alpha (CA) representation. The third one is the *model.ff* file, which contains the biophysical 
+parameters that must be used for each particle (atom types, coarsed grain description, CA, ...). For this part of the tutorial, biophysical parameters will not be used.
+
+To prepare the BioSpring input .cdl file from a .pdb file, you should use this command :  
+        
+        pdb2cdl -pdb model.pdb -cdl model.cdl -grp model.grp -ff model.ff -springcutoff 9.0
+
+### File format for reducing AA representation to CG or CA representation. 
+
+The *model.grp* file contains rules to convert AA representation to CA or CG representation. The format of the file is very simple. The first column 
+is the name you give to the target particle (a particle is an amino acid in our case), the second one is the name of the amino acid name that appears in the .pdb file, and the other ones are the atom names that appear in the .pdb file and which have to be mapped to the target particle. Columns must be separated by one space.
+
+ * Example .grp file to convert AA representation to CA representation (using amino acid backbones and not only CA atoms)
+
+        ##### AA to CA model : group for atoms to create bead
+        ACA ALA N CA C O CB
+        RCA ARG N CA C O CB CG CD NE CZ NH1 NH2
+        NCA ASN N CA C O CB CG OD1 ND2
+        DCA ASP N CA C O CB CG OD1 OD2
+        CCA CYS N CA C O CB SG
+        QCA GLN N CA C O CB CG CD OE1 NE2
+        GCA GLY N CA C O
+        ECA GLU N CA C O CB CG CD OE1 OE2
+        HCA HIS N CA C O CB CG ND1 CD2 CE1 NE2
+        ICA ILE N CA C O CB CG1 CG2 CD1
+        LCA LEU N CA C O CB CG CD1 CD2
+        KCA LYS N CA C O CB CG CD CE NZ
+        MCA MET N CA C O CB CG SD CE
+        FCA PHE N CA C O CB CG CD1 CD2 CE1 CE2 CZ
+        PCA PRO N CA C O CB CG CD
+        SCA SER N CA C O CB CO
+        TCA THR N CA C O CB OG1 CG2
+        WCA TRP N CA C O CB CG CD1 CD2 NE1 CE2 CE3 CZ2 CZ3 CH2
+        YCA TYR N CA C O CB CG CD1 CD2 CE1 CE2 CZ OH
+        VCA VAL N CA C O CB CG1 CG2
+
+The first line of this file means that the ACA target particle is created when atom names N, CA, C, O, CB (backbone) in an amino acid named ALA, are parsed in the .pdb file. 
+The target particle position is computed using the barycentre of these atom positions.
+
+
+### File format for applying force field parameters to target particles.
+
+The *model.ff* file contains particle based force field parameters which must be applied on each target particle, such as charge, radius, epsilon, mass and transferIMP (see IMPALA references - to be documented).
+
+ * Example .ff file to apply a particle based force field on new particle targets
+
+        #type   charge(e)       radius(A)       epsilon(kJ.mol-1)       mass(Da)        transferIMP(kJ.mol-1.A-2)
+        ACA     0.00    2.88    1.00000 89.00   1.28278 
+        RCA     1.00    3.47    1.00000 174.00  -4.17938
+        NCA     0.00    3.13    1.00000 132.00  -2.4828 
+        DCA     -1.00   3.00    1.00000 133.00  -3.18626
+        CCA     0.00    3.03    1.00000 121.00  6.37252 
+        QCA     0.00    3.34    1.00000 146.00  -0.91036
+        ECA     -1.00   3.22    1.00000 147.00  -2.64832
+        GCA     0.00    2.58    1.00000 75.00   0        
+        HCA     1.00    3.38    1.00000 155.00  0.53794 
+        ICA     0.00    3.47    1.00000 131.00  7.4484  
+        LCA     0.00    3.49    1.00000 131.00  7.0346  
+        KCA     1.00    3.44    1.00000 146.00  -4.09662
+        MCA     0.00    3.47    1.00000 149.00  5.08974 
+        FCA     0.00    3.64    1.00000 165.00  7.40702 
+        PCA     0.00    3.20    1.00000 115.00  2.97936 
+        SCA     0.00    2.89    1.00000 105.00  -0.16552
+        TCA     0.00    3.12    1.00000 119.00  1.07588
+        WCA     0.00    3.85    1.00000 204.00  9.3105
+        YCA     0.00    3.66    1.00000 181.00  3.97248
+        VCA     0.00    3.30    1.00000 117.00  5.04836
+
+The first line of this file means that the target particle you named ACA in the .grp file is created, a charge of 0.0 e is used, with a radius of 2.88 A, an epsilon of 1.0 kJ.mol-1 a mass of 89.0 D, and an IMP transfer energy of 1.28278 kJ.mol-1.A-2.
+
+Related work
+------------
+* S. Sacquin-Mora, O. Delalande, M. Baaden: [Functional Modes and Residue Flexibility Control the Anisotropic Response of Guanylate Kinase to Mechanical Stress][gk2paper] ; BIOPHYS J (2010) 99, 3412-3419
+* O. Delalande, S. Sacquin-Mora, M. Baaden: [Enzyme closure and nucleotide binding structurally lock guanylate kinase][gk1paper] ; BIOPHYSICAL JOURNAL (2011) 101
+* some more information is available at [this project website][fonflonweb]
+* A. Saladin, C. Amourda, P. Poulain, N. Ferey, M. Baaden, M. Zacharias, O. Delalande, C. Prevost: [Modeling the early stage of DNA sequence recognition within RecA nucleoprotein filaments][recapaper] ; NUCLEIC ACIDS RES. (2010) 38, 6313
+* O. Delalande, N. Ferey, B. Laurent, M. Gueroult, B. Hartmann, M. Baaden: [Multi-resolution approach for interactively locating functionally linked ion binding sites by steering small molecules into electrostatic potential maps using a haptic device][psbpaper] ; PAC SYMP BIOCOMPUT (2010) 205
+* Counterman, A. E. and Clemmer, D. E. Volumes of Individual Amino Acid Residues in Gas-Phase Peptide Ions. J. Am. Chem. Soc. (1999) 121, 4031-4039.
+* P.J. Linstrom and W.G. Mallard, Eds., NIST Chemistry WebBook, NIST Standard Reference Database Number 69, June 2005, National Institute of Standards and Technology, Gaithersburg MD, 20899 (http://webbook.nist.gov)
+* O. Beckstein, E.J. Denning, J.R. Perilla, T.B. Woolf, Zipping and unzipping of adenylate kinase: atomistic insights into the ensemble of open<-->closed transitions. J Mol Biol. (2009) 394, 160-76.
+
+Troubleshooting
+---------------
+* please note that this tutorial assumes you are working under an sh-like shell. It will not work with csh for example. If you have trouble, try *sh* or *bash* and run the tutorial from within this environment.
+
+The end!
+------------
+
+We hope you enjoy interactive simulations via [MDDriver][mdd] and [BioSpring][bs]. Please let us know about your applications and discoveries!
+
+Copyright and License
+================================================
+This program and tutorial is under the [CeCill licence][cecill], which is compatible with the GPL licence.
+
+<!-- REFERENCES -->
+[logo]: bslogo.jpg "BioSpring logo"
+[gksnap1]: gkview.jpg "A view of the GK enzyme"
+[gksnap2]: gkimd.jpg "Starting an interactive experiment on the GK enzyme"
+[gksnap3]: gkrmsd.jpg "An interactive experiment compared to crystal structures"
+[vmdsnap2]: ../images/vmd2.png "Connect to the simulation"
+[cecill]: http://www.cecill.info/index.en.html "CeCill licence"
+[vmd]: http://www.ks.uiuc.edu/Research/vmd/ "http://www.ks.uiuc.edu/Research/vmd/"
+[fonflonweb]: http://www.baaden.ibpc.fr/projects/fonflon/ "http://www.baaden.ibpc.fr/projects/fonflon/"
+[recapaper]: http://dx.doi.org/10.1093/nar/gkq459 "http://dx.doi.org/10.1093/nar/gkq459"
+[psbpaper]: http://www.ncbi.nlm.nih.gov/pubmed?term=19908373 "http://www.ncbi.nlm.nih.gov/pubmed?term=19908373"
+[gk1paper]: http://dx.doi.org/10.1016/j.bpj.2011.07.048 "http://dx.doi.org/10.1016/j.bpj.2011.07.048"
+[gk2paper]: http://dx.doi.org/10.1016/j.bpj.2010.09.026 "http://dx.doi.org/10.1016/j.bpj.2010.09.026"
+[mdd]: http://mddriver.sourceforge.net/ "http://mddriver.sourceforge.net"
+[bs]: http://biospring.sourceforge.net/ "http://biospring.sourceforge.net"
