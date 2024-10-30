@@ -53,6 +53,10 @@ Cmake & NetCDF library installation is straightforward on Linux:
 
     apt install cmake libnetcdf-c++4-dev
 
+On macOS, it's quite convenient to use a dedicated conda environment:
+
+    conda env create -f conda-env.yml -n biospring
+    conda activate biospring
 
 ### BioSpring
 
