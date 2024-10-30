@@ -3,6 +3,7 @@
 
 #include <Vector3f.h>
 #include "Quaternion.h"
+#define _USE_MATH_DEFINES
 #include <cmath>
 #include <iostream>
 #include "InsertionVector.h"
@@ -33,21 +34,21 @@ class RigidBody
       : pos_ini(0.0),
         cur_pos(0.0)
     {}
-    
+
     inline biospring::spn::SpringNetwork * getSpringNetwork() const { return _spn; }
 
     void fetchParameters();
     RigidBody(spn::SpringNetwork * sp,
           unsigned newRbId,
-          std::vector<unsigned int> particles, 
+          std::vector<unsigned int> particles,
           std::vector<unsigned int> interactionParticles = std::vector<unsigned int>(0));
 
     void UpdateSpringsState(bool isStatic);
     unsigned rbid;
 
     std::vector<unsigned> getParticlesIds() const { return _particulesIds; }
-    
-  
+
+
     // Initialization
     void init();
     double computeTotalMass();
@@ -88,7 +89,7 @@ class RigidBody
     void solveMonteCarlo();
     /* ---------------------------------------------------------------------------------------------------------------*/
     // Rigid body dynamics computation
-    
+
     int applydepthrestraint = 0;
     double depth_restraint = 0;
     double depth_restraint_scaling = 0;
@@ -98,7 +99,7 @@ class RigidBody
     double angle_restraint = 0;
     double angle_restraint_scaling = 0;
     void applyAngleRestraint();
-    
+
     int withoutRotational = 0;
     Vector3f external_force;
     Vector3f external_torque;
@@ -153,7 +154,7 @@ class RigidBody
     std::vector<unsigned> _interactionHydrophilicParticles;
 
     std::vector<Vector3f> _p0;
-    double _dt;        
+    double _dt;
     double _dmax; // Maximum distance from barycentre to the farthest atom in the structure
     // time step size
 
@@ -169,7 +170,7 @@ class RigidBody
 
     Quaternion _orientation;
 
-    /* Derived quantities (auxiliary variables) */            
+    /* Derived quantities (auxiliary variables) */
     Vector3f   _v;                         /* v(t) */
     Vector3f   _a;                         /* a(t) */
     Vector3f   _alpha;                         /* angular acceleration */

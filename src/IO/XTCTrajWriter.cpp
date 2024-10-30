@@ -1,5 +1,5 @@
 
-
+#include <vector>
 #include "XTCTrajWriter.h"
 
 #include "Particle.h"
@@ -13,7 +13,7 @@ void XTCTrajWriter::writeNextStep()
 {
     /* copy the atom coordinates into a float array */
     size_t natoms = _spn->getNumberOfParticles();
-    rvec x_xtc[natoms];
+    std::vector<rvec> x_xtc(natoms);
     for (size_t i = 0; i < natoms; ++i)
     {
         const biospring::spn::Particle & p = _spn->getParticle(i);

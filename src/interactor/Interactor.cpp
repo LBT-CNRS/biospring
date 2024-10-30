@@ -1,12 +1,8 @@
 #include "interactor/Interactor.h"
 #include "SpringNetwork.h"
 
-Interactor::Interactor() : _springnetwork(nullptr), _nbpositions(0), _sleepDuration(1000), _isRunning(false)
-{
-	pthread_mutex_t mutextmp1 = PTHREAD_MUTEX_INITIALIZER;
-	mutex=mutextmp1;
-}
-	
+Interactor::Interactor() : _springnetwork(nullptr), _nbpositions(0), _sleepDuration(1000), _isRunning(false) {}
+
 
 void Interactor::initializeSystemState()
 {
@@ -35,21 +31,16 @@ void Interactor::startInteractionThread()
 {
 	_isRunning = true;
 	int rc;
-	rc = pthread_create(&_thread, NULL, runthread, (void *) this);
-
-	if (rc)
-	{
-		exit(-1);
-	}
+    _thread = thread(runthread,(void *) this);
 }
 
 
 void* Interactor::runthread(void* userdata)
 {
     Interactor* interactor = static_cast<Interactor*>(userdata);
-    pthread_mutex_lock(&interactor->mutex);
+    &interactor->_mutex.lock();
     interactor->setupInteraction();
-    pthread_mutex_unlock(&interactor->mutex);
+    &interactor->_mutex.unlock();
     while (interactor->continueInteractionThread())
     {
         interactor->processInteractions();

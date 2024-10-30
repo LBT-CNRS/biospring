@@ -2,8 +2,8 @@
 #define _INTERACTOR_H_
 
 #include <cstring>
-#include <pthread.h>
-#include <unistd.h>
+#include <thread>
+#include <mutex>
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -157,8 +157,8 @@ class Interactor
 
     virtual void syncParticleStateData(unsigned index) = 0;
 
-    pthread_t _thread;
-    pthread_mutex_t mutex;
+    std::thread _thread;
+    std::mutex _mutex;
     bool _isRunning;
 
     static void* runthread(void* userdata);

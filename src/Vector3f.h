@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <ostream>
+#include <string>
 
 // Three dimensions vector with single floating point precision, used for position, velocity, or force.
 //
@@ -164,7 +165,7 @@ class Vector3f
     /**Return the components of this vector to string format
 	@return the components in string format
 	*/
-	inline std::string to_string() 
+	inline std::string to_string()
 	{
 		return "x: "+std::to_string(_x)+" y: "+std::to_string(_y)+" z: "+std::to_string(_z);
 	}
