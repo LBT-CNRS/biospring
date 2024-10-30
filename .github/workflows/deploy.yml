@@ -1,9 +1,9 @@
-name: Build & Deploy BioSpring
+name: Deploy BioSpring
 
 on:
   push:
-    branches:
-      - develop
+  pull_request:
+  release:
 
 env:
   REGISTRY: ghcr.io
@@ -11,31 +11,9 @@ env:
 
 
 jobs:
-  build-test-biospring:
-    name: Build & Test BioSpring
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -qq \
-            cmake \
-            libnetcdf-c++4-dev \
-      - name: Checkout repository
-        uses: actions/checkout@v4.2.2
-      # Build & Test BioSpring -------------------------------------------------
-      - name: Build BioSpring
-        run: |
-          cmake . -B build -DBUILD_TESTS=ON
-          make -C build -j$(nproc)
-
-      - name: Test BioSpring
-        run: make -C build test
-
   get-mddriver-freesasa:
     name: Get MDDriver & FreeSASA
     runs-on: ubuntu-latest
-    needs: build-test-biospring
 
     steps:
       # - Get MDDriver ---------------------------------------------------------
@@ -57,15 +35,6 @@ jobs:
         with:
           repository: mittinatten/freesasa
           path: freesasa_src
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -qq \
-            git \
-            cmake \
-            autoconf \
-            libtool \
-            pkg-config \
 
       - name: Configure FreeSASA
         run: |
