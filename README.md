@@ -45,17 +45,29 @@ Here is a list of the most important features added in this branch:
 
 - UnityMol (http://unitymol.sourceforge.net/) or VMD visualization software (http://www.ks.uiuc.edu/Research/vmd/)
 
-### Compilation
 
-### MacOS & Windows
+### Conda
 
-On these operating systems, we suggest you to use `conda` to install biopsring:
+A `conda-env.yml` is provided to easily set up a conda environnement with BioSpring (with MDDriver and FreeSASA support) installed:
 
     conda env create -f conda-env.yml -n biospring
     conda activate biospring
 
+This is the recommended way for MacOS and Windows OS.
 
-### Linux
+
+### Docker
+
+A docker file `Dockerfile` is also provided to set up a docker container with BioSpring (with MDDriver and FreeSASA support).
+
+Also, docker images are built and provided through the Container registry of GitHub. They are available trough the [Packages link](https://github.com/LBT-CNRS/biospring/pkgs/container/biospring).
+
+Docker images are built only when tags or Release are created.
+
+
+### Compilation
+
+#### Linux
 
 Cmake & NetCDF library installation is straightforward on Linux:
 
