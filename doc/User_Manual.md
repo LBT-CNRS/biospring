@@ -91,11 +91,15 @@ Example of `.msp` file for BioSpring:
 
 After generating model.nc file and setting simulation parameters model.msp and you can launch BioSpring using this command:
 
-    biospring  -s model.nc -c model.msp
+    biospring -s model.nc -c model.msp
 
 Be carefull that you have set constraints and output parameters to get results. Indeed, without constraints, there is no reason that the spring
 network comes out the initial equilibriumn, and without output parameters, you won't be able to get any results.
 
+Or run the Docker image:
+
+	docker run --init -v ./:/data ghcr.io/lbt-cnrs/biospring \
+		biospring -s /data/model.nc -c /data/model.msp
 
 ### with interaction via VMD using MDDriver
 
@@ -109,8 +113,12 @@ We advice you to try BioSpring with MDDriver and VMD to understand how this inte
 
 To run BioSpring with VMD and MDDriver, start by launching the BioSpring tools with these MDDriver parameters.
 
-	biospring  -c model.nc -s model.msp --wait 1 --port 3000 --log model.log
+	biospring -c model.nc -s model.msp --wait --port 3000 --log model.log
 
+Or run the Docker image:
+
+	docker run -p 3000:3000 --init -v ./:/data ghcr.io/lbt-cnrs/biospring \
+		biospring -s /data/model.nc -c /data/model.msp --wait --port 3000
 
 #### Lauching VMD
 Start the VMD program (double click on its icon or launch from the command line).
