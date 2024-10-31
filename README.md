@@ -64,6 +64,11 @@ Also, docker images are built and provided through the Container registry of Git
 
 Docker images are built only when tags or Release are created.
 
+Pull the Docker Image:
+
+    docker pull ghcr.io/lbt-cnrs/biospring:latest
+
+Please read [User Manual](doc/User_Manual.md) for detailed usage of the docker image.
 
 ### Compilation
 
