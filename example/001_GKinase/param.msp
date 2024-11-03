@@ -10,9 +10,9 @@ pdbtrajectory.enable = 0
 pdbtrajectory.path = traj.pdb
 pdbtrajectory.frequency = 1
 
-csvtrajectory.enable = 0
-csvtrajectory.path = sample.csv
-csvtrajectory.frequency = 1
+csvsampling.enable = 0
+csvsampling.path = sample.csv
+csvsampling.frequency = 1
 
 # -----------------------------------
 spring.enable = 1
