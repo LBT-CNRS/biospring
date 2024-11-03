@@ -24,7 +24,7 @@ viscosity.value = 0.1
 
 # -----------------------------------
 steric.enable = 0
-steric.scale = 1.0
+steric.gridscale = 1.0
 steric.cutoff = 8.0
 
 coulomb.enable = 0
