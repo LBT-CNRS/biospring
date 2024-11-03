@@ -1,0 +1,41 @@
+#Molecular Simulation Parameter file
+# be careful of the syntax : parameter<space>=<space>value
+
+# -----------------------------------
+simulation.timestep  = 2.5
+simulation.nbsteps = -1
+#simulation.samplerate = 1
+
+pdbtrajectory.enable = 0
+pdbtrajectory.path = traj.pdb
+pdbtrajectory.frequency = 1
+
+csvtrajectory.enable = 0
+csvtrajectory.path = sample.csv
+csvtrajectory.frequency = 1
+
+# -----------------------------------
+spring.enable = 1
+spring.scale = 1.0
+
+# -----------------------------------
+viscosity.enable = 1
+viscosity.value = 0.1
+
+# -----------------------------------
+steric.enable = 0
+steric.scale = 1.0
+steric.cutoff = 8.0
+
+coulomb.enable = 0
+coulomb.scale = 1.0
+coulomb.dielectric = 40.0
+coulomb.cutoff = 16.0
+
+
+# contraint parameters not available yet
+#constraint.enable = 1
+#constraint.src = arg_41_selection
+#constraint.dest = thr_138_selection
+#constraint.module = 0.001 
+
