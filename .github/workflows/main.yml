@@ -14,7 +14,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt-get install -y cmake libnetcdf-c++4-dev g++
+          sudo apt-get install -y cmake libnetcdf-c++4-dev g++ libc++-dev libc++abi-dev
 
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
