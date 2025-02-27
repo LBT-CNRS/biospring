@@ -1,0 +1,78 @@
+name: Build Docker Image for Local Debug
+
+on:
+  workflow_dispatch: # The workflow is triggered manually 
+
+env:
+  IMAGE_NAME: biospring-debug
+
+jobs:
+
+  get-mddriver-freesasa:
+      name: Get MDDriver & FreeSASA
+      runs-on: ubuntu-latest
+
+      steps:
+        # - Get MDDriver ---------------------------------------------------------
+        - name: Checkout MDDriver
+          uses: actions/checkout@v4.2.2
+          with:
+            repository: LBT-CNRS/MDDriver
+            path: mddriver_src
+
+        - name: Upload MDDriver Artifacts
+          uses: actions/upload-artifact@v3
+          with:
+            name: mddriver_src
+            path: mddriver_src
+
+        # - Get FreeSASA ---------------------------------------------------------
+        - name: Checkout FreeSASA
+          uses: actions/checkout@v4.2.2
+          with:
+            repository: mittinatten/freesasa
+            path: freesasa_src
+
+        - name: Configure FreeSASA
+          run: |
+            cd freesasa_src
+            git submodule init
+            git submodule update
+
+        - name: Upload FreeSASA Artifacts
+          uses: actions/upload-artifact@v3
+          with:
+            name: freesasa_src
+            path: freesasa_src
+
+
+  build-debug-image:
+    name: Build Debug Docker Image Locally
+    runs-on: ubuntu-latest
+    needs: get-mddriver-freesasa
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      # Télécharger les sources si nécessaire (MDDriver et FreeSASA)
+      - name: Download MDDriver Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: mddriver_src
+          path: mddriver_src
+
+      - name: Download FreeSASA Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: freesasa_src
+          path: freesasa_src
+
+      # Construire l'image Docker en mode Debug local
+      - name: Build Docker Image in Debug Mode
+        run: |
+          docker build --build-arg CMAKE_BUILD_TYPE=Debug -t ${IMAGE_NAME} .
+
+      - name: Verify the built image locally
+        run: |
+          docker images ${IMAGE_NAME}
