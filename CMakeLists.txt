@@ -7,7 +7,7 @@ project(BioSpring)
 # Program version.
 set(BIOSPRING_VERSION_MAJOR 1)
 set(BIOSPRING_VERSION_MINOR 1)
-set(BIOSPRING_VERSION_PATCH 0)
+set(BIOSPRING_VERSION_PATCH 1)
 
 # ############################################################################
 #

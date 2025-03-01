@@ -117,8 +117,16 @@ To run BioSpring with VMD and MDDriver, start by launching the BioSpring tools w
 
 Or run the Docker image:
 
-	docker run -p 3000:3000 --init -v ./:/data ghcr.io/lbt-cnrs/biospring \
-		biospring -s /data/model.nc -c /data/param.msp --wait --port 3000
+	docker run --rm -p 3000:3000 --init -v ./:/data ghcr.io/lbt-cnrs/biospring \
+		biospring -s model.nc -c param.msp --wait --port 3000
+
+Use an alias for convenience:  
+You can simplify the command by creating an alias and run the image with a shorter command:
+
+	alias biospring-run='docker run --rm -p 3000:3000 --init -v ./:/data ghcr.io/lbt-cnrs/biospring biospring'
+
+	biospring-run -s model.nc -c param.msp --wait --port 3000
+
 
 #### Lauching VMD
 Start the VMD program (double click on its icon or launch from the command line).
