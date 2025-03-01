@@ -1,0 +1,52 @@
+#--- GeneralSimulation ---
+simulation.timestep = 0.1
+simulation.samplerate = 5000
+#simulation.nbsteps = 10000
+
+#--- GeneralSimulation:Trajectory ---
+csvsampling.enable = 0
+csvsampling.path = csv_results/ims_out.csv
+csvsampling.frequency = 1
+
+#--- SpringNetwork ---
+spring.enable = 0
+spring.scale = 100.0
+
+viscosity.enable = 1
+viscosity.value = 0.01
+
+#--- FF:Steric ---
+steric.enable = 0
+steric.cutoff = 16
+
+#--- FF:Electrostatic ---
+
+coulomb.enable = 0
+coulomb.dielectric = 80
+
+#--- FF:Density ---
+
+#--- FF:IMPALA ---
+impala.enable = 1
+impala.scale = 10.0
+
+#--- InsertionVector ---
+insertionvector.enable = 1
+# Lys-34-CA Val45-CA, check PDB file & biospring output to verify
+insertionvector.vector = 34 45
+
+
+#--- Rigid body ---
+rigidbody.enable = 1
+rigidbody.enablesampling = 0
+rigidbody.enablemontecarlo = 0
+rigidbody.montecarlo_translation_norm = 0.01
+rigidbody.montecarlo_rotation_norm = 0.01
+rigidbody.montecarlo_temperature = 298.1
+
+
+#--- FF:Hydrophobic ---
+
+#--- FF:Probe ---
+
+#--- AutomaticConstraints ---
