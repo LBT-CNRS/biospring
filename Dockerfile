@@ -71,3 +71,9 @@ ENV BioSpring_ROOT="/biospring" \
     BioSpring_LIBRARY_DIR="/biospring/lib" \
     BioSpring_INCLUDE_DIR="/biospring/include" \
     PATH="/biospring/bin:/usr/local/bin/:${PATH}" 
+
+# Create the /data directory for external mounts
+RUN mkdir -p /data
+
+# Set /data as the working directory
+WORKDIR /data
