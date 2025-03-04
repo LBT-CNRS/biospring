@@ -25,7 +25,7 @@ insertionvector.vector = 513 660
 
 #--- Rigid body ---
 rigidbody.enable = 1
-rigidbody.enablesampling = 1
+rigidbody.enablesampling = 0
 rigidbody.enablemontecarlo = 0
 rigidbody.montecarlo_translation_norm = 0.01
 rigidbody.montecarlo_rotation_norm = 0.01
