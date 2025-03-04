@@ -73,13 +73,13 @@ jobs:
         uses: actions/checkout@v4.2.2
 
       - name: Download MDDriver Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: mddriver_src
           path: mddriver_src
 
       - name: Download FreeSASA Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: freesasa_src
           path: freesasa_src
