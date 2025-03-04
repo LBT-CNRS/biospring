@@ -1,4 +1,7 @@
-# BioSpring
+# BioSpring 
+
+![GitHub Release](https://img.shields.io/github/v/release/LBT-CNRS/biospring)
+
 
 BioSpring is a molecular simulation software based on a spring network, especially designed for
 interactive simulations. The main goal of BioSpring is to allow user to interactively explore the biomechanical properties biomolecule using spring network model at different scales (all atom, coarsed grain, Carbon-Alpha, ...).
