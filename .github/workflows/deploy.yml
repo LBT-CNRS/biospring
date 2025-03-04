@@ -31,7 +31,7 @@ jobs:
           path: mddriver_src
 
       - name: Upload MDDriver Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: mddriver_src
           path: mddriver_src
@@ -50,7 +50,7 @@ jobs:
           git submodule update
 
       - name: Upload FreeSASA Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: freesasa_src
           path: freesasa_src
