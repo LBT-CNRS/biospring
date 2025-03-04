@@ -1,3 +1,10 @@
+RED    = \033[0;31m
+GREEN  = \033[0;32m
+YELLOW = \033[0;33m
+BLUE   = \033[0;34m
+RESET  = \033[0m
+# ---------------------------------------------------------------------
+
 IMAGE = ghcr.io/lbt-cnrs/biospring
 PDB2SPN = pdb2spn
 BIOSPRING = biospring
@@ -92,3 +99,20 @@ run :
 				 -c $(MSP) \
 				 --wait --port 3000 \
 				 --sasa-classifier biospring
+
+expose_data:
+	@echo "Host machine: $(GREEN)$(shell hostname)$(RESET)"
+	@echo "On the client side, you can retrive the data with the following command:"
+	@echo "\n    $(GREEN)make get_data HOSTNAME=$(shell hostname)$(RESET)\n"
+	@docker run --network host --rm --init -v $(PWD):/data $(IMAGE) python -m http.server 4000 --directory /data
+
+get_data :
+	@if [ -z "$(HOSTNAME)" ]; then \
+		echo "$(RED)Usage: make get_data HOSTNAME=<hostname>$(RESET)"; \
+		exit 1; \
+	fi
+
+	@echo "$(GREEN)Retrieving data from http://$(HOSTNAME):4000/model.* ...$(RESET)"
+	@wget -q -r -np -nH  --accept-regex='model.*' http://$(HOSTNAME):4000/
+	@rm index.html
+
