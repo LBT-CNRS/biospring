@@ -94,7 +94,7 @@ prep : martinize pause pdb2spn
 #        even viscosity).
 run : 
 	@echo "Run BioSpring"
-	docker run --hostname biospring-docker --rm -p 3000:3000 --init -v $(PWD):/data $(IMAGE) \
+	docker run --network host --rm --init -v $(PWD):/data $(IMAGE) \
 	$(BIOSPRING) -s $(NC) \
 				 -c $(MSP) \
 				 --wait --port 3000 \
