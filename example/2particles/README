@@ -2,10 +2,6 @@
 
 This a very simple system with 2 particles. The file `model.vmd` is optional and use for a VMD visualization.
 
-### Generate the .nc file from the pdb
-
-     pdb2spn -s 2particles.pdb -o model.nc
-
 ### Launch the simulation
 
-    biospring -s model.nc -c param.msp
+    make run / make run_now
