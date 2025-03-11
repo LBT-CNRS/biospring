@@ -89,16 +89,16 @@ clean:
 #        even viscosity).
 run : 
 	@echo "Run BioSpring"
-	docker run --network host --rm --init -v $(PWD):/data $(IMAGE) \
+	docker run -p 8888:8888 --rm --init -v $(PWD):/data $(IMAGE) \
 	$(BIOSPRING) -s $(NC) \
 				 -c $(MSP) \
-				 --wait --port 3000 \
+				 --wait --port 8888 \
 				 --sasa-classifier biospring
 
 # Run the BioSpring simulation without waiting for the connection
 run_now:
 	@echo "Run BioSpring NOOOW !!!!"
-	docker run --network host --rm --init -v $(PWD):/data $(IMAGE) \
+	docker run -p 8888:8888 --rm --init -v $(PWD):/data $(IMAGE) \
 	$(BIOSPRING) -s $(NC) \
 				 -c $(MSP) \
 				 --sasa-classifier biospring
@@ -111,7 +111,7 @@ expose_data:
 	@echo "Host machine: $(GREEN)$(shell hostname)$(RESET)"
 	@echo "On the client side, you can retrive the data with the following command:"
 	@echo "\n    $(GREEN)make get_data HOSTNAME=$(shell hostname)$(RESET)\n"
-	@docker run --network host --rm --init -v $(PWD):/data $(IMAGE) python -m http.server 4000 --directory /data
+	@docker run -p 4000:4000 --rm --init -v $(PWD):/data $(IMAGE) python -m http.server 4000 --directory /data
 
 # Retrieve the data from the host machine
 get_data :

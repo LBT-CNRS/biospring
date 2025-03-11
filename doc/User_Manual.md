@@ -113,20 +113,22 @@ We advice you to try BioSpring with MDDriver and VMD to understand how this inte
 
 To run BioSpring with VMD and MDDriver, start by launching the BioSpring tools with these MDDriver parameters.
 
-	biospring -c model.nc -s param.msp --wait --port 3000 --log model.log
+	biospring -c model.nc -s param.msp --wait --port 8888 --log model.log
 
 Or run the Docker image:
 
-	docker run --rm -p 3000:3000 --init -v ./:/data ghcr.io/lbt-cnrs/biospring \
-		biospring -s model.nc -c param.msp --wait --port 3000
+	docker run --rm -p 8888:8888 --init -v ./:/data ghcr.io/lbt-cnrs/biospring \
+		biospring -s model.nc -c param.msp --wait --port 8888
 
-Use an alias for convenience:  
+Or use an alias for convenience:  
 You can simplify the command by creating an alias and run the image with a shorter command:
 
-	alias biospring-run='docker run --rm -p 3000:3000 --init -v ./:/data ghcr.io/lbt-cnrs/biospring biospring'
+	alias biospring-run='docker run --rm -p 8888:8888 --init -v ./:/data ghcr.io/lbt-cnrs/biospring biospring'
 
-	biospring-run -s model.nc -c param.msp --wait --port 3000
+	biospring-run -s model.nc -c param.msp --wait --port 8888
 
+Or reuse the Makefile in the example directory:  
+Copy the file `example/base.mk` and some of other Makefile in example subdir as template for your own system (see README in example directory for usage)
 
 #### Lauching VMD
 Start the VMD program (double click on its icon or launch from the command line).

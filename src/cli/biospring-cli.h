@@ -17,7 +17,7 @@ const std::string PROGRAM_VERSION = "biospring " + biospring::VERSION_STRING;
 struct MDDriverParameters
 {
     bool wait = true;
-    unsigned port = 3000;
+    unsigned port = 8888;
     unsigned debug = 0;
     std::string logpath = "";
     float forcescale = 1.0;
