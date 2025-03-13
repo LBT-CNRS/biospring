@@ -164,7 +164,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
                                   .name_long("--port")
                                   .description("Listening and outcoming port for MDDriver.")
                                   .argument_type(argparse::ArgumentType::INTEGER)
-                                  .default_value("3000");
+                                  .default_value("8888");
 
     argparse::Argument debug = argparse::Argument()
                                    .name_long("--debug")

@@ -54,7 +54,7 @@ int main(int argc, char ** argv)
 	{
 	bool openclok=true;
 	#ifdef MDDRIVER_SUPPORT
-   		unsigned port=3000;
+   		unsigned port=8888;
 		unsigned wait=1;
 		unsigned debug=0;
         	char logfilename[FILENAMEMAXSIZE]="";
