@@ -97,7 +97,7 @@ run:
 	HOSTNAME=$$(hostname); \
 	echo "$(GREEN)✅ BioSpring container started successfully!$(RESET)"; \
 	echo ""; \
-	echo "$(YELLOW)⚠️  Before continuing, please note that the BioSpring program is running in idle mode within the container, waiting for a connection. By proceeding, we will reattach to the container and display BioSpring's logs in real-time. Afterward, you can use the following information to connect:$(RESET)"; \
+	echo "$(YELLOW)⚠️  Before continuing, please note that the BioSpring program is running now in idle mode within the container, waiting for a connection. By proceeding, we will reattach to the container and display BioSpring's logs in real-time. Afterward, you can use the following information to connect:$(RESET)"; \
 	echo ""; \
 	echo "  - On the local machine: $(GREEN)localhost:8888$(RESET) or $(GREEN)127.0.0.1:8888$(RESET)"; \
 	echo "  - On the network: $(GREEN)$$HOSTNAME:8888$(RESET)"; \
