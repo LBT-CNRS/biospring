@@ -37,7 +37,7 @@ void usage()
 	#ifdef MDDRIVER_SUPPORT
 	cout<<"\tMDDriver support     MDDriver support is enabled : "<<endl;
 	cout<<"\t\tMDDriver is a library which extends the IMD protocol used in VMD for simulation and visualisation coupling."<<endl;
-	cout<<"\t\t[-port portnumber] 			(Listening and outcoming port for MDDriver with default = 3000)"<<endl;
+	cout<<"\t\t[-port portnumber] 			(Listening and outcoming port for MDDriver with default = 8888)"<<endl;
 	cout<<"\t\t[-wait 0 or 1]     			(Wait a connection before starting the simulation with default = 1 means wait)"<<endl;
 	cout<<"\t\t[-debug 0, 1 or 2] 	 		(Debug level of the MDDriver simulation with default = 0 means no debug message)"<<endl;
 	cout<<"\t\t[-log filename]     			(Filename for MDDriver debug messages with default = stdout)"<<endl;
@@ -54,7 +54,7 @@ int main(int argc, char ** argv)
 	{
 	bool openclok=true;
 	#ifdef MDDRIVER_SUPPORT
-   		unsigned port=3000;
+   		unsigned port=8888;
 		unsigned wait=1;
 		unsigned debug=0;
         	char logfilename[FILENAMEMAXSIZE]="";

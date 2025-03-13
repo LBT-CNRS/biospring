@@ -22,7 +22,7 @@ InteractorMDDriver::InteractorMDDriver()
 	strcpy(_IMDlogfilename,"");
 	_IMDlog = NULL;
 	_IMDwait           = 1;
-	_IMDport           = 3000;
+	_IMDport           = 8888;
 	_IMDmode = 1; //server
 	_IMDforcescale =1.0;
 	_IMDenergies.tstep  = 0.0;
