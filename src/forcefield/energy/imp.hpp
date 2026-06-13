@@ -3,6 +3,8 @@
 
 #include "../constants.hpp"
 
+#include <cmath> // for std::fabs — bare abs() on a float binds to int abs(int)
+
 namespace biospring
 {
 namespace forcefield
@@ -35,8 +37,8 @@ inline float imp_energy(float x, float y, float z,
     double cz = 0.0;
 
     // membrane radius based on its curvature 
-    float uppermemb_radius = uppermembtubecurv == 0.0 ? 1000000 : abs(1/uppermembtubecurv);
-    float lowermemb_radius = lowermembtubecurv == 0.0 ? 1000000 : abs(1/lowermembtubecurv);
+    float uppermemb_radius = uppermembtubecurv == 0.0 ? 1000000 : std::fabs(1/uppermembtubecurv);
+    float lowermemb_radius = lowermembtubecurv == 0.0 ? 1000000 : std::fabs(1/lowermembtubecurv);
 
     // sign of curv (-1 or 1)
     int uppermemb_curv_sign = (uppermembtubecurv > 0.0) - (uppermembtubecurv < 0.0);
@@ -61,8 +63,8 @@ inline float imp_energy(float x, float y, float z,
             lowermemb_curv_sign * v_lower.norm() - lowermemboffset - lowermemb_radius : // Particle inside the lower tube membrane zone
             -lowermemb_curv_sign * v_lower.norm() - lowermemboffset - lowermemb_radius; // Particle outside the lower tube membrane zone
 
-    double cz_upper = 0.5 - 1.0 / (1.0 + exp(ALPHA * (abs(z_upper - uppermemboffset) - Z0)));
-    double cz_lower = 0.5 - 1.0 / (1.0 + exp(ALPHA * (abs(z_lower + lowermemboffset) - Z0)));
+    double cz_upper = 0.5 - 1.0 / (1.0 + exp(ALPHA * (std::fabs(z_upper - uppermemboffset) - Z0)));
+    double cz_lower = 0.5 - 1.0 / (1.0 + exp(ALPHA * (std::fabs(z_lower + lowermemboffset) - Z0)));
 
     double hydro_upper = -surface * transfer * cz_upper;
     double hydro_lower = -surface * transfer * cz_lower;
@@ -97,8 +99,8 @@ inline Vector3f imp_force_vector(float x, float y, float z,
                               float lowermembtubecurv=0.0)
 {
     // membrane radius based on its curvature 
-    float uppermemb_radius = uppermembtubecurv == 0.0 ? 1000000 : abs(1/uppermembtubecurv);
-    float lowermemb_radius = lowermembtubecurv == 0.0 ? 1000000 : abs(1/lowermembtubecurv);
+    float uppermemb_radius = uppermembtubecurv == 0.0 ? 1000000 : std::fabs(1/uppermembtubecurv);
+    float lowermemb_radius = lowermembtubecurv == 0.0 ? 1000000 : std::fabs(1/lowermembtubecurv);
 
     // sign of curv
     int uppermemb_curv_sign = (uppermembtubecurv > 0.0) - (uppermembtubecurv < 0.0);
@@ -123,14 +125,14 @@ inline Vector3f imp_force_vector(float x, float y, float z,
             lowermemb_curv_sign * v_lower.norm() - lowermemboffset - lowermemb_radius : // Particle inside the lower tube membrane zone
             -lowermemb_curv_sign * v_lower.norm() - lowermemboffset - lowermemb_radius; // Particle outside the lower tube membrane zone
 
-    auto expo_side = [](float z, float offset) { return exp(ALPHA * (abs(z + offset) - Z0)); };
+    auto expo_side = [](float z, float offset) { return exp(ALPHA * (std::fabs(z + offset) - Z0)); };
 
     double dcz_upper = (ALPHA * (z_upper - uppermemboffset) * expo_side(z_upper, -uppermemboffset)) / 
-                (pow(expo_side(z_upper, -uppermemboffset) + 1, 2.0) * abs(z_upper - uppermemboffset));
+                (pow(expo_side(z_upper, -uppermemboffset) + 1, 2.0) * std::fabs(z_upper - uppermemboffset));
     
 
     double dcz_lower = (ALPHA * (z_lower + lowermemboffset) * expo_side(z_lower, lowermemboffset)) / 
-                (pow(expo_side(z_lower, lowermemboffset) + 1, 2.0) * abs(z_lower + lowermemboffset));
+                (pow(expo_side(z_lower, lowermemboffset) + 1, 2.0) * std::fabs(z_lower + lowermemboffset));
     
     if (std::isnan(dcz_upper) || !std::isfinite(dcz_upper))
         dcz_upper = 0.0;
