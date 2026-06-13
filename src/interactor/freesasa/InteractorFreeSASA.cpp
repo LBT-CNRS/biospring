@@ -223,6 +223,11 @@ void InteractorFreeSASA::syncSystemStateData()
 // based on FreeSASA-related computations.
 void InteractorFreeSASA::syncParticleStateData(unsigned index)
 {
+	// Guard against the first-step race: _sasa is allocated inside the FreeSASA
+	// worker thread (processFreesasaInteractions); the main thread's first
+	// idleRun -> syncParticleStateData can run before that allocation, derefing
+	// a null _sasa (segfault, lost for large N). No-op until SASA is ready.
+	if (_sasa == nullptr) return;
 	getSpringNetwork()->getParticle(index).setSolventAccessibilitySurface(_sasa[index]);
 }
 
