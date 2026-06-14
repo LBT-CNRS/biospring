@@ -88,6 +88,7 @@ struct ParticleBuffer
     float * epsilons;
     float * masses;
     float * hscales;
+    float * hydrophobicities;
     float * surface_accessibilities;
 
     int * ids;
@@ -111,6 +112,7 @@ struct ParticleBuffer
             epsilons = new float[nParticles];
             masses = new float[nParticles];
             hscales = new float[nParticles];
+            hydrophobicities = new float[nParticles];
             surface_accessibilities = new float[nParticles];
             ids = new int[nParticles];
             resids = new int[nParticles];
@@ -138,6 +140,7 @@ struct ParticleBuffer
             epsilons[i] = p.getEpsilon();
             masses[i] = p.getMass();
             hscales[i] = p.getTransferEnergyByAccessibleSurface();
+            hydrophobicities[i] = p.getHydrophobicity();
 
             ids[i] = p.getId();
             resids[i] = p.getResId();
@@ -156,7 +159,8 @@ struct ParticleBuffer
     //
     ParticleBuffer()
         : number_of_particles(0), coordinates(0), charges(0), radii(0), epsilons(0), masses(0), hscales(0),
-          surface_accessibilities(0), ids(0), resids(0), dynamic_states(0), chainnames(0), particlenames(0), resnames(0)
+          hydrophobicities(0), surface_accessibilities(0), ids(0), resids(0), dynamic_states(0), chainnames(0),
+          particlenames(0), resnames(0)
     {
     }
 
@@ -174,6 +178,7 @@ struct ParticleBuffer
         delete epsilons;
         delete masses;
         delete hscales;
+        delete hydrophobicities;
         delete surface_accessibilities;
         delete ids;
         delete resids;
