@@ -604,6 +604,11 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupForceField();
     _setupSteric();
     _setupElectrostatic();
+    // _setupHydrophobic() builds _nsearch.hydrophobic; without this call it stays
+    // null and Particle::addHydrophobicityForce() dereferences it -> SIGSEGV on any
+    // hydrophobicity.enable=1 run. (Same class as the steric/electrostatic nsearch
+    // setups above.)
+    _setupHydrophobic();
     _setupDensityGrid();
     _setupProbe();
     _setupInsertionVector();
