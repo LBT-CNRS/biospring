@@ -77,6 +77,9 @@ void NetCDFWriter::writeBinary()
     hscale.putAtt("units", "kJ.mol-1");
     hscale.putAtt("long_name", "Particle hydrophobicity scale (transfer energy)");
 
+    NcVar hydrophobicity = nc->addVar("hydrophobicity", ncFloat, pnbdim);
+    hydrophobicity.putAtt("long_name", "Particle hydrophobicity (pairwise hydrophobic force)");
+
     NcVar resids = nc->addVar("resids", ncInt, pnbdim);
     resids.putAtt("long_name", "Particle residue id");
 
@@ -110,6 +113,7 @@ void NetCDFWriter::writeBinary()
     charges.putVar(pbuffer.charges);
     surfacc.putVar(pbuffer.surface_accessibilities);
     hscale.putVar(pbuffer.hscales);
+    hydrophobicity.putVar(pbuffer.hydrophobicities);
     chainnames.putVar(pbuffer.chainnames);
     pnames.putVar(pbuffer.particlenames);
     resnames.putVar(pbuffer.resnames);
