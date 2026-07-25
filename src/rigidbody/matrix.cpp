@@ -230,7 +230,7 @@ Matrix Matrix::solve(Matrix A, Matrix b)
     if (x.p[x.rows_ - 1][0] < EPS && x.p[x.rows_ - 1][0] > -1*EPS)
         x.p[x.rows_ - 1][0] = 0;
     for (int i = x.rows_ - 2; i >= 0; --i) {
-        int sum = 0;
+        double sum = 0;
         for (int j = i + 1; j < x.rows_; ++j) {
             sum += A.p[i][j] * x.p[j][0];
         }
@@ -266,7 +266,7 @@ Matrix Matrix::bandSolve(Matrix A, Matrix b, int k)
     Matrix x(b.rows_, 1);
     x.p[x.rows_ - 1][0] = b.p[x.rows_ - 1][0] / A.p[x.rows_ - 1][x.rows_ - 1];
     for (int i = x.rows_ - 2; i >= 0; --i) {
-        int sum = 0;
+        double sum = 0;
         for (int j = i + 1; j < x.rows_; ++j) {
             sum += A.p[i][j] * x.p[j][0];
         }
