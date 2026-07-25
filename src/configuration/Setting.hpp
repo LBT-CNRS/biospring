@@ -255,10 +255,12 @@ class SimulationSetting : public SettingBase
     int nbsteps;
     double timestep;
     size_t samplerate;
+    double neighborskin;
 
-    SimulationSetting(const std::string & name) : SettingBase(name), nbsteps(0), timestep(0.0), samplerate(1)
+    SimulationSetting(const std::string & name)
+        : SettingBase(name), nbsteps(0), timestep(0.0), samplerate(1), neighborskin(0.0)
     {
-        _parameterNames = {"nbsteps", "timestep", "samplerate"};
+        _parameterNames = {"nbsteps", "timestep", "samplerate", "neighborskin"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -269,6 +271,8 @@ class SimulationSetting : public SettingBase
             utils::string::from_string<decltype(timestep)>(timestep, s);
         else if (param == "samplerate")
             utils::string::from_string<decltype(samplerate)>(samplerate, s);
+        else if (param == "neighborskin")
+            utils::string::from_string<decltype(neighborskin)>(neighborskin, s);
         else
             logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
     }
@@ -278,6 +282,7 @@ class SimulationSetting : public SettingBase
         _mspFormatter.print("nbsteps", nbsteps, os);
         _mspFormatter.print("timestep", timestep, os);
         _mspFormatter.print("samplerate", samplerate, os);
+        _mspFormatter.print("neighborskin", neighborskin, os);
     }
 };
 

@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <optional>
 #include <unordered_map>
 #include <utility>
@@ -181,16 +182,30 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     // the current cell list; no particle-to-particle neighbor list is cached.
     std::vector<size_t> _included_indices;
 
+    // Extra distance added to `_cutoff` when sizing grid cells. A positive skin
+    // lets `update()` skip rebuilding the grid until a tracked particle has
+    // moved far enough that a neighbor could otherwise be missed, trading exact
+    // per-call freshness for fewer O(N) rebuilds. Zero (the default) preserves
+    // the original behaviour of rebuilding on every `update()` call.
+    float _skin = 0.0f;
+
+    // Position of each tracked particle at the last grid rebuild. Only
+    // populated and consulted when `_skin > 0`.
+    std::vector<std::array<double, 3>> _referencePositions;
+
   public:
     // Initializes the neighbor search object with the particles.
 
-    NeighborSearch(const ContainerType & container, float cutoff) : NeighborSearchBase<ContainerType>(container, cutoff)
+    NeighborSearch(const ContainerType & container, float cutoff, float skin = 0.0f)
+        : NeighborSearchBase<ContainerType>(container, cutoff), _skin(skin)
     {
         _build_grid();
     }
 
-    NeighborSearch(const ContainerType & container, float cutoff, std::vector<size_t> included_indices)
-        : NeighborSearchBase<ContainerType>(container, cutoff), _included_indices(std::move(included_indices))
+    NeighborSearch(const ContainerType & container, float cutoff, std::vector<size_t> included_indices,
+                    float skin = 0.0f)
+        : NeighborSearchBase<ContainerType>(container, cutoff), _included_indices(std::move(included_indices)),
+          _skin(skin)
     {
         _build_grid();
     }
@@ -229,28 +244,44 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     // Returns the neighbors of the element located at `index` in `_system`.
     std::vector<size_t> get_neighbors(size_t i) const { return get_neighbors(_system->at(i)); }
 
-    // Rebuilds the cell list based on the system coordinates.
-    void update() { _build_grid(); }
+    // Rebuilds the cell list based on the system coordinates. When a positive
+    // skin was requested, the rebuild is skipped until a tracked particle has
+    // drifted far enough since the last rebuild that a neighbor could
+    // otherwise be missed (see `_exceeds_skin`).
+    void update()
+    {
+        if (!_exceeds_skin())
+            return;
+        _build_grid();
+    }
 
-    // Excludes one particle index from the grid. Existing cells are rebuilt so
-    // future neighbor queries immediately reflect the exclusion.
+    // Excludes one particle index from the grid. The grid is rebuilt
+    // unconditionally, bypassing the skin check, so future neighbor queries
+    // immediately reflect the exclusion.
     void exclude_index(size_t index)
     {
         _excluded_index = index;
-        update();
+        _build_grid();
     }
 
   protected:
+    // Returns the search radius used to size grid cells: the physical cutoff
+    // used to filter pairs, plus the skin margin. Equal to `_cutoff` when no
+    // skin was requested.
+    float _search_radius() const { return _cutoff + _skin; }
+
     // Returns the total number of cells.
     size_t _number_of_cells() const { return _ncells_x * _ncells_y * _ncells_z; }
 
     // Returns the cell id of the given position.
     size_t _compute_cell(const std::array<double, 3> & position) const
     {
+        const float radius = _search_radius();
+
         // Calculate grid cell coordinates for the given position, considering negative coordinates
-        size_t cell_y = static_cast<size_t>((position[1] - _box.min_y()) / _cutoff);
-        size_t cell_z = static_cast<size_t>((position[2] - _box.min_z()) / _cutoff);
-        size_t cell_x = static_cast<size_t>((position[0] - _box.min_x()) / _cutoff);
+        size_t cell_y = static_cast<size_t>((position[1] - _box.min_y()) / radius);
+        size_t cell_z = static_cast<size_t>((position[2] - _box.min_z()) / radius);
+        size_t cell_x = static_cast<size_t>((position[0] - _box.min_x()) / radius);
 
         // Ensure that the cell coordinates are within bounds
         cell_x = std::min(cell_x, _ncells_x - 1);
@@ -317,19 +348,28 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         _box = measure::box(*_system);
 
         // Computes the number of cells in each direction.
-        _ncells_x = size_t(std::ceil(_box.length()[0] / _cutoff) + 1);
-        _ncells_y = size_t(std::ceil(_box.length()[1] / _cutoff) + 1);
-        _ncells_z = size_t(std::ceil(_box.length()[2] / _cutoff) + 1);
+        const float radius = _search_radius();
+        _ncells_x = size_t(std::ceil(_box.length()[0] / radius) + 1);
+        _ncells_y = size_t(std::ceil(_box.length()[1] / radius) + 1);
+        _ncells_z = size_t(std::ceil(_box.length()[2] / radius) + 1);
+
+        if (_skin > 0.0f)
+            _referencePositions.assign(_system->size(), std::array<double, 3>{});
 
         const auto add_particle_to_cell = [&](size_t i) {
             if (_excluded_index && i == *_excluded_index)
                 return;
 
+            const auto & position = concepts::locatable::get_position(_system->at(i));
+
             // Computes the cell number of the particle.
-            size_t cell_id = _compute_cell(concepts::locatable::get_position(_system->at(i)));
+            size_t cell_id = _compute_cell(position);
 
             // Adds the particle to the appropriate cell.
             _cells[cell_id].push_back(i);
+
+            if (_skin > 0.0f)
+                _referencePositions[i] = position;
         };
 
         // Finds the cell of each selected particle.
@@ -347,6 +387,51 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
                 add_particle_to_cell(i);
             }
         }
+    }
+
+    // Returns true when the grid must be rebuilt: either no skin was
+    // requested (always rebuild), or a tracked particle has moved more than
+    // `_skin` since the last rebuild.
+    //
+    // Correctness note: a query point's own cell is always recomputed from
+    // its current position (see `for_each_neighbor`), so only the staleness
+    // of *candidate* cell placement threatens correctness. For a true
+    // neighbor pair (current distance < `_cutoff`), the distance between a
+    // candidate's build-time position and the query's current position is at
+    // most `candidate_drift + _cutoff`. Cells built with radius
+    // `_cutoff + _skin` are guaranteed to still find that candidate as long
+    // as `candidate_drift <= _skin`, which is exactly what this check
+    // enforces (per particle, not per pair, so it is safe for every query).
+    bool _exceeds_skin() const
+    {
+        if (_skin <= 0.0f)
+            return true;
+
+        const auto has_drifted = [&](size_t i) {
+            if (_excluded_index && i == *_excluded_index)
+                return false;
+
+            const auto & current = concepts::locatable::get_position(_system->at(i));
+            const auto & reference = _referencePositions[i];
+            const double dx = current[0] - reference[0];
+            const double dy = current[1] - reference[1];
+            const double dz = current[2] - reference[2];
+            return std::sqrt(dx * dx + dy * dy + dz * dz) > static_cast<double>(_skin);
+        };
+
+        if (_included_indices.empty())
+        {
+            for (size_t i = 0; i < _system->size(); i++)
+                if (has_drifted(i))
+                    return true;
+        }
+        else
+        {
+            for (size_t i : _included_indices)
+                if (i < _system->size() && has_drifted(i))
+                    return true;
+        }
+        return false;
     }
 };
 

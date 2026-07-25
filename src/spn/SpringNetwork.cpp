@@ -97,6 +97,8 @@ void SpringNetwork::computeParticleForces()
     float imp_energy = 0.0f;
     float hydrophobic_energy = 0.0f;
 
+    _resizeNonbondedPairScratch();
+
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
 #endif
@@ -107,40 +109,16 @@ void SpringNetwork::computeParticleForces()
         if (isElectrostaticEnabled())
         {
             if (isElectrostaticCoulombEnabled() && p.isCharged() && _nsearch.electrostatic)
-                p.addElectrostaticForce();
+                p.addElectrostaticForce(_electrostaticPairScratch[i]);
             if (isElectrostaticFieldEnabled())
                 p.addElectrostaticFieldForce();
         }
 
-            // ===================
-            // Compute electrostatic forces.
-            if (isElectrostaticEnabled())
-            {
-                // Guard: the pairwise-Coulomb neighbour-search is only built when the
-                // potential-grid (electrostatic field) is OFF (see _setupElectrostatic).
-                // Without this guard, enabling potentialgrid + coulomb together derefs a
-                // null _nsearch.electrostatic here -> segfault. Skip pairwise Coulomb when
-                // its search was not built (grid mode).
-                if (isElectrostaticCoulombEnabled() && _nsearch.electrostatic != nullptr)
-                {
-                    // p->addElectrostaticForceNoGrid(getElectrostaticCutoff());
-                    if (p.isCharged())
-                    {
-                        p.addElectrostaticForce();
-                        electrostatic_energy += p.getElectrostaticEnergy();
-                    }
-                }
-                if (isElectrostaticFieldEnabled())
-                {
-                    p.addElectrostaticFieldForce();
-                    electrostatic_energy += p.getElectrostaticEnergy();
-                }
-            }
         if (isDensityGridEnabled())
             p.addDensityFieldForce();
 
         if (isStericEnabled())
-            p.addStericForce();
+            p.addStericForce(_stericPairScratch[i]);
 
         if (isViscosityEnabled())
             p.applyViscosity(getViscosity());
@@ -149,9 +127,18 @@ void SpringNetwork::computeParticleForces()
             p.addIMPForce();
 
         if (isHydrophobicityEnabled() && p.isHydrophobic() && _nsearch.hydrophobic)
-            p.addHydrophobicityForce();
+            p.addHydrophobicityForce(_hydrophobicPairScratch[i]);
 
     }
+
+    // Applies the deferred "other side" of each unique nonbonded pair
+    // (Newton's third law) serially, since two threads may have deferred a
+    // contribution to the same target particle. Must run before the force
+    // read by rigid-body torque aggregation and setPreviousForce() below, and
+    // before summing per-particle energies, since it feeds both.
+    _applyNonbondedPairScratch(_stericPairScratch, steric_energy);
+    _applyNonbondedPairScratch(_electrostaticPairScratch, electrostatic_energy);
+    _applyNonbondedPairScratch(_hydrophobicPairScratch, hydrophobic_energy);
 
     // Sum per-particle energies in particle order to keep results reproducible
     // across OpenMP thread counts.
@@ -669,7 +656,7 @@ void SpringNetwork::_setupSteric()
     {
         if (getStericCutoff() < 1e-6)
             throw std::runtime_error("Steric cutoff must be > 0");
-        _nsearch.steric = make_nsearch(_particles, getStericCutoff());
+        _nsearch.steric = make_nsearch(_particles, getStericCutoff(), getNeighborSkin());
         _excludeProbeFromNeighborSearch(*_nsearch.steric);
     }
 }
@@ -683,7 +670,8 @@ void SpringNetwork::_setupHydrophobic()
         const std::vector<size_t> hydrophobic_particles = _hydrophobicParticleIndexes();
         if (!hydrophobic_particles.empty())
         {
-            _nsearch.hydrophobic = make_nsearch(_particles, getHydrophobicCutoff(), hydrophobic_particles);
+            _nsearch.hydrophobic =
+                make_nsearch(_particles, getHydrophobicCutoff(), hydrophobic_particles, getNeighborSkin());
             _excludeProbeFromNeighborSearch(*_nsearch.hydrophobic);
         }
     }
@@ -731,7 +719,8 @@ void SpringNetwork::_setupElectrostatic()
         const std::vector<size_t> charged_particles = _chargedParticleIndexes();
         if (!charged_particles.empty())
         {
-            _nsearch.electrostatic = make_nsearch(_particles, getElectrostaticCutoff(), charged_particles);
+            _nsearch.electrostatic =
+                make_nsearch(_particles, getElectrostaticCutoff(), charged_particles, getNeighborSkin());
             _excludeProbeFromNeighborSearch(*_nsearch.electrostatic);
         }
     }
@@ -843,6 +832,37 @@ void SpringNetwork::_updateNeighborSearches()
         _nsearch.hydrophobic->update();
 
     _neighborSearchesDirty = false;
+}
+
+void SpringNetwork::_resizeNonbondedPairScratch()
+{
+    const size_t n = _dynamicparticules.size();
+
+    _stericPairScratch.resize(n);
+    _electrostaticPairScratch.resize(n);
+    _hydrophobicPairScratch.resize(n);
+
+    // Clears logical contents but keeps each bucket's capacity, so the
+    // simulation loop does not reallocate every step.
+    for (auto & bucket : _stericPairScratch)
+        bucket.clear();
+    for (auto & bucket : _electrostaticPairScratch)
+        bucket.clear();
+    for (auto & bucket : _hydrophobicPairScratch)
+        bucket.clear();
+}
+
+void SpringNetwork::_applyNonbondedPairScratch(
+    const std::vector<std::vector<spn::DeferredNonbondedContribution>> & scratch, float & energy)
+{
+    for (const auto & bucket : scratch)
+    {
+        for (const auto & contribution : bucket)
+        {
+            getParticle(contribution.target).addForce(contribution.force);
+            energy += contribution.energy;
+        }
+    }
 }
 
 void SpringNetwork::_syncProbeParticle()
