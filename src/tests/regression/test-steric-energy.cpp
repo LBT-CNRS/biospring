@@ -11,7 +11,7 @@
 // Linear.
 float steric_energy_linear(const biospring::spn::Particle & lhs, const biospring::spn::Particle & rhs)
 {
-    float stiffness = 100.0;
+    float stiffness = 1.0;
     float equilibrium = lhs.getRadius() + rhs.getRadius();
     float distance = lhs.distance(rhs);
     float distancevar = distance - equilibrium;

@@ -14,6 +14,10 @@ namespace forcefield
 // ======================================================================================
 // Linear steric potential.
 
+// Shared by energy and force so the reported energy is consistent with the
+// force actually integrated (they used to diverge: 100 vs 1.0).
+static const float STERIC_LINEAR_STIFFNESS = 1.0;
+
 inline float steric_energy_linear(float radius_i, float radius_j, float distance)
 {
     float equilibrium = radius_i + radius_j;
@@ -22,8 +26,7 @@ inline float steric_energy_linear(float radius_i, float radius_j, float distance
     if (distancevar > 0)
         return 0.0;
 
-    float stiffness = 100;
-    return 0.5 * (stiffness)*distancevar * distancevar;
+    return 0.5 * STERIC_LINEAR_STIFFNESS * distancevar * distancevar;
 }
 
 inline float steric_force_module_linear(float radius_i, float radius_j, float distance)
@@ -34,9 +37,7 @@ inline float steric_force_module_linear(float radius_i, float radius_j, float di
     if (distancevar > 0)
         return 0.0;
 
-    float stiffness = 1.0;
-
-    float force_module = -stiffness * fabs(distancevar);
+    float force_module = -STERIC_LINEAR_STIFFNESS * fabs(distancevar);
     return force_module * GLOBAL_SPRING_FORCE_CONVERT;
 }
 
