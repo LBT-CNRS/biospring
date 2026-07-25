@@ -96,7 +96,7 @@ if(APPLE)
 endif()
 
 if(WIN32)
-    foreach(_root "$ENV{ProgramW6432}" "$ENV{ProgramFiles}" "$ENV{ProgramFiles(x86)}")
+    foreach(_root "$ENV{ProgramW6432}" "$ENV{ProgramFiles}" "$ENV{ProgramFiles\(x86\)}")
         if(_root)
             list(APPEND _NetCDFCXX_PREFIXES
                 "${_root}/netCDF"
