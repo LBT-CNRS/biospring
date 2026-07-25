@@ -1,4 +1,4 @@
-BASE_MK := $(shell echo $(PWD) | sed -E 's|(.*example).*|\1/base.mk|')
+BASE_MK := $(shell d="$(CURDIR)"; while [ "$$d" != "/" ] && [ ! -f "$$d/base.mk" ]; do d=$$(dirname "$$d"); done; [ -f "$$d/base.mk" ] && echo "$$d/base.mk")
 
 # Inclure base.mk si trouvé
 ifneq ($(wildcard $(BASE_MK)),)

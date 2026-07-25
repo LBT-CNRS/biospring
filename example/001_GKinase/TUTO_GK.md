@@ -157,7 +157,7 @@ You have to define the constraints in the *.msp* file (they should already be de
 
 Now run BioSpring:
 
-	biospring -nc modelWsel.nc -msp model.msp -wait 1 -port 3000
+	biospring -nc modelWsel.nc -msp model.msp -wait -port 3000
 
 and connect a VMD session (using model.pqr) to the simulation.
 
