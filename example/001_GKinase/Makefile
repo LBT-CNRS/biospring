@@ -21,12 +21,12 @@ NC = model.nc
 
 
 # MDDriver option
-# -wait 0 or 1, if the simulation server has to wait for client connection before starting
+# -wait, if the simulation server has to wait for client connection before starting (no value: presence = wait)
 # -port port port
 # -debub debug level : 0 no log - 2 verbose log
 # -log logfilename
 IMDLOG=mddriver.log
-IMDOPT=-wait 1 -port 3000 -debug 0 -log $(IMDLOG)
+IMDOPT=-wait -port 3000 -debug 0 -log $(IMDLOG)
 
 
 prep :  $(PDB_CONECT) $(PDB) $(PQR) $(CDL) $(NC)
@@ -71,3 +71,4 @@ clean :
 	rm -rf 	$(PQR)
 	rm -rf $(NC)
 	rm -rf $(IMDLOG)
+	rm -rf $(CDL)
