@@ -3,17 +3,30 @@
 
 #ifdef OPENGL_SUPPORT
 
+#if defined(_WIN32)
+    #include <windows.h>
+#endif
 #include <GL/glew.h>
 
-#if defined __APPLE__ || defined(MACOSX)
-	#include <OpenGL/gl.h>
-	#include <GLUT/glut.h>
-#else
-    #if defined WIN32
+#if defined(__APPLE__) || defined(MACOSX)
+    #if __has_include(<OpenGL/glu.h>)
+        #include <OpenGL/glu.h>
     #else
-        //needed for context sharing functions
-        #include <GL/gl.h>
-	#include <GL/glut.h>
+        #include <GL/glu.h>
+    #endif
+    #if __has_include(<GLUT/glut.h>)
+        #include <GLUT/glut.h>
+    #elif __has_include(<GL/freeglut.h>)
+        #include <GL/freeglut.h>
+    #else
+        #include <GL/glut.h>
+    #endif
+#else
+    #include <GL/glu.h>
+    #if __has_include(<GL/freeglut.h>)
+        #include <GL/freeglut.h>
+    #else
+        #include <GL/glut.h>
     #endif
 #endif
 
@@ -24,6 +37,9 @@
 #include <set>
 #include "SpringNetwork.h"
 #include "TrackBall.h"
+
+using biospring::spn::Particle;
+using biospring::spn::SpringNetwork;
 
 using namespace std;
 
@@ -99,7 +115,7 @@ class SpringNetworkViewer
 		static Vector3f computeTrackBallPoint(float x,float y,float radius);
 
 		// Returns the closest particle given some coordinates.
-	    std::vector<Particle>::const_reference getNearestParticleByCoords(float x, float y, float z, float radius) const;
+        static std::vector<Particle>::const_reference getNearestParticleByCoords(float x, float y, float z, float radius);
 
 	};
 

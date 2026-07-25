@@ -32,84 +32,27 @@ Here is a list of the most important features added in this branch:
 - Update and reformat other scripts in the project ...
 
 
-## Compilation & Installation
+## Compilation
 
-### Requirements
+BioSpring uses CMake and requires CMake 3.21 or newer, a C++20 compiler,
+NetCDF C and NetCDF C++4. OpenMP, OpenCL, the OpenGL viewer, MDDriver and
+FreeSASA are optional and disabled unless explicitly enabled.
 
-- CMake (http://www.cmake.org)
-- NetCDF library (http://www.unidata.ucar.edu/software/netcdf/)
-- NetCDF library headers for the C++ library (https://github.com/Unidata/netcdf-cxx4)
-
-### Optional tools
-
-- FreeSASA library (https://github.com/mittinatten/freesasa/) version 2.1.2
-- MDDriver library (https://github.com/LBT-CNRS/MDDriver) version 1.0
-
-
-- UnityMol (http://unitymol.sourceforge.net/) or VMD visualization software (http://www.ks.uiuc.edu/Research/vmd/)
-
-
-### Conda
-
-A `conda-env.yml` is provided to easily set up a conda environnement with BioSpring (with MDDriver and FreeSASA support) installed:
-
-    conda env create -f conda-env.yml -n biospring
-    conda activate biospring
-
-This is the recommended way for MacOS and Windows OS.
-
-
-### Docker
-
-A docker file `Dockerfile` is also provided to set up a docker container with BioSpring (with MDDriver and FreeSASA support).
-
-Also, docker images are built and provided through the Container registry of GitHub. They are available trough the [Packages link](https://github.com/LBT-CNRS/biospring/pkgs/container/biospring).
-
-Docker images are built only when tags or Release are created.
-
-Pull the Docker Image:
-
-    docker pull ghcr.io/lbt-cnrs/biospring:latest
-
-Please read [User Manual](doc/User_Manual.md) for detailed usage of the docker image.
-
-### Compilation
-
-#### Linux
-
-Cmake & NetCDF library installation is straightforward on Linux:
-
-    apt install cmake libnetcdf-c++4-dev
-
-Then, for BioSpring:
-
-```
-git clone https://github.com/LBT-CNRS/biospring
-cd biospring/
-
-# On Mac/Linux
-cmake -S . -B build -DCMAKE_INSTALL_PREFIX:PATH=/path/to/biospring/installation
-
-# Compilation
-cmake --build build -j4
-cmake --install
+```sh
+cmake -S . -B build
+cmake --build build
 ```
 
-### BioSpring with MDDriver and FreeSASA
+NetCDF is searched through `FindNetCDF.cmake` and `FindNetCDFCXX.cmake`.
+The modules first try the official config packages and then accept explicit
+include and library paths. See [BUILDING.md](BUILDING.md) for the available
+variables and optional features.
 
-BioSpring can also be compiled with MDDriver and/or FreeSASA support with those cmake options:
+Tests are disabled by default. They can be enabled with `-DBUILD_TESTING=ON` and run with:
 
-    cmake -S . -B build -DMDDRIVER_SUPPORT=ON -DMDDriver_DIR=/path/to/mddriver/installation/MDDriver/cmake/ -DFREESASA_SUPPORT=ON -DFREESASA_PREFIX=/path/to/freesasa/installation/freesasa-2.1.2/
-
-
-### Test
-
-BioSpring integrates unit & regressions tests. You can test the software with those commands:
-
-    cmake -S . -B build -DBUILD_TESTS=ON
-    cmake --build build -j4
-    ctest --test-dir build
-
+```sh
+ctest --test-dir build --output-on-failure
+```
 
 ### Usage
 
@@ -134,3 +77,8 @@ BioSpring is licenced under the [CeCILL-C license](LICENSE.txt).
 - Benoist Laurent
 - André Lanrezac
 - Hubert Santuz
+
+
+## Building
+
+See [BUILDING.md](BUILDING.md).

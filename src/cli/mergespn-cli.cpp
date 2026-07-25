@@ -10,19 +10,20 @@ namespace mergespn
 
 const std::string PROGRAM_VERSION = "0.1.0";
 const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
-    "mergespn is a tool that aims to merge spring networks. ",
+    "mergespn merges two or more spring-network topologies.",
     "",
-    "It takes in input two or more topology files and creates a ",
-    "spring network by combining them.",
+    "Input topology formats are selected from the -s/--topology filename extension:",
+    "  .nc  : binary NetCDF spring-network file",
+    "  .pdb : Protein Data Bank file",
+    "  .pqr : PQR file",
     "",
-    "A cutoff value can be specified to describe if the spring networks ",
-    "should be linked together and, if so, what is the cutoff to use.",
+    "Output formats are selected from the -o/--output filename extension:",
+    "  .nc  : binary NetCDF spring-network file",
+    "  .cdl : text NetCDF/CDL spring-network file",
+    "  .pdb : Protein Data Bank file",
+    "  .pqr : PQR file",
     "",
-    "By default, mergespn produces a new binary nc file. Its name ",
-    "can be specified using the -o option. ",
-    "The format of the output file is guessed based on the filename ",
-    "extension. Allowed extensions are .nc (binary nc file), ",
-    ".cdl (ASCII nc file), .pdb (Protein Data Bank format) and .pqr.",
+    "Use -cutoff/--cutoff to create springs between merged structures.",
 };
 
 int main(int argc, char ** argv)
@@ -66,7 +67,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
                                       .name_long("--topology")
-                                      .description("input topology(ies).")
+                                      .description("input topology file(s); format is selected by extension: .nc, .pdb or .pqr")
                                       .metavar("INPUT_FILE")
                                       .number_of_arguments("+")
                                       .argument_type(argparse::ArgumentType::PATH_INPUT)
@@ -75,13 +76,14 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument output = argparse::Argument()
                                     .name_short("-o")
                                     .name_long("--output")
-                                    .description("output file name(s).")
+                                    .description("output file name(s); format is selected by extension: .nc, .cdl, .pdb or .pqr")
                                     .metavar("OUTPUT_FILE")
                                     .number_of_arguments("+")
                                     .argument_type(argparse::ArgumentType::PATH_OUTPUT)
                                     .default_value("system.nc");
 
     argparse::Argument cutoff = argparse::Argument()
+                                    .name_short("-cutoff")
                                     .name_long("--cutoff")
                                     .description("cutoff for spring creation (< 0 means no spring)")
                                     .argument_type(argparse::ArgumentType::REAL)

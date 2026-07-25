@@ -34,6 +34,7 @@ void Particle::updateFromForceField(const biospring::forcefield::ForceField & ff
         setRadius(pp.getRadius());
         setMass(pp.getMass());
         setEpsilon(pp.getEpsilon());
+        setHydrophobicity(pp.getHydrophobicity());
         setTransferEnergyByAccessibleSurface(pp.getTransferEnergyByAccessibleSurface());
     }
 }
@@ -73,6 +74,7 @@ void Particle::resetForce()
     _stericenergy = 0.0;
     _kineticenergy = 0.0;
     _impenergy = 0.0;
+    _hydrophobicityenergy = 0.0;
 }
 
 void Particle::applyViscosity(float viscosity)
@@ -154,10 +156,11 @@ void Particle::addElectrostaticForce()
     float cutoff = _springnetwork->getElectrostaticCutoff();
     bool apply = true;
 
-    const auto & coulombneighbors = _springnetwork->getNeighborSearch().electrostatic->get_neighbors(*this);
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-    for (auto neighbor_index : coulombneighbors)
-    {
+    _springnetwork->getNeighborSearch().electrostatic->for_each_neighbor(*this, [&](size_t neighbor_index) {
+        if (_springnetwork->isProbeParticle(neighbor_index))
+            return;
+
         const Particle & p = _springnetwork->getParticle(neighbor_index);
         apply = true;
         if (_springnetwork->isSpringEnabled())
@@ -175,7 +178,7 @@ void Particle::addElectrostaticForce()
                 addForce(f);
             }
         }
-    }
+    });
 }
 
 /// @brief Add IMPALA force to the particle. 
@@ -201,10 +204,11 @@ void Particle::addHydrophobicityForce()
 
     if (_springnetwork->isHydrophobicityEnabled())
     {
-        const auto & hydrophobicneighbors = _springnetwork->getNeighborSearch().hydrophobic->get_neighbors(*this);
         const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-        for (auto neighbor_index : hydrophobicneighbors)
-        {
+        _springnetwork->getNeighborSearch().hydrophobic->for_each_neighbor(*this, [&](size_t neighbor_index) {
+            if (_springnetwork->isProbeParticle(neighbor_index))
+                return;
+
             const Particle & p = _springnetwork->getParticle(neighbor_index);
             apply = true;
             if (_springnetwork->isSpringEnabled())
@@ -223,7 +227,7 @@ void Particle::addHydrophobicityForce()
                     addForce(f);
                 }
             }
-        }
+        });
     }
 }
 
@@ -248,10 +252,13 @@ void Particle::addElectrostaticForceNoGrid(float cutoff)
         {
             f = p.getPosition() - getPosition();
             distance = f.norm();
-            _electrostaticenergy += ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
-            f.normalize();
-            f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
-            addForce(f);
+            if (distance < cutoff && distance != 0.0f)
+            {
+                _electrostaticenergy += ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
+                f.normalize();
+                f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
+                addForce(f);
+            }
         }
     }
 }
@@ -265,10 +272,11 @@ void Particle::addStericForce()
 
     bool apply = true;
 
-    const auto & vanderwaalsneighbors = _springnetwork->getNeighborSearch().steric->get_neighbors(*this);
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-    for (auto neighbor_index : vanderwaalsneighbors)
-    {
+    _springnetwork->getNeighborSearch().steric->for_each_neighbor(*this, [&](size_t neighbor_index) {
+        if (_springnetwork->isProbeParticle(neighbor_index))
+            return;
+
         const Particle & p = _springnetwork->getParticle(neighbor_index);
         apply = true;
         if (_springnetwork->isSpringEnabled())
@@ -288,38 +296,43 @@ void Particle::addStericForce()
                 addForce(f);
             }
         }
-    }
+    });
 }
 
 // ======================================================================================
 // Add forces to probe
 
-void Particle::addStericProbeForce(Particle & probe)
+float Particle::addStericProbeForce(Particle & probe)
 {
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     Vector3f f = probe.getPosition() - getPosition();
     float distance = f.norm();
 
-    _stericenergy +=
-        ff->computeStericEnergy(probe.getRadius(), getRadius(), probe.getEpsilon(), getEpsilon(), distance) / 2.0;
+    const float pair_energy =
+        ff->computeStericEnergy(probe.getRadius(), getRadius(), probe.getEpsilon(), getEpsilon(), distance);
+    _stericenergy += pair_energy * 0.5f;
+    probe.setStericEnergy(probe.getStericEnergy() + pair_energy * 0.5f);
     f.normalize();
     f = f * ff->computeStericForceModule(probe.getRadius(), getRadius(), probe.getEpsilon(), getEpsilon(), distance);
     addForce(f);
     probe.addForce(-f);
+    return pair_energy;
 }
 
-void Particle::addElectrostaticProbeForce(Particle & probe)
+float Particle::addElectrostaticProbeForce(Particle & probe)
 {
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     Vector3f f = probe.getPosition() - getPosition();
     float distance = f.norm();
 
-    _electrostaticenergy = ff->computeElectrostaticEnergy(probe.getCharge(), getCharge(), distance);
-    probe.setElectrostaticEnergy(probe.getElectrostaticEnergy() + _electrostaticenergy);
+    const float pair_energy = ff->computeElectrostaticEnergy(probe.getCharge(), getCharge(), distance);
+    _electrostaticenergy += pair_energy * 0.5f;
+    probe.setElectrostaticEnergy(probe.getElectrostaticEnergy() + pair_energy * 0.5f);
     f.normalize();
     f = f * ff->computeElectrostaticForceModule(probe.getCharge(), getCharge(), distance);
     addForce(f);
     probe.addForce(-f);
+    return pair_energy;
 }
 
 } // namespace spn

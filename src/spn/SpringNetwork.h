@@ -21,9 +21,6 @@
 #include "Selection.h"
 #include "Spring.h"
 #include "Vector3f.h"
-#ifdef OPENGL_SUPPORT
-#include "viewer/SpringNetworkViewer.h"
-#endif
 #include <cstdlib>
 #include <cstring>
 #include <stdio.h>
@@ -31,15 +28,16 @@
 
 #include <iostream>
 #include <memory>
+#include <utility>
 
 class Interactor;
+class SpringNetworkViewer;
 namespace biospring
 {
 namespace spn
 {
 
 class Spring;
-class SpringNetworkViewer;
 
 class SpringNetwork
 {
@@ -52,11 +50,12 @@ class SpringNetwork
 
     struct Energies
     {
-        float spring;
-        float electrostatic;
-        float steric;
-        float kinetic;
-        float imp;
+        float spring = 0.0f;
+        float electrostatic = 0.0f;
+        float steric = 0.0f;
+        float kinetic = 0.0f;
+        float imp = 0.0f;
+        float hydrophobic = 0.0f;
 
         void reset()
         {
@@ -65,6 +64,7 @@ class SpringNetwork
             steric = 0.0;
             kinetic = 0.0;
             imp = 0.0;
+            hydrophobic = 0.0;
         }
     };
 
@@ -79,7 +79,7 @@ class SpringNetwork
     struct NeighborSearch
     {
         using Container = std::vector<Particle>;
-        using Searcher = nsearch::NeighborSearchDynamic<Container>;
+        using Searcher = nsearch::NeighborSearch<Container>;
         using SearcherPtr = std::unique_ptr<Searcher>;
 
         SearcherPtr steric;
@@ -87,16 +87,25 @@ class SpringNetwork
         SearcherPtr hydrophobic;
     };
 
-    constexpr static auto make_nsearch = [](const NeighborSearch::Container & particles, float cutoff) {
+    static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff)
+    {
         return std::make_unique<NeighborSearch::Searcher>(particles, cutoff);
-    };
+    }
+
+    static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
+                                                    std::vector<size_t> included_indices)
+    {
+        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, std::move(included_indices));
+    }
 
   public:
     SpringNetwork()
-        : _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
-          _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _nbiter(0), _end(false),
-          _pause(false), _constraintenabled(false), _framerate(0.0), _ff(nullptr), _insertionVector(nullptr),
-          _constraints(), _meanConstraintsDistances(0.0), _structid(_currentstructid++), _config(), _profiler()
+        : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
+          _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
+          _dynamicsprings(), _springForceScratch(), _energies(), _nsearch(), _neighborSearchesDirty(false),
+          _nbiter(0), _end(false), _pause(false), _grids(), _constraintenabled(false), _framerate(0.0),
+          _freesasaState(), _ff(nullptr), _trajectories(), _insertionVector(nullptr), _constraints(),
+          _meanConstraintsDistances(0.0), _structid(_currentstructid++), _config(), _profiler()
     {
         _profiler.create_timer("main");
         _profiler.create_timer("samplerate");
@@ -148,6 +157,7 @@ class SpringNetwork
     float getStericEnergy() const { return _energies.steric; }
     float getElectrostaticEnergy() const { return _energies.electrostatic; }
     float getIMPEnergy() const { return _energies.imp; }
+    float getHydrophobicEnergy() const { return _energies.hydrophobic; }
 
     // ================================================================================
     // Used to define the minimum IMP energy of all possible conformations at a 
@@ -249,6 +259,12 @@ class SpringNetwork
     bool isProbeElectrostaticEnabled() const { return _config.probe.enableelectrostatic; }
     bool isProbeStericEnabled() const { return _config.probe.enablesteric; }
     bool isProbeElectrostaticFieldEnabled() const { return false; }
+    bool isProbeParticle(size_t index) const
+    {
+        return isProbeEnabled() && _probeparticule.getId() >= 0 &&
+               index == static_cast<size_t>(_probeparticule.getId());
+    }
+    const Particle & getProbeParticle() const { return _probeparticule; }
 
     bool isPDBTrajectoryWriterEnabled() const { return _config.pdbtraj.enable; }
     int getPDBTrajectoryWriterFreq() const { return _config.pdbtraj.frequency; }
@@ -334,6 +350,13 @@ class SpringNetwork
     void _setupInsertionVector();
     void _setupSelections();
     void _setupConstraints();
+    std::vector<size_t> _chargedParticleIndexes() const;
+    std::vector<size_t> _hydrophobicParticleIndexes() const;
+    void _excludeProbeFromNeighborSearch(NeighborSearch::Searcher & searcher);
+    void _updateNeighborSearches();
+    void _markNeighborSearchesDirty();
+    void _syncProbeParticle();
+    void _rebuildSpringNeighbors();
 
     // ================================================================================
     //
@@ -352,11 +375,11 @@ class SpringNetwork
 
     virtual void setForce(unsigned i, float force[3]);
 
-#ifdef OPENGL_SUPPORT
-    SpringNetworkViewer * _viewer;
-    void setSpringNetworkViewer(SpringNetworkViewer * viewer) { _viewer = viewer; }
-    SpringNetworkViewer * getSpringNetworkViewer() const { return _viewer; }
-#endif
+    // The opaque viewer pointer is always present so enabling the optional
+    // viewer never changes SpringNetwork's ABI or class layout.
+    ::SpringNetworkViewer * _viewer;
+    void setSpringNetworkViewer(::SpringNetworkViewer * viewer) { _viewer = viewer; }
+    ::SpringNetworkViewer * getSpringNetworkViewer() const { return _viewer; }
 
   protected:
     std::vector<Interactor*> _interactors;
@@ -374,8 +397,13 @@ class SpringNetwork
     std::vector<unsigned> _staticsprings;
     std::vector<unsigned> _dynamicsprings;
 
+    // One force contribution per dynamic spring. Reused between steps to avoid
+    // allocations in the simulation loop and to keep OpenMP writes disjoint.
+    std::vector<Vector3f> _springForceScratch;
+
     Energies _energies;
     NeighborSearch _nsearch;
+    bool _neighborSearchesDirty;
 
     int _nbiter;
     bool _end;

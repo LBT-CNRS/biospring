@@ -12,7 +12,18 @@ namespace editspn
 
 const std::string PROGRAM_VERSION = "0.1.0";
 const argparse::description_t PROGRAM_DESCRIPTION = {
-    "editspn is a tool that aims to edit and create spring networks.",
+    "editspn edits or creates spring networks from an existing topology.",
+    "",
+    "Input topology formats are selected from the -s/--topology filename extension:",
+    "  .nc  : binary NetCDF spring-network file",
+    "  .pdb : Protein Data Bank file",
+    "  .pqr : PQR file",
+    "",
+    "Output formats are selected from the -o/--output filename extension:",
+    "  .nc  : binary NetCDF spring-network file",
+    "  .cdl : text NetCDF/CDL spring-network file",
+    "  .pdb : Protein Data Bank file",
+    "  .pqr : PQR file",
 };
 
 int main(int argc, char ** argv)
@@ -210,7 +221,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument output = argparse::Argument()
                                     .name_short("-o")
                                     .name_long("--output")
-                                    .description("output file name(s).")
+                                    .description("output file name(s); format is selected by extension: .nc, .cdl, .pdb or .pqr")
                                     .metavar("OUTPUT_FILE")
                                     .number_of_arguments("+")
                                     .argument_type(argparse::ArgumentType::PATH_OUTPUT)
@@ -233,7 +244,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument stiffness = argparse::Argument()
                                        .name_short("-d")
                                        .name_long("--stiffness")
-                                       .description("when used with -c, sets the spring stiffness")
+                                       .description("when used with -cutoff/--cutoff, sets the spring stiffness")
                                        .argument_type(argparse::ArgumentType::REAL)
                                        .default_value("-1.0");
 

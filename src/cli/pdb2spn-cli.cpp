@@ -13,6 +13,20 @@
 const std::string PROGRAM_VERSION = "0.1.0";
 const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "pdb2spn creates a spring network from a topology file.",
+    "",
+    "Input topology formats are selected from the -s/--topology filename extension:",
+    "  .nc  : binary NetCDF spring-network file",
+    "  .pdb : Protein Data Bank file",
+    "  .pqr : PQR file",
+    "",
+    "Output formats are selected from the -o/--output filename extension:",
+    "  .nc  : binary NetCDF spring-network file",
+    "  .cdl : text NetCDF/CDL spring-network file",
+    "  .pdb : Protein Data Bank file",
+    "  .pqr : PQR file",
+    "",
+    "When the output is a PDB file, -pdbconect/--pdbconect adds CONECT",
+    "records at the end of the PDB to visualize the springs of the network.",
 };
 
 namespace biospring
@@ -76,7 +90,7 @@ int main(int argc, char ** argv)
     }
 
     // Writes output files.
-    biospring::io::writeTopology(args.pathOutputList, topology);
+    biospring::io::writeTopology(args.pathOutputList, topology, args.writePdbConect);
 
     return EXIT_SUCCESS;
 }
@@ -84,13 +98,13 @@ int main(int argc, char ** argv)
 CommandLineArguments::CommandLineArguments(const std::string & name, const argparse::description_t & description,
                                            const std::string & version)
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
-      pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0), isStatic(false), ignoreDuplicates(false),
-      ignoreMissing(false)
+      pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0), isStatic(false),
+      ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false)
 {
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
                                       .name_long("--topology")
-                                      .description("input topology.")
+                                      .description("input topology file; format is selected by extension: .nc, .pdb or .pqr")
                                       .metavar("INPUT_FILE")
                                       .argument_type(argparse::ArgumentType::PATH_INPUT)
                                       .required(true);
@@ -98,50 +112,59 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument output = argparse::Argument()
                                     .name_short("-o")
                                     .name_long("--output")
-                                    .description("output file name(s).")
+                                    .description("output file name(s); format is selected by extension: .nc, .cdl, .pdb or .pqr")
                                     .metavar("OUTPUT_FILE")
                                     .number_of_arguments("+")
                                     .argument_type(argparse::ArgumentType::PATH_OUTPUT)
                                     .default_value("system.nc");
 
     argparse::Argument forcefield = argparse::Argument()
+                                        .name_short("-ff")
                                         .name_long("--ff")
                                         .description("force field file")
                                         .metavar("INPUT_FILE")
                                         .argument_type(argparse::ArgumentType::PATH_INPUT);
 
     argparse::Argument grp = argparse::Argument()
+                                 .name_short("-grp")
                                  .name_long("--grp")
                                  .description("particles definition file")
                                  .metavar("INPUT_FILE")
                                  .argument_type(argparse::ArgumentType::PATH_INPUT);
 
     argparse::Argument cutoff = argparse::Argument()
+                                    .name_short("-cutoff")
                                     .name_long("--cutoff")
-                                    .description("cutoff for spring creation (< 0 means no spring)")
+                                    .description("cutoff in Angstroms for spring creation (< 0 means no spring)")
                                     .argument_type(argparse::ArgumentType::REAL)
                                     .default_value("-1.0");
 
     argparse::Argument stiffness = argparse::Argument()
+                                       .name_short("-stiffness")
                                        .name_long("--stiffness")
                                        .description("spring stiffness")
                                        .argument_type(argparse::ArgumentType::REAL)
                                        .default_value("1.0");
 
     argparse::Argument charge = argparse::Argument()
+                                    .name_short("-charge")
                                     .name_long("--charge")
                                     .description("override force field values for particle charge")
                                     .default_value("0.0")
                                     .argument_type(argparse::ArgumentType::REAL);
 
     argparse::Argument static_ =
-        argparse::StoreTrueArgument("", "--static", "should the particles be freezed during the simulation");
+        argparse::StoreTrueArgument("-static", "--static", "should the particles be freezed during the simulation");
 
     argparse::Argument ignore_duplicate = argparse::StoreTrueArgument(
-        "", "--ignore-duplicate", "ignore duplicate particles when reducing to coarse grain");
+        "-ignore-duplicate", "--ignore-duplicate", "ignore duplicate particles when reducing to coarse grain");
 
     argparse::Argument ignore_missing =
-        argparse::StoreTrueArgument("", "--ignore-missing", "ignore missing particles when reducing to coarse grain");
+        argparse::StoreTrueArgument("-ignore-missing", "--ignore-missing", "ignore missing particles when reducing to coarse grain");
+
+    argparse::Argument pdbconect = argparse::StoreTrueArgument(
+        "-pdbconect", "--pdbconect",
+        "when writing PDB output, add CONECT records for the springs at the end of the PDB file");
 
     _parser.add_argument(topology);
     _parser.add_argument(output);
@@ -153,6 +176,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(static_);
     _parser.add_argument(ignore_duplicate);
     _parser.add_argument(ignore_missing);
+    _parser.add_argument(pdbconect);
 }
 
 void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
@@ -199,6 +223,7 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     isStatic = _parser.get_option("--static").is_set();
     ignoreDuplicates = _parser.get_option("--ignore-duplicate").is_set();
     ignoreMissing = _parser.get_option("--ignore-missing").is_set();
+    writePdbConect = _parser.get_option("--pdbconect").is_set();
 
     // Reduce file and force field should be provided together.
     // Dies if not the case.
@@ -211,6 +236,25 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     {
         _parser.print_help();
         _parser.die("--grp <file> is mandatory when --ff is provided");
+    }
+
+    if (writePdbConect)
+    {
+        bool hasPdbOutput = false;
+        for (const auto & path : pathOutputList)
+        {
+            if (biospring::utils::path::getExtension(path) == "pdb")
+            {
+                hasPdbOutput = true;
+                break;
+            }
+        }
+
+        if (!hasPdbOutput)
+        {
+            _parser.print_help();
+            _parser.die("--pdbconect requires at least one PDB output file in -o/--output");
+        }
     }
 }
 
@@ -242,6 +286,11 @@ void biospring::pdb2spn::CommandLineArguments::printArgumentValues() const
         logging::info("    static particles: yes");
     else
         logging::info("    static particles: no");
+
+    if (writePdbConect)
+        logging::info("    PDB CONECT records: enabled for PDB output file(s)");
+    else
+        logging::info("    PDB CONECT records: disabled");
 
     if (pathGroup.size())
     {

@@ -2,7 +2,6 @@
 #include <iostream>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "interactor/freesasa/InteractorFreeSASA.h"
 #include "logging.h"
@@ -160,7 +159,7 @@ void InteractorFreeSASA::setupFreesasaInteractions()
 		}
 	}
 	// setRadii(radii_array);
-	_isRunning = true;
+	_isRunning.store(true, std::memory_order_release);
 }
 
 void InteractorFreeSASA::processFreesasaInteractions()

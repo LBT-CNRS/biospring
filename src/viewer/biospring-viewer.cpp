@@ -1,8 +1,16 @@
 #include <iostream>
 
 #include <GL/glew.h>
-#if defined __APPLE__ || defined(MACOSX)
-    #include <GLUT/glut.h>
+#if defined(__APPLE__) || defined(MACOSX)
+    #if __has_include(<GLUT/glut.h>)
+        #include <GLUT/glut.h>
+    #elif __has_include(<GL/freeglut.h>)
+        #include <GL/freeglut.h>
+    #else
+        #include <GL/glut.h>
+    #endif
+#elif __has_include(<GL/freeglut.h>)
+    #include <GL/freeglut.h>
 #else
     #include <GL/glut.h>
 #endif
