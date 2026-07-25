@@ -1,0 +1,19 @@
+name: CI (Windows, local/Docker) — not implemented
+
+# Placeholder: this project's Dockerfile only targets Linux (Ubuntu base
+# image), so there is currently no local/Docker build path for Windows. This
+# file exists so the naming convention stays consistent across platforms:
+# ci-<platform>.yml       = tested directly on GitHub's hosted runner.
+# ci-<platform>.local.yml = tested on a local/Docker platform.
+# Manual trigger only; does nothing. Replace with a real workflow if a
+# Windows-based local/Docker build path is added in the future.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  not-implemented:
+    name: Not implemented
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No local/Docker build path exists for Windows yet."

@@ -1,0 +1,201 @@
+name: CI (Linux, Docker/local)
+
+# Two independent, mutually exclusive flows sharing this file because they
+# both build the project's Dockerfile for Linux:
+# - workflow_dispatch: build the local debug image (devcontainer workflow).
+# - push tags / release: test, then build and push the release image to GHCR.
+
+on:
+  workflow_dispatch: # The workflow is triggered manually
+  push:
+    tags:
+      - '*'
+  release:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DEBUG_IMAGE_NAME: biospring-debug
+
+jobs:
+
+  # ===========================================================================
+  # Manual: build the local debug image (devcontainer workflow).
+  # ===========================================================================
+
+  get-mddriver-freesasa-debug:
+    if: github.event_name == 'workflow_dispatch'
+    name: Get MDDriver & FreeSASA (debug build)
+    runs-on: ubuntu-latest
+
+    steps:
+      # - Get MDDriver ---------------------------------------------------------
+      - name: Checkout MDDriver
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: LBT-CNRS/MDDriver
+          path: mddriver_src
+
+      - name: Upload MDDriver Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mddriver_src
+          path: mddriver_src
+
+      # - Get FreeSASA ---------------------------------------------------------
+      - name: Checkout FreeSASA
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: mittinatten/freesasa
+          path: freesasa_src
+
+      - name: Configure FreeSASA
+        run: |
+          cd freesasa_src
+          git submodule init
+          git submodule update
+
+      - name: Upload FreeSASA Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: freesasa_src
+          path: freesasa_src
+
+  build-debug-image:
+    if: github.event_name == 'workflow_dispatch'
+    name: Build Debug Docker Image Locally
+    runs-on: ubuntu-latest
+    needs: get-mddriver-freesasa-debug
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Download MDDriver Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mddriver_src
+          path: mddriver_src
+
+      - name: Download FreeSASA Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: freesasa_src
+          path: freesasa_src
+
+      - name: Build Docker Image in Debug Mode
+        run: |
+          docker build --build-arg CMAKE_BUILD_TYPE=Debug -t "${DEBUG_IMAGE_NAME}" .
+
+      - name: Verify the built image locally
+        run: |
+          docker images "${DEBUG_IMAGE_NAME}"
+
+  # ===========================================================================
+  # Release: test, then build and push the production image (tags/releases).
+  # ===========================================================================
+
+  test-biospring:
+    if: github.event_name != 'workflow_dispatch'
+    name: Test Biospring
+    uses: ./.github/workflows/ci-linux.yml
+
+  get-mddriver-freesasa-release:
+    if: github.event_name != 'workflow_dispatch'
+    name: Get MDDriver & FreeSASA (release build)
+    runs-on: ubuntu-latest
+    needs: test-biospring
+
+    steps:
+      # - Get MDDriver ---------------------------------------------------------
+      - name: Checkout MDDriver
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: LBT-CNRS/MDDriver
+          path: mddriver_src
+
+      - name: Upload MDDriver Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mddriver_src
+          path: mddriver_src
+
+      # - Get FreeSASA ---------------------------------------------------------
+      - name: Checkout FreeSASA
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: mittinatten/freesasa
+          path: freesasa_src
+
+      - name: Configure FreeSASA
+        run: |
+          cd freesasa_src
+          git submodule init
+          git submodule update
+
+      - name: Upload FreeSASA Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: freesasa_src
+          path: freesasa_src
+
+  deploy-docker-image:
+    if: github.event_name != 'workflow_dispatch'
+    name: Deploy Docker Image
+    runs-on: ubuntu-latest
+    needs: get-mddriver-freesasa-release
+
+    # Sets the permissions granted to the GITHUB_TOKEN for the actions in this job.
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Download MDDriver Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mddriver_src
+          path: mddriver_src
+
+      - name: Download FreeSASA Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: freesasa_src
+          path: freesasa_src
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5.5.1
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: List project files
+        run: ls -la
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6.9.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v1.4.3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
