@@ -280,6 +280,18 @@ class Argument
         return _name_long;
     }
 
+    // Prefers the canonical "--long" spelling for user-facing error messages when
+    // `_name_short` is just the single-dash alias of the same long name (e.g. "-grp"
+    // for "--grp"), but keeps a true short flag (e.g. "-s" for "--topology") as is.
+    std::string get_display_name() const
+    {
+        if (_name_short != "" && _name_short == get_single_dash_long_name())
+            return _name_long;
+        if (_name_short != "")
+            return _name_short;
+        return _name_long;
+    }
+
     std::string get_single_dash_long_name() const
     {
         if (_name_long.size() > 2 && _name_long.substr(0, 2) == "--")
