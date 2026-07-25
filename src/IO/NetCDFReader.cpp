@@ -9,8 +9,10 @@ void NetCDFReader::addSpringsToSpn()
 {
     for (size_t i = 0; i < _sbuffer.number_of_springs; ++i)
     {
-        _topology.add_spring(_sbuffer.springs[i][0], _sbuffer.springs[i][1], _sbuffer.springsequilibriums[i],
-                             _sbuffer.springsstiffnesses[i]);
+        // springs[][] stays a plain int: it mirrors the NetCDF "springs"
+        // variable's on-disk type (nc_INT), read as-is by the netCDF API.
+        _topology.add_spring(static_cast<size_t>(_sbuffer.springs[i][0]), static_cast<size_t>(_sbuffer.springs[i][1]),
+                             _sbuffer.springsequilibriums[i], _sbuffer.springsstiffnesses[i]);
     }
 }
 

@@ -253,9 +253,12 @@ class Topology
             spn::Particle target;
             target.setName(source.properties().name());
             target.setResName(source.properties().residue_name());
-            target.setResId(source.properties().residue_id());
+            // residue_id()/atom_id() stay signed ints (some PDB files use
+            // negative residue numbering), while the simulation-side
+            // Particle assumes a non-negative id; cast explicitly here.
+            target.setResId(static_cast<unsigned>(source.properties().residue_id()));
             target.setChainName(source.properties().chain_name());
-            target.setExtid(source.properties().atom_id());
+            target.setExtid(static_cast<unsigned>(source.properties().atom_id()));
             target.setMass(source.properties().mass());
             target.setCharge(source.properties().charge());
             target.setRadius(source.properties().radius());

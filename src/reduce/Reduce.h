@@ -30,7 +30,13 @@ class Reduce
 
     size_t getNumberOfRules() const { return _reducerules.size(); }
 
-    ReduceRule getReduceRule(const std::string & name) const { return _reducerules.at(getReduceRuleIdFromName(name)); }
+    // getReduceRuleIdFromName() stays a signed int (-1 means "not found"), so
+    // an unknown name still throws via .at() bounds-checking below rather
+    // than silently reading rule 0.
+    ReduceRule getReduceRule(const std::string & name) const
+    {
+        return _reducerules.at(static_cast<size_t>(getReduceRuleIdFromName(name)));
+    }
 
     bool hasRuleNamed(const std::string & name) const
     {

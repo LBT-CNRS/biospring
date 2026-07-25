@@ -172,7 +172,11 @@ void Particle::addElectrostaticForce(std::vector<DeferredNonbondedContribution> 
 
         apply = true;
         if (_springnetwork->isSpringEnabled())
-            apply = !isInSpringNeighbors(p.getId());
+            // getId() stays signed (used as an "unassigned" sentinel elsewhere,
+            // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
+            // where it is consumed as a spring-neighbor index (always >= 0
+            // once assigned by SpringNetwork).
+            apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
 
         if (apply)
         {
@@ -247,7 +251,11 @@ void Particle::addHydrophobicityForce(std::vector<DeferredNonbondedContribution>
 
             apply = true;
             if (_springnetwork->isSpringEnabled())
-                apply = !isInSpringNeighbors(p.getId());
+                // getId() stays signed (used as an "unassigned" sentinel elsewhere,
+            // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
+            // where it is consumed as a spring-neighbor index (always >= 0
+            // once assigned by SpringNetwork).
+            apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
 
             if (apply)
             {
@@ -296,7 +304,11 @@ void Particle::addElectrostaticForceNoGrid(float cutoff)
         apply = true;
         if (_springnetwork->isSpringEnabled())
         {
-            apply = !isInSpringNeighbors(p.getId());
+            // getId() stays signed (used as an "unassigned" sentinel elsewhere,
+            // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
+            // where it is consumed as a spring-neighbor index (always >= 0
+            // once assigned by SpringNetwork).
+            apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
         }
 
         if (apply && p.getId() != getId())
@@ -338,7 +350,11 @@ void Particle::addStericForce(std::vector<DeferredNonbondedContribution> & defer
 
         apply = true;
         if (_springnetwork->isSpringEnabled())
-            apply = !isInSpringNeighbors(p.getId());
+            // getId() stays signed (used as an "unassigned" sentinel elsewhere,
+            // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
+            // where it is consumed as a spring-neighbor index (always >= 0
+            // once assigned by SpringNetwork).
+            apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
 
         if (apply && p.getId() != getId())
         {

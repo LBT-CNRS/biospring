@@ -28,9 +28,9 @@ std::array<size_t, 3> OpenDXReader::readSize()
         logging::die("OpenDXReader: cannot read grid dimensions (found '%s')", buffer.c_str());
     }
 
-    size_t sizei = std::stoi(tokens[0]);
-    size_t sizej = std::stoi(tokens[1]);
-    size_t sizek = std::stoi(tokens[2]);
+    size_t sizei = static_cast<size_t>(std::stoi(tokens[0]));
+    size_t sizej = static_cast<size_t>(std::stoi(tokens[1]));
+    size_t sizek = static_cast<size_t>(std::stoi(tokens[2]));
 
     return {sizei, sizej, sizek};
 }

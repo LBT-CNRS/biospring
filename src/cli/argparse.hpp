@@ -500,7 +500,7 @@ class Argument
             return number_of_arguments(NumberOfArguments(1, NumberOfArgumentsType::AT_MOST));
         else if (n == "*")
             return number_of_arguments(NumberOfArguments(0, NumberOfArgumentsType::AT_LEAST));
-        return number_of_arguments(NumberOfArguments(std::stoi(n), NumberOfArgumentsType::EXACTLY));
+        return number_of_arguments(NumberOfArguments(static_cast<size_t>(std::stoi(n)), NumberOfArgumentsType::EXACTLY));
     }
 
     Argument & action_type(const ActionType & action_type)

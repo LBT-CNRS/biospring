@@ -139,7 +139,7 @@ class ParticleCollection
     // Removes the particle at the given position.
     void remove_particle(size_type pos)
     {
-        _data.erase(_data.begin() + pos);
+        _data.erase(_data.begin() + static_cast<std::ptrdiff_t>(pos));
         _by_uid.clear();
         for (size_type i = 0; i < _data.size(); ++i)
             _by_uid[_data[i].unique_id()] = i;

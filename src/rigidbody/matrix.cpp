@@ -502,9 +502,13 @@ Vector3f Matrix::toVector3f()
 
 void Matrix::allocSpace()
 {
-    p = new double*[rows_];
+    // rows_/cols_ stay signed ints: this whole file relies on backward loops
+    // like `for (int i = rows_ - 2; i >= 0; --i)` where the intermediate
+    // value can go negative, which would underflow catastrophically if
+    // rows_/cols_ (or i) were unsigned.
+    p = new double*[static_cast<size_t>(rows_)];
     for (int i = 0; i < rows_; ++i) {
-        p[i] = new double[cols_];
+        p[i] = new double[static_cast<size_t>(cols_)];
     }
 }
 

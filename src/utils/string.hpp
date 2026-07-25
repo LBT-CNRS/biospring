@@ -105,12 +105,16 @@ inline std::string format(const std::string fmt, ...)
     std::string str;
     va_list ap;
     while (1) {
-        str.resize(size);
+        // size is always >= 0 here (100 initially, then doubled or set from a
+        // validated non-negative n below), so this narrowing is safe; size
+        // itself stays a signed int because vsnprintf's return value must be
+        // comparable against -1 (its error sentinel).
+        str.resize(static_cast<size_t>(size));
         va_start(ap, fmt);
-        int n = vsnprintf((char *)str.c_str(), size, fmt.c_str(), ap);
+        int n = vsnprintf((char *)str.c_str(), static_cast<size_t>(size), fmt.c_str(), ap);
         va_end(ap);
         if (n > -1 && n < size) {
-            str.resize(n);
+            str.resize(static_cast<size_t>(n));
             return str;
         }
         if (n > -1)
