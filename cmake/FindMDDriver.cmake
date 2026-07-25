@@ -15,7 +15,7 @@ find_package(MDDriver NO_MODULE)
 
 find_package_handle_standard_args(MDDriver
     REQUIRED_VARS MDDRIVER_LIBRARY MDDRIVER_INCLUDE_DIR
-    FAIL_MESSAGE "MDDriver not found. Set the MDDriver_DIR cmake cache entry to the directory containing MDDriverConfig.cmake."
+    FAIL_MESSAGE "MDDriver not found. MDDriver has no standard package-manager distribution, so it must be built from source. Either set the MDDriver_DIR cmake cache entry to the directory containing MDDriverConfig.cmake, or set MDDRIVER_LIBRARY (full path to the library) and MDDRIVER_INCLUDE_DIR (directory containing imd.h) directly."
 )
 
 if (MDDriver_FOUND)
