@@ -15,7 +15,7 @@ env:
 jobs:
   test-biospring:
     name: Test Biospring
-    uses: ./.github/workflows/main.yml
+    uses: ./.github/workflows/ci-linux.yml
 
   get-mddriver-freesasa:
     name: Get MDDriver & FreeSASA
