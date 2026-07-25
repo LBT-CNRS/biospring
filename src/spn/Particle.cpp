@@ -127,6 +127,14 @@ void Particle::addDensityFieldForce()
     float gridscale = _springnetwork->getGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getDensityGrid();
 
+    // Off-grid guard: a steered or free-moving particle can leave the density
+    // grid. DenseGrid::get -> at() throws std::out_of_range for an out-of-bounds
+    // cell, which aborts the whole run. The JAX port (potential/density_field.py)
+    // instead contributes ZERO force for out-of-grid particles (clamp-the-index +
+    // mask-to-zero). Mirror that here: skip the lookup and add nothing.
+    if (potentialgrid.is_out_of_grid(biospring::grid::real_coordinates(getX(), getY(), getZ())))
+        return;
+
     Vector3f force = potentialgrid.get(getX(), getY(), getZ()).vector;
     force = force * getBurying() * gridscale;
 
@@ -138,6 +146,11 @@ void Particle::addElectrostaticFieldForce()
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     float gridscale = _springnetwork->getGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getPotentialGrid();
+
+    // Off-grid guard (see addDensityFieldForce): mirror the JAX port's zero-force
+    // out-of-bounds behaviour instead of throwing std::out_of_range and crashing.
+    if (potentialgrid.is_out_of_grid(biospring::grid::real_coordinates(getX(), getY(), getZ())))
+        return;
 
     const auto & cell = potentialgrid.get(getX(), getY(), getZ());
 
