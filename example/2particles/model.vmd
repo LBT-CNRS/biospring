@@ -7,7 +7,7 @@ proc vmdrestoremymaterials {} {
   set mlist { Opaque Transparent BrushedMetal Diffuse Ghost Glass1 Glass2 Glass3 Glossy HardPlastic MetallicPastel Steel Translucent Edgy EdgyShiny EdgyGlass Goodsell AOShiny AOChalky AOEdgy BlownGlass GlassBubble }
   set mymlist [material list]
   foreach mat $mlist {
-    if { [lsearch $mymlist $mat] == -1 } { 
+    if { [lsearch $mymlist $mat] == -1 } {
       material add $mat
     }
   }
@@ -517,3 +517,10 @@ color scale colors WBlk {1.0 1.0 1.0} {0.5 0.5 0.5} {0.0 0.0 0.0}
 }
 vmdrestoremycolors
 label textsize 1.0
+
+menu imd on
+imd connect localhost 3000
+
+tool create tug omnitracker omnibuttons omnifeedback
+tool scalefeedback 1.0
+tool scaleforce 1.0
