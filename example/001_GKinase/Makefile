@@ -8,8 +8,7 @@ GRP = model.grp
 FF = model.ff
 PDB = model.pdb
 PQR = model.pqr
-MSP = model.msp
-MSPSPRING = model_spring.msp
+MSP = param.msp
 MSPSPRINGSTERIC = model_spring_steric.msp
 MSPSPRINGSTERICELECTROSTATIC = model_spring_steric_electrostatic.msp
 

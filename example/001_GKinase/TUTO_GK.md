@@ -110,7 +110,7 @@ Actually, typing this last command runs all the necessary steps in cascade.
 Running an Interactive Simulation
 --------------
 
-Please check that the file *model.msp* is present in the tutorial directory.
+Please check that the file *param.msp* is present in the tutorial directory.
 It contains the simulation parameters for BioSpring.
 You can now launch your first run:
 
@@ -122,13 +122,13 @@ Open *model.pqr* with VMD, set the representation to VDW and color by ResType. T
 
 The simulation should start and... again, nothing happens in the viewer ! Is this expected ?
 
-Remember that by construction the starting structure will be the global minimum for the spring network, so actually the springs are at rest when you start the simulation. Furthermore, if you check the simulation parameters (*model.msp* file), you will notice that no forcefield features are activated. If you want to make the structure move, you need an external force to disrupt the resting system. To do so, activate the Force mode in VMD (Mouse -> Force -> Residue or keyboard shortcut "^") and add a force by clicking and dragging with the mouse on a particle. Try to play a bit with the system to get a feeling of how the spring network reacts and how it conserves the structure of the protein.
+Remember that by construction the starting structure will be the global minimum for the spring network, so actually the springs are at rest when you start the simulation. Furthermore, if you check the simulation parameters (*param.msp* file), you will notice that no forcefield features are activated. If you want to make the structure move, you need an external force to disrupt the resting system. To do so, activate the Force mode in VMD (Mouse -> Force -> Residue or keyboard shortcut "^") and add a force by clicking and dragging with the mouse on a particle. Try to play a bit with the system to get a feeling of how the spring network reacts and how it conserves the structure of the protein.
 
 <center>
 ![gksnap2][]
 </center>
 
-You can now try to activate steric interactions. Stop the run (*Ctrl-c* in the console) and open the *model.msp* file. Set *steric* to linear. Re-run a simulation and try to push one particle into another. They should repel each other. Depending on the value of the *stericscale* parameter, you can observe violent interaction between the particles. If the simulation is too slow, increase the number of threads used for the simulation by typing the following environment variable setting in the console:
+You can now try to activate steric interactions. Stop the run (*Ctrl-c* in the console) and open the *param.msp* file. Set *steric* to linear. Re-run a simulation and try to push one particle into another. They should repel each other. Depending on the value of the *stericscale* parameter, you can observe violent interaction between the particles. If the simulation is too slow, increase the number of threads used for the simulation by typing the following environment variable setting in the console:
 
 	export OMP_NUM_THREADS=4
 
@@ -157,7 +157,7 @@ You have to define the constraints in the *.msp* file (they should already be de
 
 Now run BioSpring:
 
-	biospring -nc modelWsel.nc -msp model.msp -wait -port 3000
+	biospring -nc modelWsel.nc -msp param.msp -wait -port 3000
 
 and connect a VMD session (using model.pqr) to the simulation.
 
@@ -165,7 +165,7 @@ The two tips of the structure should get closer together. Try to play with the *
 
 Analyzing log files and trajectories
 --------------------
-So far we have mainly looked at the behavior of the molecule on the screen. More quantitative studies can be carried out by using log files and simulation trajectories. For this purpose, edit the model.msp file and uncomment the following lines:
+So far we have mainly looked at the behavior of the molecule on the screen. More quantitative studies can be carried out by using log files and simulation trajectories. For this purpose, edit the param.msp file and uncomment the following lines:
 
 	pdbtrajfilename = traj.pdb
 	pdbtrajfreq = 1
