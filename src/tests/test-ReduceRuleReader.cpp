@@ -2,6 +2,7 @@
 
 #include "IO/ReduceRuleReader.h"
 
+#include <filesystem>
 #include <fstream>
 
 struct TestReduceRuleReader : public ::testing::Test
@@ -19,7 +20,7 @@ struct TestReduceRuleReader : public ::testing::Test
                   "RCA ARG CA\n"
                   "RCB ARG CG\n"
                   "RCG ARG NE CZ\n";
-        path = "/tmp/dummy.grp";
+        path = (std::filesystem::temp_directory_path() / "dummy.grp").string();
         reader.setFileName(path);
     }
 
@@ -155,7 +156,7 @@ struct TestReduceRuleReaderLegacy : public ::testing::Test
                   "RCA ARG CA\n"
                   "RCB ARG CG\n"
                   "RCG ARG NE CZ\n";
-        path = "/tmp/dummy.grp";
+        path = (std::filesystem::temp_directory_path() / "dummy.grp").string();
         reader.setFileName(path);
     }
 
