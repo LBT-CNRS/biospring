@@ -35,11 +35,11 @@ find_package(NetCDFCXX REQUIRED)
 find_package(Threads REQUIRED)
 
 if(MDDRIVER_SUPPORT)
-    find_package(MDDriver CONFIG REQUIRED)
+    find_package(MDDriver REQUIRED)
 endif()
 
 if(FREESASA_SUPPORT)
-    find_package(FreeSASA CONFIG REQUIRED)
+    find_package(FreeSASA REQUIRED)
 endif()
 
 if(OPENCL_SUPPORT)
