@@ -210,7 +210,10 @@ struct RunGKReduce : public RunGK
 TEST_F(RunGKReduce, BasicReduce)
 {
     run();
-    ASSERT_EQ(topology.number_of_particles(), 174);
+    // model.grp's SER rule used to require a nonexistent "CO" atom, so every SER
+    // grain was always incomplete and dropped by default; now that it correctly
+    // requires "OG", the 9 SER residues form complete grains and are kept too.
+    ASSERT_EQ(topology.number_of_particles(), 183);
 }
 
 TEST_F(RunGKReduce, BasicReduceIgnoreMissing)

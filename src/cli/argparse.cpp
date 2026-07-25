@@ -111,15 +111,15 @@ void StoreFalseAction::take_action(CommandLineParser &, Argument & arg, size_t &
 void die_no_argument(const CommandLineParser & parser, const Argument & arg)
 {
     if (arg.number_of_arguments().type == NumberOfArgumentsType::AT_LEAST)
-        parser.die(string_format("Option '%s' requires at least %d argument", arg.get_name().c_str(), arg.number_of_arguments().value));
+        parser.die(string_format("Option '%s' requires at least %d argument", arg.get_display_name().c_str(), arg.number_of_arguments().value));
     else if (arg.number_of_arguments().type == NumberOfArgumentsType::EXACTLY)
     {
         if (arg.number_of_arguments().value == 1)
-            parser.die(string_format("Option '%s' requires an argument", arg.get_name().c_str()));
+            parser.die(string_format("Option '%s' requires an argument", arg.get_display_name().c_str()));
         else
-            parser.die(string_format("Option '%s' requires %d arguments", arg.get_name().c_str(), arg.number_of_arguments().value));
+            parser.die(string_format("Option '%s' requires %d arguments", arg.get_display_name().c_str(), arg.number_of_arguments().value));
     }
-    parser.die(string_format("Option '%s' requires an argument", arg.get_name().c_str()));
+    parser.die(string_format("Option '%s' requires an argument", arg.get_display_name().c_str()));
 }
 
 

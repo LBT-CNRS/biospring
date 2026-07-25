@@ -57,7 +57,9 @@ class ParticleCollection
     ParticleCollection(const std::initializer_list<Particle> & particles) { push_back(particles); }
 
     // Copy constructor.
-    ParticleCollection(const ParticleCollection & other) { push_back(other); }
+    // Copies the underlying storage directly so that particle unique ids are preserved,
+    // unlike push_back() which calls Particle::copy() and mints a new id for each particle.
+    ParticleCollection(const ParticleCollection & other) : _data(other._data), _by_uid(other._by_uid) {}
 
     // Assignment operator.
     // Copies particles from `other` to `this`.
