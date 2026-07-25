@@ -76,7 +76,7 @@ void InteractorFreeSASA::setupFreesasaInteractions()
 	setParams(params);
 
 	// Get atom classifier
-	const freesasa_classifier* classifier;
+	const freesasa_classifier* classifier = nullptr;
 	std::string chosen_classifier = getRadiiClassifier();
 	if (strcmp(chosen_classifier.c_str(), "protor") == 0)
 	{
@@ -113,7 +113,7 @@ void InteractorFreeSASA::setupFreesasaInteractions()
 	// Get radii
 	// double radii_array[getNbPositions()];
 
-	for (unsigned i=0; i<_nbpositions; ++i)
+	for (int i = 0; i < _nbpositions; ++i)
 	{
 		biospring::spn::Particle & p = getSpringNetwork()->getParticle(i);
 
@@ -166,7 +166,7 @@ void InteractorFreeSASA::processFreesasaInteractions()
 {
     // double coords_array[_nbpositions * 3];
 
-	for (unsigned i = 0; i < _nbpositions; ++i)
+	for (int i = 0; i < _nbpositions; ++i)
 	{
 		biospring::spn::Particle & p = getSpringNetwork()->getParticle(i);
 
@@ -193,7 +193,7 @@ void InteractorFreeSASA::processFreesasaInteractions()
 			_sasa = (double *)malloc(sizeof(double) * _nbpositions);
 		}
 	}
-	for (unsigned i = 0; i < _nbpositions; ++i)
+	for (int i = 0; i < _nbpositions; ++i)
 	{
 		_sasa[i] = result->sasa[i];
 	}
