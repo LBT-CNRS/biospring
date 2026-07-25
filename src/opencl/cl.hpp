@@ -1138,7 +1138,7 @@ protected:
 #if defined(__CL_ENABLE_EXCEPTIONS)
 static inline cl_int errHandler (
     cl_int err,
-    const char * errStr = NULL) throw(Error)
+    const char * errStr = NULL) noexcept(false)
 {
     if (err != CL_SUCCESS) {
         throw Error(err, errStr);
