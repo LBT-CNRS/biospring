@@ -20,10 +20,8 @@ inline float hydrophobic_energy(float hydrophobicity1, float hydrophobicity2, fl
 
 inline float hydrophobic_force_module(float hydrophobicity1, float hydrophobicity2, float distance)
 {
-    double force_module = 0.0;
-    force_module = (hydrophobicity1 * hydrophobicity2) * exp(-distance);
-    force_module = force_module * AVOGADRO_NUMBER * 1.0E-3; // J/mol
-    force_module = force_module * 1.0E-3;                   // kJ/mol
+    float force_module = (hydrophobicity1 * hydrophobicity2) * exp(-distance);
+    force_module *= GLOBAL_SPRING_FORCE_CONVERT;
     return force_module;
 }
 
