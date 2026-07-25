@@ -52,7 +52,7 @@ jobs:
 
       - name: Build BioSpring
         run: |
-          cmake . -B build -DBUILD_TESTS=ON -DMDDRIVER_SUPPORT=ON -DMDDriver_DIR=/mddriver/share/cmake/ \
+          cmake . -B build -DBUILD_TESTING=ON -DMDDRIVER_SUPPORT=ON -DMDDriver_DIR=/mddriver/share/cmake/ \
             -DFREESASA_SUPPORT=ON -DFREESASA_PREFIX=/freesasa
           make -C build -j$(nproc)
 
