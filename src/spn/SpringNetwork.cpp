@@ -112,6 +112,30 @@ void SpringNetwork::computeParticleForces()
                 p.addElectrostaticFieldForce();
         }
 
+            // ===================
+            // Compute electrostatic forces.
+            if (isElectrostaticEnabled())
+            {
+                // Guard: the pairwise-Coulomb neighbour-search is only built when the
+                // potential-grid (electrostatic field) is OFF (see _setupElectrostatic).
+                // Without this guard, enabling potentialgrid + coulomb together derefs a
+                // null _nsearch.electrostatic here -> segfault. Skip pairwise Coulomb when
+                // its search was not built (grid mode).
+                if (isElectrostaticCoulombEnabled() && _nsearch.electrostatic != nullptr)
+                {
+                    // p->addElectrostaticForceNoGrid(getElectrostaticCutoff());
+                    if (p.isCharged())
+                    {
+                        p.addElectrostaticForce();
+                        electrostatic_energy += p.getElectrostaticEnergy();
+                    }
+                }
+                if (isElectrostaticFieldEnabled())
+                {
+                    p.addElectrostaticFieldForce();
+                    electrostatic_energy += p.getElectrostaticEnergy();
+                }
+            }
         if (isDensityGridEnabled())
             p.addDensityFieldForce();
 
