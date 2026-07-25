@@ -205,11 +205,8 @@ if(OPENGL_SUPPORT)
     add_subdirectory(src/viewer)
 endif()
 
-foreach(tool IN ITEMS biospring editspn mergespn pdb2spn)
-    add_executable(${tool}
-        "src/cli/${tool}-cli.cpp"
-        "src/cli/${tool}.cpp"
-    )
+function(add_biospring_cli_tool tool)
+    add_executable(${tool} ${ARGN})
     target_link_libraries(${tool} PRIVATE BioSpring::core)
     if(MSVC)
         target_compile_options(${tool} PRIVATE /W4)
@@ -217,6 +214,20 @@ foreach(tool IN ITEMS biospring editspn mergespn pdb2spn)
     else()
         target_compile_options(${tool} PRIVATE -Wall -Wextra)
     endif()
+endfunction()
+
+foreach(tool IN ITEMS biospring editspn mergespn pdb2spn)
+    add_biospring_cli_tool(${tool}
+        "src/cli/${tool}-cli.cpp"
+        "src/cli/${tool}.cpp"
+    )
+endforeach()
+
+foreach(tool IN ITEMS pdb2cdl pdb2pqr pdb2pdbconect)
+    add_biospring_cli_tool(${tool}
+        "src/cli/pdb2spn-cli.cpp"
+        "src/cli/pdb2spn-legacy.cpp"
+    )
 endforeach()
 
 if(BUILD_TESTING)
@@ -253,7 +264,7 @@ install(DIRECTORY ${BIOSPRING_INCLUDE_DIRS_SOURCE_TREE}
 )
 
 # install targets
-set(TARGETS biospring editspn mergespn pdb2spn biospring-core)
+set(TARGETS biospring editspn mergespn pdb2spn pdb2cdl pdb2pqr pdb2pdbconect biospring-core)
 install(TARGETS ${TARGETS}
     RUNTIME DESTINATION ${BIN_INSTALL_DIR}
     LIBRARY DESTINATION ${LIB_INSTALL_DIR}

@@ -1,5 +1,5 @@
 
-PDB2SPN = pdb2spn
+PDB2PDBCONECT = pdb2pdbconect
 PDB2CDL = pdb2cdl
 PDB2PQR = pdb2pqr
 BIOSPRING = biospring
@@ -39,7 +39,7 @@ $(PQR) :
 
 
 $(PDB_CONECT) :
-	$(PDB2SPN) -s $(PDB) --grp $(GRP) --ff $(FF) --cutoff 9.0 -o $(PDB_CONECT) --pdbconect
+	$(PDB2PDBCONECT) -pdb $(PDB) -pdbconect $(PDB_CONECT) -grp $(GRP) -ff $(FF)
 
 $(CDL) : $(PDB) $(GRP) $(FF)
 	$(PDB2CDL) -pdb $(PDB) -cdl $(CDL) -grp $(GRP) -ff $(FF) -springcutoff 9.0
