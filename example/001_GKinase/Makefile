@@ -38,7 +38,7 @@ $(PDB_CONECT) :
 	$(PDB2SPN) -s $(PDB) -o $(PDB_CONECT) --grp $(GRP) --ff $(FF) --cutoff 9.0 --pdbconect
 
 $(CDL) : $(PDB) $(GRP) $(FF)
-	$(PDB2SPN) -s $(PDB) -o $(CDL) --grp $(GRP) --ff $(FF) --cutoff 9.0
+	$(PDB2SPN) -s $(PDB) -o $(CDL) --grp $(GRP) --ff $(FF) --cutoff 9.0 --stiffness 2.508
 
 $(NC) : $(CDL)
 	$(NCGEN) -b -o $(NC) $(CDL)
