@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include "Particle.h"
@@ -125,6 +126,84 @@ TEST(TestNeighborSearch, NeighbourSearchingRandom)
                 EXPECT_FALSE(neighbors_contains_j);
         }
     }
+}
+
+// =====================================================================================
+//
+// Tests for the skin margin of `NeighborSearch` (deferred grid rebuilds).
+//
+// =====================================================================================
+
+// A particle drifting by less than the skin margin must still be found (or correctly
+// excluded) by distance, even though the grid was never rebuilt to reflect the move.
+TEST(TestNeighborSearchSkin, NeighborsStayCorrectWithinSkinMargin)
+{
+    auto particles = generate_random_particles(200);
+    ASSERT_FALSE(has_position_duplicate(particles));
+
+    double cutoff = 5.0;
+    double skin = 3.0;
+    biospring::nsearch::NeighborSearch ns(particles, cutoff, skin);
+
+    // Moves every particle by less than the skin margin, without ever calling update().
+    for (auto & p : particles)
+    {
+        double dx = 2.0 * rand() / RAND_MAX - 1.0;
+        double dy = 2.0 * rand() / RAND_MAX - 1.0;
+        double dz = 2.0 * rand() / RAND_MAX - 1.0;
+        double norm = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (norm < 1e-9)
+        {
+            dx = 1.0;
+            norm = 1.0;
+        }
+        double magnitude = 0.9 * skin * (double)rand() / RAND_MAX;
+        const auto & pos = p.getPosition();
+        p.setPosition(Vector3f(pos.getX() + dx / norm * magnitude, pos.getY() + dy / norm * magnitude,
+                                pos.getZ() + dz / norm * magnitude));
+    }
+
+    // Neighbor lists must still be exact against the (moved) positions.
+    for (size_t i = 0; i < particles.size() - 1; i++)
+    {
+        const auto & neighbors = ns.get_neighbors(particles[i]);
+        for (size_t j = i + 1; j < particles.size(); j++)
+        {
+            double distance = biospring::measure::distance(particles[i], particles[j]);
+            bool neighbors_contains_j = std::find(neighbors.begin(), neighbors.end(), j) != neighbors.end();
+            if (distance < cutoff)
+                EXPECT_TRUE(neighbors_contains_j);
+            else
+                EXPECT_FALSE(neighbors_contains_j);
+        }
+    }
+}
+
+// A particle drifting past the skin margin can be missed by a stale grid; `update()` must
+// detect the excess drift and rebuild to restore correctness.
+TEST(TestNeighborSearchSkin, UpdateRebuildsAfterExceedingSkinMargin)
+{
+    // 10 groups of 10 particles spaced 10 units apart.
+    auto particles = generate_particle_groups(10);
+    double cutoff = 1.0;
+    double skin = 2.0;
+    biospring::nsearch::NeighborSearch ns(particles, cutoff, skin);
+
+    ASSERT_EQ(ns.get_neighbors(particles[0]).size(), 9);
+
+    // Moves the first particle of the second group right next to particle 0, well beyond
+    // the skin margin, without calling update().
+    particles[10].setPosition(Vector3f(0.5, 0.0, 0.0));
+    ASSERT_LT(biospring::measure::distance(particles[0], particles[10]), cutoff);
+
+    // The grid still places particle 10 in its old, far-away cell: it is missed.
+    EXPECT_EQ(ns.get_neighbors(particles[0]).size(), 9);
+
+    // update() must detect that particle 10 drifted past the skin and rebuild.
+    ns.update();
+    const auto & neighbors = ns.get_neighbors(particles[0]);
+    EXPECT_EQ(neighbors.size(), 10);
+    EXPECT_NE(std::find(neighbors.begin(), neighbors.end(), 10u), neighbors.end());
 }
 
 // =====================================================================================

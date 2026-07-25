@@ -87,22 +87,24 @@ class SpringNetwork
         SearcherPtr hydrophobic;
     };
 
-    static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff)
+    static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
+                                                     float skin)
     {
-        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff);
+        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, skin);
     }
 
     static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
-                                                    std::vector<size_t> included_indices)
+                                                     std::vector<size_t> included_indices, float skin)
     {
-        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, std::move(included_indices));
+        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, std::move(included_indices), skin);
     }
 
   public:
     SpringNetwork()
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
-          _dynamicsprings(), _springForceScratch(), _energies(), _nsearch(), _neighborSearchesDirty(false),
+          _dynamicsprings(), _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
+          _hydrophobicPairScratch(), _energies(), _nsearch(), _neighborSearchesDirty(false),
           _nbiter(0), _end(false), _pause(false), _grids(), _constraintenabled(false), _framerate(0.0),
           _freesasaState(), _ff(nullptr), _trajectories(), _insertionVector(nullptr), _constraints(),
           _meanConstraintsDistances(0.0), _structid(_currentstructid++), _config(), _profiler()
@@ -244,6 +246,7 @@ class SpringNetwork
     float getStericCutoff() const { return _config.steric.cutoff; }
     float getElectrostaticCutoff() const { return _config.electrostatic.cutoff; }
     float getHydrophobicCutoff() const { return _config.hydrophobicity.cutoff; }
+    float getNeighborSkin() const { return _config.sim.neighborskin; }
 
     bool isSpringEnabled() const { return _config.spring.enable; }
     bool isViscosityEnabled() const { return _config.viscosity.enable; }
@@ -358,6 +361,17 @@ class SpringNetwork
     void _syncProbeParticle();
     void _rebuildSpringNeighbors();
 
+    // Resizes the nonbonded pair scratch buffers to the current number of
+    // dynamic particles and clears their contents, reusing prior capacity.
+    void _resizeNonbondedPairScratch();
+
+    // Applies deferred nonbonded pair contributions to their target
+    // particles and adds their energy to `energy`. Must run serially, after
+    // the parallel region that filled `scratch`, since two buckets may defer
+    // a contribution to the same target particle.
+    void _applyNonbondedPairScratch(const std::vector<std::vector<spn::DeferredNonbondedContribution>> & scratch,
+                                     float & energy);
+
     // ================================================================================
     //
     // Constraint methods.
@@ -400,6 +414,16 @@ class SpringNetwork
     // One force contribution per dynamic spring. Reused between steps to avoid
     // allocations in the simulation loop and to keep OpenMP writes disjoint.
     std::vector<Vector3f> _springForceScratch;
+
+    // One bucket per dynamic-particle-loop index, filled while computing
+    // nonbonded pair interactions in parallel: each pair is evaluated once,
+    // and the contribution owed to the *other* particle of the pair is
+    // recorded here rather than written directly (that particle may be
+    // processed concurrently by another thread). Reused between steps to
+    // avoid allocations. See computeParticleForces / _applyNonbondedPairScratch.
+    std::vector<std::vector<spn::DeferredNonbondedContribution>> _stericPairScratch;
+    std::vector<std::vector<spn::DeferredNonbondedContribution>> _electrostaticPairScratch;
+    std::vector<std::vector<spn::DeferredNonbondedContribution>> _hydrophobicPairScratch;
 
     Energies _energies;
     NeighborSearch _nsearch;

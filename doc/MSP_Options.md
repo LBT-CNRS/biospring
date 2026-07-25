@@ -58,6 +58,11 @@ Define the steps and IO settings. The values written here are the default values
 -1 defines an infinite run and you will have to kill the process manually. 
 * **simulation.samplerate = 100** *(integer)* Frequence at which energies are printed on the standard
 output.
+* **simulation.neighborskin = 0** *(distance unit, float)* Extra margin added to the steric,
+electrostatic and hydrophobic cutoffs when building their neighbor grids. When greater than
+zero, the grid is only rebuilt once a particle has moved more than this margin since the last
+rebuild, instead of every step, which reduces the cost of neighbor search. `0` (the default)
+rebuilds the grid every step, which is always correct but can be slower for large systems.
 ---
 * **pdbtrajectory.enable = 0** *(boolean)* Enables trajectory writing in pdb format.
 * **pdbtrajectory.frequency = 100** *(integer)* Frequence at which frames are written.
