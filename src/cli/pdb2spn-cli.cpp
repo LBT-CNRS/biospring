@@ -76,7 +76,7 @@ int main(int argc, char ** argv)
     }
 
     // Writes output files.
-    biospring::io::writeTopology(args.pathOutputList, topology);
+    biospring::io::writeTopology(args.pathOutputList, topology, args.writePdbConect);
 
     return EXIT_SUCCESS;
 }
@@ -84,8 +84,8 @@ int main(int argc, char ** argv)
 CommandLineArguments::CommandLineArguments(const std::string & name, const argparse::description_t & description,
                                            const std::string & version)
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
-      pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0), isStatic(false), ignoreDuplicates(false),
-      ignoreMissing(false)
+      pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0), isStatic(false),
+      ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false)
 {
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
@@ -143,6 +143,9 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument ignore_missing =
         argparse::StoreTrueArgument("", "--ignore-missing", "ignore missing particles when reducing to coarse grain");
 
+    argparse::Argument pdbconect = argparse::StoreTrueArgument(
+        "", "--pdbconect", "write CONECT records for springs in PDB output file(s)");
+
     _parser.add_argument(topology);
     _parser.add_argument(output);
     _parser.add_argument(forcefield);
@@ -153,6 +156,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(static_);
     _parser.add_argument(ignore_duplicate);
     _parser.add_argument(ignore_missing);
+    _parser.add_argument(pdbconect);
 }
 
 void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
@@ -199,6 +203,7 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     isStatic = _parser.get_option("--static").is_set();
     ignoreDuplicates = _parser.get_option("--ignore-duplicate").is_set();
     ignoreMissing = _parser.get_option("--ignore-missing").is_set();
+    writePdbConect = _parser.get_option("--pdbconect").is_set();
 
     // Reduce file and force field should be provided together.
     // Dies if not the case.
@@ -211,6 +216,25 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     {
         _parser.print_help();
         _parser.die("--grp <file> is mandatory when --ff is provided");
+    }
+
+    if (writePdbConect)
+    {
+        bool hasPdbOutput = false;
+        for (const auto & path : pathOutputList)
+        {
+            if (biospring::utils::path::getExtension(path) == "pdb")
+            {
+                hasPdbOutput = true;
+                break;
+            }
+        }
+
+        if (!hasPdbOutput)
+        {
+            _parser.print_help();
+            _parser.die("--pdbconect requires at least one PDB output file in -o/--output");
+        }
     }
 }
 
@@ -242,6 +266,11 @@ void biospring::pdb2spn::CommandLineArguments::printArgumentValues() const
         logging::info("    static particles: yes");
     else
         logging::info("    static particles: no");
+
+    if (writePdbConect)
+        logging::info("    PDB CONECT records: enabled for PDB output file(s)");
+    else
+        logging::info("    PDB CONECT records: disabled");
 
     if (pathGroup.size())
     {

@@ -20,8 +20,9 @@ namespace biospring
 namespace io
 {
 
-static void _writeTopology(const std::vector<std::string> & outputfiles, const spn::SpringNetwork * const spn);
-static void _writeTopology(const std::string & path, const spn::SpringNetwork * const spn);
+static void _writeTopology(const std::vector<std::string> & outputfiles, const spn::SpringNetwork * const spn,
+                           bool writePdbConect);
+static void _writeTopology(const std::string & path, const spn::SpringNetwork * const spn, bool writePdbConect);
 
 //
 // Reads topology file.
@@ -57,25 +58,25 @@ topology::Topology readTopology(const std::string & path)
     return reader->getTopology();
 }
 
-void writeTopology(const std::string & path, const topology::Topology & topology)
+void writeTopology(const std::string & path, const topology::Topology & topology, bool writePdbConect)
 {
     spn::SpringNetwork spn;
     topology.to_spring_network(spn);
-    _writeTopology(path, &spn);
+    _writeTopology(path, &spn, writePdbConect);
 }
 
-void writeTopology(const vector<string> & outputfiles, const topology::Topology & topology)
+void writeTopology(const vector<string> & outputfiles, const topology::Topology & topology, bool writePdbConect)
 {
     spn::SpringNetwork spn;
     topology.to_spring_network(spn);
-    _writeTopology(outputfiles, &spn);
+    _writeTopology(outputfiles, &spn, writePdbConect);
 }
 
 //
 // Write topology to output file.
 // Format is guessed according to the file extension.
 //
-static void _writeTopology(const std::string & path, const spn::SpringNetwork * const spn)
+static void _writeTopology(const std::string & path, const spn::SpringNetwork * const spn, bool writePdbConect)
 {
     class TopologyWriter
     {
@@ -86,7 +87,10 @@ static void _writeTopology(const std::string & path, const spn::SpringNetwork * 
 
         const std::unordered_set<std::string> allowedFormats{"pdb", "pqr", "cdl", "nc"};
 
-        TopologyWriter(const std::string & p, const spn::SpringNetwork * const s) : path(p), spn(s)
+        bool writePdbConect;
+
+        TopologyWriter(const std::string & p, const spn::SpringNetwork * const s, bool conect)
+            : path(p), spn(s), writePdbConect(conect)
         {
             format = biospring::utils::path::getExtension(path);
 
@@ -121,7 +125,7 @@ static void _writeTopology(const std::string & path, const spn::SpringNetwork * 
         {
             logging::status("Writing spring network to PDB file %s.", path.c_str());
             PDBWriter writer(path, spn);
-            writer.setIsConnect(true);
+            writer.setIsConnect(writePdbConect);
             writer.write();
         }
 
@@ -144,15 +148,16 @@ static void _writeTopology(const std::string & path, const spn::SpringNetwork * 
         }
     };
 
-    TopologyWriter(path, spn).write();
+    TopologyWriter(path, spn, writePdbConect).write();
 }
 
 // Write multiple topology files.
 // See also: writeTopology.
-static void _writeTopology(const std::vector<std::string> & outputfiles, const spn::SpringNetwork * const spn)
+static void _writeTopology(const std::vector<std::string> & outputfiles, const spn::SpringNetwork * const spn,
+                           bool writePdbConect)
 {
     for (const std::string & path : outputfiles)
-        _writeTopology(path, spn);
+        _writeTopology(path, spn, writePdbConect);
 }
 } // namespace io
 } // namespace biospring

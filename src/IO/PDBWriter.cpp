@@ -59,7 +59,6 @@ void PDBWriter::writeModel(size_t modelid)
     }
 
     // Writes CONECT records if required.
-    _isconnect = _spn->isSpringEnabled() || _isconnect;
     if (_isconnect)
     {
         for (const auto & spring : _spn->getSprings())

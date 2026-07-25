@@ -22,7 +22,7 @@ class PDBWriter : public TrajectoryWriterBase
     void setIsConnect(bool b) { _isconnect = b; }
 
   protected:
-    bool _isconnect;
+    bool _isconnect = false;
 
   private:
 };
