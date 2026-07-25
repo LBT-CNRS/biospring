@@ -16,7 +16,7 @@ csvsampling.frequency = 1
 
 # -----------------------------------
 spring.enable = 1
-spring.scale = 1.0
+spring.scale = 10.0
 
 # -----------------------------------
 viscosity.enable = 1
@@ -37,5 +37,4 @@ coulomb.cutoff = 16.0
 #constraint.enable = 1
 #constraint.src = arg_41_selection
 #constraint.dest = thr_138_selection
-#constraint.module = 0.001 
-
+#constraint.module = 0.001
