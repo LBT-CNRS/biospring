@@ -54,10 +54,12 @@ template <typename T> class InfiniteGrid
 
     // Returns the element at the given cell coordinates.
     T & at(const discrete_coordinates & cell) { return _data[cell]; }
+    const T & at(const discrete_coordinates & cell) const { return _data.at(cell); }
     T & operator()(const discrete_coordinates & cell) { return _data[cell]; }
 
     // Returns the element at the given position.
     T & at(const real_coordinates & position) { return at(_coordinates.cell_coordinates(position)); }
+    const T & at(const real_coordinates & position) const { return at(_coordinates.cell_coordinates(position)); }
     T & operator()(const real_coordinates & cell) { return _data[cell]; }
 
     // Adds an element to the grid.
