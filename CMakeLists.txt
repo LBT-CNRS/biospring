@@ -26,7 +26,6 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 option(BUILD_TESTING "Build BioSpring tests" OFF)
-include(CTest)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
@@ -55,6 +54,32 @@ if(OPENGL_SUPPORT)
 endif()
 
 if(OPENMP_SUPPORT)
+    # Apple's system Clang (AppleClang) ships without OpenMP support at all,
+    # so find_package(OpenMP) fails out of the box on macOS even when a
+    # working OpenMP runtime is installed. Homebrew's `libomp` is the common
+    # way to get one, but it is keg-only (not linked into a compiler search
+    # path), so CMake cannot discover it without help. Auto-detect it here,
+    # unless the user already told CMake how to find OpenMP explicitly.
+    if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" AND NOT OpenMP_CXX_FLAGS)
+        find_program(_biospring_brew_executable brew NO_CACHE)
+        if(_biospring_brew_executable)
+            execute_process(
+                COMMAND "${_biospring_brew_executable}" --prefix libomp
+                OUTPUT_VARIABLE _biospring_libomp_prefix
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+        endif()
+
+        if(_biospring_libomp_prefix AND EXISTS "${_biospring_libomp_prefix}/include/omp.h")
+            message(STATUS "Using Homebrew libomp for OpenMP: ${_biospring_libomp_prefix}")
+            set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${_biospring_libomp_prefix}/include")
+            set(OpenMP_CXX_LIB_NAMES "omp")
+            set(OpenMP_omp_LIBRARY "${_biospring_libomp_prefix}/lib/libomp.dylib")
+        endif()
+        unset(_biospring_libomp_prefix)
+    endif()
+
     find_package(OpenMP REQUIRED COMPONENTS CXX)
 else()
     # Keep CMake GUI clean when OpenMP support is disabled.
@@ -231,7 +256,62 @@ foreach(tool IN ITEMS pdb2cdl pdb2pqr pdb2pdbconect)
 endforeach()
 
 if(BUILD_TESTING)
+    # Pulled in only when tests are actually requested: `include(CTest)` adds a
+    # batch of CDash/Dart cache variables (DART_TESTING_TIMEOUT,
+    # MEMORYCHECK_*, COVERAGE_*, SITE, BUILDNAME, ...) that are irrelevant
+    # clutter in cmake-gui/ccmake when BUILD_TESTING is off.
+    include(CTest)
     add_subdirectory(src/tests)
+
+    # GoogleTest (fetched above, in src/tests/CMakeLists.txt) creates a batch
+    # of cache variables that are internal implementation details: nothing a
+    # BioSpring user configuring "do I want tests" needs to see or change.
+    # They cannot be suppressed at the source since they come from CMake's
+    # own modules or fetched, third-party CMake code; mark them advanced
+    # instead so they stay out of the default cmake-gui/ccmake view, matching
+    # the OpenMP/CTest cleanup above:
+    #  - CMAKE_INSTALL_* (~16 vars): created by GoogleTest's unconditional
+    #    include(GNUInstallDirs), regardless of INSTALL_GTEST. BioSpring's
+    #    own install() rules do not use them.
+    #  - FETCHCONTENT_*: generic FetchContent module housekeeping (download
+    #    location, offline mode, per-dependency overrides); only relevant to
+    #    someone mirroring or vendoring the googletest checkout by hand.
+    #  - GTEST_HAS_ABSL: GoogleTest's own Abseil/RE2 integration switch;
+    #    BioSpring does not use Abseil.
+    #  - GTest_DIR: left over from the find_package(GTest CONFIG QUIET)
+    #    probe above, always GTest_DIR-NOTFOUND since BioSpring fetches its
+    #    own copy instead of using a system install.
+    #  - INSTALL_GTEST, BUILD_GMOCK: forced to OFF by src/tests/CMakeLists.txt
+    #    already; showing them as editable checkboxes would be misleading
+    #    since any change would be overwritten on the next configure.
+    mark_as_advanced(
+        CMAKE_INSTALL_BINDIR
+        CMAKE_INSTALL_DATADIR
+        CMAKE_INSTALL_DATAROOTDIR
+        CMAKE_INSTALL_DOCDIR
+        CMAKE_INSTALL_INCLUDEDIR
+        CMAKE_INSTALL_INFODIR
+        CMAKE_INSTALL_LIBDIR
+        CMAKE_INSTALL_LIBEXECDIR
+        CMAKE_INSTALL_LOCALEDIR
+        CMAKE_INSTALL_LOCALSTATEDIR
+        CMAKE_INSTALL_MANDIR
+        CMAKE_INSTALL_OLDINCLUDEDIR
+        CMAKE_INSTALL_RUNSTATEDIR
+        CMAKE_INSTALL_SBINDIR
+        CMAKE_INSTALL_SHAREDSTATEDIR
+        CMAKE_INSTALL_SYSCONFDIR
+        FETCHCONTENT_BASE_DIR
+        FETCHCONTENT_FULLY_DISCONNECTED
+        FETCHCONTENT_QUIET
+        FETCHCONTENT_SOURCE_DIR_GOOGLETEST
+        FETCHCONTENT_UPDATES_DISCONNECTED
+        FETCHCONTENT_UPDATES_DISCONNECTED_GOOGLETEST
+        GTEST_HAS_ABSL
+        GTest_DIR
+        INSTALL_GTEST
+        BUILD_GMOCK
+    )
 endif()
 
 
