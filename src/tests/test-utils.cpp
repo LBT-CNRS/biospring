@@ -1,6 +1,7 @@
 
 #include "../utils.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <string>
@@ -298,13 +299,13 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST(File, FileDoesNotExists)
 {
-    const std::string fname = "/tmp/foo";
+    const std::string fname = (std::filesystem::temp_directory_path() / "foo").string();
     EXPECT_FALSE(file::exists(fname));
 }
 
 TEST(File, FileExists)
 {
-    const std::string fname = "/tmp/foo";
+    const std::string fname = (std::filesystem::temp_directory_path() / "foo").string();
     std::ofstream outfile(fname, std::ofstream::out);
     EXPECT_TRUE(outfile);
     EXPECT_TRUE(file::exists(fname));
@@ -315,7 +316,7 @@ TEST(File, FileExists)
 // -- Open file for writing ---------------------------------------------------
 TEST(File, OpenwriteSuccess)
 {
-    const std::string fname = "/tmp/foo";
+    const std::string fname = (std::filesystem::temp_directory_path() / "foo").string();
     std::ofstream outfile;
     file::openwrite(fname, outfile);
     EXPECT_TRUE(outfile);

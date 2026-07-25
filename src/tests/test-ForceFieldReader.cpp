@@ -3,6 +3,7 @@
 #include "IO/ForceFieldReader.h"
 #include "ParticleProperty.h"
 
+#include <filesystem>
 #include <fstream>
 
 struct TestForceFieldReader : public ::testing::Test
@@ -23,7 +24,7 @@ struct TestForceFieldReader : public ::testing::Test
                   "CCA	0.00	3.03	1.00000	121.00  0.047259	17.0\n"
                   "QCA	0.00	3.34	1.00000	146.00  -0.005096	17.0\n"
                   "ECA	-1.00	3.22	456.00000	147.00  -0.015356	17.0\n";
-        path = "/tmp/dummy.ff";
+        path = (std::filesystem::temp_directory_path() / "dummy.ff").string();
         reader.setFileName(path);
     }
 
