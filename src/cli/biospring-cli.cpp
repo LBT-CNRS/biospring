@@ -38,6 +38,35 @@ namespace biospring
 namespace biospringcli
 {
 
+#ifndef MDDRIVER_SUPPORT
+namespace
+{
+
+bool isMDDriverOption(const std::string & option)
+{
+    return option == "-wait" || option == "--wait" ||
+           option == "-port" || option == "--port" ||
+           option == "-debug" || option == "--debug" ||
+           option == "-log" || option == "--log";
+}
+
+void rejectMDDriverOptionsWhenDisabled(int argc, const char * const argv[])
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string option(argv[i]);
+        if (isMDDriverOption(option))
+        {
+            logging::die(
+                "Option '%s' requires MDDriver support. This BioSpring executable must be built and used with MDDriver to accept MDDriver options such as -wait/--wait, -port/--port, -debug/--debug and -log/--log. Reconfigure with MDDRIVER_SUPPORT=ON.",
+                option.c_str());
+        }
+    }
+}
+
+} // namespace
+#endif // MDDRIVER_SUPPORT
+
 const argparse::description_t PROGRAM_DESCRIPTION = {
     "biospring runs the spring-network simulation engine.",
     "",
@@ -260,6 +289,10 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
 
 void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
 {
+#ifndef MDDRIVER_SUPPORT
+    rejectMDDriverOptionsWhenDisabled(argc, argv);
+#endif
+
     _parser.parse_arguments(argc, argv);
     pathTopology = _parser.get_option_value<std::string>("--nc");
     pathConfig = _parser.get_option_value<std::string>("--msp");
