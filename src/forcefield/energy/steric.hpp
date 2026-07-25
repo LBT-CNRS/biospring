@@ -13,11 +13,17 @@ namespace forcefield
 
 // ======================================================================================
 // Linear steric potential.
+//
+// radius_i, radius_j: particle radii, in Angstrom (A).
+// distance: distance between the two particles, in Angstrom (A).
 
-// Shared by energy and force so the reported energy is consistent with the
-// force actually integrated (they used to diverge: 100 vs 1.0).
+// Penalty stiffness for particle overlap, in kJ.mol-1.A-2 (molar
+// convention, same unit as spring stiffness). Shared by energy and force so
+// the reported energy is consistent with the force actually integrated
+// (they used to diverge: 100 vs 1.0).
 static const float STERIC_LINEAR_STIFFNESS = 1.0;
 
+/// @return Steric energy, in kJ.mol-1 (0 when particles do not overlap).
 inline float steric_energy_linear(float radius_i, float radius_j, float distance)
 {
     float equilibrium = radius_i + radius_j;
@@ -29,6 +35,7 @@ inline float steric_energy_linear(float radius_i, float radius_j, float distance
     return 0.5 * STERIC_LINEAR_STIFFNESS * distancevar * distancevar;
 }
 
+/// @return Steric force module, in Da.A.fs-2 (see GLOBAL_SPRING_FORCE_CONVERT).
 inline float steric_force_module_linear(float radius_i, float radius_j, float distance)
 {
     float equilibrium = radius_i + radius_j;
@@ -43,6 +50,12 @@ inline float steric_force_module_linear(float radius_i, float radius_j, float di
 
 // ======================================================================================
 // Amber 12-6 Lennard-Jones potential.
+//
+// radius_i, radius_j: particle radii (sigma), in Angstrom (A).
+// epsilon_i, epsilon_j: particle well depths, in kJ.mol-1.
+// distance: distance between the two particles, in Angstrom (A).
+// Energies below are in kJ.mol-1, force modules in Da.A.fs-2 (converted via
+// GLOBAL_SPRING_FORCE_CONVERT, see constants.hpp).
 
 inline float steric_energy_amber(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)
 {
@@ -75,6 +88,8 @@ inline float steric_force_module_amber(float radius_i, float radius_j, float eps
 
 // ======================================================================================
 // Lewitt 8-6 Lennard-Jones potential.
+// Same units as the Amber 12-6 potential above (radius/distance in A,
+// epsilon in kJ.mol-1, energy in kJ.mol-1, force module in Da.A.fs-2).
 
 inline float steric_energy_lewitt(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)
 {
@@ -108,6 +123,8 @@ inline float steric_force_module_lewitt(float radius_i, float radius_j, float ep
 
 // ======================================================================================
 // Zacharias 8-6 Lennard-Jones potential.
+// Same units as the Amber 12-6 potential above (radius/distance in A,
+// epsilon in kJ.mol-1, energy in kJ.mol-1, force module in Da.A.fs-2).
 
 inline float steric_energy_zacharias(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)
 {

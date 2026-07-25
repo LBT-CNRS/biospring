@@ -171,6 +171,11 @@ class Particle : public ParticleProperty
     void _integrateForce(float timestep);
     void _integrateVelocity(float timestep);
 
+    // Mechanical state, all in the simulation's internal unit system: mass in
+    // Dalton (Da, see ParticleProperty::getMass), distance in Angstrom (A),
+    // time in femtosecond (fs). So _force is in Da.A.fs-2 and _velocity in
+    // A.fs-1 (see forcefield/constants.hpp and Particle::IntegrateVelocityVerlet
+    // / IntegrateEuler for the conversions feeding into these units).
     Vector3f _force;
     Vector3f _previousForce;
     Vector3f _position;

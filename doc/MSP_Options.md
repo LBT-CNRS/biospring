@@ -82,8 +82,13 @@ Spring Network Parameters Description
 Define how the spring network behavior. More details are given in the examples.
 
 * **spring.enable = 0** *(boolean)* Enable spring forces.
-* **spring.scale = 1.0** *(float)* Factor applied on the spring forces.
-* **spring.cutoff = 1.0** *(float)* Factor applied on the spring forces.
+* **spring.scale = 1.0** *(dimensionless factor, float)* Multiplier applied to the per-spring
+stiffness (itself in kJ.mol-1.A-2, set at topology creation time by pdb2spn/editspn/mergespn's
+`--stiffness` option). See doc/User_Manual.md for the usual literature value (~0.6 kcal.mol-1.A-2,
+i.e. ~2.5 kJ.mol-1.A-2).
+* **spring.cutoff = 15.0** *(Angstroms, float)* Currently unused: springs are created once, ahead of
+time, by pdb2spn/editspn/mergespn's own `--cutoff` option (see there), not rebuilt at runtime from
+this value.
 ---
 * **viscosity.enable = 0** *(boolean)* Enables a damping factor on the particles.
 * **viscosity.value = 1.0** *(Da.fs-1, float)* Damping factor.
@@ -103,18 +108,23 @@ which examples)**
 
 * **steric.enable = 0** *(boolean)* Enable steric interaction.
 * **steric.mode = linear** *(string)* Type of steric interaction Can be *linear, lennard-jones-8-6Lewitt, lennard-jones-8-6Zacharias, lennard-jones-8-6Amber*
-* **steric.gridscale = 1** *(float)* Factor applied on steric forces.
+* **steric.gridscale = 1** *(dimensionless factor, float)* Multiplier applied to steric forces
+(steric stiffness in the *linear* mode is a fixed kJ.mol-1.A-2 constant in the code; the
+Lennard-Jones modes use each particle's `epsilon`, in kJ.mol-1, from the .ff file).
 * **steric.cutoff = 1** *(Angstroms, float)* Cutoff distance for steric calculation.
 ---
 * **coulomb.enable = 0** *(boolean)* Enables Coulomb interaction.
-* **coulomb.scale = 1.0** *(float)* Factor applied on electrostatic forces.
+* **coulomb.scale = 1.0** *(dimensionless factor, float)* Multiplier applied to electrostatic
+forces (charges, in elementary charge units *e*, come from the .ff file).
 * **coulomb.cutoff = 16.0** *(Angstroms, float)* Cutoff distance for Coulomb.
 calculation
-* **coulomb.dielectric = 1.0** *(float)* Dielectric constant used in Coulomb equation.
+* **coulomb.dielectric = 1.0** *(dimensionless, float)* Relative dielectric constant used in
+Coulomb's equation.
 ---
 * **potentialgrid.enable = 0** *(boolean)* Enable APBS potential grid.
 * **potentialgrid.path = ""** *(string)* Name of the APBS potential grid file in OpenDX format.
-* **potentialgrid.scale = 1** *(float)* Factor applied on electrostatic forces.
+* **potentialgrid.scale = 1** *(dimensionless factor, float)* Multiplier applied to electrostatic
+forces derived from the potential grid.
 ---
 * **densitygrid.enable = 0** *(boolean)* Enable density grid.
 * **densitygrid.path = ""** *(string)* Name of the density grid file in OpenDX format.
@@ -125,7 +135,9 @@ Implicit Membrane (IMPALA)
 Particles with their transfer energies preconfigured via pdb2spn (using the forcefield and reducerules options) can interact with an implicit membrane according to the IMPALA model.
 
 * **impala.enable = 0** *(boolean)* Enable IMPALA membrane interaction.
-* **impala.scale = 1.0** *(float)* Factor applied on IMPALA forces.
+* **impala.scale = 1.0** *(dimensionless factor, float)* Multiplier applied to IMPALA forces
+(particle transfer energies, in kJ.mol-1, come from the .ff file, see pdb2spn's forcefield/reducerule
+options).
 ---
 * **insertionvector.enable = 0** *(boolean)* Enable Insertion Vector.
 * **insertionvector.vector = 0 0** *(int int)* Set the IDs of the two particles defining the insertion vector.
@@ -148,7 +160,9 @@ Hydrophobicity (experimental)
 Add a pseudo-hydrophobicity interaction for multimeric assembly into a rigid body in an implicit membrane.
 
 * **hydrophobicity.enable = 0** *(boolean)* Enable Hydrophobicity interaction.
-* **hydrophobicity.scale = 1.0** *(float)* Factor applied on Hydrophobicity forces.
+* **hydrophobicity.scale = 1.0** *(dimensionless factor, float)* Multiplier applied to
+Hydrophobicity forces (per-particle hydrophobicity/transfer scale, in kJ.mol-1, comes from the
+.ff file).
 * **hydrophobicity.cutoff = 15.0** *(Angstroms, float)* Cutoff distance for Hydrophobicity.
 
 
@@ -160,9 +174,9 @@ The probe is a charged entity used to explore and characterize binding sites thr
 * **probe.enable = 0** *(boolean)* Enable probe.
 * **probe.enableelectrostatic = 0** *(boolean)* Enable probe electrostatic interaction.
 * **probe.enablesteric = 0** *(boolean)* Enable probe steric interaction.
-* **probe.x = 1.0** *(float)* Initial x position of the probe.
-* **probe.y = 1.0** *(float)* Initial y position of the probe.
-* **probe.z = 1.0** *(float)* Initial z position of the probe.
+* **probe.x = 1.0** *(Å, float)* Initial x position of the probe.
+* **probe.y = 1.0** *(Å, float)* Initial y position of the probe.
+* **probe.z = 1.0** *(Å, float)* Initial z position of the probe.
 * **probe.mass = 1.0** *(Da, float)* Mass of the probe.
 * **probe.epsilon = 1.0** *(kJ.mol-1, float)* Set the probe's interaction energy.
 * **probe.radius = 1.0** *(Å, float)* Sets the probe's radius

@@ -6,6 +6,8 @@ simulation.timestep = 0.1
 simulation.samplerate = 10000
 
 spring.enable = 1
+#dimensionless factor applied to each spring's stiffness (kJ.mol-1.A-2, set
+#by pdb2spn's --stiffness at topology creation time)
 spring.scale = 25
 
 #in Da.fs-1

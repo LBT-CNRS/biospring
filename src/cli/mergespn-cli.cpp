@@ -85,7 +85,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument cutoff = argparse::Argument()
                                     .name_short("-cutoff")
                                     .name_long("--cutoff")
-                                    .description("cutoff for spring creation (< 0 means no spring)")
+                                    .description("cutoff in Angstroms for spring creation (< 0 means no spring)")
                                     .argument_type(argparse::ArgumentType::REAL)
                                     .default_value("-1.0");
 

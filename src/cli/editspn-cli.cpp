@@ -237,14 +237,14 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument cutoff = argparse::Argument()
                                     .name_short("-c")
                                     .name_long("--cutoff")
-                                    .description("cutoff for spring creation (< 0 means no spring)")
+                                    .description("cutoff in Angstroms for spring creation (< 0 means no spring)")
                                     .argument_type(argparse::ArgumentType::REAL)
                                     .default_value("-1.0");
 
     argparse::Argument stiffness = argparse::Argument()
                                        .name_short("-d")
                                        .name_long("--stiffness")
-                                       .description("when used with -cutoff/--cutoff, sets the spring stiffness")
+                                       .description("when used with -cutoff/--cutoff, sets the spring stiffness, in kJ.mol-1.A-2")
                                        .argument_type(argparse::ArgumentType::REAL)
                                        .default_value("-1.0");
 

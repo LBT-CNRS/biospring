@@ -17,14 +17,14 @@ static const float ALIP = -0.018; // kJ.mol^-1
 /// @brief Compute IMPALA energy (double membrane version).
 /// @link https://doi.org/10.3390/membranes13030362
 /// @callergraph
-/// @param x x coordinate
-/// @param y y coordinate
-/// @param z z coordinate
-/// @param surface Solvent accessible surface of the particle
-/// @param transfer Transfer energy of the particle
+/// @param x x coordinate, in Angstrom (A)
+/// @param y y coordinate, in Angstrom (A)
+/// @param z z coordinate, in Angstrom (A)
+/// @param surface Solvent accessible surface of the particle, in A^2
+/// @param transfer Transfer energy of the particle, in kJ.mol-1
 /// @param offset IMPALA double membrane offset in angstrom
-/// @param uppermembtubecurv Tube curvature of the upper membrane
-/// @param lowermembtubecurv Tube curvature of the lower membrane
+/// @param uppermembtubecurv Tube curvature of the upper membrane, in A^-1
+/// @param lowermembtubecurv Tube curvature of the lower membrane, in A^-1
 /// @return IMPALA energy of the particle in kJ.mol-1
 inline float imp_energy(float x, float y, float z, 
                         float surface, float transfer, 

@@ -171,9 +171,9 @@ void InteractorFreeSASA::processFreesasaInteractions()
 		biospring::spn::Particle & p = getSpringNetwork()->getParticle(i);
 
 		Vector3f c = p.getPosition();
-		coords_array[i * 3] = c.getX();       // Stockage de la coordonnée X
-		coords_array[i * 3 + 1] = c.getY();   // Stockage de la coordonnée Y
-		coords_array[i * 3 + 2] = c.getZ();   // Stockage de la coordonnée Z
+		coords_array[i * 3] = c.getX();       // Store the X coordinate
+		coords_array[i * 3 + 1] = c.getY();   // Store the Y coordinate
+		coords_array[i * 3 + 2] = c.getZ();   // Store the Z coordinate
 	}
 
     freesasa_result * result = nullptr;
