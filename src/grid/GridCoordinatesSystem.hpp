@@ -220,8 +220,11 @@ class GridCoordinatesSystem : public InfiniteGridCoordinatesSystem
     // Returns wheters a cell in outside the grid boundaries.
     bool is_out_of_grid(const discrete_coordinates & cell) const
     {
-        return cell.x < 0 || cell.x >= _shape[0] || cell.y < 0 || cell.y >= _shape[1] || cell.z < 0 ||
-               cell.z >= _shape[2];
+        if (cell.x < 0 || cell.y < 0 || cell.z < 0)
+            return true;
+        return static_cast<size_t>(cell.x) >= _shape[0] ||
+               static_cast<size_t>(cell.y) >= _shape[1] ||
+               static_cast<size_t>(cell.z) >= _shape[2];
     }
 
     // =============================================================================
@@ -288,11 +291,11 @@ class GridCoordinatesSystem : public InfiniteGridCoordinatesSystem
         {
             // Increment to the next cell
             _cell.z++;
-            if (_cell.z >= _grid._shape[2])
+            if (static_cast<size_t>(_cell.z) >= _grid._shape[2])
             {
                 _cell.z = 0;
                 _cell.y++;
-                if (_cell.y >= _grid._shape[1])
+                if (static_cast<size_t>(_cell.y) >= _grid._shape[1])
                 {
                     _cell.y = 0;
                     _cell.x++;

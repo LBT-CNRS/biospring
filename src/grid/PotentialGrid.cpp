@@ -25,13 +25,15 @@ void PotentialGrid::compute_gradient()
     float scale = biospring::forcefield::BOLTZMANJPERK * biospring::forcefield::METER_TO_ANGSTROM *
                   biospring::forcefield::NEWTON_TO_DALTON_ANGSTROM_PER_FEMTOSECOND_2;
 
-    double dx = cell_size()[0], dy = cell_size()[1], dz = cell_size()[2];
+    const float dx = static_cast<float>(cell_size()[0]);
+    const float dy = static_cast<float>(cell_size()[1]);
+    const float dz = static_cast<float>(cell_size()[2]);
 
-    for (int i = 0; i < shape()[0]; ++i)
+    for (size_t i = 0; i < shape()[0]; ++i)
     {
-        for (int j = 0; j < shape()[1]; ++j)
+        for (size_t j = 0; j < shape()[1]; ++j)
         {
-            for (int k = 0; k < shape()[2]; ++k)
+            for (size_t k = 0; k < shape()[2]; ++k)
             {
                 Vector3f gradient = Vector3f(0.0f, 0.0f, 0.0f);
 

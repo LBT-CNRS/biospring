@@ -18,9 +18,11 @@ class Particle : public ParticleProperty
 {
   public:
     Particle()
-        : ParticleProperty(), _force(Vector3f()), _position(Vector3f()), _velocity(Vector3f()), _isstatic(false),
-          _name(""), _resid(0), _resname(""), _chainname(""), _internalstructid(0), _rigidbodyid(0),
-          _isrigid(false), _springneighbors(), _extid(-1), _springnetwork(NULL)
+        : ParticleProperty(), _force(), _previousForce(), _position(), _previousposition(), _velocity(),
+          _isstatic(false), _name(""), _cgname(""), _resid(0), _resname(""), _chainname(""), _elementname(""),
+          _internalstructid(0), _rigidbodyid(0), _isrigid(false), _springneighbors(), _kineticenergy(0.0f),
+          _electrostaticenergy(0.0f), _stericenergy(0.0f), _impenergy(0.0f), _hydrophobicityenergy(0.0f),
+          _extid(static_cast<unsigned>(-1)), _id(-1), _springnetwork(nullptr)
     {
     }
 
@@ -114,8 +116,8 @@ class Particle : public ParticleProperty
     void addStericForce();
     void addIMPForce();
     void addHydrophobicityForce();
-    void addElectrostaticProbeForce(Particle & probe);
-    void addStericProbeForce(Particle & probe);
+    float addElectrostaticProbeForce(Particle & probe);
+    float addStericProbeForce(Particle & probe);
 
     void resetForce();
 

@@ -19,24 +19,11 @@ static std::string atom_record(const biospring::spn::Particle & p)
                                             p.getRadius());
 }
 
-void PQRWriter::writeModel(size_t modelid)
+void PQRWriter::writeModel(size_t)
 {
     for (const auto & p : _spn->getParticles())
     {
         _ostream << atom_record(p) << std::endl;
     }
 
-    // Writes PROBE record if required.
-    if (_spn->isProbeEnabled())
-    {
-        biospring::spn::Particle probe;
-        probe.setId(99999);
-        probe.setName("PRB");
-        probe.setResName("PRB");
-        probe.setResId(9999);
-        probe.setPosition(Vector3f(0.0, 0.0, 0.0));
-        probe.setCharge(0.0);
-        probe.setRadius(0.0);
-        _ostream << atom_record(probe) << std::endl;
-    }
 }

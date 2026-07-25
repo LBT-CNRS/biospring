@@ -1,42 +1,21 @@
+cmake_minimum_required(VERSION 3.21)
 
-cmake_minimum_required(VERSION 3.12)
+project(BioSpring
+    VERSION 1.1.1
+    LANGUAGES C CXX
+)
 
-# Project name
-project(BioSpring)
-
-# Program version.
-set(BIOSPRING_VERSION_MAJOR 1)
-set(BIOSPRING_VERSION_MINOR 1)
-set(BIOSPRING_VERSION_PATCH 1)
-
-# ############################################################################
-#
-# General settings.
-#
-# ############################################################################
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Where to find additionnal cmake modules.
-set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+option(MDDRIVER_SUPPORT "Enable MDDriver coupling" OFF)
+option(FREESASA_SUPPORT "Enable FreeSASA coupling" OFF)
+option(OPENCL_SUPPORT "Enable the OpenCL backend" OFF)
+option(OPENGL_SUPPORT "Enable the OpenGL viewer" OFF)
+option(OPENMP_SUPPORT "Enable OpenMP parallelism" OFF)
 
-# Enable/disable MDDriver support.
-option(MDDRIVER_SUPPORT "MDDriver support for interactive simulations" OFF)
-
-# Enable/disable OPENMP support.
-option(OPENMP_SUPPORT "OpenMP support for parallelism" ON)
-
-# Enable/disable OpenGL support.
-option(OPENGL_SUPPORT "OpenGL support" OFF)
-
-# Enable/disable FreeSASA support.
-option(FREESASA_SUPPORT "FreeSASA support" OFF)
-
-# Unit tests.
-option(BUILD_TESTS "build unit tests" OFF)
-
-# By default, we'll be installing BioSpring in /some/standard/path/BioSpring.
+# Keep the original, simple install-prefix behavior from the initial CMakeLists.
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/BioSpring
         CACHE
@@ -44,97 +23,86 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
         "Install path prefix, prepended onto install directories."
         FORCE
     )
-endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+endif()
 
-# ############################################################################
-#
-# Search for external packages.
-#
-# ############################################################################
+option(BUILD_TESTING "Build BioSpring tests" OFF)
+include(CTest)
 
-# Search for NetCDF.
-find_package(NetCDF_CXX REQUIRED)
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
-# Search for MDDriver if required.
+find_package(NetCDF REQUIRED)
+find_package(NetCDFCXX REQUIRED)
+find_package(Threads REQUIRED)
+
 if(MDDRIVER_SUPPORT)
-    find_package(MDDriver REQUIRED)
-endif(MDDRIVER_SUPPORT)
+    find_package(MDDriver CONFIG REQUIRED)
+endif()
 
-# Search for OpenMP if required.
-if(OPENMP_SUPPORT)
-    find_package(OpenMP REQUIRED)
-endif(OPENMP_SUPPORT)
+if(FREESASA_SUPPORT)
+    find_package(FreeSASA CONFIG REQUIRED)
+endif()
 
-# Search for OpenGL if required.
+if(OPENCL_SUPPORT)
+    find_package(OpenCL REQUIRED)
+    # The bundled legacy OpenCL C++ header exposes OpenGL interop types.
+    find_package(OpenGL REQUIRED)
+endif()
+
 if(OPENGL_SUPPORT)
     find_package(OpenGL REQUIRED)
     find_package(GLUT REQUIRED)
     find_package(GLEW REQUIRED)
-endif(OPENGL_SUPPORT)
-
-# Search for Freesasa if required.
-if(FREESASA_SUPPORT)
-    find_package(FreeSASA REQUIRED)
-endif(FREESASA_SUPPORT)
-
-# ############################################################################
-#
-# Build the projet.
-#
-# ############################################################################
-
-# ############################################################################
-#
-# If this is a git clone, uses the commit hash / tag instead of the revision
-# number.
-#
-# ############################################################################
-set(BIOSPRING_VERSION "${BIOSPRING_VERSION_MAJOR}.${BIOSPRING_VERSION_MINOR}.${BIOSPRING_VERSION_PATCH}")
-
-if(EXISTS ${PROJECT_SOURCE_DIR}/.git)
-    # Searches git, dies if cannot find it.
-    find_package(Git REQUIRED)
-
-    # Does the current commit as a tag ?
-    execute_process(COMMAND git tag --points-at HEAD OUTPUT_VARIABLE CURRENT_GIT_VERSION
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    )
-
-    if(CURRENT_GIT_VERSION)
-    # Else uses the short git hash
-    else()
-        execute_process(COMMAND git rev-parse --short HEAD OUTPUT_VARIABLE CURRENT_GIT_VERSION
-            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        )
-    endif()
-
-    # Remove end-of-line carriage return.
-    string(REGEX REPLACE "\n$" "" CURRENT_GIT_VERSION "${CURRENT_GIT_VERSION}")
-
-    # Replaces classical version string with git version.
-    set(BIOSPRING_VERSION "${BIOSPRING_VERSION}-${CURRENT_GIT_VERSION}")
 endif()
 
-# Creates version.h which contains the version string.
-configure_file(${PROJECT_SOURCE_DIR}/src/version.h.in ${PROJECT_SOURCE_DIR}/src/version.h)
+if(OPENMP_SUPPORT)
+    find_package(OpenMP REQUIRED COMPONENTS CXX)
+else()
+    # Keep CMake GUI clean when OpenMP support is disabled.
+    # These cache entries are created by CMake's FindOpenMP module after a
+    # previous configure with OPENMP_SUPPORT=ON. They are not BioSpring options.
+    get_cmake_property(_biospring_cache_variables CACHE_VARIABLES)
+    foreach(_biospring_cache_variable IN LISTS _biospring_cache_variables)
+        if(_biospring_cache_variable MATCHES "^OpenMP(_|$)")
+            unset(${_biospring_cache_variable} CACHE)
+        endif()
+    endforeach()
+    unset(_biospring_cache_variables)
+    unset(_biospring_cache_variable)
+endif()
+
+set(BIOSPRING_VERSION "${PROJECT_VERSION}")
+find_package(Git QUIET)
+if(Git_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" describe --tags --always --dirty
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        OUTPUT_VARIABLE GIT_DESCRIPTION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(GIT_DESCRIPTION)
+        set(BIOSPRING_VERSION "${PROJECT_VERSION}-${GIT_DESCRIPTION}")
+    endif()
+endif()
+
+configure_file(
+    "${PROJECT_SOURCE_DIR}/src/version.h.in"
+    "${PROJECT_BINARY_DIR}/generated/version.h"
+    @ONLY
+)
 
 add_subdirectory(src/IO/xdrfile)
 
-add_library(biospring-core STATIC
+set(BIOSPRING_CORE_SOURCES
     src/cli/argparse.cpp
-
     src/configuration/SafeConfigurationReader.cpp
-
     src/forcefield/ForceField.cpp
-
     src/grid/GridCoordinatesSystem.cpp
     src/grid/PotentialGrid.cpp
-
     src/reduce/ParticleGroup.cpp
     src/reduce/Reduce.cpp
     src/reduce/Reducer.cpp
     src/reduce/ReduceRule.cpp
-
     src/IO/io.cpp
     src/IO/CSVSampleWriter.cpp
     src/IO/ForceFieldReader.cpp
@@ -152,88 +120,108 @@ add_library(biospring-core STATIC
     src/IO/modern/PDBTrajectoryWriter.cpp
     src/IO/modern/XTCTrajectoryWriter.cpp
     src/IO/modern/TrajectoryManager.cpp
-
     src/Constraint.cpp
     src/InsertionVector.cpp
     src/Vector3f.cpp
-
     src/interactor/Interactor.cpp
-    src/interactor/mddriver/InteractorMDDriver.cpp
-    src/interactor/mddriver/CustomData.cpp
-    src/interactor/freesasa/InteractorFreeSASA.cpp
-
     src/logging.cpp
     src/measure.cpp
-
     src/spn/Particle.cpp
     src/spn/ParticleProperty.cpp
     src/spn/Spring.cpp
     src/spn/SpringNetwork.cpp
-
     src/topology/Particle.cpp
     src/topology/ParticleCollection.cpp
     src/topology/ParticleProperties.cpp
-
     src/rigidbody/RigidBody.cpp
     src/rigidbody/matrix.cpp
     src/rigidbody/Quaternion.cpp
     src/rigidbody/RigidBodiesManager.cpp
 )
 
-target_include_directories(biospring-core PUBLIC
-    ${PROJECT_SOURCE_DIR}/src/
-    ${PROJECT_SOURCE_DIR}/src/spn/
-)
-
-target_compile_options(biospring-core PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall>
-)
-
-target_link_libraries(biospring-core
-    PUBLIC
-    netCDF::netCDF_CXX
-    xdrfile
-)
-
-if(OpenMP_CXX_FOUND)
-    target_compile_definitions(biospring-core PUBLIC -DOPENMP_SUPPORT)
-    target_link_libraries(biospring-core PUBLIC OpenMP::OpenMP_CXX)
-endif()
-
-if(MDDRIVER_FOUND)
-    target_compile_definitions(biospring-core PUBLIC -DMDDRIVER_SUPPORT)
-    target_link_libraries(biospring-core PUBLIC MDDriver::MDDriver)
+if(MDDRIVER_SUPPORT)
+    list(APPEND BIOSPRING_CORE_SOURCES
+        src/interactor/mddriver/InteractorMDDriver.cpp
+        src/interactor/mddriver/CustomData.cpp
+    )
 endif()
 
 if(FREESASA_SUPPORT)
-    target_compile_definitions(biospring-core PUBLIC -DFREESASA_SUPPORT)
+    list(APPEND BIOSPRING_CORE_SOURCES
+        src/interactor/freesasa/InteractorFreeSASA.cpp
+    )
+endif()
+
+add_library(biospring-core STATIC ${BIOSPRING_CORE_SOURCES})
+add_library(BioSpring::core ALIAS biospring-core)
+
+target_include_directories(biospring-core PUBLIC
+    "${PROJECT_BINARY_DIR}/generated"
+    "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/src/spn"
+)
+
+target_link_libraries(biospring-core PUBLIC
+    NetCDFCXX::NetCDFCXX
+    BioSpring::xdrfile
+    Threads::Threads
+)
+
+if(MSVC)
+    target_compile_options(biospring-core PRIVATE /W4)
+    target_compile_definitions(biospring-core PRIVATE
+        _CRT_SECURE_NO_WARNINGS NOMINMAX _USE_MATH_DEFINES)
+else()
+    target_compile_options(biospring-core PRIVATE -Wall -Wextra)
+endif()
+
+if(OPENMP_SUPPORT)
+    target_compile_definitions(biospring-core PUBLIC OPENMP_SUPPORT)
+    target_link_libraries(biospring-core PUBLIC OpenMP::OpenMP_CXX)
+endif()
+
+if(MDDRIVER_SUPPORT)
+    target_compile_definitions(biospring-core PUBLIC MDDRIVER_SUPPORT)
+    if(TARGET MDDriver::MDDriver)
+        target_link_libraries(biospring-core PUBLIC MDDriver::MDDriver)
+    elseif(MDDRIVER_INCLUDE_DIR AND MDDRIVER_LIBRARY)
+        target_include_directories(biospring-core PUBLIC "${MDDRIVER_INCLUDE_DIR}")
+        target_link_libraries(biospring-core PUBLIC "${MDDRIVER_LIBRARY}")
+    else()
+        message(FATAL_ERROR "MDDriverConfig.cmake did not expose its include directory and library")
+    endif()
+endif()
+
+if(FREESASA_SUPPORT)
+    target_compile_definitions(biospring-core PUBLIC FREESASA_SUPPORT)
     target_link_libraries(biospring-core PUBLIC FreeSASA::FreeSASA)
 endif()
 
-# if(OPENGL_FOUND)
-# target_compile_definitions(biospring-core PUBLIC -DOPENGL_SUPPORT)
-# target_link_libraries(biospring-core PUBLIC OpenGL::GL GLUT::GLUT GLEW::glew)
-# endif()
-
-# Executable compilation.
-set(TOOLS biospring editspn mergespn pdb2spn)
-
-foreach(TARGET ${TOOLS})
-    add_executable(${TARGET} src/cli/${TARGET}-cli.cpp src/cli/${TARGET}.cpp)
-    target_compile_options(${TARGET} PRIVATE
-        $<$<CXX_COMPILER_ID:MSVC>:/W4>
-        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall>
-    )
-    target_link_libraries(${TARGET} PRIVATE biospring-core)
-endforeach()
-
-# Unit tests
-if(BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(${PROJECT_SOURCE_DIR}/src/tests)
+if(OPENCL_SUPPORT)
+    add_subdirectory(src/opencl)
 endif()
 
+if(OPENGL_SUPPORT)
+    add_subdirectory(src/viewer)
+endif()
+
+foreach(tool IN ITEMS biospring editspn mergespn pdb2spn)
+    add_executable(${tool}
+        "src/cli/${tool}-cli.cpp"
+        "src/cli/${tool}.cpp"
+    )
+    target_link_libraries(${tool} PRIVATE BioSpring::core)
+    if(MSVC)
+        target_compile_options(${tool} PRIVATE /W4)
+        target_compile_definitions(${tool} PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    else()
+        target_compile_options(${tool} PRIVATE -Wall -Wextra)
+    endif()
+endforeach()
+
+if(BUILD_TESTING)
+    add_subdirectory(src/tests)
+endif()
 
 
 # ############################################################################
@@ -242,7 +230,9 @@ endif()
 #
 # ############################################################################
 
-# Set the installation location of biospring components.
+# Set the installation location of biospring components.  This deliberately
+# keeps the simple layout from the original project instead of exporting a
+# CMake package.
 set(BIN_INSTALL_DIR bin)
 set(LIB_INSTALL_DIR lib)
 set(INCLUDE_INSTALL_DIR include)
@@ -263,7 +253,7 @@ install(DIRECTORY ${BIOSPRING_INCLUDE_DIRS_SOURCE_TREE}
 )
 
 # install targets
-set(TARGETS ${TOOLS} biospring-core)
+set(TARGETS biospring editspn mergespn pdb2spn biospring-core)
 install(TARGETS ${TARGETS}
     RUNTIME DESTINATION ${BIN_INSTALL_DIR}
     LIBRARY DESTINATION ${LIB_INSTALL_DIR}
@@ -278,7 +268,6 @@ install(FILES
     GROUP_READ GROUP_EXECUTE
     WORLD_READ WORLD_EXECUTE
 )
-
 
 # install data
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/
@@ -301,9 +290,7 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/scripts/
 # install doc
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/doc/
     DESTINATION ${DOC_INSTALL_DIR}
-    USE_SOURCE_PERMISSIONS
 )
-
 
 # ############################################################################
 #
@@ -323,18 +310,18 @@ set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE.txt")
 
 if(NOT DEFINED CPACK_SYSTEM_NAME)
     set(CPACK_SYSTEM_NAME ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})
-endif(NOT DEFINED CPACK_SYSTEM_NAME)
+endif()
 
 set(CPACK_GENERATOR "TGZ")
-set(CPACK_PACKAGE_VERSION_MAJOR "${BIOSPRING_VERSION_MAJOR}")
-set(CPACK_PACKAGE_VERSION_MINOR "${BIOSPRING_VERSION_MINOR}")
-set(CPACK_PACKAGE_VERSION_PATCH "${BIOSPRING_VERSION_PATCH}")
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "biospring ${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME "biospring-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}.${SVN_WC_REVISION}")
+set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "biospring ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
+set(CPACK_SOURCE_PACKAGE_FILE_NAME "biospring-${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}.${SVN_WC_REVISION}")
 set(CPACK_SOURCE_GENERATOR "TGZ")
 set(CPACK_SOURCE_IGNORE_FILES
-    /\\\\.svn/;
-    /\\\\.swp$/;
+    /\\.svn/;
+    /\\.swp$/;
     /.~*/;
     /build.*/;
 )

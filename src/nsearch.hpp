@@ -85,7 +85,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearchO2 : p
     }
 
     // Finds and returns the neighbors of the given element.
-    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element)
+    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
     {
         // Loops over the particles.
         std::vector<size_t> neighbors;
@@ -116,7 +116,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch2 : pu
         _populate();
     }
 
-    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element)
+    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
     {
         std::vector<size_t> neighbors;
         auto cells = _grid.cells_within_radius(concepts::locatable::get_position(element), _cutoff);
@@ -178,7 +178,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     }
 
     // Returns the neighbors of the given element.
-    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element)
+    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
     {
         std::vector<size_t> neighbors;
 
@@ -186,10 +186,11 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         for (size_t neighbor_cell_id : _compute_neighbor_cells(concepts::locatable::get_position(element)))
         {
             // If cell does not exists (aka is empty), skip it.
-            if (_cells.count(neighbor_cell_id) == 0)
+            const auto cell = _cells.find(neighbor_cell_id);
+            if (cell == _cells.end())
                 continue;
 
-            for (size_t particle_index : _cells[neighbor_cell_id])
+            for (size_t particle_index : cell->second)
             {
                 const T & candidate = _system->at(particle_index);
 
@@ -204,17 +205,17 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     }
 
     // Returns the neighbors of the element located at `index` in `_system`.
-    std::vector<size_t> get_neighbors(size_t i) { return get_neighbors(_system->at(i)); }
+    std::vector<size_t> get_neighbors(size_t i) const { return get_neighbors(_system->at(i)); }
 
     // Rebuilds the cell list based on the system coordinates.
     void update() { _build_grid(); }
 
   protected:
     // Returns the total number of cells.
-    size_t _number_of_cells() { return _ncells_x * _ncells_y * _ncells_z; }
+    size_t _number_of_cells() const { return _ncells_x * _ncells_y * _ncells_z; }
 
     // Returns the cell id of the given position.
-    size_t _compute_cell(const std::array<double, 3> & position)
+    size_t _compute_cell(const std::array<double, 3> & position) const
     {
         // Calculate grid cell coordinates for the given position, considering negative coordinates
         size_t cell_y = static_cast<size_t>((position[1] - _box.min_y()) / _cutoff);
@@ -231,7 +232,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     }
 
     // Returns the cell ids of the neighboring cells.
-    std::vector<size_t> _compute_neighbor_cells(size_t cell_id)
+    std::vector<size_t> _compute_neighbor_cells(size_t cell_id) const
     {
         std::vector<size_t> neighbor_cell_ids;
 
@@ -262,7 +263,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     }
 
     // Returns the cells ids of the neighboring cells, given a position.
-    std::vector<size_t> _compute_neighbor_cells(const std::array<double, 3> & position)
+    std::vector<size_t> _compute_neighbor_cells(const std::array<double, 3> & position) const
     {
         return _compute_neighbor_cells(_compute_cell(position));
     }
@@ -321,23 +322,24 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearchDynami
     }
 
     // Returns the neighbors of the given element.
-    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element)
+    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
     {
         return NeighborSearch<ContainerType>::get_neighbors(element);
     }
 
     // Returns the neighbors of the element located at `index` in `_system`.
-    std::vector<size_t> get_neighbors(size_t index)
+    std::vector<size_t> get_neighbors(size_t index) const
     {
         size_t cell_id = _compute_cell(concepts::locatable::get_position(_system->at(index)));
 
         std::vector<size_t> neighbors;
-        for (auto neighbor_cell_id : _neighbor_cells[cell_id])
+        for (auto neighbor_cell_id : _neighbor_cells.at(cell_id))
         {
-            if (_cells.count(neighbor_cell_id) == 0)
+            const auto cell = _cells.find(neighbor_cell_id);
+            if (cell == _cells.end())
                 continue;
 
-            for (size_t particle_index : _cells[neighbor_cell_id])
+            for (size_t particle_index : cell->second)
             {
                 const auto & candidate = _system->at(particle_index);
 

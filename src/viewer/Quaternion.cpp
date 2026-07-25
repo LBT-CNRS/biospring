@@ -57,7 +57,7 @@ Quaternion Quaternion::operator*(const Quaternion & v) const
     Vector3f axis3 = v1 ^ v2;
     Vector3f axis = axis1 + axis2 + axis3;
 
-    return Quaternion(axis.getX(), axis.getY(), axis.getZ(), _w * v._w - v1 * v2);
+    return Quaternion(axis.getX(), axis.getY(), axis.getZ(), _w * v._w - v1.dot(v2));
 }
 
 void Quaternion::rotationUsing2Vectors(Vector3f & v1, Vector3f & v2)
@@ -68,6 +68,6 @@ void Quaternion::rotationUsing2Vectors(Vector3f & v1, Vector3f & v2)
     _z = v3.getZ();
     float norm1 = v1.norm();
     float norm2 = v2.norm();
-    _w = norm1 * norm1 * norm2 * norm2 + v1 * v2;
+    _w = norm1 * norm2 + v1.dot(v2);
     normalize();
 }

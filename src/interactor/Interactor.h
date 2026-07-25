@@ -2,8 +2,10 @@
 #define _INTERACTOR_H_
 
 #include <cstring>
-#include <pthread.h>
-#include <unistd.h>
+#include <atomic>
+#include <chrono>
+#include <mutex>
+#include <thread>
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -24,7 +26,7 @@ class Interactor
   public:
     Interactor();
 
-    virtual ~Interactor() {};
+    virtual ~Interactor();
 
     inline void setSpringNetwork(biospring::spn::SpringNetwork * springnetwork) { _springnetwork = springnetwork; }
     inline biospring::spn::SpringNetwork * getSpringNetwork() const { return _springnetwork; }
@@ -32,6 +34,7 @@ class Interactor
     inline int getNbPositions() const { return _nbpositions; }
 
     virtual void startInteractionThread();
+    void waitForInteractionThread();
 	virtual bool continueInteractionThread() = 0;
     virtual void stopInteractionThread() = 0;
 
@@ -157,11 +160,11 @@ class Interactor
 
     virtual void syncParticleStateData(unsigned index) = 0;
 
-    pthread_t _thread;
-    pthread_mutex_t mutex;
-    bool _isRunning;
+    std::thread _thread;
+    std::mutex mutex;
+    std::atomic_bool _isRunning;
 
-    static void* runthread(void* userdata);
+    static void runthread(Interactor* interactor);
     virtual void setupInteraction() = 0;        // Pure virtual method
     virtual void processInteractions() = 0;     // Pure virtual method
     virtual void terminateInteraction() {}      // Virtual method with empty default implementation

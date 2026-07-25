@@ -11,7 +11,8 @@ class ParticleProperty
   public:
     ParticleProperty()
         : _mass(1.0), _charge(0.0), _electroncharge(0), _radius(1.0), _epsilon(0.0), _tempfactor(0.0), _occupancy(0.0),
-          _solventaccessibilitysurface(0.0), _transferenergybyaccessiblesurface(0.0), _ischarged(false), _burying(1.0)
+          _hydrophobicity(0.0), _solventaccessibilitysurface(0.0), _transferenergybyaccessiblesurface(0.0),
+          _ischarged(false), _ishydrophobic(false), _burying(1.0)
     {
     }
 

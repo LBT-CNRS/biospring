@@ -73,6 +73,7 @@ void Particle::resetForce()
     _stericenergy = 0.0;
     _kineticenergy = 0.0;
     _impenergy = 0.0;
+    _hydrophobicityenergy = 0.0;
 }
 
 void Particle::applyViscosity(float viscosity)
@@ -127,14 +128,6 @@ void Particle::addDensityFieldForce()
     float gridscale = _springnetwork->getGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getDensityGrid();
 
-    // Off-grid guard: a steered or free-moving particle can leave the density
-    // grid. DenseGrid::get -> at() throws std::out_of_range for an out-of-bounds
-    // cell, which aborts the whole run. The JAX port (potential/density_field.py)
-    // instead contributes ZERO force for out-of-grid particles (clamp-the-index +
-    // mask-to-zero). Mirror that here: skip the lookup and add nothing.
-    if (potentialgrid.is_out_of_grid(biospring::grid::real_coordinates(getX(), getY(), getZ())))
-        return;
-
     Vector3f force = potentialgrid.get(getX(), getY(), getZ()).vector;
     force = force * getBurying() * gridscale;
 
@@ -146,11 +139,6 @@ void Particle::addElectrostaticFieldForce()
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     float gridscale = _springnetwork->getGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getPotentialGrid();
-
-    // Off-grid guard (see addDensityFieldForce): mirror the JAX port's zero-force
-    // out-of-bounds behaviour instead of throwing std::out_of_range and crashing.
-    if (potentialgrid.is_out_of_grid(biospring::grid::real_coordinates(getX(), getY(), getZ())))
-        return;
 
     const auto & cell = potentialgrid.get(getX(), getY(), getZ());
 
@@ -171,6 +159,9 @@ void Particle::addElectrostaticForce()
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     for (auto neighbor_index : coulombneighbors)
     {
+        if (_springnetwork->isProbeParticle(neighbor_index))
+            continue;
+
         const Particle & p = _springnetwork->getParticle(neighbor_index);
         apply = true;
         if (_springnetwork->isSpringEnabled())
@@ -218,6 +209,9 @@ void Particle::addHydrophobicityForce()
         const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
         for (auto neighbor_index : hydrophobicneighbors)
         {
+            if (_springnetwork->isProbeParticle(neighbor_index))
+                continue;
+
             const Particle & p = _springnetwork->getParticle(neighbor_index);
             apply = true;
             if (_springnetwork->isSpringEnabled())
@@ -261,10 +255,13 @@ void Particle::addElectrostaticForceNoGrid(float cutoff)
         {
             f = p.getPosition() - getPosition();
             distance = f.norm();
-            _electrostaticenergy += ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
-            f.normalize();
-            f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
-            addForce(f);
+            if (distance < cutoff && distance != 0.0f)
+            {
+                _electrostaticenergy += ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
+                f.normalize();
+                f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
+                addForce(f);
+            }
         }
     }
 }
@@ -282,6 +279,9 @@ void Particle::addStericForce()
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     for (auto neighbor_index : vanderwaalsneighbors)
     {
+        if (_springnetwork->isProbeParticle(neighbor_index))
+            continue;
+
         const Particle & p = _springnetwork->getParticle(neighbor_index);
         apply = true;
         if (_springnetwork->isSpringEnabled())
@@ -307,32 +307,37 @@ void Particle::addStericForce()
 // ======================================================================================
 // Add forces to probe
 
-void Particle::addStericProbeForce(Particle & probe)
+float Particle::addStericProbeForce(Particle & probe)
 {
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     Vector3f f = probe.getPosition() - getPosition();
     float distance = f.norm();
 
-    _stericenergy +=
-        ff->computeStericEnergy(probe.getRadius(), getRadius(), probe.getEpsilon(), getEpsilon(), distance) / 2.0;
+    const float pair_energy =
+        ff->computeStericEnergy(probe.getRadius(), getRadius(), probe.getEpsilon(), getEpsilon(), distance);
+    _stericenergy += pair_energy * 0.5f;
+    probe.setStericEnergy(probe.getStericEnergy() + pair_energy * 0.5f);
     f.normalize();
     f = f * ff->computeStericForceModule(probe.getRadius(), getRadius(), probe.getEpsilon(), getEpsilon(), distance);
     addForce(f);
     probe.addForce(-f);
+    return pair_energy;
 }
 
-void Particle::addElectrostaticProbeForce(Particle & probe)
+float Particle::addElectrostaticProbeForce(Particle & probe)
 {
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     Vector3f f = probe.getPosition() - getPosition();
     float distance = f.norm();
 
-    _electrostaticenergy = ff->computeElectrostaticEnergy(probe.getCharge(), getCharge(), distance);
-    probe.setElectrostaticEnergy(probe.getElectrostaticEnergy() + _electrostaticenergy);
+    const float pair_energy = ff->computeElectrostaticEnergy(probe.getCharge(), getCharge(), distance);
+    _electrostaticenergy += pair_energy * 0.5f;
+    probe.setElectrostaticEnergy(probe.getElectrostaticEnergy() + pair_energy * 0.5f);
     f.normalize();
     f = f * ff->computeElectrostaticForceModule(probe.getCharge(), getCharge(), distance);
     addForce(f);
     probe.addForce(-f);
+    return pair_energy;
 }
 
 } // namespace spn

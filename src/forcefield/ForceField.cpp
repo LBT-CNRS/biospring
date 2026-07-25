@@ -12,14 +12,12 @@ namespace forcefield
 
 // ======================================================================================
 // Steric energy and force.
-float ForceField::computeStericEnergy(float radius1, float radius2, float epsilon1, float epsilon2,
-                                      float distance) const
+float ForceField::computeStericEnergy(float, float, float, float, float) const
 {
     return 0.0;
 }
 
-float ForceField::computeStericForceModule(float radius1, float radius2, float epsilon1, float epsilon2,
-                                           float distance) const
+float ForceField::computeStericForceModule(float, float, float, float, float) const
 {
     return 0.0;
 }
