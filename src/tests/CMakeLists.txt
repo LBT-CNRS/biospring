@@ -6,12 +6,36 @@ if(NOT GTest_FOUND)
     include(FetchContent)
 
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    # GoogleTest installs itself by default when embedded this way. BioSpring
+    # only needs it to build the test binaries; it must not end up in
+    # CMAKE_INSTALL_PREFIX alongside BioSpring's own files.
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    # BioSpring's tests only use gtest/gtest_main, never gmock: skip building
+    # it entirely instead of just hiding the option, since it also saves real
+    # compile time.
+    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG v1.15.2
     )
     FetchContent_MakeAvailable(googletest)
+
+    # GoogleTest is vendored, third-party code built as its own CMake
+    # targets: it does not inherit BioSpring's own compile options, but the
+    # compiler's baseline warnings (e.g. char8_t/char32_t conversion in
+    # gtest-printers.h) still fire while building it. Silence warnings on its
+    # targets rather than patching fetched source.
+    foreach(_gtest_target IN ITEMS gtest gtest_main)
+        if(TARGET ${_gtest_target})
+            if(MSVC)
+                target_compile_options(${_gtest_target} PRIVATE /w)
+            else()
+                target_compile_options(${_gtest_target} PRIVATE -w)
+            endif()
+        endif()
+    endforeach()
+    unset(_gtest_target)
 endif()
 
 include(GoogleTest)
