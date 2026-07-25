@@ -1,6 +1,8 @@
 #ifndef __PARTICLE_H__
 #define __PARTICLE_H__
 
+#include <vector>
+
 #include "forcefield/ForceField.h"
 
 #include "ParticleProperty.h"
@@ -13,6 +15,20 @@ namespace spn
 
 class Spring;
 class SpringNetwork;
+
+// A force/energy contribution owed to another particle (identified by its
+// index/id), produced while computing a nonbonded pair interaction from the
+// other side of that pair. Nonbonded force computation runs in parallel, one
+// thread per particle, so a thread may not write directly into a particle it
+// does not own; the contribution is recorded here instead and applied by the
+// caller in a serial pass once every thread is done. See
+// SpringNetwork::computeParticleForces / _applyNonbondedPairScratch.
+struct DeferredNonbondedContribution
+{
+    unsigned target;
+    Vector3f force;
+    float energy;
+};
 
 class Particle : public ParticleProperty
 {
@@ -112,10 +128,17 @@ class Particle : public ParticleProperty
     void addElectrostaticFieldForce();
     void addDensityFieldForce();
     void addElectrostaticForceNoGrid(float cutoff);
-    void addElectrostaticForce();
-    void addStericForce();
+
+    // Computes nonbonded pair interactions with this particle's grid neighbors.
+    // Each unique pair is evaluated once (from the lower-id dynamic side, see
+    // the .cpp for the exact rule) and Newton's third law is applied
+    // explicitly: the contribution to `*this` is applied immediately, while
+    // the opposite contribution owed to a dynamic neighbor is appended to
+    // `deferred` for the caller to apply once out of the parallel region.
+    void addElectrostaticForce(std::vector<DeferredNonbondedContribution> & deferred);
+    void addStericForce(std::vector<DeferredNonbondedContribution> & deferred);
     void addIMPForce();
-    void addHydrophobicityForce();
+    void addHydrophobicityForce(std::vector<DeferredNonbondedContribution> & deferred);
     float addElectrostaticProbeForce(Particle & probe);
     float addStericProbeForce(Particle & probe);
 

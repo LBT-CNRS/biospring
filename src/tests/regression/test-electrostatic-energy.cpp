@@ -96,6 +96,44 @@ TEST_F(TestElectrostaticEnergy, energy)
     }
 }
 
+// A static particle never re-visits its pairs on its own, so it never
+// contributes its own share of the pair energy: the dynamic side must credit
+// the full pairwise energy, not half of it.
+TEST(TestElectrostaticEnergyStatic, static_neighbor_contributes_full_pair_energy)
+{
+    configuration::Configuration config;
+    config.sim.nbsteps = 1;
+    config.sim.timestep = 0.01;
+    config.electrostatic.enable = true;
+    config.electrostatic.cutoff = 16.0;
+    config.electrostatic.dielectric = 1.0;
+
+    spn::Particle p1, p2;
+    p1.setPosition(Vector3f(0.0, 0.0, 0.0));
+    p2.setPosition(Vector3f(2.0, 0.0, 0.0));
+    p1.setCharge(0.5973);
+    p2.setCharge(-0.5973);
+    p2.setStatic(true);
+
+    spn::SpringNetwork spn;
+    spn.addParticle(p1);
+    spn.addParticle(p2);
+    spn.setup(config);
+
+    spn.idleRun();
+    spn.computeParticleForces();
+
+    const auto & a = spn.getParticle(0);
+    const auto & b = spn.getParticle(1);
+
+    const float expected = expected_electrostatic_energy(a, b, config.electrostatic.dielectric);
+    EXPECT_FLOAT_EQ(spn.getElectrostaticEnergy(), expected);
+
+    EXPECT_FLOAT_EQ(b.getForce().getX(), 0.0f);
+    EXPECT_FLOAT_EQ(b.getForce().getY(), 0.0f);
+    EXPECT_FLOAT_EQ(b.getForce().getZ(), 0.0f);
+}
+
 // -- Main function  ----------------------------------------------------------
 int main(int argc, char * argv[])
 {

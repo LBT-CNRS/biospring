@@ -159,6 +159,87 @@ TEST_F(TestStericEnergyAmber, amber)
     }
 }
 
+// ============================================================================
+// Regression tests for unique-pair evaluation (each pair's force/energy is
+// computed once, and Newton's third law is applied explicitly instead of
+// letting each side recompute the pair independently).
+// ============================================================================
+
+struct TestStericEnergyDedup : public ::testing::Test
+{
+    biospring::configuration::Configuration config;
+    biospring::spn::SpringNetwork spn;
+
+    void SetUp() override
+    {
+        ::testing::Test::SetUp();
+        config.sim.nbsteps = 1;
+        config.sim.timestep = 0.01;
+        config.steric.enable = true;
+        config.steric.cutoff = 16.0;
+        config.steric.mode = "linear";
+    }
+
+    biospring::spn::Particle makeParticle(float x, bool isStatic = false)
+    {
+        biospring::spn::Particle p;
+        p.setPosition(Vector3f(x, 0.0, 0.0));
+        p.setCharge(0.5973);
+        p.setRadius(1.908);
+        p.setEpsilon(0.086);
+        p.setMass(12.01);
+        p.setStatic(isStatic);
+        return p;
+    }
+};
+
+// Three mutually-visible dynamic particles: every unique pair must contribute
+// its full energy exactly once, whichever side (lower or higher id) triggers
+// the computation.
+TEST_F(TestStericEnergyDedup, three_dynamic_particles_sum_all_unique_pairs)
+{
+    spn.addParticle(makeParticle(0.0));
+    spn.addParticle(makeParticle(1.0));
+    spn.addParticle(makeParticle(2.0));
+    spn.setup(config);
+
+    spn.idleRun();
+    spn.computeParticleForces();
+
+    const auto & a = spn.getParticle(0);
+    const auto & b = spn.getParticle(1);
+    const auto & c = spn.getParticle(2);
+
+    const float expected = steric_energy_linear(a, b) + steric_energy_linear(a, c) + steric_energy_linear(b, c);
+    EXPECT_FLOAT_EQ(spn.getStericEnergy(), expected);
+}
+
+// A static particle never re-visits its pairs on its own, so it never
+// contributes its own share of the pair energy: the dynamic side must credit
+// the full pairwise energy, not half of it (a static neighbor is not double
+// counted the way a dynamic one is, since only one side ever computes it).
+TEST_F(TestStericEnergyDedup, static_neighbor_contributes_full_pair_energy)
+{
+    spn.addParticle(makeParticle(0.0, /*isStatic=*/false));
+    spn.addParticle(makeParticle(1.0, /*isStatic=*/true));
+    spn.setup(config);
+
+    spn.idleRun();
+    spn.computeParticleForces();
+
+    const auto & a = spn.getParticle(0);
+    const auto & b = spn.getParticle(1);
+
+    const float expected = steric_energy_linear(a, b);
+    EXPECT_FLOAT_EQ(spn.getStericEnergy(), expected);
+
+    // The static particle must never receive a force: it is never integrated
+    // or reset, so any stray write would silently accumulate across steps.
+    EXPECT_FLOAT_EQ(b.getForce().getX(), 0.0f);
+    EXPECT_FLOAT_EQ(b.getForce().getY(), 0.0f);
+    EXPECT_FLOAT_EQ(b.getForce().getZ(), 0.0f);
+}
+
 // -- Main function  ----------------------------------------------------------
 int main(int argc, char * argv[])
 {
