@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     gdb
 
+ARG CMAKE_BUILD_TYPE=Release
+ENV CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+RUN echo "CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}"
+
 # Martini tools
 FROM python:3 AS cg-tools
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -51,11 +55,11 @@ WORKDIR /biospring/biospring_src
 RUN mkdir build ; cd build && \
     cmake .. -DCMAKE_INSTALL_PREFIX:PATH=/biospring \
             -DBUILD_TESTING=OFF \
-            -DBIOSPRING_ENABLE_MDDRIVER=ON \
+            -DMDDRIVER_SUPPORT=ON \
             -DMDDriver_DIR="$MDDriver_DIR" \
-            -DBIOSPRING_ENABLE_FREESASA=ON \
-            -DCMAKE_BUILD_TYPE=Release && \
-            # -DCMAKE_BUILD_TYPE=DEBUG && \
+            -DFREESASA_SUPPORT=ON \
+            -DOPENMP_SUPPORT=ON \
+            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} && \
     # Try to set -j1 if compilation error, restart deamon process
     make -j1 && make install
 
