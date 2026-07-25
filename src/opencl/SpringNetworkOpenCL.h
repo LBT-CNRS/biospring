@@ -8,7 +8,37 @@
 	#include "viewer/SpringNetworkViewer.h"
 #endif
 #define __CL_ENABLE_EXCEPTIONS
+
+// cl.hpp is a vendored, unmodified copy of the legacy Khronos OpenCL C++
+// bindings. It intentionally targets deprecated OpenCL 1.x APIs and predates
+// modern C++ warning conventions; silence warnings from it here rather than
+// editing third-party code to satisfy this project's own compiler flags.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#pragma clang diagnostic ignored "-Wdeprecated-copy-with-user-provided-copy"
+#pragma clang diagnostic ignored "-Wignored-qualifiers"
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996) // deprecated declarations
+#endif
+
 #include "cl.hpp"
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 #include <utility>
 
 using biospring::spn::Spring;
