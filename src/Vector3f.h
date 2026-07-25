@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <ostream>
+#include <string>
 
 // Three dimensions vector with single floating point precision, used for position, velocity, or force.
 //
