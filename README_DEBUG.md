@@ -15,13 +15,13 @@
 - .artifacts/ : Artifacts of the workflow that contains locally the FreeSASA and MDDriver sources in order to BioSpring to be built
 - .devcontainer/
   - devcontainer.json : configuration file for the devcontainer using the biospring-debug image
-- .github/workflows/local-debug.yml : workflow file to build the image of BioSpring in debug mode
+- .github/workflows/ci-linux.local.yml : workflow file to build the image of BioSpring in debug mode (manual trigger); also builds and pushes the release image on tags/releases
 - .actrc : configuration file for Act / Docker engine
 - README_DEBUG.md : this file
 
 ## Build Docker Image for Local Debug in dev container
 
-- Go to GitHub Local Actions > Workflows and run `Build Docker Image for Local Debug`
+- Go to GitHub Local Actions > Workflows and run `CI (Linux, Docker/local)` manually (workflow_dispatch)
 - Command Palette (CTRL+MAJ+P) > `Dev Containers: Reopen in Container` and wait until the C++ extensions finished to be installed
 - Setup Debug config, see example below:
 
