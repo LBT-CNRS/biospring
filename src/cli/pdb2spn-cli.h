@@ -21,6 +21,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     std::string pathGroup;
     std::vector<std::string> pathOutputList;
 
+
     // User options.
     float cutoff;
     float stiffness;
@@ -28,6 +29,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     bool isStatic;
     bool ignoreDuplicates;
     bool ignoreMissing;
+    bool writePdbConect;
 
     // Constructor (inherited from argparse::CommandLineArgumentsBase).
     CommandLineArguments(const std::string & name, const argparse::description_t & description,

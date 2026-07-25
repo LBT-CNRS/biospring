@@ -3,7 +3,6 @@
 #ifndef _INTERACTORFREESASA_H_
 #define _INTERACTORFREESASA_H_
 
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "freesasa.h"
@@ -62,8 +61,8 @@ class InteractorFreeSASA : public Interactor
         inline float getSASA_total() { return _total;};
 
         virtual void startInteractionThread() override;
-        virtual bool continueInteractionThread() override { return _isRunning; }
-        virtual void stopInteractionThread() override { _isRunning = false; }
+        virtual bool continueInteractionThread() override { return _isRunning.load(std::memory_order_acquire); }
+        virtual void stopInteractionThread() override { _isRunning.store(false, std::memory_order_release); }
 
         virtual void syncSystemStateData() override;
 
@@ -101,7 +100,6 @@ class InteractorFreeSASA : public Interactor
 
         virtual void syncParticleStateData(unsigned index) override;
 
-        bool _isRunning;
 
 };
 

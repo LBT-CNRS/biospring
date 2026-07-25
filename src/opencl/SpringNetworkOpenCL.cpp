@@ -10,15 +10,22 @@
 #include "Spring.h"
 #include "Particle.h"
 #include "Vector3f.h"
+#include "forcefield/constants.hpp"
+
+using biospring::spn::Particle;
+using biospring::spn::Spring;
+using biospring::spn::SpringNetwork;
 
 
 
 
-#if defined __APPLE__ || defined(MACOSX)
-#else
-    #if defined WIN32
+#ifdef OPENGL_SUPPORT
+    #if defined(__APPLE__) || defined(MACOSX)
+        #include <OpenGL/OpenGL.h>
+    #elif defined(_WIN32)
+        #include <windows.h>
     #else
-        //needed for context sharing functions
+        // Needed only for OpenCL/OpenGL context sharing on X11.
         #include <GL/glx.h>
     #endif
 #endif
@@ -27,18 +34,22 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include <algorithm>
+#include <ctime>
+#include <stdexcept>
 
 
 #define WORK_GROUP_SIZE 256
 
 
-SpringNetworkOpenCL::SpringNetworkOpenCL() : SpringNetwork()
-	{
-	_nbspringsocl=0;
-	_nbparticlesocl=0;
-	_springparticlesindexes=NULL;
-   	getOpenCLRessources();
-	}
+SpringNetworkOpenCL::SpringNetworkOpenCL()
+    : SpringNetwork(), _springparticlesindexes(nullptr), _nbparticlesocl(0), _nbspringsocl(0),
+      _particlepositions(nullptr), _particlevelocities(nullptr), _particleforces(nullptr),
+      _particleexternalforces(nullptr), _particletospringindexes(nullptr), _springsocl(nullptr),
+      _err(CL_SUCCESS), _contextproperties(nullptr)
+    {
+    getOpenCLRessources();
+    }
 
 
 
@@ -64,8 +75,16 @@ void SpringNetworkOpenCL::getOpenCLRessources()
 	}
 
 SpringNetworkOpenCL::~SpringNetworkOpenCL()
-	{
-	}
+    {
+    delete[] _springparticlesindexes;
+    delete[] _particlepositions;
+    delete[] _particlevelocities;
+    delete[] _particleforces;
+    delete[] _particleexternalforces;
+    delete[] _particletospringindexes;
+    delete[] _springsocl;
+    delete[] _contextproperties;
+    }
 
 cl::Context * SpringNetworkOpenCL::getContext()
 	{
@@ -303,14 +322,14 @@ void SpringNetworkOpenCL::InitOcl()
 
 
 		#else
-			#if defined WIN32 // Win32
+			#if defined(_WIN32) // Win32
 			    _contextproperties=new cl_context_properties[7];
 			    _contextproperties[0]=CL_GL_CONTEXT_KHR;
 			    _contextproperties[1]=(cl_context_properties)wglGetCurrentContext();
 			    _contextproperties[2]=CL_WGL_HDC_KHR;
 			    _contextproperties[3]=(cl_context_properties)wglGetCurrentDC();
 			    _contextproperties[4]=CL_CONTEXT_PLATFORM;
-			    _contextproperties[5]=(cl_context_properties)(platforms[0])();
+			    _contextproperties[5]=(cl_context_properties)(_platforms[0])();
 			    _contextproperties[6]=0;
 
 
@@ -330,7 +349,7 @@ void SpringNetworkOpenCL::InitOcl()
 			    _contextproperties[2]=CL_GLX_DISPLAY_KHR;
 			    _contextproperties[3]=(cl_context_properties)glXGetCurrentDisplay();
 			    _contextproperties[4]=CL_CONTEXT_PLATFORM;
-			    _contextproperties[5]=(cl_context_properties)(platforms[0])();
+			    _contextproperties[5]=(cl_context_properties)(_platforms[0])();
 			    _contextproperties[6]=0;
 			    //cl_context cxGPUContext = clCreateContext(props, 1, &cdDevices[uiDeviceUsed], NULL, NULL, &err);
 			    try{
@@ -341,7 +360,7 @@ void SpringNetworkOpenCL::InitOcl()
 			    }
 			#endif
 		#endif
-	#else`
+	#else
 		 _contextproperties=new cl_context_properties[3];
 		_contextproperties[0] = CL_CONTEXT_PLATFORM;
 		_contextproperties[1] = (cl_context_properties)(_platforms[0])();
@@ -417,7 +436,11 @@ void SpringNetworkOpenCL::idleRun()
 		_queue.finish();
 	#endif
 
-	_event=_kernelfunctorspring(_inoutPositionBuffer,_inSpringBuffer,_inSpringIndexesBuffer,_inoutForceBuffer, _nbparticlesocl, ForceField::GLOBALSPRINGFORCECONVERT);
+    const float springForceScale =
+        static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+    _event = _kernelfunctorspring(_inoutPositionBuffer, _inSpringBuffer,
+                                 _inSpringIndexesBuffer, _inoutForceBuffer,
+                                 _nbparticlesocl, springForceScale);
 	_event.wait();
 
 
@@ -426,7 +449,9 @@ void SpringNetworkOpenCL::idleRun()
 	springtime=(endTime-startTime)*1.0E-9;
 
 
-	_event=_kernelfunctordamping(_inoutForceBuffer,_inoutVelocityBuffer,_viscosity, _nbparticlesocl);
+    const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
+    _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
+                                  viscosity, _nbparticlesocl);
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
@@ -439,24 +464,30 @@ void SpringNetworkOpenCL::idleRun()
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 	integrationtime=(endTime-startTime)*1.0E-9;
 
-	_event=_kernelfunctorintegration(_inoutPositionBuffer,_inoutVelocityBuffer,_inoutForceBuffer, _timestep,_nbparticlesocl);
+    _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
+                                      _inoutForceBuffer, getTimeStep(),
+                                      _nbparticlesocl);
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 	externalforcetime=(endTime-startTime)*1.0E-9;
 
-	_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer,CL_TRUE,0,_nbparticlesocl,_particlevelocities);
+	_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_TRUE, 0,
+        sizeof(float4) * _nbparticlesocl, _particlevelocities);
 	checkErr("ComamndQueue::enqueueReadBuffer()");
 
-	_err = _queue.enqueueReadBuffer(_inoutForceBuffer,CL_TRUE,0,_nbparticlesocl,_particleforces);
+	_err = _queue.enqueueReadBuffer(_inoutForceBuffer, CL_TRUE, 0,
+        sizeof(float4) * _nbparticlesocl, _particleforces);
 	checkErr("ComamndQueue::enqueueReadBuffer()");
 
-	_err = _queue.enqueueReadBuffer(_inoutPositionBuffer,CL_TRUE,0,_nbparticlesocl,_particlepositions);
+	_err = _queue.enqueueReadBuffer(_inoutPositionBuffer, CL_TRUE, 0,
+        sizeof(float4) * _nbparticlesocl, _particlepositions);
 	_queue.finish();
 	checkErr("CommandQueue::enqueueReadBuffer()");
 
 
-	_err = _queue.enqueueWriteBuffer(_inExternalForceBuffer,CL_TRUE,0,_nbparticlesocl,_particleexternalforces);
+	_err = _queue.enqueueWriteBuffer(_inExternalForceBuffer, CL_TRUE, 0,
+        sizeof(float4) * _nbparticlesocl, _particleexternalforces);
 	_queue.finish();
 	checkErr("CommandQueue::enqueueWriteBuffer()");
 
@@ -474,10 +505,6 @@ void SpringNetworkOpenCL::idleRun()
 		cout<<"fx "<<_particleforces[i].x<<" fy "<<_particleforces[i].y<<" fz " <<_particleforces[i].z<<std::endl;
 		}
 
-	cl_ulong queueTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_QUEUED>();
-	cl_ulong submitTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_SUBMIT>();
-
-	double runTime=endTime-startTime;
 	std::cout<<"Times: "<<totaltime<<"( spring : "<<springtime<<", damping : "<<dampingtime<<", integration : "<<integrationtime<<", external : "<<externalforcetime<<")"<< std::endl;
 
 	//usleep(10);
@@ -502,7 +529,7 @@ void SpringNetworkOpenCL::initRun()
 void SpringNetworkOpenCL::run()
 	{
 	initRun();
-	while(_nbiter<_maxiter || _maxiter<=0)
+	while (!isEnd())
 		{
 		idleRun();
 
@@ -514,33 +541,28 @@ void SpringNetworkOpenCL::run()
 
 void SpringNetworkOpenCL::convertSpringtoSpringocl(const Spring & spin, Springocl & spout)
 	{
-	spout.id1=spin.getParticle1()->getId();
-	spout.id2=spin.getParticle2()->getId();
+	spout.id1=spin.getParticle1().getId();
+	spout.id2=spin.getParticle2().getId();
 	spout.stiffness=spin.getStiffness();
 	spout.equilibrium=spin.getEquilibrium();
 	}
 void SpringNetworkOpenCL::computeParticleToSpringIndexes()
-	{
-	cerr<<__FUNCTION__<<" start"<<endl;
-	_particletospringindexes=new int[_nbparticlesocl];
-	bool cut=true;
+    {
+    cerr << __FUNCTION__ << " start" << endl;
+    delete[] _particletospringindexes;
+    _particletospringindexes = new int[_nbparticlesocl];
+    std::fill_n(_particletospringindexes, _nbparticlesocl, -1);
 
-	for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		_particletospringindexes[i]=-1;
-		}
-
-	for(unsigned i=0;i<_nbspringsocl-1;i++)
-		{
-		if(cut)
-			{
-			_particletospringindexes[_springsocl[i].id1]=i;
-			}
-		cut=_springsocl[i].id1!=_springsocl[i+1].id1;
-		}
-
-	cerr<<__FUNCTION__<<" endl"<<endl;
-	}
+    // Springs are grouped by id1 by computeOpenCLSprings(). Keep the first
+    // spring index for each particle, including the final group.
+    for (unsigned i = 0; i < _nbspringsocl; ++i)
+        {
+        const unsigned particleId = _springsocl[i].id1;
+        if (particleId < _nbparticlesocl && _particletospringindexes[particleId] < 0)
+            _particletospringindexes[particleId] = static_cast<int>(i);
+        }
+    cerr << __FUNCTION__ << " end" << endl;
+    }
 
 float SpringNetworkOpenCL::distance (const float4 p1,const float4 p2)
 		{
@@ -554,77 +576,61 @@ float SpringNetworkOpenCL::distance (const float4 p1,const float4 p2)
 
 
 void SpringNetworkOpenCL::computeOpenCLSprings()
-		{
-		cerr<<__FUNCTION__<<" start"<<endl;
-		vector < vector <Spring *> > adjacentlist;
-		vector <Spring *> v;
+    {
+    cerr << __FUNCTION__ << " start" << endl;
 
-		cerr<<__FUNCTION__<<" test1 "<<getNumberOfParticles()<<endl;
-		for(unsigned i=0;i<getNumberOfParticles();i++)
-			{
-			adjacentlist.push_back(v);
-			}
-		cerr<<__FUNCTION__<<" test1 "<<SpringNetwork::getNumberOfSprings()<<endl;
+    const unsigned particleCount = SpringNetwork::getNumberOfParticles();
+    const unsigned springCount = SpringNetwork::getNumberOfSprings();
+    vector<vector<Springocl>> adjacentList(particleCount);
 
-		for(unsigned i=0;i<SpringNetwork::getNumberOfSprings();i++)
-			{
-			Spring * s1 = new Spring(*(_springs[i]));
-			Spring * s2 = new Spring(s1->getParticle2(), s1->getParticle1(), s1->getStiffness(), s1->getEquilibrium());
-			adjacentlist[s1->getParticle1()->getId()].push_back(s1);
-			adjacentlist[s2->getParticle1()->getId()].push_back(s2);
-			}
-		_springparticlesindexes=new unsigned[SpringNetwork::getNumberOfSprings()*2];
+    delete[] _springparticlesindexes;
+    _springparticlesindexes = springCount == 0 ? nullptr : new unsigned[springCount * 2];
 
-		for(unsigned i=0;i<SpringNetwork::getNumberOfSprings();i++)
-			{
-			_springparticlesindexes[i*2]=_springs[i]->getParticle1()->getId();
-			_springparticlesindexes[i*2+1]=_springs[i]->getParticle2()->getId();
-			}
+    for (unsigned i = 0; i < springCount; ++i)
+        {
+        const Spring & spring = SpringNetwork::getSpring(i);
+        const unsigned id1 = static_cast<unsigned>(spring.getParticle1().getId());
+        const unsigned id2 = static_cast<unsigned>(spring.getParticle2().getId());
+        if (id1 >= particleCount || id2 >= particleCount)
+            throw std::runtime_error("OpenCL spring references an invalid particle id");
 
+        _springparticlesindexes[i * 2] = id1;
+        _springparticlesindexes[i * 2 + 1] = id2;
 
+        Springocl forward{};
+        convertSpringtoSpringocl(spring, forward);
+        adjacentList[id1].push_back(forward);
 
-		cerr<<__FUNCTION__<<" test2"<<endl;
-		_nbspringsocl=SpringNetwork::getNumberOfSprings()*2;
-		_springsocl=new Springocl[_nbspringsocl];
+        Springocl reverse = forward;
+        std::swap(reverse.id1, reverse.id2);
+        adjacentList[id2].push_back(reverse);
+        }
 
+    _nbspringsocl = springCount * 2;
+    delete[] _springsocl;
+    _springsocl = _nbspringsocl == 0 ? nullptr : new Springocl[_nbspringsocl];
 
+    unsigned springIndex = 0;
+    for (const auto & particleSprings : adjacentList)
+        for (const Springocl & spring : particleSprings)
+            _springsocl[springIndex++] = spring;
 
-
-		unsigned springindex=0;
-		for(unsigned i=0;i<getNumberOfParticles();i++)
-			{
-			for(unsigned j=0;j<adjacentlist[i].size();j++)
-				{
-				convertSpringtoSpringocl(*(adjacentlist[i][j]),_springsocl[springindex]);
-				springindex++;
-				}
-			}
-
-		cerr<<__FUNCTION__<<" test"<<endl;
-		for(unsigned i=0;i<getNumberOfParticles();i++)
-			{
-			for(unsigned j=0;j<adjacentlist[i].size();j++)
-				{
-				delete(adjacentlist[i][j]);
-				}
-			adjacentlist[i].clear();
-			}
-		adjacentlist.clear();
-		cerr<<__FUNCTION__<<" end"<<endl;
-		}
+    cerr << __FUNCTION__ << " end" << endl;
+    }
 
 void SpringNetworkOpenCL::computeOpenCLPositions()
 		{
 		cerr<<__FUNCTION__<<" start"<<endl;
 
 		_nbparticlesocl=SpringNetwork::getNumberOfParticles();
-		_particlepositions = new float4[_nbparticlesocl];
+		delete[] _particlepositions;
+		_particlepositions = _nbparticlesocl == 0 ? nullptr : new float4[_nbparticlesocl];
 
 
 		Vector3f v;
 		for(unsigned i=0;i<_nbparticlesocl;i++)
 			{
-			v=_particules[i]->getPosition();
+			v=SpringNetwork::getParticle(i).getPosition();
 			_particlepositions[i].x=v.getX();
 			_particlepositions[i].y=v.getY();
 			_particlepositions[i].z=v.getZ();
@@ -638,8 +644,10 @@ void SpringNetworkOpenCL::computeOpenCLPositions()
 
 void SpringNetworkOpenCL::computeOpenCLForces()
 {
-	_particleforces = new float4[_nbparticlesocl];
-	_particleexternalforces = new float4[_nbparticlesocl];
+	delete[] _particleforces;
+	delete[] _particleexternalforces;
+	_particleforces = _nbparticlesocl == 0 ? nullptr : new float4[_nbparticlesocl];
+	_particleexternalforces = _nbparticlesocl == 0 ? nullptr : new float4[_nbparticlesocl];
 	for(unsigned i=0;i<_nbparticlesocl;i++)
 		{
 		_particleforces[i].x=0.0f;
@@ -656,7 +664,8 @@ void SpringNetworkOpenCL::computeOpenCLForces()
 
 void SpringNetworkOpenCL::computeOpenCLVelocities()
 {
-	_particlevelocities = new float4[_nbparticlesocl];
+	delete[] _particlevelocities;
+	_particlevelocities = _nbparticlesocl == 0 ? nullptr : new float4[_nbparticlesocl];
 
 	for(unsigned i=0;i<_nbparticlesocl;i++)
 		{
@@ -673,7 +682,7 @@ void SpringNetworkOpenCL::computeRandomSet()
 	_nbparticlesocl=10000;
 	_particlepositions=new float4[_nbparticlesocl];
 
-	srand(NULL);
+	std::srand(static_cast<unsigned>(std::time(nullptr)));
 	for(unsigned i=0;i<_nbparticlesocl;i++)
 		{
 		_particlepositions[i].x=((float) rand())/((float) RAND_MAX)-0.5;

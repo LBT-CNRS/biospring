@@ -1,15 +1,14 @@
-# CMakefile for xdrfile-1.1.1
-# author: Benoist LAURENT
-# version: 1.0
-# date: 08/02/2011
-
-
-set(XDRFILE_SRCS
+add_library(biospring-xdrfile STATIC
     src/xdrfile.c
     src/xdrfile_trr.c
     src/xdrfile_xtc.c
-    )
+)
+add_library(BioSpring::xdrfile ALIAS biospring-xdrfile)
 
-add_library(xdrfile STATIC ${XDRFILE_SRCS})
+target_include_directories(biospring-xdrfile PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
 
-target_include_directories(xdrfile INTERFACE src/)
+if(MSVC)
+    target_compile_definitions(biospring-xdrfile PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()

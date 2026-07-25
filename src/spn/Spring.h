@@ -46,6 +46,11 @@ class Spring
     void computeEnergy(const biospring::forcefield::ForceField & ff);
     void computeLength();
 
+    // Computes and returns the force applied to particle 1. The opposite force
+    // must be applied to particle 2. This split makes parallel force evaluation
+    // possible without concurrently modifying particles.
+    Vector3f computeForce(const biospring::forcefield::ForceField & ff);
+
     void applyForceToParticle(const biospring::forcefield::ForceField & ff);
 
   private:

@@ -25,7 +25,7 @@ if (MDDriver_FOUND)
 endif()
 
 if (MDDriver_FOUND AND NOT TARGET MDDriver::MDDriver)
-  add_library(MDDriver::MDDriver STATIC IMPORTED)
+  add_library(MDDriver::MDDriver UNKNOWN IMPORTED)
   set_property(TARGET MDDriver::MDDriver PROPERTY IMPORTED_LOCATION ${MDDRIVER_LIBRARY})
   target_include_directories(MDDriver::MDDriver INTERFACE ${MDDRIVER_INCLUDE_DIR})
 endif()

@@ -9,24 +9,26 @@
 #include "xdrfile.h"
 #include "xdrfile_xtc.h"
 
+#include <vector>
+
 void XTCTrajWriter::writeNextStep()
 {
     /* copy the atom coordinates into a float array */
     size_t natoms = _spn->getNumberOfParticles();
-    rvec x_xtc[natoms];
+    std::vector<float> x_xtc(3 * natoms);
     for (size_t i = 0; i < natoms; ++i)
     {
         const biospring::spn::Particle & p = _spn->getParticle(i);
-        x_xtc[i][0] = p.getX() / 10.0;
-        x_xtc[i][1] = p.getY() / 10.0;
-        x_xtc[i][2] = p.getZ() / 10.0;
+        x_xtc[3 * i + 0] = p.getX() / 10.0;
+        x_xtc[3 * i + 1] = p.getY() / 10.0;
+        x_xtc[3 * i + 2] = p.getZ() / 10.0;
     }
 
     /* the box */
     matrix box = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
 
     /* write the step in the xdr file */
-    write_xtc(_xdr, natoms, _step, (float)_step, box, x_xtc, 1000.0);
+    write_xtc(_xdr, natoms, _step, static_cast<float>(_step), box, reinterpret_cast<rvec *>(x_xtc.data()), 1000.0);
     _step++;
 }
 

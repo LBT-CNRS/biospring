@@ -21,6 +21,7 @@ class Quaternion
 
     // Quaternion(const Quaternion & v) : _x(v._x), _y(v._y), _z(v._z), _w(v._w) { normalize(); }
     Quaternion(const Quaternion & v) : _x(v._x), _y(v._y), _z(v._z), _w(v._w) {  }
+    Quaternion & operator=(const Quaternion &) = default;
 
     // Quaternion(Vector3f v, float w) : _x(v.getX()), _y(v.getY()), _z(v.getZ()), _w(w) { normalize(); }
     Quaternion(Vector3f v, float w) : _x(v.getX()), _y(v.getY()), _z(v.getZ()), _w(w) {  }

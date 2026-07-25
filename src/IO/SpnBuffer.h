@@ -19,12 +19,22 @@ struct SpringBuffer
     float * springsequilibriums;
     int * nbofspringsperparticle;
 
-    ~SpringBuffer()
+    ~SpringBuffer() { clear(); }
+
+    SpringBuffer(const SpringBuffer &) = delete;
+    SpringBuffer & operator=(const SpringBuffer &) = delete;
+
+    void clear()
     {
         delete[] springs;
-        delete springsstiffnesses;
-        delete springsequilibriums;
-        delete nbofspringsperparticle;
+        delete[] springsstiffnesses;
+        delete[] springsequilibriums;
+        delete[] nbofspringsperparticle;
+        springs = nullptr;
+        springsstiffnesses = nullptr;
+        springsequilibriums = nullptr;
+        nbofspringsperparticle = nullptr;
+        number_of_springs = 0;
     }
 
     //
@@ -39,23 +49,25 @@ struct SpringBuffer
     // Constructor with number of particles.
     // Allocates memory.
     //
-    SpringBuffer(size_t number_of_springs, size_t number_of_particles)
+    SpringBuffer(size_t number_of_springs, size_t number_of_particles) : SpringBuffer()
     {
-        this->initialize(number_of_springs, number_of_particles);
+        initialize(number_of_springs, number_of_particles);
     }
 
     // Allocates memory for all buffers.
     void initialize(size_t nSprings, size_t nParticles)
     {
+        clear();
         number_of_springs = nSprings;
 
         if (nSprings > 0)
         {
-            springs = new int[nSprings][2];
-            springsstiffnesses = new float[nSprings];
-            springsequilibriums = new float[nSprings];
-            nbofspringsperparticle = new int[nParticles];
+            springs = new int[nSprings][2]{};
+            springsstiffnesses = new float[nSprings]{};
+            springsequilibriums = new float[nSprings]{};
         }
+        if (nParticles > 0)
+            nbofspringsperparticle = new int[nParticles]{};
     }
 
     // Copies SpringNetwork particle data to buffers.
@@ -101,23 +113,24 @@ struct ParticleBuffer
     // Allocates memory for all buffers.
     void initialize(size_t nParticles)
     {
+        clear();
         number_of_particles = nParticles;
 
         if (nParticles > 0)
         {
-            coordinates = new float[nParticles][3];
-            charges = new float[nParticles];
-            radii = new float[nParticles];
-            epsilons = new float[nParticles];
-            masses = new float[nParticles];
-            hscales = new float[nParticles];
-            surface_accessibilities = new float[nParticles];
-            ids = new int[nParticles];
-            resids = new int[nParticles];
-            dynamic_states = new unsigned char[nParticles];
-            chainnames = new char[nParticles][CHAIN_NAME_LENGTH];
-            particlenames = new char[nParticles][PARTICLE_NAME_LENGTH];
-            resnames = new char[nParticles][RESIDUE_NAME_LENGTH];
+            coordinates = new float[nParticles][3]{};
+            charges = new float[nParticles]{};
+            radii = new float[nParticles]{};
+            epsilons = new float[nParticles]{};
+            masses = new float[nParticles]{};
+            hscales = new float[nParticles]{};
+            surface_accessibilities = new float[nParticles]{};
+            ids = new int[nParticles]{};
+            resids = new int[nParticles]{};
+            dynamic_states = new unsigned char[nParticles]{};
+            chainnames = new char[nParticles][CHAIN_NAME_LENGTH]{};
+            particlenames = new char[nParticles][PARTICLE_NAME_LENGTH]{};
+            resnames = new char[nParticles][RESIDUE_NAME_LENGTH]{};
         }
     }
 
@@ -138,6 +151,7 @@ struct ParticleBuffer
             epsilons[i] = p.getEpsilon();
             masses[i] = p.getMass();
             hscales[i] = p.getTransferEnergyByAccessibleSurface();
+            surface_accessibilities[i] = p.getSolventAccessibilitySurface();
 
             ids[i] = p.getId();
             resids[i] = p.getResId();
@@ -147,7 +161,6 @@ struct ParticleBuffer
             strncpy(particlenames[i], p.getName().c_str(), PARTICLE_NAME_LENGTH);
             strncpy(resnames[i], p.getResName().c_str(), RESIDUE_NAME_LENGTH);
 
-            // !!! WARNING: Surface accessibilities not saved to output file !!!
         }
     }
 
@@ -164,22 +177,42 @@ struct ParticleBuffer
     // Constructor with number of particles.
     // Allocates memory.
     //
-    ParticleBuffer(size_t number_of_particles) { this->initialize(number_of_particles); }
+    ParticleBuffer(size_t number_of_particles) : ParticleBuffer() { initialize(number_of_particles); }
 
-    virtual ~ParticleBuffer()
+    ParticleBuffer(const ParticleBuffer &) = delete;
+    ParticleBuffer & operator=(const ParticleBuffer &) = delete;
+
+    virtual ~ParticleBuffer() { clear(); }
+
+    void clear()
     {
         delete[] coordinates;
-        delete charges;
-        delete radii;
-        delete epsilons;
-        delete masses;
-        delete hscales;
-        delete surface_accessibilities;
-        delete ids;
-        delete resids;
-        delete dynamic_states;
+        delete[] charges;
+        delete[] radii;
+        delete[] epsilons;
+        delete[] masses;
+        delete[] hscales;
+        delete[] surface_accessibilities;
+        delete[] ids;
+        delete[] resids;
+        delete[] dynamic_states;
         delete[] chainnames;
         delete[] particlenames;
         delete[] resnames;
+
+        coordinates = nullptr;
+        charges = nullptr;
+        radii = nullptr;
+        epsilons = nullptr;
+        masses = nullptr;
+        hscales = nullptr;
+        surface_accessibilities = nullptr;
+        ids = nullptr;
+        resids = nullptr;
+        dynamic_states = nullptr;
+        chainnames = nullptr;
+        particlenames = nullptr;
+        resnames = nullptr;
+        number_of_particles = 0;
     }
 };

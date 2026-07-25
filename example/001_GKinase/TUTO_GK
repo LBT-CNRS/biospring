@@ -192,7 +192,7 @@ Conclusion
 ----------
 Now you know the basics of [BioSpring][bs]. You can try more features in the other BioSpring tutorials about docking, membrane insertion and sidechain rotamers.
 
-Appendix: Prepare BioSpring input files using pdb2cdl
+Appendix: Prepare BioSpring input files using pdb2spn
 ----------------------------
 In the tutorial directory, you can find three files used to generate the *model.cdl* file needed by BioSpring as input. The first one is the *model.pdb* file, that describes the molecular conformation of the system you want to study.
 The second one is the *model.grp* file, which contains rules to convert all atom (AA) representations in the .pdb file to Carbon Alpha (CA) representation. The third one is the *model.ff* file, which contains the biophysical 
@@ -200,7 +200,7 @@ parameters that must be used for each particle (atom types, coarsed grain descri
 
 To prepare the BioSpring input .cdl file from a .pdb file, you should use this command :  
         
-        pdb2cdl -pdb model.pdb -cdl model.cdl -grp model.grp -ff model.ff -springcutoff 9.0
+        pdb2spn -s model.pdb -o model.cdl --grp model.grp --ff model.ff --cutoff 9.0
 
 ### File format for reducing AA representation to CG or CA representation. 
 

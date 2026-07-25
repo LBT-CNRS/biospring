@@ -157,7 +157,7 @@ void InteractorMDDriver::setupIMDInteractions( InteractorMDDriver * imdl)
 			spn->setPause(false);
 		}
 		fp_comm = 1;
-		imdl->_isRunning = true;
+		imdl->_isRunning.store(true, std::memory_order_release);
 	}
 }
 
@@ -208,7 +208,7 @@ void InteractorMDDriver::sendDensityGrid(InteractorMDDriver * imdl)
 
 int InteractorMDDriver::processIMDInteractions(InteractorMDDriver * imdl) {
     int ret = 0;
-    pthread_mutex_lock(&imdl->mutex);
+    std::lock_guard<std::mutex> lock(imdl->mutex);
 
     // Send positions
     handleIMDWorkflow(imdl);
@@ -235,7 +235,6 @@ int InteractorMDDriver::processIMDInteractions(InteractorMDDriver * imdl) {
 	CustomData::processCustomFloatData(imdl);
 	
 	
-    pthread_mutex_unlock(&imdl->mutex);
     return ret;
 }
 

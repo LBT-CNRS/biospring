@@ -1,16 +1,16 @@
-# Enable/disable OpenCL support.
-option(OPENCL_SUPPORT "OpenCL support for parallelism on GPUs" OFF)
+target_sources(biospring-core PRIVATE SpringNetworkOpenCL.cpp)
+target_include_directories(biospring-core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(biospring-core PUBLIC OPENCL_SUPPORT)
+target_compile_definitions(biospring-core PRIVATE
+    CL_TARGET_OPENCL_VERSION=120
+    CL_USE_DEPRECATED_OPENCL_1_2_APIS
+)
+target_link_libraries(biospring-core PUBLIC OpenCL::OpenCL OpenGL::GL)
 
-# Search for OpenCL if required.
-if(OPENCL_SUPPORT)
-    find_package(OpenCL REQUIRED)
-endif(OPENCL_SUPPORT)
+configure_file(biospring.cl "${PROJECT_BINARY_DIR}/biospring.cl" COPYONLY)
 
-if(OpenCL_FOUND)
-    target_compile_definitions(biospring-core PUBLIC -DOPENCL_SUPPORT)
-    target_link_libraries(biospring-core PUBLIC OpenCL::OpenCL)
+if(OPENGL_SUPPORT)
+    target_compile_definitions(biospring-core PRIVATE OPENGL_SUPPORT)
+    target_link_libraries(biospring-core PRIVATE
+        OpenGL::GLU GLUT::GLUT GLEW::GLEW)
 endif()
-
-
-# install OpenCL extension
-install(FILES src/biospring.cl DESTINATION ${BIN_INSTALL_DIR})

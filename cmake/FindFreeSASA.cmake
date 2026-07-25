@@ -54,7 +54,7 @@ find_package_handle_standard_args(FreeSASA
 
 # Export target FreeSASA::FreeSASA
 if (FreeSASA_FOUND AND NOT TARGET FreeSASA::FreeSASA)
-  add_library(FreeSASA::FreeSASA STATIC IMPORTED)
+  add_library(FreeSASA::FreeSASA UNKNOWN IMPORTED)
   set_property(TARGET FreeSASA::FreeSASA PROPERTY IMPORTED_LOCATION ${FREESASA_LIBRARY})
   target_include_directories(FreeSASA::FreeSASA INTERFACE ${FREESASA_INCLUDE_DIR})
 endif()

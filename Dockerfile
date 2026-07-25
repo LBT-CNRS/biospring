@@ -4,11 +4,10 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     autoconf \
     libtool \
-    pkg-config \
     git \
     cmake \
     libnetcdf-c++4-dev \
-    python3 \ 
+    python3 \
     python3-pip \
     gdb
 
@@ -51,11 +50,11 @@ WORKDIR /biospring/biospring_src
 # Ensure that we are in the "develop" branch in the biospring_src repo
 RUN mkdir build ; cd build && \
     cmake .. -DCMAKE_INSTALL_PREFIX:PATH=/biospring \
-            -DBUILD_TESTS=OFF \
-            -DMDDRIVER_SUPPORT=ON \
-            -DOPENMP_SUPPORT=ON \
-            -DFREESASA_SUPPORT=ON \
-            -DCMAKE_BUILD_TYPE=RELEASE && \
+            -DBUILD_TESTING=OFF \
+            -DBIOSPRING_ENABLE_MDDRIVER=ON \
+            -DMDDriver_DIR="$MDDriver_DIR" \
+            -DBIOSPRING_ENABLE_FREESASA=ON \
+            -DCMAKE_BUILD_TYPE=Release && \
             # -DCMAKE_BUILD_TYPE=DEBUG && \
     # Try to set -j1 if compilation error, restart deamon process
     make -j1 && make install
