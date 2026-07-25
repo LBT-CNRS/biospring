@@ -10,6 +10,9 @@
 #define __CL_ENABLE_EXCEPTIONS
 #include "cl.hpp"
 #include <utility>
+
+using biospring::spn::Spring;
+using biospring::spn::SpringNetwork;
 //#define __NO_STD_VECTOR // Use cl::vector instead of STL version
 
 
@@ -61,7 +64,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 		cl::Context * getContext() ;
 		static const char* oclErrorString(cl_int error);
+#ifdef OPENGL_SUPPORT
 		static GLuint createVBO(const void* data, int dataSize, GLenum target, GLenum usage);
+#endif
 
 		/*int _particlevelocitiesvbo;
 		int _particleforcesvbo;
@@ -86,8 +91,6 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 
 		Springocl * _springsocl;
-		Vec3ocl * _forcesocl;
-		float _cutoff;
 
 
 		cl_int _err;

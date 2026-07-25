@@ -1,13 +1,19 @@
-include(FetchContent)
+# Setup Google Test framework. Prefer a GoogleTest installation already
+# known to CMake. If none is available, fetch a version whose CMake project is
+# compatible with recent CMake releases.
+find_package(GTest CONFIG QUIET)
+if(NOT GTest_FOUND)
+    include(FetchContent)
 
-FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG release-1.11.0
-)
-FetchContent_MakeAvailable(googletest)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+    )
+    FetchContent_MakeAvailable(googletest)
+endif()
 
-# Setup Google Test framework.
 include(GoogleTest)
 
 # Copy test data for unit tests.

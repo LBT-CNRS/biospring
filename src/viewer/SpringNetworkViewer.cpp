@@ -13,14 +13,6 @@
 	#include "SpringNetworkOpenCL.h"
 #endif
 
-#include <GL/glew.h>
-#if defined __APPLE__ || defined(MACOSX)
-    #include <GLUT/glut.h>
-#else
-    #include <GL/glut.h>
-#endif
-
-
 
 int SpringNetworkViewer::window_width = 800;
 int SpringNetworkViewer::window_height = 600;
@@ -62,19 +54,21 @@ bool SpringNetworkViewer::navigationmode=false;
 
 
 
-std::vector<Particle>::const_reference SpringNetworkViewer::getNearestParticleByCoords(float x, float y, float z, float radius) const
+std::vector<Particle>::const_reference SpringNetworkViewer::getNearestParticleByCoords(float x, float y, float z, float radius)
 {
-	const auto particles = _springnetwork->getParticles();
-    float distance = 0.0;
-    float distancemax = 0.0;
-    Vector3f pos = Vector3f(x, y, z);
-    unsigned target_id = 0;
-    for (unsigned i = 0; i < particles.size(); i++)
+    const auto & particles = _springnetwork->getParticles();
+    if (particles.empty())
+        throw std::runtime_error("Cannot pick a particle from an empty network");
+
+    const Vector3f position(x, y, z);
+    float best_distance = radius;
+    std::size_t target_id = 0;
+    for (std::size_t i = 0; i < particles.size(); ++i)
     {
-        distance = Vector3f::distance(particles[i].getPosition(), pos);
-        if (distance > distancemax && distance <= radius)
+        const float distance = Vector3f::distance(particles[i].getPosition(), position);
+        if (distance <= best_distance)
         {
-            distancemax = distance;
+            best_distance = distance;
             target_id = i;
         }
     }
@@ -155,10 +149,10 @@ void SpringNetworkViewer::init_gl(int argc, char** argv)
 		particlesforce[i*4+3]=0.0f;
 		}
 
-	auto centre = _springnetwork->getCentroid();
-	barycentre[0]=centre.getX();
-	barycentre[1]=centre.getY();
-	barycentre[2]=centre.getZ();
+	const auto centre = _springnetwork->getCentroid();
+	barycentre[0] = static_cast<GLfloat>(centre[0]);
+	barycentre[1] = static_cast<GLfloat>(centre[1]);
+	barycentre[2] = static_cast<GLfloat>(centre[2]);
 
 	camerainitposition[0]=-barycentre[0];
 	camerainitposition[1]=-barycentre[1];
@@ -296,8 +290,8 @@ void SpringNetworkViewer::updateColor()
 			}
 		if(mouseoverid!=-1)
 			{
-			Particle * p=_springnetwork->getParticle(mouseoverid);
-			Vector3f pos=p->getPosition();
+			const Particle & p = _springnetwork->getParticle(mouseoverid);
+			Vector3f pos = p.getPosition();
 			/*glPushMatrix();
 			glTranslatef(p->getX(),p->getY(),p->getZ());
 			glutSolidSphere(1.0,20,20);

@@ -49,7 +49,7 @@ class SpnReaderBase : public ReaderBase
 
     void setSpringNetwork(biospring::spn::SpringNetwork * const spn) { _spn = spn; }
     biospring::spn::SpringNetwork * getSpringNetwork(void) { return _spn; }
-    const biospring::spn::SpringNetwork * const getSpringNetwork(void) const { return _spn; }
+    const biospring::spn::SpringNetwork * getSpringNetwork(void) const { return _spn; }
 
   protected:
     biospring::spn::SpringNetwork * _spn;

@@ -37,8 +37,8 @@ class InteractorMDDriver : public Interactor
 		inline void setForceScale(float forcescale) { _IMDforcescale = forcescale; }
 		
 		virtual void startInteractionThread() override;
-		virtual bool continueInteractionThread() override { return _isRunning; }
-		virtual void stopInteractionThread() override { _isRunning = false; }
+		virtual bool continueInteractionThread() override { return _isRunning.load(std::memory_order_acquire); }
+		virtual void stopInteractionThread() override { _isRunning.store(false, std::memory_order_release); }
 
 		virtual void syncSystemStateData() override;
 
@@ -90,7 +90,6 @@ class InteractorMDDriver : public Interactor
 
 		virtual void syncParticleStateData(unsigned index) override;
 
-        bool _isRunning;
 		
 	};
 } // namespace interactor

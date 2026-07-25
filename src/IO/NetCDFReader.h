@@ -4,6 +4,7 @@
 #include "IO/ReaderBase.h"
 #include "IO/SpnBuffer.h"
 
+#include <memory>
 #include <netcdf>
 
 class NetCDFReader : public TopologyReaderBase
@@ -19,8 +20,8 @@ class NetCDFReader : public TopologyReaderBase
     SpringBuffer _sbuffer;
     ParticleBuffer _pbuffer;
 
-    netCDF::NcFile * _file;
-    int _filec;
+    std::unique_ptr<netCDF::NcFile> _file;
+    int _filec = -1;
 
     void readSprings();
     void readNumberOfSprings();

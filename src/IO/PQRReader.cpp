@@ -13,7 +13,6 @@ void PQRReader::read()
     // Loop over lines.
     std::string buffer;
     std::getline(_instream, buffer);
-    size_t serial = 0;
     do
     {
         if (PDBReader::isAtomLine(buffer))

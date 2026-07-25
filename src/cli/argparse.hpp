@@ -650,13 +650,13 @@ class CommandLineParser
         throw std::runtime_error(string_format("Option '%s' does not exist", name.c_str()));
     }
 
-    const std::string get_command_line_argument(const size_t & position) const
+    std::string get_command_line_argument(const size_t & position) const
     {
         return _cl_arguments[position];
     }
 
     // Returns the number of command line arguments.
-    const size_t get_number_of_command_line_arguments() const
+    size_t get_number_of_command_line_arguments() const
     {
         return _cl_arguments.size();
     }

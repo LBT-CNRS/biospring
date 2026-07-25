@@ -56,6 +56,9 @@ class ParticleCollection
     // Construct from initializer lists.
     ParticleCollection(const std::initializer_list<Particle> & particles) { push_back(particles); }
 
+    // Copy constructor.
+    ParticleCollection(const ParticleCollection & other) { push_back(other); }
+
     // Assignment operator.
     // Copies particles from `other` to `this`.
     ParticleCollection & operator=(const ParticleCollection & other)

@@ -163,7 +163,7 @@ void RigidBody::computeAllLocalPositions()
 }
 
 // Compute inertia tensor
-Matrix RigidBody::computeIbody(Vector3f com)
+Matrix RigidBody::computeIbody(Vector3f)
 {
     Matrix ibody = Matrix(3,3);
 
@@ -172,9 +172,9 @@ Matrix RigidBody::computeIbody(Vector3f com)
         spn::Particle & p = _spn->getParticle(_particulesIds[i]);
         double x = _p0[i].getX(); double y = _p0[i].getY(); double z = _p0[i].getZ(); 
         double m = p.getMass();
-        ibody(0,0) =+ m *(y*y + z*z); ibody(0,1) =+ -m * x*y;         ibody(0,2) =+ -m * x*z;
-        ibody(1,0) =+ -m * x*y;       ibody(1,1) =+ -m * (x*x + z*z); ibody(1,2) =+ -m * y*z;
-        ibody(2,0) =+ m * x*z;        ibody(2,1) =+ -m * y*z;         ibody(2,2) =+ -m * (x*x + y*y);
+        ibody(0,0) += m * (y*y + z*z); ibody(0,1) += -m * x*y;        ibody(0,2) += -m * x*z;
+        ibody(1,0) += -m * x*y;        ibody(1,1) += m * (x*x + z*z); ibody(1,2) += -m * y*z;
+        ibody(2,0) += -m * x*z;        ibody(2,1) += -m * y*z;        ibody(2,2) += m * (x*x + y*y);
 
     }
     return ibody;
@@ -230,7 +230,7 @@ void RigidBody::initImpalaSampling()
     inser_angle_ini = iv.getAngle();
 }
 
-void RigidBody::updateImpalaSampling(int nbiter, double timestep)
+void RigidBody::updateImpalaSampling(int, double)
 {
     if (!_spn->isInsertionVectorEnabled())
         logging::die("Insertion vector must be set to compute IMPALA insertion sampling");
@@ -282,7 +282,7 @@ void RigidBody::updateImpalaSampling(int nbiter, double timestep)
         _spn->setEnd(true);
 }
 
-Vector3f RigidBody::getImpalaSamplingParticlePosition(spn::Particle & p, int ind)
+Vector3f RigidBody::getImpalaSamplingParticlePosition(spn::Particle &, int ind)
 {
     _pos = Vector3f(0., 0., cur_pos);
 
@@ -331,7 +331,7 @@ void RigidBody::initMonteCarlo(double translation_norm, double rotation_norm)
     _montecarlo_next_angles.setY(getRandomRotation());
 }
 
-Vector3f RigidBody::getMonteCarloParticlePosition(spn::Particle & p, int ind)
+Vector3f RigidBody::getMonteCarloParticlePosition(spn::Particle &, int ind)
 {
         // Apply First rotation:
         double xangle_rad = _montecarlo_current_angles.getX() * (M_PI / 180);

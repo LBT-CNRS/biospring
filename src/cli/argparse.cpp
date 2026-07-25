@@ -95,13 +95,13 @@ template<> std::vector<std::string> Argument::get_values() const
 // =====================================================================================
 
 
-void StoreTrueAction::take_action(CommandLineParser & parser, Argument & arg, size_t & position)
+void StoreTrueAction::take_action(CommandLineParser &, Argument & arg, size_t &)
 {
     arg.set_value("true");
 }
 
 
-void StoreFalseAction::take_action(CommandLineParser & parser, Argument & arg, size_t & position)
+void StoreFalseAction::take_action(CommandLineParser &, Argument & arg, size_t &)
 {
     arg.set_value("false");
 }
