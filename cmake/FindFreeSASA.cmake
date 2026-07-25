@@ -49,7 +49,7 @@ if(APPLE)
 endif()
 
 if(WIN32)
-    foreach(_root "$ENV{ProgramW6432}" "$ENV{ProgramFiles}" "$ENV{ProgramFiles(x86)}")
+    foreach(_root "$ENV{ProgramW6432}" "$ENV{ProgramFiles}" "$ENV{ProgramFiles\(x86\)}")
         if(_root)
             list(APPEND _FreeSASA_INCLUDE_HINTS "${_root}/freesasa/include" "${_root}/FreeSASA/include")
             list(APPEND _FreeSASA_LIBRARY_HINTS "${_root}/freesasa/lib" "${_root}/FreeSASA/lib")
