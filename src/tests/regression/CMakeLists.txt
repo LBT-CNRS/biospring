@@ -9,6 +9,7 @@ set(TEST_CLI_MODULES
 set(TEST_MODULES
     electrostatic-energy
     steric-energy
+    hydrophobic-energy
     spring-energy
 )
 

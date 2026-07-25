@@ -149,7 +149,7 @@ void Particle::addElectrostaticFieldForce()
     _electrostaticenergy += ff->computeElectrostaticFieldEnergy(cell.scalar, getCharge());
 }
 
-void Particle::addElectrostaticForce()
+void Particle::addElectrostaticForce(std::vector<DeferredNonbondedContribution> & deferred)
 {
     Vector3f f = Vector3f();
     float distance = 0.0;
@@ -162,6 +162,14 @@ void Particle::addElectrostaticForce()
             return;
 
         const Particle & p = _springnetwork->getParticle(neighbor_index);
+
+        // A dynamic neighbor will independently visit this same pair from its
+        // own side; process it only once, from the lower-id side, instead of
+        // recomputing it twice. A static neighbor never visits any pair on
+        // its own, so it must always be processed here.
+        if (p.isDynamic() && neighbor_index < static_cast<size_t>(getId()))
+            return;
+
         apply = true;
         if (_springnetwork->isSpringEnabled())
             apply = !isInSpringNeighbors(p.getId());
@@ -172,10 +180,30 @@ void Particle::addElectrostaticForce()
             distance = f.norm();
             if (distance < cutoff && distance != 0.0)
             {
-                _electrostaticenergy += 0.5 * ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
+                const float pair_energy = ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
                 f.normalize();
                 f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
                 addForce(f);
+
+                if (p.isDynamic())
+                {
+                    // Combining rules are symmetric, so a dynamic neighbor
+                    // would have computed exactly `-f` and `0.5 *
+                    // pair_energy` had it visited this pair on its own
+                    // (Newton's third law, applied explicitly instead of
+                    // through a redundant computation).
+                    _electrostaticenergy += 0.5f * pair_energy;
+                    deferred.push_back({static_cast<unsigned>(p.getId()), -f, 0.5f * pair_energy});
+                }
+                else
+                {
+                    // A static neighbor never visits this pair on its own, so
+                    // it never contributes its own half: crediting only half
+                    // here would silently drop the other half of the pair's
+                    // energy from the system total. It never receives a
+                    // force either way (it is never integrated or reset).
+                    _electrostaticenergy += pair_energy;
+                }
             }
         }
     });
@@ -195,7 +223,7 @@ void Particle::addIMPForce()
     addForce(f);
 }
 
-void Particle::addHydrophobicityForce()
+void Particle::addHydrophobicityForce(std::vector<DeferredNonbondedContribution> & deferred)
 {
     Vector3f f = Vector3f();
     float distance = 0.0;
@@ -210,6 +238,13 @@ void Particle::addHydrophobicityForce()
                 return;
 
             const Particle & p = _springnetwork->getParticle(neighbor_index);
+
+            // See addElectrostaticForce: process each pair once, from the
+            // lower-id side when the neighbor is dynamic; a static neighbor
+            // never visits any pair on its own, so it is always processed.
+            if (p.isDynamic() && neighbor_index < static_cast<size_t>(getId()))
+                return;
+
             apply = true;
             if (_springnetwork->isSpringEnabled())
                 apply = !isInSpringNeighbors(p.getId());
@@ -220,11 +255,27 @@ void Particle::addHydrophobicityForce()
                 distance = f.norm();
                 if (distance < cutoff && distance != 0.0)
                 {
-                    _hydrophobicityenergy +=
-                        ff->computeHydrophobicityEnergy(p.getHydrophobicity(), getHydrophobicity(), distance) / 2.0;
+                    const float pair_energy =
+                        ff->computeHydrophobicityEnergy(p.getHydrophobicity(), getHydrophobicity(), distance);
                     f.normalize();
                     f = f * ff->computeHydrophobicityForceModule(p.getHydrophobicity(), getHydrophobicity(), distance);
                     addForce(f);
+
+                    if (p.isDynamic())
+                    {
+                        // See addElectrostaticForce for why `-f` and half the
+                        // energy are exactly what a dynamic neighbor would
+                        // have computed on its own.
+                        _hydrophobicityenergy += pair_energy / 2.0f;
+                        deferred.push_back({static_cast<unsigned>(p.getId()), -f, pair_energy / 2.0f});
+                    }
+                    else
+                    {
+                        // A static neighbor never contributes its own half;
+                        // see addElectrostaticForce for why the full energy
+                        // must be credited here instead.
+                        _hydrophobicityenergy += pair_energy;
+                    }
                 }
             }
         });
@@ -263,7 +314,7 @@ void Particle::addElectrostaticForceNoGrid(float cutoff)
     }
 }
 
-void Particle::addStericForce()
+void Particle::addStericForce(std::vector<DeferredNonbondedContribution> & deferred)
 {
     Vector3f f = Vector3f();
     float distance = 0.0;
@@ -278,6 +329,13 @@ void Particle::addStericForce()
             return;
 
         const Particle & p = _springnetwork->getParticle(neighbor_index);
+
+        // See addElectrostaticForce: process each pair once, from the
+        // lower-id side when the neighbor is dynamic; a static neighbor never
+        // visits any pair on its own, so it is always processed.
+        if (p.isDynamic() && neighbor_index < static_cast<size_t>(getId()))
+            return;
+
         apply = true;
         if (_springnetwork->isSpringEnabled())
             apply = !isInSpringNeighbors(p.getId());
@@ -288,12 +346,28 @@ void Particle::addStericForce()
             distance = f.norm();
             if (distance < cutoff)
             {
-                _stericenergy +=
-                    ff->computeStericEnergy(p.getRadius(), getRadius(), p.getEpsilon(), getEpsilon(), distance) / 2.0;
+                const float pair_energy =
+                    ff->computeStericEnergy(p.getRadius(), getRadius(), p.getEpsilon(), getEpsilon(), distance);
                 f.normalize();
                 f = f *
                     ff->computeStericForceModule(p.getRadius(), getRadius(), p.getEpsilon(), getEpsilon(), distance);
                 addForce(f);
+
+                if (p.isDynamic())
+                {
+                    // See addElectrostaticForce for why `-f` and half the
+                    // energy are exactly what a dynamic neighbor would have
+                    // computed on its own.
+                    _stericenergy += pair_energy / 2.0f;
+                    deferred.push_back({static_cast<unsigned>(p.getId()), -f, pair_energy / 2.0f});
+                }
+                else
+                {
+                    // A static neighbor never contributes its own half; see
+                    // addElectrostaticForce for why the full energy must be
+                    // credited here instead.
+                    _stericenergy += pair_energy;
+                }
             }
         }
     });
