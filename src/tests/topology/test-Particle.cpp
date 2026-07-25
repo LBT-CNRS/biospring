@@ -40,9 +40,9 @@ TEST(TestParticle, unique_id_unchanged_on_assignement)
     biospring::topology::Particle p2;
     biospring::topology::Particle p3;
 
-    pid_t p1_uid = p1.unique_id();
-    pid_t p2_uid = p2.unique_id();
-    pid_t p3_uid = p3.unique_id();
+    biospring::topology::pid_t p1_uid = p1.unique_id();
+    biospring::topology::pid_t p2_uid = p2.unique_id();
+    biospring::topology::pid_t p3_uid = p3.unique_id();
 
     p1 = p2;
     p2 = p3;
@@ -62,7 +62,7 @@ TEST(TestParticle, unique_id_in_container)
     container.push_back(p.copy());
     ASSERT_EQ(container.capacity(), 1);
 
-    pid_t expected = container.front().unique_id();
+    biospring::topology::pid_t expected = container.front().unique_id();
 
     container.push_back(p.copy());
     ASSERT_EQ(container.capacity(), 2);
