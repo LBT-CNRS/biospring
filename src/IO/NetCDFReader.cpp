@@ -61,6 +61,10 @@ void NetCDFReader::addParticlesToSpn()
             // impProperties.set_transfert_energy_by_accessible_surface(_pbuffer.hscales[i]);
             // p.properties().imp().set_transfert_energy_by_accessible_surface(_pbuffer.hscales[i]);
 
+        // Per-particle hydrophobicity for the pairwise hydrophobic force term.
+        if (_pbuffer.hydrophobicities)
+            p.properties().set_hydrophobicity(_pbuffer.hydrophobicities[i]);
+
         _topology.add_particle(p);
     }
 }
@@ -162,6 +166,24 @@ void NetCDFReader::readParticles()
         checkNDims(data, 1);
         checkDim(data, 0, _pbuffer.number_of_particles);
         data.getVar(_pbuffer.hscales);
+    }
+
+    // Per-particle hydrophobicity for the pairwise hydrophobic FORCE term
+    // (Particle::getHydrophobicity()). Distinct from `hydrophobicityscale`, which
+    // above feeds the IMP transfer energy. Optional; previously only settable via
+    // pdb2spn's ForceFieldReader, so the term was inert when run from a .nc.
+    data = getNcVar("hydrophobicity", false);
+    if (not data.isNull())
+    {
+        checkNDims(data, 1);
+        checkDim(data, 0, _pbuffer.number_of_particles);
+        data.getVar(_pbuffer.hydrophobicities);
+    }
+    else
+    {
+        // Absent → default 0 (term inert), avoiding an uninitialised-buffer read.
+        for (size_t i = 0; i < _pbuffer.number_of_particles; ++i)
+            _pbuffer.hydrophobicities[i] = 0.0f;
     }
 }
 
