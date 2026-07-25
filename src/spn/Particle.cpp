@@ -34,6 +34,7 @@ void Particle::updateFromForceField(const biospring::forcefield::ForceField & ff
         setRadius(pp.getRadius());
         setMass(pp.getMass());
         setEpsilon(pp.getEpsilon());
+        setHydrophobicity(pp.getHydrophobicity());
         setTransferEnergyByAccessibleSurface(pp.getTransferEnergyByAccessibleSurface());
     }
 }
@@ -155,12 +156,10 @@ void Particle::addElectrostaticForce()
     float cutoff = _springnetwork->getElectrostaticCutoff();
     bool apply = true;
 
-    const auto & coulombneighbors = _springnetwork->getNeighborSearch().electrostatic->get_neighbors(*this);
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-    for (auto neighbor_index : coulombneighbors)
-    {
+    _springnetwork->getNeighborSearch().electrostatic->for_each_neighbor(*this, [&](size_t neighbor_index) {
         if (_springnetwork->isProbeParticle(neighbor_index))
-            continue;
+            return;
 
         const Particle & p = _springnetwork->getParticle(neighbor_index);
         apply = true;
@@ -179,7 +178,7 @@ void Particle::addElectrostaticForce()
                 addForce(f);
             }
         }
-    }
+    });
 }
 
 /// @brief Add IMPALA force to the particle. 
@@ -205,12 +204,10 @@ void Particle::addHydrophobicityForce()
 
     if (_springnetwork->isHydrophobicityEnabled())
     {
-        const auto & hydrophobicneighbors = _springnetwork->getNeighborSearch().hydrophobic->get_neighbors(*this);
         const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-        for (auto neighbor_index : hydrophobicneighbors)
-        {
+        _springnetwork->getNeighborSearch().hydrophobic->for_each_neighbor(*this, [&](size_t neighbor_index) {
             if (_springnetwork->isProbeParticle(neighbor_index))
-                continue;
+                return;
 
             const Particle & p = _springnetwork->getParticle(neighbor_index);
             apply = true;
@@ -230,7 +227,7 @@ void Particle::addHydrophobicityForce()
                     addForce(f);
                 }
             }
-        }
+        });
     }
 }
 
@@ -275,12 +272,10 @@ void Particle::addStericForce()
 
     bool apply = true;
 
-    const auto & vanderwaalsneighbors = _springnetwork->getNeighborSearch().steric->get_neighbors(*this);
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-    for (auto neighbor_index : vanderwaalsneighbors)
-    {
+    _springnetwork->getNeighborSearch().steric->for_each_neighbor(*this, [&](size_t neighbor_index) {
         if (_springnetwork->isProbeParticle(neighbor_index))
-            continue;
+            return;
 
         const Particle & p = _springnetwork->getParticle(neighbor_index);
         apply = true;
@@ -301,7 +296,7 @@ void Particle::addStericForce()
                 addForce(f);
             }
         }
-    }
+    });
 }
 
 // ======================================================================================

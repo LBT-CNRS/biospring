@@ -92,10 +92,6 @@ void SpringNetwork::computeSpringForces()
 // Calculate forces that apply on dynamic particles.
 void SpringNetwork::computeParticleForces()
 {
-    // Public callers may invoke this method directly, so keep the spatial
-    // acceleration structures synchronized here rather than only in computeForces().
-    _updateNeighborSearches();
-
     float electrostatic_energy = 0.0f;
     float steric_energy = 0.0f;
     float imp_energy = 0.0f;
@@ -110,7 +106,7 @@ void SpringNetwork::computeParticleForces()
 
         if (isElectrostaticEnabled())
         {
-            if (isElectrostaticCoulombEnabled() && p.isCharged())
+            if (isElectrostaticCoulombEnabled() && p.isCharged() && _nsearch.electrostatic)
                 p.addElectrostaticForce();
             if (isElectrostaticFieldEnabled())
                 p.addElectrostaticFieldForce();
@@ -128,7 +124,7 @@ void SpringNetwork::computeParticleForces()
         if (isIMPEnabled())
             p.addIMPForce();
 
-        if (isHydrophobicityEnabled())
+        if (isHydrophobicityEnabled() && p.isHydrophobic() && _nsearch.hydrophobic)
             p.addHydrophobicityForce();
 
     }
@@ -224,6 +220,11 @@ void SpringNetwork::updateParticlePositions()
         } // omp for loop
     }     // omp parallel
     _energies.kinetic += kinetic_energy_particle;
+
+    // The spatial grids must follow particle motion. Rebuild them once here,
+    // after all particle positions have been integrated for the current step.
+    _markNeighborSearchesDirty();
+    _updateNeighborSearches();
 }
 
 /// @brief Compute particles force and, if activated, springs forces.
@@ -501,6 +502,7 @@ void SpringNetwork::addParticle(const Particle & source)
 
     _particles.push_back(p);
     _initparticles.push_back(p);
+    _markNeighborSearchesDirty();
 }
 
 void SpringNetwork::updateParticleState(unsigned id, bool isStatic) {
@@ -529,6 +531,7 @@ void SpringNetwork::clear()
     _nsearch.steric.reset();
     _nsearch.electrostatic.reset();
     _nsearch.hydrophobic.reset();
+    _neighborSearchesDirty = false;
     _insertionVector.reset();
     _probeparticule = Particle();
 }
@@ -624,13 +627,14 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _config = conf;
 
     _setupForceField();
+    _setupProbe();
     _setupSteric();
     _setupElectrostatic();
     _setupHydrophobic();
     _setupDensityGrid();
-    _setupProbe();
     _setupInsertionVector();
     _setupTrajectories();
+    _neighborSearchesDirty = false;
     // _setupConstraints();
     // _setupSelections();
 }
@@ -642,6 +646,7 @@ void SpringNetwork::_setupSteric()
         if (getStericCutoff() < 1e-6)
             throw std::runtime_error("Steric cutoff must be > 0");
         _nsearch.steric = make_nsearch(_particles, getStericCutoff());
+        _excludeProbeFromNeighborSearch(*_nsearch.steric);
     }
 }
 
@@ -651,7 +656,12 @@ void SpringNetwork::_setupHydrophobic()
     {
         if (getHydrophobicCutoff() < 1e-6)
             throw std::runtime_error("Hydrophobic cutoff must be > 0");
-        _nsearch.hydrophobic = make_nsearch(_particles, getHydrophobicCutoff());
+        const std::vector<size_t> hydrophobic_particles = _hydrophobicParticleIndexes();
+        if (!hydrophobic_particles.empty())
+        {
+            _nsearch.hydrophobic = make_nsearch(_particles, getHydrophobicCutoff(), hydrophobic_particles);
+            _excludeProbeFromNeighborSearch(*_nsearch.hydrophobic);
+        }
     }
 }
 
@@ -679,21 +689,26 @@ void SpringNetwork::_setupForceField()
 
 void SpringNetwork::_setupElectrostatic()
 {
-    if (isElectrostaticEnabled())
-    {
-        if (isElectrostaticFieldEnabled())
-        {
-            const std::string dxpath = _config.potentialgrid.path;
-            logging::info("Reading electrostatic map from DX file '%s'", dxpath.c_str());
-            _grids.potential = opendx::readGrid(dxpath);
-        }
-        else
-        {
-            if (getElectrostaticCutoff() < 1e-6)
-                throw std::runtime_error("Electrostatic cutoff must be > 0");
+    if (!isElectrostaticEnabled())
+        return;
 
-            // TODO:: can we initialize it with all particles?
-            _nsearch.electrostatic = make_nsearch(_particles, getElectrostaticCutoff());
+    if (isElectrostaticFieldEnabled())
+    {
+        const std::string dxpath = _config.potentialgrid.path;
+        logging::info("Reading electrostatic map from DX file '%s'", dxpath.c_str());
+        _grids.potential = opendx::readGrid(dxpath);
+    }
+
+    if (isElectrostaticCoulombEnabled())
+    {
+        if (getElectrostaticCutoff() < 1e-6)
+            throw std::runtime_error("Electrostatic cutoff must be > 0");
+
+        const std::vector<size_t> charged_particles = _chargedParticleIndexes();
+        if (!charged_particles.empty())
+        {
+            _nsearch.electrostatic = make_nsearch(_particles, getElectrostaticCutoff(), charged_particles);
+            _excludeProbeFromNeighborSearch(*_nsearch.electrostatic);
         }
     }
 }
@@ -746,14 +761,64 @@ void SpringNetwork::_setupInsertionVector()
         setInsertionVector(_config.ivector.vector[0], _config.ivector.vector[1]);
 }
 
+
+std::vector<size_t> SpringNetwork::_chargedParticleIndexes() const
+{
+    std::vector<size_t> indexes;
+    indexes.reserve(_particles.size());
+
+    for (size_t i = 0; i < _particles.size(); ++i)
+    {
+        if (_particles[i].isCharged())
+            indexes.push_back(i);
+    }
+
+    return indexes;
+}
+
+std::vector<size_t> SpringNetwork::_hydrophobicParticleIndexes() const
+{
+    std::vector<size_t> indexes;
+    indexes.reserve(_particles.size());
+
+    for (size_t i = 0; i < _particles.size(); ++i)
+    {
+        if (_particles[i].isHydrophobic())
+            indexes.push_back(i);
+    }
+
+    return indexes;
+}
+
+void SpringNetwork::_excludeProbeFromNeighborSearch(NeighborSearch::Searcher & searcher)
+{
+    if (!isProbeEnabled())
+        return;
+
+    const int probe_id = _probeparticule.getId();
+    if (probe_id >= 0)
+        searcher.exclude_index(static_cast<size_t>(probe_id));
+}
+
+void SpringNetwork::_markNeighborSearchesDirty()
+{
+    if (_nsearch.steric || _nsearch.electrostatic || _nsearch.hydrophobic)
+        _neighborSearchesDirty = true;
+}
+
 void SpringNetwork::_updateNeighborSearches()
 {
+    if (!_neighborSearchesDirty)
+        return;
+
     if (_nsearch.steric)
         _nsearch.steric->update();
     if (_nsearch.electrostatic)
         _nsearch.electrostatic->update();
     if (_nsearch.hydrophobic)
         _nsearch.hydrophobic->update();
+
+    _neighborSearchesDirty = false;
 }
 
 void SpringNetwork::_syncProbeParticle()

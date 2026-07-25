@@ -29,13 +29,12 @@
 #ifndef __NSEARCH_HPP__
 #define __NSEARCH_HPP__
 
-// DEBUG
-#include <iostream>
-// DEBUG - END
-
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "box.hpp"
 #include "concepts.hpp"
@@ -169,6 +168,19 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     // The particle' bounding box.
     Box _box;
 
+    // Optional particle index to exclude from the cell list. This is used by
+    // SpringNetwork for the probe particle, whose interactions are handled
+    // explicitly and must not be counted through the regular neighbor grids.
+    std::optional<size_t> _excluded_index;
+
+    // Optional list of particle indices to insert in the cell list. When empty,
+    // every particle from the system is inserted, except the excluded index.
+    // This lets specialised grids stay compact: steric uses all physical
+    // particles, electrostatic uses charged particles, and hydrophobic uses
+    // hydrophobic particles. Neighbor queries are still evaluated on demand from
+    // the current cell list; no particle-to-particle neighbor list is cached.
+    std::vector<size_t> _included_indices;
+
   public:
     // Initializes the neighbor search object with the particles.
 
@@ -177,30 +189,40 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         _build_grid();
     }
 
-    // Returns the neighbors of the given element.
-    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
+    NeighborSearch(const ContainerType & container, float cutoff, std::vector<size_t> included_indices)
+        : NeighborSearchBase<ContainerType>(container, cutoff), _included_indices(std::move(included_indices))
     {
-        std::vector<size_t> neighbors;
+        _build_grid();
+    }
 
+    // Applies a callback to each neighbor of the given element.
+    template <concepts::Locatable T, typename Callback> void for_each_neighbor(const T & element, Callback && callback) const
+    {
         // Loops over the particles in the cell of the given particle and in the neighboring cells.
-        for (size_t neighbor_cell_id : _compute_neighbor_cells(concepts::locatable::get_position(element)))
-        {
-            // If cell does not exists (aka is empty), skip it.
+        _for_each_neighbor_cell(concepts::locatable::get_position(element), [&](size_t neighbor_cell_id) {
+            // If cell does not exist (aka is empty), skip it.
             const auto cell = _cells.find(neighbor_cell_id);
             if (cell == _cells.end())
-                continue;
+                return;
 
             for (size_t particle_index : cell->second)
             {
                 const T & candidate = _system->at(particle_index);
 
-                // Add the particle to the list of neighbors if:
-                //   - is not `element` itself, and
-                //   - is within the cutoff distance.
+                // Visit the particle if:
+                //   - it is not `element` itself, and
+                //   - it is within the cutoff distance.
                 if (&candidate != &element && measure::distance(element, candidate) < _cutoff)
-                    neighbors.push_back(particle_index);
+                    callback(particle_index);
             }
-        }
+        });
+    }
+
+    // Returns the neighbors of the given element.
+    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
+    {
+        std::vector<size_t> neighbors;
+        for_each_neighbor(element, [&](size_t particle_index) { neighbors.push_back(particle_index); });
         return neighbors;
     }
 
@@ -209,6 +231,14 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
 
     // Rebuilds the cell list based on the system coordinates.
     void update() { _build_grid(); }
+
+    // Excludes one particle index from the grid. Existing cells are rebuilt so
+    // future neighbor queries immediately reflect the exclusion.
+    void exclude_index(size_t index)
+    {
+        _excluded_index = index;
+        update();
+    }
 
   protected:
     // Returns the total number of cells.
@@ -231,11 +261,8 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         return cell_x + cell_y * _ncells_x + cell_z * _ncells_x * _ncells_y;
     }
 
-    // Returns the cell ids of the neighboring cells.
-    std::vector<size_t> _compute_neighbor_cells(size_t cell_id) const
+    template <typename Callback> void _for_each_neighbor_cell(size_t cell_id, Callback && callback) const
     {
-        std::vector<size_t> neighbor_cell_ids;
-
         for (int dx = -1; dx <= 1; dx++)
         {
             for (int dy = -1; dy <= 1; dy++)
@@ -253,12 +280,24 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
                     if (neighbor_cell_z < 0 || neighbor_cell_z >= static_cast<int>(_ncells_z))
                         continue;
 
-                    size_t neighbor_cell_id =
-                        neighbor_cell_x + neighbor_cell_y * _ncells_x + neighbor_cell_z * _ncells_x * _ncells_y;
-                    neighbor_cell_ids.push_back(neighbor_cell_id);
+                    callback(static_cast<size_t>(neighbor_cell_x) + static_cast<size_t>(neighbor_cell_y) * _ncells_x +
+                             static_cast<size_t>(neighbor_cell_z) * _ncells_x * _ncells_y);
                 }
             }
         }
+    }
+
+    template <typename Callback>
+    void _for_each_neighbor_cell(const std::array<double, 3> & position, Callback && callback) const
+    {
+        _for_each_neighbor_cell(_compute_cell(position), std::forward<Callback>(callback));
+    }
+
+    // Returns the cell ids of the neighboring cells.
+    std::vector<size_t> _compute_neighbor_cells(size_t cell_id) const
+    {
+        std::vector<size_t> neighbor_cell_ids;
+        _for_each_neighbor_cell(cell_id, [&](size_t neighbor_cell_id) { neighbor_cell_ids.push_back(neighbor_cell_id); });
         return neighbor_cell_ids;
     }
 
@@ -282,14 +321,31 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         _ncells_y = size_t(std::ceil(_box.length()[1] / _cutoff) + 1);
         _ncells_z = size_t(std::ceil(_box.length()[2] / _cutoff) + 1);
 
-        // Finds the cell of each particle.
-        for (size_t i = 0; i < _system->size(); i++)
-        {
+        const auto add_particle_to_cell = [&](size_t i) {
+            if (_excluded_index && i == *_excluded_index)
+                return;
+
             // Computes the cell number of the particle.
             size_t cell_id = _compute_cell(concepts::locatable::get_position(_system->at(i)));
 
             // Adds the particle to the appropriate cell.
             _cells[cell_id].push_back(i);
+        };
+
+        // Finds the cell of each selected particle.
+        if (_included_indices.empty())
+        {
+            for (size_t i = 0; i < _system->size(); i++)
+                add_particle_to_cell(i);
+        }
+        else
+        {
+            for (size_t i : _included_indices)
+            {
+                if (i >= _system->size())
+                    continue;
+                add_particle_to_cell(i);
+            }
         }
     }
 };
@@ -321,11 +377,20 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearchDynami
         _build_grid();
     }
 
+    NeighborSearchDynamic(const ContainerType & container, float cutoff, std::vector<size_t> included_indices)
+        : NeighborSearch<ContainerType>(container, cutoff, std::move(included_indices))
+    {
+        _build_grid();
+    }
+
     // Returns the neighbors of the given element.
     template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
     {
         return NeighborSearch<ContainerType>::get_neighbors(element);
     }
+
+    // Rebuilds the cell list and the cached neighbor-cell topology.
+    void update() { _build_grid(); }
 
     // Returns the neighbors of the element located at `index` in `_system`.
     std::vector<size_t> get_neighbors(size_t index) const

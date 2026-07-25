@@ -28,6 +28,7 @@
 
 #include <iostream>
 #include <memory>
+#include <utility>
 
 class Interactor;
 class SpringNetworkViewer;
@@ -78,7 +79,7 @@ class SpringNetwork
     struct NeighborSearch
     {
         using Container = std::vector<Particle>;
-        using Searcher = nsearch::NeighborSearchDynamic<Container>;
+        using Searcher = nsearch::NeighborSearch<Container>;
         using SearcherPtr = std::unique_ptr<Searcher>;
 
         SearcherPtr steric;
@@ -86,16 +87,25 @@ class SpringNetwork
         SearcherPtr hydrophobic;
     };
 
-    constexpr static auto make_nsearch = [](const NeighborSearch::Container & particles, float cutoff) {
+    static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff)
+    {
         return std::make_unique<NeighborSearch::Searcher>(particles, cutoff);
-    };
+    }
+
+    static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
+                                                    std::vector<size_t> included_indices)
+    {
+        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, std::move(included_indices));
+    }
 
   public:
     SpringNetwork()
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
-          _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _nbiter(0), _end(false),
-          _pause(false), _constraintenabled(false), _framerate(0.0), _ff(nullptr), _insertionVector(nullptr),
-          _constraints(), _meanConstraintsDistances(0.0), _structid(_currentstructid++), _config(), _profiler()
+          _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
+          _dynamicsprings(), _springForceScratch(), _energies(), _nsearch(), _neighborSearchesDirty(false),
+          _nbiter(0), _end(false), _pause(false), _grids(), _constraintenabled(false), _framerate(0.0),
+          _freesasaState(), _ff(nullptr), _trajectories(), _insertionVector(nullptr), _constraints(),
+          _meanConstraintsDistances(0.0), _structid(_currentstructid++), _config(), _profiler()
     {
         _profiler.create_timer("main");
         _profiler.create_timer("samplerate");
@@ -340,7 +350,11 @@ class SpringNetwork
     void _setupInsertionVector();
     void _setupSelections();
     void _setupConstraints();
+    std::vector<size_t> _chargedParticleIndexes() const;
+    std::vector<size_t> _hydrophobicParticleIndexes() const;
+    void _excludeProbeFromNeighborSearch(NeighborSearch::Searcher & searcher);
     void _updateNeighborSearches();
+    void _markNeighborSearchesDirty();
     void _syncProbeParticle();
     void _rebuildSpringNeighbors();
 
@@ -389,6 +403,7 @@ class SpringNetwork
 
     Energies _energies;
     NeighborSearch _nsearch;
+    bool _neighborSearchesDirty;
 
     int _nbiter;
     bool _end;
