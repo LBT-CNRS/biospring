@@ -280,6 +280,22 @@ class Argument
         return _name_long;
     }
 
+    std::string get_single_dash_long_name() const
+    {
+        if (_name_long.size() > 2 && _name_long.substr(0, 2) == "--")
+            return "-" + _name_long.substr(2);
+        return "";
+    }
+
+    bool matches_name(const std::string & name) const
+    {
+        if (_name_short == name || _name_long == name)
+            return true;
+
+        const std::string single_dash_long_name = get_single_dash_long_name();
+        return !single_dash_long_name.empty() && single_dash_long_name == name;
+    }
+
     std::string get_full_name() const
     {
         std::string name = "";
@@ -290,7 +306,15 @@ class Argument
                 name += _name_short;
             if (_name_long != "")
             {
-                if (_name_short != "")
+                const std::string single_dash_long_name = get_single_dash_long_name();
+                if (!single_dash_long_name.empty() && single_dash_long_name != _name_short)
+                {
+                    if (!name.empty())
+                        name += ", ";
+                    name += single_dash_long_name;
+                }
+
+                if (!name.empty())
                     name += ", ";
                 name += _name_long;
             }
@@ -349,23 +373,7 @@ class Argument
 
     std::string get_help_string() const
     {
-        std::string name_buf = "";
-
-        if (is_option())
-        {
-            if (_name_short != "")
-                name_buf += _name_short;
-            if (_name_long != "")
-            {
-                if (_name_short != "")
-                    name_buf += ", ";
-                name_buf += _name_long;
-            }
-        }
-        else
-        {
-            name_buf += _name_short;
-        }
+        std::string name_buf = get_full_name();
 
         std::string type_buf;
         switch (_argument_type)
@@ -399,7 +407,7 @@ class Argument
         std::string default_buf = _default_value;
 
         std::string help = string_format(
-            " %-20s %-20s %-15s %-s",
+            " %-35s %-20s %-15s %-s",
             name_buf.c_str(),
             type_buf.c_str(),
             default_buf.c_str(),
@@ -603,7 +611,7 @@ class CommandLineParser
     bool _argument_is_required(const Argument & argument) const
     {
         for (const auto & arg : _cl_arguments)
-            if (arg == argument.name_short() || arg == argument.name_long())
+            if (argument.matches_name(arg))
                 return true;
         return false;
     }
@@ -628,7 +636,7 @@ class CommandLineParser
     T get_option_value(const std::string & name) const
     {
         for (const Argument & opt : _options)
-            if (opt.name_short() == name || opt.name_long() == name)
+            if (opt.matches_name(name))
                 return opt.get_value<T>();
         throw std::runtime_error(string_format("Option '%s' does not exist", name.c_str()));
     }
@@ -636,7 +644,7 @@ class CommandLineParser
     template<typename T> std::vector<T> get_option_values(const std::string & name) const
     {
         for (const Argument & opt : _options)
-            if (opt.name_short() == name || opt.name_long() == name)
+            if (opt.matches_name(name))
                 return opt.get_values<T>();
         throw std::runtime_error(string_format("Option '%s' does not exist", name.c_str()));
     }
@@ -645,7 +653,7 @@ class CommandLineParser
     bool option_was_provided(const std::string & name) const
     {
         for (const Argument & opt : _options)
-            if (opt.name_short() == name || opt.name_long() == name)
+            if (opt.matches_name(name))
                 return opt.is_set();
         throw std::runtime_error(string_format("Option '%s' does not exist", name.c_str()));
     }
@@ -683,7 +691,7 @@ class CommandLineParser
     bool has_option(const std::string & name) const
     {
         for (const Argument & opt : _options)
-            if (opt.name_short() == name || opt.name_long() == name)
+            if (opt.matches_name(name))
                 return true;
         return false;
     }
@@ -721,10 +729,14 @@ class CommandLineParser
     bool has_been_registered(const Argument & arg) const
     {
         for (const Argument & argument : _options)
-            if (!arg.name_short().empty() && (argument.name_short() == arg.name_short() || argument.name_long() == arg.name_long()))
+            if ((!arg.name_short().empty() && argument.matches_name(arg.name_short())) ||
+                (!arg.name_long().empty() && argument.matches_name(arg.name_long())) ||
+                (!arg.get_single_dash_long_name().empty() && argument.matches_name(arg.get_single_dash_long_name())))
                 return true;
         for (const Argument & argument : _arguments)
-            if (!arg.name_short().empty() && (argument.name_short() == arg.name_short() || argument.name_long() == arg.name_long()))
+            if ((!arg.name_short().empty() && argument.matches_name(arg.name_short())) ||
+                (!arg.name_long().empty() && argument.matches_name(arg.name_long())) ||
+                (!arg.get_single_dash_long_name().empty() && argument.matches_name(arg.get_single_dash_long_name())))
                 return true;
         return false;
     }
@@ -785,8 +797,9 @@ class CommandLineParser
     {
         std::string help = get_description_string() + "\n\n" + get_usage_string() + "\n\n";
 
-        help += "Option                Type                 Default         Description\n";
-        help += "-----------------------------------------------------------------------------\n";
+        help += "Long options accept both -option and --option forms; short aliases such as -s remain available.\n\n";
+        help += "Option                              Type                 Default         Description\n";
+        help += "---------------------------------------------------------------------------------------------\n";
 
         // Shows positional arguments first.
         for (auto & argument : _arguments)
@@ -896,7 +909,7 @@ class CommandLineParser
     std::vector<Argument>::reference get_option(const std::string & name)
     {
         for (Argument & opt : _options)
-            if (opt.name_short() == name || opt.name_long() == name)
+            if (opt.matches_name(name))
                 return opt;
         throw std::runtime_error("Option '" + name + "' not found.");
     }
@@ -905,7 +918,7 @@ class CommandLineParser
     std::vector<Argument>::const_reference get_option(const std::string & name) const
     {
         for (const Argument & opt : _options)
-            if (opt.name_short() == name || opt.name_long() == name)
+            if (opt.matches_name(name))
                 return opt;
         throw std::runtime_error("Option '" + name + "' not found.");
     }
@@ -914,7 +927,7 @@ class CommandLineParser
     std::vector<Argument>::reference get_positional(const std::string & name)
     {
         for (Argument & arg : _arguments)
-            if (arg.name_short() == name || arg.name_long() == name)
+            if (arg.matches_name(name))
                 return arg;
         throw std::runtime_error("Positional argument '" + name + "' not found.");
     }
@@ -923,7 +936,7 @@ class CommandLineParser
     std::vector<Argument>::const_reference get_positional(const std::string & name) const
     {
         for (const Argument & arg : _arguments)
-            if (arg.name_short() == name || arg.name_long() == name)
+            if (arg.matches_name(name))
                 return arg;
         throw std::runtime_error("Positional argument '" + name + "' not found.");
     }

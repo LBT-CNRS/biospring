@@ -13,6 +13,20 @@
 const std::string PROGRAM_VERSION = "0.1.0";
 const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "pdb2spn creates a spring network from a topology file.",
+    "",
+    "Input topology formats are selected from the -s/--topology filename extension:",
+    "  .nc  : binary NetCDF spring-network file",
+    "  .pdb : Protein Data Bank file",
+    "  .pqr : PQR file",
+    "",
+    "Output formats are selected from the -o/--output filename extension:",
+    "  .nc  : binary NetCDF spring-network file",
+    "  .cdl : text NetCDF/CDL spring-network file",
+    "  .pdb : Protein Data Bank file",
+    "  .pqr : PQR file",
+    "",
+    "When the output is a PDB file, -pdbconect/--pdbconect adds CONECT",
+    "records at the end of the PDB to visualize the springs of the network.",
 };
 
 namespace biospring
@@ -90,7 +104,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
                                       .name_long("--topology")
-                                      .description("input topology.")
+                                      .description("input topology file; format is selected by extension: .nc, .pdb or .pqr")
                                       .metavar("INPUT_FILE")
                                       .argument_type(argparse::ArgumentType::PATH_INPUT)
                                       .required(true);
@@ -98,53 +112,59 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument output = argparse::Argument()
                                     .name_short("-o")
                                     .name_long("--output")
-                                    .description("output file name(s).")
+                                    .description("output file name(s); format is selected by extension: .nc, .cdl, .pdb or .pqr")
                                     .metavar("OUTPUT_FILE")
                                     .number_of_arguments("+")
                                     .argument_type(argparse::ArgumentType::PATH_OUTPUT)
                                     .default_value("system.nc");
 
     argparse::Argument forcefield = argparse::Argument()
+                                        .name_short("-ff")
                                         .name_long("--ff")
                                         .description("force field file")
                                         .metavar("INPUT_FILE")
                                         .argument_type(argparse::ArgumentType::PATH_INPUT);
 
     argparse::Argument grp = argparse::Argument()
+                                 .name_short("-grp")
                                  .name_long("--grp")
                                  .description("particles definition file")
                                  .metavar("INPUT_FILE")
                                  .argument_type(argparse::ArgumentType::PATH_INPUT);
 
     argparse::Argument cutoff = argparse::Argument()
+                                    .name_short("-cutoff")
                                     .name_long("--cutoff")
-                                    .description("cutoff for spring creation (< 0 means no spring)")
+                                    .description("cutoff in Angstroms for spring creation (< 0 means no spring)")
                                     .argument_type(argparse::ArgumentType::REAL)
                                     .default_value("-1.0");
 
     argparse::Argument stiffness = argparse::Argument()
+                                       .name_short("-stiffness")
                                        .name_long("--stiffness")
                                        .description("spring stiffness")
                                        .argument_type(argparse::ArgumentType::REAL)
                                        .default_value("1.0");
 
     argparse::Argument charge = argparse::Argument()
+                                    .name_short("-charge")
                                     .name_long("--charge")
                                     .description("override force field values for particle charge")
                                     .default_value("0.0")
                                     .argument_type(argparse::ArgumentType::REAL);
 
     argparse::Argument static_ =
-        argparse::StoreTrueArgument("", "--static", "should the particles be freezed during the simulation");
+        argparse::StoreTrueArgument("-static", "--static", "should the particles be freezed during the simulation");
 
     argparse::Argument ignore_duplicate = argparse::StoreTrueArgument(
-        "", "--ignore-duplicate", "ignore duplicate particles when reducing to coarse grain");
+        "-ignore-duplicate", "--ignore-duplicate", "ignore duplicate particles when reducing to coarse grain");
 
     argparse::Argument ignore_missing =
-        argparse::StoreTrueArgument("", "--ignore-missing", "ignore missing particles when reducing to coarse grain");
+        argparse::StoreTrueArgument("-ignore-missing", "--ignore-missing", "ignore missing particles when reducing to coarse grain");
 
     argparse::Argument pdbconect = argparse::StoreTrueArgument(
-        "", "--pdbconect", "write CONECT records for springs in PDB output file(s)");
+        "-pdbconect", "--pdbconect",
+        "when writing PDB output, add CONECT records for the springs at the end of the PDB file");
 
     _parser.add_argument(topology);
     _parser.add_argument(output);
