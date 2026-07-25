@@ -1,0 +1,89 @@
+# ------------------------------------------------------------------------------
+# Docker-based execution -- use when biospring is not installed locally.
+# Invoke explicitly with `make -f Makefile.docker <target>`.
+# $(NC)/$(MSP) must already exist (see Makefile's classic prep targets, or
+# run them once inside the container with `make -f Makefile.docker interactive`).
+# ------------------------------------------------------------------------------
+RED    = \033[0;31m
+GREEN  = \033[0;32m
+YELLOW = \033[0;33m
+BLUE   = \033[0;34m
+RESET  = \033[0m
+
+IMAGE = ghcr.io/lbt-cnrs/biospring
+BIOSPRING = biospring
+
+NC = model.nc
+MSP = param.msp
+
+run:
+	@echo "Starting BioSpring in detached mode..."
+	@CONTAINER_ID=$$(docker run -d --rm -p 8888:8888 --name biospring-container --init -v $(PWD):/data $(IMAGE) $(BIOSPRING) -s $(NC) -c $(MSP) --wait --port 8888); \
+	if [ -z "$$CONTAINER_ID" ]; then \
+		echo "$(RED)Failed to start the container.$(RESET)"; \
+		exit 1; \
+	fi; \
+	HOSTNAME=$$(hostname); \
+	echo "$(GREEN)BioSpring container started successfully!$(RESET)"; \
+	echo ""; \
+	echo "  - On the local machine: $(GREEN)localhost:8888$(RESET) or $(GREEN)127.0.0.1:8888$(RESET)"; \
+	echo "  - On the network: $(GREEN)$$HOSTNAME:8888$(RESET)"; \
+	trap 'docker ps -q --filter "id=$$CONTAINER_ID" | grep -q . && docker stop $$CONTAINER_ID || true; exit 130' INT TERM; \
+	while true; do \
+		read -p "Continue (c) or Kill the container (k)? " choice; \
+		case $$choice in \
+			[cC]) \
+				docker logs -f $$CONTAINER_ID & \
+				docker attach $$CONTAINER_ID; \
+				break;; \
+			[kK]) \
+				if docker ps -q --filter "id=$$CONTAINER_ID" | grep -q .; then \
+					docker stop $$CONTAINER_ID; \
+				fi; \
+				exit 0;; \
+			*) \
+				echo "$(YELLOW)Invalid input. Enter 'c' to continue or 'k' to kill.$(RESET)";; \
+		esac; \
+	done
+
+run_now:
+	docker run -p 8888:8888 --rm --init -v $(PWD):/data $(IMAGE) \
+	$(BIOSPRING) -s $(NC) -c $(MSP)
+
+# If the client is on the same network but not on the same machine,
+# you can expose the data to the client side before running the simulation.
+# Run "make -f Makefile.docker expose_data" on the host machine and on the
+# client side run "make -f Makefile.docker get_data HOSTNAME=<hostname>"
+expose_data:
+	@echo "Host machine: $(GREEN)$(shell hostname)$(RESET)"
+	@echo "On the client side, you can retrive the data with the following command:"
+	@echo "\n    $(GREEN)make -f Makefile.docker get_data HOSTNAME=$(shell hostname)$(RESET)\n"
+	@docker run -p 4000:4000 --rm --init -v $(PWD):/data $(IMAGE) python -m http.server 4000 --directory /data
+
+get_data :
+	@if [ -z "$(HOSTNAME)" ]; then \
+		echo "$(RED)Usage: make -f Makefile.docker get_data HOSTNAME=<hostname>$(RESET)"; \
+		exit 1; \
+	fi
+
+	@echo "$(GREEN)Retrieving data from http://$(HOSTNAME):4000/model.* ...$(RESET)"
+	@wget -q -r -np -nH  --accept-regex='model.*' http://$(HOSTNAME):4000/
+	@rm index.html
+
+pause:
+	@read -p "Press enter to continue..." key
+
+# Run the docker image in interactive mode if you need to run the tools manually
+interactive:
+	docker run --rm -it -v $(PWD):/data $(IMAGE)
+
+usage:
+	@echo "------------------------------------------------------------------------------"
+	@echo "Usage:"
+	@echo ""
+	@echo "Classic (local): if biospring is installed locally, just run:"
+	@echo "  make run / make run_now"
+	@echo ""
+	@echo "Docker (no local install needed):"
+	@echo "  make -f Makefile.docker run / make -f Makefile.docker run_now"
+	@echo "------------------------------------------------------------------------------"
