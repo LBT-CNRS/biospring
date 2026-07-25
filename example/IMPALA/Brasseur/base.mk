@@ -21,23 +21,10 @@ PDB = model.pdb
 NC = model.nc # USED AS BIOSPRING INPUT
 MSP = param.msp
 
-# MARTINIZE TOOL
-# INPUT: model_in_membrane.pdb (1BXW.pdb positioned in the membrane)
-# OUTPUT: pdb2spn_input_cg.pdb (PDB2SPN INPUT)
-martinize:
-	@echo "Copy PDB input for Martinize"
-	cp $(RAW_PDB) raw.pdb
-	@echo "Run Martinize"
-	docker run --rm -v $(PWD):/data $(IMAGE) \
-    $(MARTINIZE) -f raw.pdb \
-                 -x $(PDB2SPN_INPUT) \
-                 -ff martini30b32 \
-                 -resid input \
-                 -ignh
-	rm raw.pdb
-
 # PDB2SPN TOOL
-# INPUT: pdb2spn_input_cg.pdb (Martinize output, CG PDB file)
+# INPUT: $(PDB2SPN_INPUT) (either a straight copy of $(RAW_PDB), or Martinize's
+#        output for the martini3 variants -- see each directory's own
+#        Makefile.docker for how $(PDB2SPN_INPUT) is produced)
 # OUTPUT:
 #  - model.cdl: Readable NetCDF file of the structure, used to verify the
 #               structure informations
@@ -49,15 +36,11 @@ martinize:
 #  - model.pdb: PDB file of the structure, used as input structure for
 #               visualization tools (like UnityMol or VMD) and to determine the
 #               insertion vector particle pair (see doc/MSP_Options.md)
-pdb2spn:
-	@if [ ! -f $(PDB2SPN_INPUT) ]; then \
-		if [ ! -f $(RAW_PDB) ]; then \
-			echo "Error: RAW_PDB file $(RAW_PDB) not found!"; \
-			exit 1; \
-		fi; \
-		cp $(RAW_PDB) $(PDB2SPN_INPUT); \
-	fi
-
+#
+# $(NC) is a real file target: `make run` (below) depends on it, so it gets
+# (re)built automatically whenever missing or $(PDB2SPN_INPUT) changed --
+# no separate `make prep` step needed.
+$(NC): $(PDB2SPN_INPUT)
 	@echo "Run pdb2spn"
 	docker run --rm --init -v $(PWD):/data $(IMAGE) \
 	$(PDB2SPN) -s $(PDB2SPN_INPUT) \
@@ -66,6 +49,8 @@ pdb2spn:
 			   --grp $(GRP) \
 			   --cutoff $(CUTOFF) \
 			   --stiffness $(STIFFNESS)
+
+prep : $(NC)
 
 clean:
 	rm -f \#*#
@@ -83,7 +68,7 @@ clean:
 #        and restart biospring or tune certain parameters from UnityMol during
 #        an interactive simulation (for example IMPALA scale or Input Force, or
 #        even viscosity).
-run:
+run: $(NC) $(MSP)
 	@echo "Starting BioSpring in detached mode..."
 	@CONTAINER_ID=$$(docker run -d --rm -p 8888:8888 --name biospring-container --init -v $(PWD):/data $(IMAGE) $(BIOSPRING) -s $(NC) -c $(MSP) --wait --port 8888 --sasa-classifier biospring); \
 	if [ -z "$$CONTAINER_ID" ]; then \
@@ -120,7 +105,7 @@ run:
 	done
 
 # Run the BioSpring simulation in Docker without waiting for the connection
-run_now:
+run_now: $(NC) $(MSP)
 	@echo "Run BioSpring NOOOW !!!!"
 	docker run -p 8888:8888 --rm --init -v $(PWD):/data $(IMAGE) \
 	$(BIOSPRING) -s $(NC) \

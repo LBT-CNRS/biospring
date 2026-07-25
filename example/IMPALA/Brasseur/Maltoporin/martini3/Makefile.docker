@@ -11,5 +11,18 @@ GRP =  $(BS_DATA_DIR)/martini/reducerules/martini.grp
 CUTOFF = 5.0
 STIFFNESS = 30.0
 
-# Prepare the input files for the simulation
-prep : martinize pause pdb2spn
+# MARTINIZE TOOL
+# INPUT: model_in_membrane.pdb (1BXW.pdb positioned in the membrane)
+# OUTPUT: pdb2spn_input.pdb (PDB2SPN INPUT)
+$(PDB2SPN_INPUT): $(RAW_PDB)
+	@echo "Copy PDB input for Martinize"
+	cp $(RAW_PDB) raw.pdb
+	@echo "Run Martinize"
+	docker run --rm -v $(PWD):/data $(IMAGE) \
+    $(MARTINIZE) -f raw.pdb \
+                 -x $(PDB2SPN_INPUT) \
+                 -ff martini30b32 \
+                 -resid input \
+                 -ignh
+	rm raw.pdb
+	@read -p "Press enter to continue..." key
