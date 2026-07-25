@@ -34,7 +34,6 @@ prep :  $(PDB_CONECT) $(PDB) $(PQR) $(CDL) $(NC)
 $(PQR) :
 	$(PDB2SPN) -s $(PDB) -o $(PQR) --grp $(GRP) --ff $(FF)
 
-
 $(PDB_CONECT) :
 	$(PDB2SPN) -s $(PDB) -o $(PDB_CONECT) --grp $(GRP) --ff $(FF) --cutoff 9.0 --pdbconect
 
@@ -45,7 +44,7 @@ $(NC) : $(CDL)
 	$(NCGEN) -b -o $(NC) $(CDL)
 
 
-run : $(NC) $(MSP)
+run : $(NC) $(MSP) $(PQR)
 	$(BIOSPRING)  -nc $(NC) -msp  $(MSP) $(IMDOPT)
 
 run_spring : $(NC) $(MSP)
