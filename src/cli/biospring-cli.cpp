@@ -39,7 +39,11 @@ namespace biospringcli
 {
 
 const argparse::description_t PROGRAM_DESCRIPTION = {
-    "biospring spring network engine.",
+    "biospring runs the spring-network simulation engine.",
+    "",
+    "Required inputs:",
+    "  -s/--nc  : binary NetCDF spring-network file (.nc)",
+    "  -c/--msp : simulation configuration file (.msp)",
 };
 
 int main(int argc, char ** argv)
@@ -138,7 +142,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
                                       .name_long("--nc")
-                                      .description("input topology (nc format).")
+                                      .description("input topology, binary NetCDF .nc format")
                                       .metavar("NC")
                                       .argument_type(argparse::ArgumentType::PATH_INPUT)
                                       .required(true);
@@ -146,7 +150,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument config = argparse::Argument()
                                     .name_short("-c")
                                     .name_long("--msp")
-                                    .description("input configuration (msp format).")
+                                    .description("input simulation configuration, .msp format")
                                     .metavar("MSP")
                                     .argument_type(argparse::ArgumentType::PATH_INPUT)
                                     .required(true);
