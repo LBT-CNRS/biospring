@@ -98,7 +98,9 @@ unsigned long Timer::elapsed(const high_resolution_clock::time_point & start,
     if (stop < start)
         throw std::runtime_error("timer not stopped");
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    return ms.count();
+    // ms.count() is signed (chrono convention) but already checked >= 0 above
+    // (stop < start would have thrown), so this narrowing is safe.
+    return static_cast<unsigned long>(ms.count());
 }
 
 // ======================================================================================

@@ -65,12 +65,12 @@ std::vector<std::pair<size_t, size_t>> PDBReader::parseConectLine(const std::str
 {
     std::vector<std::pair<size_t, size_t>> pairs_indexes;
 
-    size_t serial = std::stoi(line.substr(6, 5));
+    size_t serial = static_cast<size_t>(std::stoi(line.substr(6, 5)));
 
     // Helper function to try parsing and add to vector if successful
-    auto try_add_pair = [&](int start_index) {
+    auto try_add_pair = [&](size_t start_index) {
         try {
-            size_t connected_serial = std::stoi(line.substr(start_index, 5));
+            size_t connected_serial = static_cast<size_t>(std::stoi(line.substr(start_index, 5)));
             pairs_indexes.emplace_back(serial, connected_serial);
         } catch (const std::exception&) {
             // Catches std::invalid_argument and std::out_of_range

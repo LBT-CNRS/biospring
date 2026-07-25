@@ -12,8 +12,10 @@ Interactor::~Interactor()
 
 void Interactor::initializeSystemState()
 {
+    // _nbpositions stays a signed int: its address is passed directly to
+    // MDDriver's IIMD_send_coords(const int *N, ...), a fixed external C ABI.
     if (_springnetwork != nullptr)
-        _setNbPositions(_springnetwork->getNumberOfParticles());
+        _setNbPositions(static_cast<int>(_springnetwork->getNumberOfParticles()));
 }
 
 void Interactor::initializeDataManager() {}

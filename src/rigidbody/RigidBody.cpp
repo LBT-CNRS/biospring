@@ -67,7 +67,7 @@ void RigidBody::init()
             }
             
             if (p.getTransferEnergyByAccessibleSurface() > 0.0)
-                _selfHydrophilicParticles.push_back(p.getId());
+                _selfHydrophilicParticles.push_back(static_cast<unsigned>(p.getId()));
 
             Vector3f intialPosition = p.getPosition();
             p.setPreviousPosition(intialPosition);
@@ -78,7 +78,7 @@ void RigidBody::init()
         {
             spn::Particle & p = _spn->getParticle(_interactionParticles[i]);
             if (p.getTransferEnergyByAccessibleSurface() > 0.0)
-                _interactionHydrophilicParticles.push_back(p.getId());
+                _interactionHydrophilicParticles.push_back(static_cast<unsigned>(p.getId()));
         }
         // logging::info("#_selfHydrophilicParticles: %d", _selfHydrophilicParticles.size());
         // logging::info("#_interactionHydrophilicParticles: %d", _interactionHydrophilicParticles.size());
@@ -293,7 +293,11 @@ Vector3f RigidBody::getImpalaSamplingParticlePosition(spn::Particle &, int ind)
     // Apply First rotation:
     // Roll rotation -> insertion vector is the rotation vector
     double roll_angle_rad = _roll_angle * (M_PI / 180);
-    Vector3f newPos = Quaternion(_p0[ind], 0.).rotateVectorAboutAxisAndAngle(iv_vec_rot, roll_angle_rad).getV();
+    // ind stays a signed int: it is threaded through from the OpenMP loop
+    // counter in SpringNetwork::_integrateForces (signed for MSVC's
+    // OpenMP 2.0 requirement), always >= 0 in practice.
+    Vector3f newPos =
+        Quaternion(_p0[static_cast<size_t>(ind)], 0.).rotateVectorAboutAxisAndAngle(iv_vec_rot, roll_angle_rad).getV();
     
     // Apply second rotation:
     // Insertion angle rotation
@@ -335,7 +339,10 @@ Vector3f RigidBody::getMonteCarloParticlePosition(spn::Particle &, int ind)
 {
         // Apply First rotation:
         double xangle_rad = _montecarlo_current_angles.getX() * (M_PI / 180);
-        Vector3f newPos = Quaternion(_p0[ind], 0.).rotateVectorAboutAxisAndAngle(Vector3f(0,1,0), xangle_rad).getV();
+        // ind stays a signed int, see getImpalaSamplingParticlePosition above.
+        Vector3f newPos = Quaternion(_p0[static_cast<size_t>(ind)], 0.)
+                              .rotateVectorAboutAxisAndAngle(Vector3f(0, 1, 0), xangle_rad)
+                              .getV();
         
         // Apply second rotation:
         double yangle_rad = _montecarlo_current_angles.getY() * (M_PI / 180);
@@ -596,7 +603,9 @@ void RigidBody::integrateParticleVelocity(spn::Particle & p, int ind, double tim
     }
     else
     {
-        Quaternion qnewLocalPos = rb->_orientation * Quaternion(rb->_p0[ind], 0.0) * rb->_orientation.inverse();
+        // ind stays a signed int, see getImpalaSamplingParticlePosition above.
+        Quaternion qnewLocalPos =
+            rb->_orientation * Quaternion(rb->_p0[static_cast<size_t>(ind)], 0.0) * rb->_orientation.inverse();
         Vector3f newPosition = rb->_pos + qnewLocalPos.getV();
         p.setPosition(newPosition);
 

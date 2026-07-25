@@ -25,8 +25,8 @@ class Spring
 
     Spring(Particle & p1, Particle & p2, float equilibrium) : Spring(p1, p2, equilibrium, DEFAULT_STIFFNESS) {}
 
-    void setId(int id) { _id = id; }
-    int getId() const { return _id; }
+    void setId(unsigned id) { _id = id; }
+    unsigned getId() const { return _id; }
 
     const Particle & getParticle1() const { return _p1; }
     const Particle & getParticle2() const { return _p2; }
@@ -60,7 +60,7 @@ class Spring
     float _stiffness;
     float _length;
     float _energy;
-    int _id;
+    unsigned _id;
 };
 
 } // namespace spn

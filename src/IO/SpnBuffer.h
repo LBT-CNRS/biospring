@@ -84,7 +84,9 @@ struct SpringBuffer
 
         for (size_t i = 0; i < spn->getNumberOfParticles(); ++i)
         {
-            nbofspringsperparticle[i] = spn->getParticle(i).getNumberOfSprings();
+            // nbofspringsperparticle mirrors the NetCDF "nbspringsperparticle"
+            // variable's on-disk type (nc_INT).
+            nbofspringsperparticle[i] = static_cast<int>(spn->getParticle(i).getNumberOfSprings());
         }
     }
 };
@@ -154,7 +156,8 @@ struct ParticleBuffer
             surface_accessibilities[i] = p.getSolventAccessibilitySurface();
 
             ids[i] = p.getId();
-            resids[i] = p.getResId();
+            // resids mirrors the NetCDF "resids" variable's on-disk type (nc_INT).
+            resids[i] = static_cast<int>(p.getResId());
             dynamic_states[i] = p.isDynamic();
 
             strncpy(chainnames[i], p.getChainName().c_str(), CHAIN_NAME_LENGTH);

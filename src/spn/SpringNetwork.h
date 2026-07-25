@@ -124,7 +124,7 @@ class SpringNetwork
     // Gets/Sets interator.
     void addInteractor(Interactor* interactor) { _interactors.push_back(interactor);}
     Interactor* getInteractor(size_t index) {if (index < _interactors.size()) { return _interactors[index]; } return nullptr;}
-    void removeInteractor(size_t index) { if (index < _interactors.size()) { _interactors.erase(_interactors.begin() + index); } }
+    void removeInteractor(size_t index) { if (index < _interactors.size()) { _interactors.erase(_interactors.begin() + static_cast<std::ptrdiff_t>(index)); } }
     const std::vector<Interactor*>& getInteractors() const { return _interactors; }
     template <typename T>
     T* getInteractorInstance() const { return Interactor::getInteractorInstance<T>(_interactors); }
@@ -469,7 +469,7 @@ class SpringNetwork
     void _writeNextStep();
 
     // Returns true if it's time to display current frame data.
-    bool _isTimeToLogData() const { return _nbiter % (static_cast<unsigned>(getSampleRate())) == 0; }
+    bool _isTimeToLogData() const { return static_cast<unsigned>(_nbiter) % (static_cast<unsigned>(getSampleRate())) == 0; }
 
     // Displays current frame informations on logging channel.
     void _displayFrameData();

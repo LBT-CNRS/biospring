@@ -209,9 +209,11 @@ void SpringNetwork::updateParticlePositions()
 #ifdef OPENMP_SUPPORT
 #pragma omp for reduction(+ : kinetic_energy_particle) schedule(static)
 #endif
+        // i stays a signed int: MSVC only supports OpenMP 2.0, which requires
+        // a signed loop counter for #pragma omp parallel for.
         for (int i = 0; i < (int)_dynamicparticules.size(); i++)
         {
-            Particle & p = getParticle(_dynamicparticules[i]);
+            Particle & p = getParticle(_dynamicparticules[static_cast<size_t>(i)]);
             if (p.isRigid())
                 rigidbody::RigidBody::integrateParticleVelocity(p, i, getTimeStep());
             else
@@ -397,7 +399,11 @@ void SpringNetwork::_displayFrameData()
 
 }
 
-void SpringNetwork::_writeNextStep() { _trajectories.write_step(_nbiter); }
+// _nbiter stays a signed int: it is compared against getMaxIteration()
+// (config's simulation.nbsteps, whose -1 means "infinite run"), and logged
+// with %d in several places. Cast explicitly here (always >= 0 in practice,
+// only incremented from 0).
+void SpringNetwork::_writeNextStep() { _trajectories.write_step(static_cast<size_t>(_nbiter)); }
 
 void SpringNetwork::writeNextStepNow() { _trajectories.write_step(); }
 
@@ -462,7 +468,7 @@ void SpringNetwork::addSpring(unsigned id1, unsigned id2, float equilibrium, flo
         Particle & p1 = _particles[id1];
         Particle & p2 = _particles[id2];
         _springs.emplace_back(p1, p2, equilibrium, stiffness);
-        _springs.back().setId(static_cast<int>(_springs.size() - 1));
+        _springs.back().setId(static_cast<unsigned>(_springs.size() - 1));
 
         if (old_storage != _springs.data())
             _rebuildSpringNeighbors();
@@ -496,20 +502,24 @@ void SpringNetwork::addParticle(const Particle & source)
 
     Particle p = Particle(source);
     p.setSpringNetwork(this);
-    p.setId(_particles.size());
+    // Particle::getId()/setId() stay signed (used as an "unassigned" sentinel
+    // for the probe particle, see isProbeParticle()), so cast explicitly at
+    // this array-index assignment and below where it's consumed as an
+    // unsigned index (always >= 0 once assigned here).
+    p.setId(static_cast<int>(_particles.size()));
 
     p.setInternalStructId(_structid);
 
     if (p.isStatic())
-        addStaticParticle(p.getId());
+        addStaticParticle(static_cast<unsigned>(p.getId()));
     else
-        addDynamicParticle(p.getId());
+        addDynamicParticle(static_cast<unsigned>(p.getId()));
 
     if (p.isCharged())
-        _chargedparticules.push_back(p.getId());
+        _chargedparticules.push_back(static_cast<unsigned>(p.getId()));
 
     if (p.isHydrophobic())
-        _hydrophobicparticules.push_back(p.getId());
+        _hydrophobicparticules.push_back(static_cast<unsigned>(p.getId()));
 
     _particles.push_back(p);
     _initparticles.push_back(p);
@@ -750,7 +760,7 @@ void SpringNetwork::_setupProbe()
         _probeparticule.setX(_config.probe.x);
         _probeparticule.setY(_config.probe.y);
         _probeparticule.setZ(_config.probe.z);
-        _probeparticule.setId(_particles.size());
+        _probeparticule.setId(static_cast<int>(_particles.size()));
         _particles.push_back(_probeparticule);
     }
 }
@@ -887,8 +897,8 @@ void SpringNetwork::_rebuildSpringNeighbors()
     {
         Particle & p1 = spring.getParticle1();
         Particle & p2 = spring.getParticle2();
-        p1.addToSpringNeighbors(p2.getId(), &spring);
-        p2.addToSpringNeighbors(p1.getId(), &spring);
+        p1.addToSpringNeighbors(static_cast<unsigned>(p2.getId()), &spring);
+        p2.addToSpringNeighbors(static_cast<unsigned>(p1.getId()), &spring);
     }
 }
 

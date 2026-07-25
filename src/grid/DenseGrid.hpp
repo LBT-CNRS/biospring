@@ -92,14 +92,20 @@ template <typename T> class DenseGrid
     {
         if (_coordinates_system.is_out_of_grid(cell))
             throw std::out_of_range("Cell is out of grid boundaries.");
-        return _data[cell[0]][cell[1]][cell[2]];
+        // cell coordinates stay signed ints (is_out_of_grid treats any
+        // negative component as out-of-grid, see GridCoordinatesSystem), but
+        // the is_out_of_grid() check just above guarantees they are >= 0 here.
+        return _data[static_cast<size_t>(cell[0])][static_cast<size_t>(cell[1])][static_cast<size_t>(cell[2])];
     }
 
     const T & at(const discrete_coordinates & cell) const
     {
         if (_coordinates_system.is_out_of_grid(cell))
             throw std::out_of_range("Cell is out of grid boundaries.");
-        return _data[cell[0]][cell[1]][cell[2]];
+        // cell coordinates stay signed ints (is_out_of_grid treats any
+        // negative component as out-of-grid, see GridCoordinatesSystem), but
+        // the is_out_of_grid() check just above guarantees they are >= 0 here.
+        return _data[static_cast<size_t>(cell[0])][static_cast<size_t>(cell[1])][static_cast<size_t>(cell[2])];
     }
 
     // Returns the element at the given position.
