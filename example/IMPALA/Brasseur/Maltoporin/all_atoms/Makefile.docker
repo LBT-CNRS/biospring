@@ -11,5 +11,5 @@ GRP =  $(BS_DATA_DIR)/reducerules/amber.grp
 CUTOFF = 5.0
 STIFFNESS = 30.0
 
-# Prepare the input files for the simulation
-prep : pdb2spn
+$(PDB2SPN_INPUT): $(RAW_PDB)
+	cp $(RAW_PDB) $(PDB2SPN_INPUT)
