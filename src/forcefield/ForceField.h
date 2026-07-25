@@ -73,6 +73,14 @@ class ForceField
 
     // ================================================================================
     // Getters and setters
+    //
+    // All *Scale members below are dimensionless multipliers applied
+    // uniformly to the corresponding energy/force term (see msp options
+    // spring.scale, steric.gridscale, coulomb.scale, imp.scale,
+    // hydrophobicity.scale in doc/MSP_Options.md); they do not change units,
+    // only magnitude. _dielectric is likewise dimensionless (relative
+    // permittivity, applied on top of vacuum permittivity in
+    // electrostatic_energy/electrostatic_force_module).
 
     float getCoulombScale() const { return _coulombscale; }
     void setCoulombScale(float coulombscale) { _coulombscale = coulombscale; }

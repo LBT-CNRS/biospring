@@ -1,4 +1,5 @@
 #--- GeneralSimulation ---
+#fs
 simulation.timestep = 1
 simulation.samplerate = 5000
 #simulation.nbsteps = 10000
@@ -12,10 +13,12 @@ csvsampling.frequency = 10000
 spring.enable = 0
 
 viscosity.enable = 1
+#Da.fs-1
 viscosity.value = 0.001
 
 #--- FF:IMPALA ---
 impala.enable = 1
+#dimensionless factor applied to IMPALA forces (particle transfer energies, in kJ.mol-1, come from the .ff file)
 impala.scale = 1.0
 
 #--- InsertionVector ---
@@ -27,6 +30,9 @@ insertionvector.vector = 83 105
 rigidbody.enable = 1
 rigidbody.enablesampling = 0
 rigidbody.enablemontecarlo = 0
+#Angstroms (A)
 rigidbody.montecarlo_translation_norm = 0.01
+#degrees
 rigidbody.montecarlo_rotation_norm = 0.01
+#Kelvin (K)
 rigidbody.montecarlo_temperature = 298.1

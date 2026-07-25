@@ -142,14 +142,14 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument stiffness = argparse::Argument()
                                        .name_short("-stiffness")
                                        .name_long("--stiffness")
-                                       .description("spring stiffness")
+                                       .description("spring stiffness, in kJ.mol-1.A-2")
                                        .argument_type(argparse::ArgumentType::REAL)
                                        .default_value("1.0");
 
     argparse::Argument charge = argparse::Argument()
                                     .name_short("-charge")
                                     .name_long("--charge")
-                                    .description("override force field values for particle charge")
+                                    .description("override force field values for particle charge, in elementary charge units (e)")
                                     .default_value("0.0")
                                     .argument_type(argparse::ArgumentType::REAL);
 

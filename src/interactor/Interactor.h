@@ -137,7 +137,7 @@ class Interactor
             std::unordered_map<std::string, ExternalDataRef<T>> references;
 
         public:
-            // Ajoute une nouvelle référence externe (sans la créer).
+            // Adds a new external reference (without creating it).
             void add(const std::string& name) {
                 references[name] = ExternalDataRef<T>();
             }

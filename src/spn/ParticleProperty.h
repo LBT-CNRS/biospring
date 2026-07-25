@@ -6,6 +6,14 @@ namespace biospring
 namespace spn
 {
 
+// Per-particle physical properties read from the .ff force field file.
+// Units (matching the simulation's internal unit system, see
+// forcefield/constants.hpp): mass in Dalton (Da), charge in elementary
+// charge (e), radius in Angstrom (A), epsilon in kJ.mol-1 (Lennard-Jones
+// well depth), hydrophobicity in kJ.mol-1 (see NetCDFWriter's
+// "hydrophobicityscale" units), solvent accessibility surface in A^2,
+// transfer energy by accessible surface in kJ.mol-1.A-2 (see IMPALA,
+// forcefield/energy/imp.hpp).
 class ParticleProperty
 {
   public:

@@ -1,4 +1,5 @@
 #--- GeneralSimulation ---
+#fs
 simulation.timestep = 0.1
 simulation.samplerate = 5000
 #simulation.nbsteps = 10000
@@ -10,24 +11,29 @@ csvsampling.frequency = 1
 
 #--- SpringNetwork ---
 spring.enable = 0
+#dimensionless factor applied to each spring's stiffness (kJ.mol-1.A-2, set by pdb2spn's --stiffness at topology creation time)
 spring.scale = 100.0
 
 viscosity.enable = 1
+#Da.fs-1
 viscosity.value = 0.01
 
 #--- FF:Steric ---
 steric.enable = 0
+#Angstroms
 steric.cutoff = 16
 
 #--- FF:Electrostatic ---
 
 coulomb.enable = 0
+#dimensionless (relative permittivity)
 coulomb.dielectric = 80
 
 #--- FF:Density ---
 
 #--- FF:IMPALA ---
 impala.enable = 1
+#dimensionless factor applied to IMPALA forces (particle transfer energies, in kJ.mol-1, come from the .ff file)
 impala.scale = 10.0
 
 #--- InsertionVector ---
@@ -40,8 +46,11 @@ insertionvector.vector = 34 45
 rigidbody.enable = 1
 rigidbody.enablesampling = 0
 rigidbody.enablemontecarlo = 0
+#Angstroms (A)
 rigidbody.montecarlo_translation_norm = 0.01
+#degrees
 rigidbody.montecarlo_rotation_norm = 0.01
+#Kelvin (K)
 rigidbody.montecarlo_temperature = 298.1
 
 
