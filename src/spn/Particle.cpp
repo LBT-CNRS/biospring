@@ -129,6 +129,14 @@ void Particle::addDensityFieldForce()
     float gridscale = _springnetwork->getGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getDensityGrid();
 
+    // A particle can legitimately wander outside the precomputed grid
+    // (e.g. an interactively-steered ligand, or a grid only covering a
+    // local region of a much larger system): treat it as feeling no force
+    // from this field there, rather than letting the grid's exception
+    // crash the whole simulation.
+    if (potentialgrid.is_out_of_grid(biospring::grid::real_coordinates(getX(), getY(), getZ())))
+        return;
+
     Vector3f force = potentialgrid.get(getX(), getY(), getZ()).vector;
     force = force * getBurying() * gridscale;
 
@@ -140,6 +148,11 @@ void Particle::addElectrostaticFieldForce()
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     float gridscale = _springnetwork->getGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getPotentialGrid();
+
+    // See addDensityFieldForce: outside the grid, this field simply
+    // contributes no force/energy rather than crashing.
+    if (potentialgrid.is_out_of_grid(biospring::grid::real_coordinates(getX(), getY(), getZ())))
+        return;
 
     const auto & cell = potentialgrid.get(getX(), getY(), getZ());
 
