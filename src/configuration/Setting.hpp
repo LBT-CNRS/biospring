@@ -221,34 +221,6 @@ class GridSetting : public SettingBase
     }
 };
 
-class DensityGridSetting : public SettingBase
-{
-  public:
-    bool enable;
-    std::string path;
-
-    DensityGridSetting(const std::string & name) : SettingBase(name), enable(false), path()
-    {
-        _parameterNames = {"enable", "path"};
-    }
-
-    void setFromString(const std::string & param, const std::string & s) override
-    {
-        if (param == "enable")
-            _parse_bool(enable, s, param);
-        else if (param == "path")
-            path = s;
-        else
-            logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
-    }
-
-    void print(std::ostream & os = std::cout) const override
-    {
-        _mspFormatter.print("enable", enable, os);
-        _mspFormatter.print("path", path, os);
-    }
-};
-
 class SimulationSetting : public SettingBase
 {
   public:

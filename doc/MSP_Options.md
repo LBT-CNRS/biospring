@@ -128,6 +128,9 @@ forces derived from the potential grid.
 ---
 * **densitygrid.enable = 0** *(boolean)* Enable density grid.
 * **densitygrid.path = ""** *(string)* Name of the density grid file in OpenDX format.
+* **densitygrid.scale = 1** *(dimensionless factor, float)* Multiplier applied to forces derived
+from the density grid (e.g. a SAXS/cryoEM-derived envelope). Independent from steric.gridscale
+and potentialgrid.scale.
 
 Implicit Membrane (IMPALA)
 -----------------

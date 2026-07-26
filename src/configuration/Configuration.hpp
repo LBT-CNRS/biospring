@@ -30,7 +30,7 @@ class Configuration
     TrajectorySetting xtctraj;
     TrajectorySetting csvsample;
     GridSetting potentialgrid;
-    DensityGridSetting densitygrid;
+    GridSetting densitygrid;
     ProbeSetting probe;
     RigidBodySetting rigidbody;
 

@@ -238,7 +238,14 @@ class SpringNetwork
 
     float getTimeStep() const { return _config.sim.timestep; }
 
+    // Steric force scale (also pushed into the ForceField via setStericScale,
+    // see SpringNetwork::setup). Named getGridScale for historical reasons;
+    // despite the name it has nothing to do with potentialgrid or
+    // densitygrid, which have their own independent scale (see
+    // ForceField::getForceFieldScale and getDensityGridScale below).
     float getGridScale() const { return _config.steric.gridscale; }
+
+    float getDensityGridScale() const { return _config.densitygrid.scale; }
 
     float getViscosity() const { return _config.viscosity.value; }
     void setViscosity(float visc) { _config.viscosity.value = visc; } // Viscosity able to be updated during simulation

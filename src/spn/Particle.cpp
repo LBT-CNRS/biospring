@@ -126,7 +126,9 @@ void Particle::_integrateVelocity(float timestep)
 
 void Particle::addDensityFieldForce()
 {
-    float gridscale = _springnetwork->getGridScale();
+    // Own scale (densitygrid.scale), independent from the steric force's
+    // steric.gridscale -- see SpringNetwork::getDensityGridScale.
+    float gridscale = _springnetwork->getDensityGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getDensityGrid();
 
     // Off-grid guard: a steered or free-moving particle can leave the density
@@ -150,7 +152,11 @@ void Particle::addDensityFieldForce()
 void Particle::addElectrostaticFieldForce()
 {
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-    float gridscale = _springnetwork->getGridScale();
+    // Same scale (potentialgrid.scale, via setForceFieldScale) as the energy
+    // computed below (computeElectrostaticFieldEnergy): force and energy must
+    // agree on what they are scaling. Previously read steric.gridscale here,
+    // an unrelated setting shared with the steric force.
+    float gridscale = ff->getForceFieldScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getPotentialGrid();
 
     // Off-grid guard (see addDensityFieldForce): mirror the JAX port's zero-force
