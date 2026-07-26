@@ -24,9 +24,11 @@ ReduceRule ReduceRuleReader::parse_rule(const std::string & line, size_t line_id
     std::string rule_name = tokens[0];
     std::string residue_name = tokens[1];
 
-    // Dies if the rule name is already in use.
-    if (_rules.contains(rule_name))
-        logging::die("ReduceRuleReader: line %d: duplicate rule name \"%s\"", line_id, rule_name.c_str());
+    // Rule names are not required to be globally unique: the same grain name
+    // (e.g. the nucleic acid backbone beads in CGZaccharias.grp) can
+    // legitimately be reused across different residues that reduce to the
+    // same physical bead type. Rules are always looked up by residue name
+    // (see ReduceRuleContainer::get_rules_for_residue), never by name alone.
 
     // Initializes the rule using its name and residue name.
     ReduceRule rule(rule_name, residue_name);

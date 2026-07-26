@@ -45,14 +45,14 @@ class ReduceRuleContainer
     // =============================================================================
 
     // Adds a rule to the container.
-    // Dies if the rule name already exists.
+    // Rule names are not required to be globally unique: the same grain name
+    // can legitimately be reused across different residues (e.g. the nucleic
+    // acid backbone beads in CGZaccharias.grp, chemically identical for
+    // every base). Rules are selected by residue name (see
+    // get_rules_for_residue), never by looking up a name across residues, so
+    // this is safe.
     void append(const ReduceRule & rule)
     {
-        if (contains(rule.getName()))
-        {
-            std::string msg = "ReduceRuleContainer::append: rule name already exists: " + rule.getName();
-            throw std::runtime_error(msg);
-        }
         _rules.push_back(rule);
         _name_to_position[rule.getName()] = _rules.size() - 1;
     }
