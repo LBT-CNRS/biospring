@@ -72,6 +72,7 @@ set(TEST_MODULES
     OpenDXReader
     PDBReader
     Reducer
+    RigidBody
     RigidBodiesManager
     ReduceRuleReader
     Vector3f
