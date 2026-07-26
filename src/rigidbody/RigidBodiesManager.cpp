@@ -23,11 +23,14 @@ namespace rigidbody
             const auto e = rb->getParticlesIds();
             // Check if some ids in rigidparticlesids are found in existing collection of rigid bodies
             for (auto const n : newParticlesIds) {
-                if (std::find(e.begin(), e.end(), n) == e.end()) {
+                if (std::find(e.begin(), e.end(), n) != e.end()) {
                     // Particle found in existing rigid body ids
                     isAllNewParticle = false;
+                    break;
                 }
             }
+            if (!isAllNewParticle)
+                break;
         }
 
 
