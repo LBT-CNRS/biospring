@@ -95,12 +95,13 @@ void OpenDXReader::readGrid()
     size_t gx = 0, gy = 0, gz = 0;
     size_t totalsize = _grid.size();
 
-    if (totalsize % 3 != 0)
-    {
-        logging::die("OpenDXReader: misformatted data (grid size, which is %d,  % 3 != 0)", totalsize);
-    }
-
-    for (size_t i = 0; i < totalsize / 3; i++)
+    // OpenDX text data simply wraps the flat array at (conventionally) 3
+    // values per line; the total point count has no reason to be a
+    // multiple of 3 (e.g. a 97x97x97 grid is not), so the last line
+    // legitimately holds fewer than 3 values. Read by total value count
+    // instead of assuming every line, including the last, has exactly 3.
+    size_t read_count = 0;
+    while (read_count < totalsize)
     {
         if (not std::getline(_instream, buffer))
         {
@@ -108,17 +109,23 @@ void OpenDXReader::readGrid()
         }
 
         tokens = biospring::utils::string::split(buffer);
-        if (tokens.size() != 3)
+        if (tokens.empty() || tokens.size() > 3)
         {
-            logging::die("OpenDXReader: misformatted grid data (expected 3 tokens, found '%s'", buffer.c_str());
+            logging::die("OpenDXReader: misformatted grid data (expected 1 to 3 tokens, found '%s'", buffer.c_str());
         }
 
-        for (size_t j = 0; j < 3; j++)
+        for (const std::string & token : tokens)
         {
+            if (read_count >= totalsize)
+            {
+                logging::die("OpenDXReader: more grid data than the declared %zu values", totalsize);
+            }
+
             biospring::grid::discrete_coordinates cell(gx, gy, gz);
 
-            float scalar = std::stof(tokens[j]);
+            float scalar = std::stof(token);
             _grid.at(cell).scalar = scalar * unityconvert;
+            read_count++;
 
             gz++;
             if (gz >= _grid.shape()[2])
