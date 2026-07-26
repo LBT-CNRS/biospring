@@ -101,6 +101,12 @@ struct ParticleBuffer
     float * radii;
     float * epsilons;
     float * masses;
+    // Per-particle hydrophobicity, used by the pairwise hydrophobic force term
+    // (Particle::getHydrophobicity()). Distinct from `hscales`, which carries
+    // the IMPALA transfer energy per unit accessible surface -- the .nc file
+    // calls that one `hydrophobicityscale`, and conflating the two is what lost
+    // this field once already.
+    float * hydrophobicities;
     float * hscales;
     float * surface_accessibilities;
 
@@ -125,6 +131,7 @@ struct ParticleBuffer
             radii = new float[nParticles]{};
             epsilons = new float[nParticles]{};
             masses = new float[nParticles]{};
+            hydrophobicities = new float[nParticles]{};
             hscales = new float[nParticles]{};
             surface_accessibilities = new float[nParticles]{};
             ids = new int[nParticles]{};
@@ -152,6 +159,7 @@ struct ParticleBuffer
             radii[i] = p.getRadius();
             epsilons[i] = p.getEpsilon();
             masses[i] = p.getMass();
+            hydrophobicities[i] = p.getHydrophobicity();
             hscales[i] = p.getTransferEnergyByAccessibleSurface();
             surface_accessibilities[i] = p.getSolventAccessibilitySurface();
 
@@ -171,8 +179,9 @@ struct ParticleBuffer
     // Empty constructor.
     //
     ParticleBuffer()
-        : number_of_particles(0), coordinates(0), charges(0), radii(0), epsilons(0), masses(0), hscales(0),
-          surface_accessibilities(0), ids(0), resids(0), dynamic_states(0), chainnames(0), particlenames(0), resnames(0)
+        : number_of_particles(0), coordinates(0), charges(0), radii(0), epsilons(0), masses(0), hydrophobicities(0),
+          hscales(0), surface_accessibilities(0), ids(0), resids(0), dynamic_states(0), chainnames(0),
+          particlenames(0), resnames(0)
     {
     }
 
@@ -194,6 +203,7 @@ struct ParticleBuffer
         delete[] radii;
         delete[] epsilons;
         delete[] masses;
+        delete[] hydrophobicities;
         delete[] hscales;
         delete[] surface_accessibilities;
         delete[] ids;
@@ -208,6 +218,7 @@ struct ParticleBuffer
         radii = nullptr;
         epsilons = nullptr;
         masses = nullptr;
+        hydrophobicities = nullptr;
         hscales = nullptr;
         surface_accessibilities = nullptr;
         ids = nullptr;
