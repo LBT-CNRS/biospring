@@ -129,6 +129,18 @@ void Particle::addDensityFieldForce()
     float gridscale = _springnetwork->getGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getDensityGrid();
 
+    // Off-grid guard: a steered or free-moving particle can leave the density
+    // grid. DenseGrid::get -> at() throws std::out_of_range for an out-of-bounds
+    // cell, which aborts the whole run. The JAX port (potential/density_field.py)
+    // instead contributes ZERO force for out-of-grid particles (it clamps the
+    // index only to keep the gather safe, then masks the value to zero). Mirror
+    // that here: skip the lookup and add nothing.
+    if (potentialgrid.is_out_of_grid(biospring::grid::real_coordinates(getX(), getY(), getZ())))
+    {
+        BIOSPRING_WARN_ONCE("particle %u left the density grid: contributing zero density force", getId());
+        return;
+    }
+
     Vector3f force = potentialgrid.get(getX(), getY(), getZ()).vector;
     force = force * getBurying() * gridscale;
 
@@ -140,6 +152,18 @@ void Particle::addElectrostaticFieldForce()
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
     float gridscale = _springnetwork->getGridScale();
     const biospring::grid::PotentialGrid & potentialgrid = _springnetwork->getPotentialGrid();
+
+    // Off-grid guard (see addDensityFieldForce): mirror the JAX port's zero-force
+    // out-of-bounds behaviour instead of throwing std::out_of_range and crashing.
+    // Note this also skips the energy accumulation below, so an off-grid particle
+    // stops contributing to the reported electrostatic energy.
+    if (potentialgrid.is_out_of_grid(biospring::grid::real_coordinates(getX(), getY(), getZ())))
+    {
+        BIOSPRING_WARN_ONCE("particle %u left the electrostatic potential grid: contributing zero field force "
+                            "and zero field energy",
+                            getId());
+        return;
+    }
 
     const auto & cell = potentialgrid.get(getX(), getY(), getZ());
 
