@@ -65,7 +65,19 @@ std::vector<std::pair<size_t, size_t>> PDBReader::parseConectLine(const std::str
 {
     std::vector<std::pair<size_t, size_t>> pairs_indexes;
 
-    size_t serial = static_cast<size_t>(std::stoi(line.substr(6, 5)));
+    // The connected serials below are each parsed defensively; the record's own
+    // serial must be too, otherwise a malformed CONECT line throws
+    // std::invalid_argument straight out of the reader.
+    size_t serial = 0;
+    try
+    {
+        serial = static_cast<size_t>(std::stoi(line.substr(6, 5)));
+    }
+    catch (const std::exception &)
+    {
+        logging::warning("skipping malformed CONECT record: %s", line.c_str());
+        return pairs_indexes;
+    }
 
     // Helper function to try parsing and add to vector if successful
     auto try_add_pair = [&](size_t start_index) {
@@ -119,7 +131,21 @@ void PDBReader::read()
             auto pairs_indexes = parseConectLine(buffer);
             for (auto & pair_indexes : pairs_indexes)
             {
-                _topology.add_spring(_extidtoindex[pair_indexes.first], _extidtoindex[pair_indexes.second]);
+                // _extidtoindex only holds atoms that passed the filter above.
+                // Looking a missing serial up with operator[] would default-insert
+                // 0 and silently bond the atom to particle 0 -- a wrong topology
+                // that no error reports. Real PDB files routinely CONECT to
+                // HETATMs the filter dropped, so skip the pair instead of dying.
+                const auto first = _extidtoindex.find(pair_indexes.first);
+                const auto second = _extidtoindex.find(pair_indexes.second);
+                if (first == _extidtoindex.end() || second == _extidtoindex.end())
+                {
+                    BIOSPRING_WARN_ONCE("CONECT record refers to atom serials absent from the model "
+                                        "(e.g. %zu-%zu): skipping those bonds",
+                                        pair_indexes.first, pair_indexes.second);
+                    continue;
+                }
+                _topology.add_spring(first->second, second->second);
             }
         }
     } while (std::getline(_instream, buffer));
