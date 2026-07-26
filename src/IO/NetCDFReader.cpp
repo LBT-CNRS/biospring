@@ -60,6 +60,11 @@ void NetCDFReader::addParticlesToSpn()
             imp.transfert_energy_by_accessible_surface(_pbuffer.hscales[i]);
         p.properties().set_imp(imp);
 
+        // Hydrophobicity is a ParticleProperties member in its own right, not an
+        // IMP property: it feeds the pairwise hydrophobic force, not IMPALA.
+        if (_pbuffer.hydrophobicities)
+            p.properties().set_hydrophobicity(_pbuffer.hydrophobicities[i]);
+
         _topology.add_particle(p);
     }
 }
@@ -161,6 +166,18 @@ void NetCDFReader::readParticles()
         checkNDims(data, 1);
         checkDim(data, 0, _pbuffer.number_of_particles);
         data.getVar(_pbuffer.hscales);
+    }
+
+    // Per-particle hydrophobicity for the pairwise hydrophobic FORCE term
+    // (Particle::getHydrophobicity()). Distinct from `hydrophobicityscale`
+    // above, which is the IMPALA transfer energy. Optional, so a file written
+    // before this variable existed still reads, with hydrophobicity left at 0.
+    data = getNcVar("hydrophobicity", false);
+    if (not data.isNull())
+    {
+        checkNDims(data, 1);
+        checkDim(data, 0, _pbuffer.number_of_particles);
+        data.getVar(_pbuffer.hydrophobicities);
     }
 }
 
