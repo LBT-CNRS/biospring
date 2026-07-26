@@ -69,6 +69,7 @@ set(TEST_MODULES
     Configuration
     ForceFieldReader
     OpenDXReader
+    PDBReader
     Reducer
     ReduceRuleReader
     Vector3f
