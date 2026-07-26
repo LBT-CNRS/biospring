@@ -70,6 +70,7 @@ set(TEST_MODULES
     ForceFieldReader
     NetCDFRoundTrip
     OpenDXReader
+    PDBReader
     Reducer
     RigidBodiesManager
     ReduceRuleReader
