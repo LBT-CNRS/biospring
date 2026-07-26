@@ -68,6 +68,7 @@ set(TEST_MODULES
     Box
     Configuration
     ForceFieldReader
+    NetCDFRoundTrip
     OpenDXReader
     Reducer
     RigidBodiesManager

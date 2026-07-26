@@ -77,6 +77,9 @@ void NetCDFWriter::writeBinary()
     hscale.putAtt("units", "kJ.mol-1");
     hscale.putAtt("long_name", "Particle hydrophobicity scale (transfer energy)");
 
+    NcVar hydrophobicity = nc->addVar("hydrophobicity", ncFloat, pnbdim);
+    hydrophobicity.putAtt("long_name", "Particle hydrophobicity (pairwise hydrophobic force)");
+
     NcVar resids = nc->addVar("resids", ncInt, pnbdim);
     resids.putAtt("long_name", "Particle residue id");
 
@@ -110,6 +113,7 @@ void NetCDFWriter::writeBinary()
     charges.putVar(pbuffer.charges);
     surfacc.putVar(pbuffer.surface_accessibilities);
     hscale.putVar(pbuffer.hscales);
+    hydrophobicity.putVar(pbuffer.hydrophobicities);
     chainnames.putVar(pbuffer.chainnames);
     pnames.putVar(pbuffer.particlenames);
     resnames.putVar(pbuffer.resnames);
@@ -213,6 +217,11 @@ void NetCDFWriter::_writeHeaderCDL()
     _ostream << "\tfloat   hydrophobicityscale(particle_number);" << std::endl;
     _ostream << "\t        hydrophobicityscale:units = \"kJ.mol-1\" ;" << std::endl;
     _ostream << "\t        hydrophobicityscale:long_name = \"Particle hydrophobicity scale (transfer energy)\";"
+             << std::endl;
+    _ostream << std::endl;
+
+    _ostream << "\tfloat   hydrophobicity(particle_number);" << std::endl;
+    _ostream << "\t        hydrophobicity:long_name = \"Particle hydrophobicity (pairwise hydrophobic force)\";"
              << std::endl;
     _ostream << std::endl;
 
@@ -336,6 +345,17 @@ void NetCDFWriter::_writeParticleDataCDL()
     {
         const biospring::spn::Particle & p = _spn->getParticle(i);
         _ostream << p.getTransferEnergyByAccessibleSurface();
+        if (i == (nbparticles - 1))
+            _ostream << ";" << std::endl;
+        else
+            _ostream << "," << std::endl;
+    }
+
+    _ostream << "\thydrophobicity = " << std::endl;
+    for (size_t i = 0; i < nbparticles; i++)
+    {
+        const biospring::spn::Particle & p = _spn->getParticle(i);
+        _ostream << p.getHydrophobicity();
         if (i == (nbparticles - 1))
             _ostream << ";" << std::endl;
         else
