@@ -9,6 +9,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Without this, a plain `cmake -S . -B build` leaves CMAKE_BUILD_TYPE empty and
+# single-config generators then pass no optimisation flags at all: the whole
+# force loop, which is header-only and relies on inlining, builds at -O0. The
+# guard on CMAKE_CONFIGURATION_TYPES leaves multi-config generators (MSVC,
+# Xcode) alone, where the build type is chosen at build time instead.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 option(MDDRIVER_SUPPORT "Enable MDDriver coupling" OFF)
 option(FREESASA_SUPPORT "Enable FreeSASA coupling" OFF)
 option(OPENCL_SUPPORT "Enable the OpenCL backend" OFF)

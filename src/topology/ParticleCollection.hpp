@@ -12,6 +12,7 @@
 
 #include <cassert>
 #include <limits>
+#include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
 
@@ -383,7 +384,12 @@ class ParticleCollection
     template <typename T, typename Setter>
     void set_property(const std::vector<T> & values, Setter setter, std::type_identity_t<const T> * = nullptr)
     {
-        assert(_data.size() == values.size());
+        // Checked unconditionally, not with assert(): this is a public setter
+        // reached with a caller-supplied vector, and the loop below would read
+        // past the end of `values` if it were shorter. An assert would vanish
+        // under NDEBUG and turn that into a silent out-of-bounds read.
+        if (_data.size() != values.size())
+            throw std::invalid_argument("ParticleCollection::set_property: expected one value per particle");
         for (size_t i = 0; i < _data.size(); ++i)
             (_data[i].properties().*setter)(values[i]);
     }
