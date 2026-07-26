@@ -6,7 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "freesasa.h"
+#include <atomic>
 #include <string>
+#include <vector>
 
 #include "interactor/Interactor.h"
 
@@ -72,7 +74,12 @@ class InteractorFreeSASA : public Interactor
 
     protected : 
 
-        double *_sasa;
+        std::vector<double> _sasa;
+
+        // Whether _sasa holds areas computed by the worker thread. _isRunning
+        // is set by startInteractionThread() before the worker has produced
+        // anything, so it cannot be used to decide that _sasa is readable.
+        std::atomic<bool> _sasaValid;
 
         bool _isDynamic;
         unsigned _step;
