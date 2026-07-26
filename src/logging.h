@@ -1,6 +1,7 @@
 #ifndef __BIOSPRING_LOGGING_H__
 #define __BIOSPRING_LOGGING_H__
 
+#include <atomic>
 #include <cstdlib>
 #include <string>
 
@@ -33,6 +34,20 @@ void status(const char * fmt, ...);
 void warning(const char * fmt, ...);
 
 } // namespace logging
+
+// Emits a warning the first time this call site is reached, then stays quiet.
+// For degraded-but-recoverable paths inside the simulation loop, where an
+// unconditional warning() would print once per particle per step and drown the
+// output it is meant to draw attention to. The flag is function-local, so each
+// call site throttles independently, and atomic because several of these sites
+// straddle an interactor's worker thread and the main thread.
+#define BIOSPRING_WARN_ONCE(...)                                                                                       \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        static std::atomic<bool> _biospring_warned{false};                                                             \
+        if (!_biospring_warned.exchange(true, std::memory_order_relaxed))                                              \
+            biospring::logging::warning(__VA_ARGS__);                                                                  \
+    } while (false)
 
 } // namespace biospring
 
