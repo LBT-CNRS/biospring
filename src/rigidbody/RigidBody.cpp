@@ -1,5 +1,6 @@
 #include "RigidBody.h"
 #include "logging.h"
+#include <algorithm>
 #include "IO/CSVSampleWriter.h"
 #include "SpringNetwork.h"
 #include <Vector3f.h>
@@ -149,6 +150,17 @@ Vector3f RigidBody::computeBarycentre() const
     return bary;
 }
 
+// Returns the index of a particle inside this body's own arrays (_p0 and
+// friends), which is its position in _particulesIds -- not its id in the spring
+// network, and not its PDB atom id.
+size_t RigidBody::localIndexOf(const spn::Particle & p) const
+{
+    const auto it = std::find(_particulesIds.begin(), _particulesIds.end(), static_cast<unsigned>(p.getId()));
+    if (it == _particulesIds.end())
+        logging::die("particle %d does not belong to this rigid body", p.getId());
+    return static_cast<size_t>(std::distance(_particulesIds.begin(), it));
+}
+
 void RigidBody::computeAllLocalPositions()
 {
     Vector3f checkCom = Vector3f();
@@ -225,7 +237,12 @@ void RigidBody::initImpalaSampling()
     iv.computeVector();
     iv.computeAngle();
     iv.computeRollAngle();
-    iv_vec_rot = _p0[iv.getParticle(0).getExtid()] - _p0[iv.getParticle(1).getExtid()];
+    // _p0 is indexed by position in _particulesIds. getExtid() is the PDB atom
+    // id (or, for a coarse-grained model, the residue id), which lives in a
+    // different numbering entirely: indexing _p0 with it read out of bounds and
+    // produced a garbage rotation axis, or worse, whenever an atom id exceeded
+    // the body's particle count -- i.e. on essentially any real structure.
+    iv_vec_rot = _p0[localIndexOf(iv.getParticle(0))] - _p0[localIndexOf(iv.getParticle(1))];
     iv_vec_rot.normalize();
     inser_angle_ini = iv.getAngle();
 }
