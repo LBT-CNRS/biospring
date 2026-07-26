@@ -15,7 +15,7 @@ namespace biospring
 namespace interactor
 {
 
-InteractorFreeSASA::InteractorFreeSASA() : _sasa(nullptr)
+InteractorFreeSASA::InteractorFreeSASA() : _sasa(nullptr), _total(0.0)
 {
 	// https://freesasa.github.io/doxygen/group__core.html
 	_freeSASA_alg = "lr";
@@ -44,6 +44,15 @@ void InteractorFreeSASA::initializeSystemState()
 
 	radii_array.resize(_nbpositions);
     coords_array.resize(_nbpositions * 3);
+
+	// Allocate _sasa here (zero-initialized) rather than lazily on the first
+	// processFreesasaInteractions() call: the main simulation thread can
+	// call syncParticleStateData() before the interaction thread has run
+	// its first computation, and _sasa must never be read while still null.
+	if (_sasa == NULL)
+	{
+		_sasa = (double *)calloc(_nbpositions, sizeof(double));
+	}
 
 	initializeDataManager();
 }
@@ -185,23 +194,35 @@ void InteractorFreeSASA::processFreesasaInteractions()
 
     result = freesasa_calc_coord(coords_array.data(), radii_array.data(), _nbpositions, param);
 
+	// Allocate _sasa once regardless of whether this call succeeds, so
+	// syncParticleStateData() always has valid memory to read from.
+	if (_sasa == NULL)
+	{
+		_sasa = (double *)calloc(_nbpositions, sizeof(double));
+	}
+
 	if (result != NULL)
 	{
-		// Allocate memory for _sasa if not already allocated
-    	if (_sasa == NULL)
+		for (int i = 0; i < _nbpositions; ++i)
 		{
-			_sasa = (double *)malloc(sizeof(double) * _nbpositions);
+			_sasa[i] = result->sasa[i];
 		}
+
+		_total = result->total;
+		freesasa_result_free(result);
 	}
-	for (int i = 0; i < _nbpositions; ++i)
+	else
 	{
-		_sasa[i] = result->sasa[i];
+		// freesasa_calc_coord returns NULL e.g. when a particle was given an
+		// invalid (negative) radius, which happens for any atom/residue the
+		// chosen classifier doesn't recognize (freesasa_classifier_radius
+		// returns -1 and the atom's name doesn't start with 'H'). Keep the
+		// previous SASA values (zero on the very first failure) instead of
+		// crashing.
+		biospring::logging::warning(
+			"InteractorFreeSASA: freesasa_calc_coord failed (likely an invalid atom radius); "
+			"keeping previous solvent-accessible-surface values");
 	}
-	
-    // _sasa = result->sasa;
-	// logging::info("New total sasa : %f", _total);
-	_total = result->total;
-    freesasa_result_free(result);
 
 	if (!isDynamic())
 		stopInteractionThread();
