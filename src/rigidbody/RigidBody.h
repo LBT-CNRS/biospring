@@ -53,6 +53,7 @@ class RigidBody
     double computeTotalMass();
     Vector3f computeBarycentre() const;
     void computeAllLocalPositions();
+    size_t localIndexOf(const spn::Particle & p) const;
     Matrix computeIbody(Vector3f com);
     /* ---------------------------------------------------------------------------------------------------------------*/
 

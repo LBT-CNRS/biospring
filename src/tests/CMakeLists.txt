@@ -69,6 +69,7 @@ set(TEST_MODULES
     ForceFieldReader
     OpenDXReader
     Reducer
+    RigidBody
     ReduceRuleReader
     Vector3f
 )
