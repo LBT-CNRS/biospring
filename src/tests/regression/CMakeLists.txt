@@ -11,6 +11,7 @@ set(TEST_MODULES
     steric-energy
     hydrophobic-energy
     spring-energy
+    offgrid-force
 )
 
 foreach(MODULE ${TEST_CLI_MODULES})
