@@ -302,7 +302,16 @@ class Topology
             size_t i = other._particles.by_uid().at(source.first().unique_id());
             size_t j = other._particles.by_uid().at(source.second().unique_id());
 
-            _springs.add_spring(_particles[i], _particles[j], source.equilibrium(), source.stiffness());
+            // Two merged topologies may share overlapping particles (e.g. the
+            // boundary residues between two structures reduced separately
+            // before merging), so the same spring can already exist.
+            try
+            {
+                _springs.add_spring(_particles[i], _particles[j], source.equilibrium(), source.stiffness());
+            }
+            catch (const SpringAlreadyExistsException & e)
+            {
+            }
         }
     }
 };
