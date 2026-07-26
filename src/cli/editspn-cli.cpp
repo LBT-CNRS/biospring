@@ -46,16 +46,16 @@ int main(int argc, char ** argv)
         topology.add_springs_from_cutoff(args.cutoff);
     }
 
-    // if (not args.pathUpdateSprings.empty())
-    // {
-    //     logging::status("Updating spring parameters using spring file %s.", args.pathUpdateSprings.c_str());
-    //     addSpringsToSpn(args.pathUpdateSprings, spn);
-    // }
+    if (not args.pathUpdateSprings.empty())
+    {
+        logging::status("Updating spring parameters using spring file %s.", args.pathUpdateSprings.c_str());
+        addSpringsToSpn(args.pathUpdateSprings, topology);
+    }
 
-    // logging::info("Final spring network has %d particles.", spn.getNumberOfParticles());
-    // logging::info("Final spring network has %d springs.", spn.getNumberOfSprings());
+    logging::info("Final spring network has %zu particles.", topology.number_of_particles());
+    logging::info("Final spring network has %zu springs.", topology.number_of_springs());
 
-    // biospring::io::writeTopology(args.pathOutputList, &spn);
+    biospring::io::writeTopology(args.pathOutputList, topology);
 
     return EXIT_SUCCESS;
 }
