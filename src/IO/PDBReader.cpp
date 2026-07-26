@@ -145,7 +145,16 @@ void PDBReader::read()
                                         pair_indexes.first, pair_indexes.second);
                     continue;
                 }
-                _topology.add_spring(first->second, second->second);
+                // PDB CONECT records are listed symmetrically (a bond between A
+                // and B appears once from A's own record and once from B's),
+                // so the same spring is routinely seen twice.
+                try
+                {
+                    _topology.add_spring(first->second, second->second);
+                }
+                catch (const topology::SpringAlreadyExistsException &)
+                {
+                }
             }
         }
     } while (std::getline(_instream, buffer));
