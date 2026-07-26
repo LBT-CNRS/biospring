@@ -83,6 +83,11 @@ foreach(MODULE ${TEST_MODULES})
     add_test_module(${MODULE})
 endforeach()
 
+# InteractorFreeSASA only exists when BioSpring is built against FreeSASA.
+if(FREESASA_SUPPORT)
+    add_test_module(InteractorFreeSASA)
+endif()
+
 add_subdirectory(grid)
 add_subdirectory(regression)
 add_subdirectory(topology)

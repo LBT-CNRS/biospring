@@ -15,7 +15,7 @@ namespace biospring
 namespace interactor
 {
 
-InteractorFreeSASA::InteractorFreeSASA() : _sasa(nullptr), _total(0.0)
+InteractorFreeSASA::InteractorFreeSASA() : _sasaValid(false)
 {
 	// https://freesasa.github.io/doxygen/group__core.html
 	_freeSASA_alg = "lr";
@@ -27,10 +27,7 @@ InteractorFreeSASA::InteractorFreeSASA() : _sasa(nullptr), _total(0.0)
 	_isDynamic = false;
 }
 
-InteractorFreeSASA::~InteractorFreeSASA()
-{
-	delete[] _sasa;
-}
+InteractorFreeSASA::~InteractorFreeSASA() {}
 
 void InteractorFreeSASA::startInteractionThread()
 {
@@ -42,17 +39,15 @@ void InteractorFreeSASA::initializeSystemState()
 {
 	Interactor::initializeSystemState(); // Set _nbpositions int defined in Interactor.
 
+	// Sized here, on the main thread, before Interactor::startInteractionThread()
+	// spawns the worker: the buffer never has to grow while the worker writes it.
+	// _sasaValid is cleared on every start, not just at construction, because
+	// startInteractionThread() waits for the previous thread and may be entered
+	// again with a different _nbpositions.
 	radii_array.resize(_nbpositions);
     coords_array.resize(_nbpositions * 3);
-
-	// Allocate _sasa here (zero-initialized) rather than lazily on the first
-	// processFreesasaInteractions() call: the main simulation thread can
-	// call syncParticleStateData() before the interaction thread has run
-	// its first computation, and _sasa must never be read while still null.
-	if (_sasa == NULL)
-	{
-		_sasa = (double *)calloc(_nbpositions, sizeof(double));
-	}
+	_sasa.assign(static_cast<size_t>(_nbpositions), 0.0);
+	_sasaValid.store(false, std::memory_order_release);
 
 	initializeDataManager();
 }
@@ -194,35 +189,27 @@ void InteractorFreeSASA::processFreesasaInteractions()
 
     result = freesasa_calc_coord(coords_array.data(), radii_array.data(), _nbpositions, param);
 
-	// Allocate _sasa once regardless of whether this call succeeds, so
-	// syncParticleStateData() always has valid memory to read from.
-	if (_sasa == NULL)
+	// freesasa_calc_coord returns NULL on allocation failure or invalid input.
+	// Reading result->sasa in that case dereferences a null pointer, so keep
+	// every use of `result` inside this branch and leave _sasa untouched: the
+	// previous areas, if any, stay valid and a later pass can still succeed.
+	if (result == NULL)
 	{
-		_sasa = (double *)calloc(_nbpositions, sizeof(double));
+		BIOSPRING_WARN_ONCE("FreeSASA: area computation failed, keeping the previous solvent accessible surfaces");
+		return;
 	}
 
-	if (result != NULL)
+	for (int i = 0; i < _nbpositions; ++i)
 	{
-		for (int i = 0; i < _nbpositions; ++i)
-		{
-			_sasa[i] = result->sasa[i];
-		}
+		_sasa[static_cast<size_t>(i)] = result->sasa[i];
+	}
 
-		_total = result->total;
-		freesasa_result_free(result);
-	}
-	else
-	{
-		// freesasa_calc_coord returns NULL e.g. when a particle was given an
-		// invalid (negative) radius, which happens for any atom/residue the
-		// chosen classifier doesn't recognize (freesasa_classifier_radius
-		// returns -1 and the atom's name doesn't start with 'H'). Keep the
-		// previous SASA values (zero on the very first failure) instead of
-		// crashing.
-		biospring::logging::warning(
-			"InteractorFreeSASA: freesasa_calc_coord failed (likely an invalid atom radius); "
-			"keeping previous solvent-accessible-surface values");
-	}
+	// logging::info("New total sasa : %f", _total);
+	_total = result->total;
+    freesasa_result_free(result);
+
+	// Publishes _sasa to the main thread, which reads it in syncParticleStateData.
+	_sasaValid.store(true, std::memory_order_release);
 
 	if (!isDynamic())
 		stopInteractionThread();
@@ -239,10 +226,24 @@ void InteractorFreeSASA::syncSystemStateData()
 
 }
 
-// Update the `_solventaccessibilitysurface` of the given particle 
+// Update the `_solventaccessibilitysurface` of the given particle
 // based on FreeSASA-related computations.
 void InteractorFreeSASA::syncParticleStateData(unsigned index)
 {
+	// The areas are computed by the worker thread, but the main thread's first
+	// idleRun -> syncSystemStateData -> syncParticleStateData can run before that
+	// first computation completes -- _isRunning is already true by then, and
+	// nothing else gates this path. Do nothing until the areas exist rather than
+	// publish a surface of 0, which would silently zero the IMPALA energy and
+	// force (surface is a multiplicative factor there) for the first frames. A
+	// later idleRun applies the real areas once the worker has produced them.
+	if (!_sasaValid.load(std::memory_order_acquire))
+	{
+		BIOSPRING_WARN_ONCE("FreeSASA: solvent accessible surfaces are not computed yet, "
+		                    "skipping the update for this frame");
+		return;
+	}
+
 	getSpringNetwork()->getParticle(index).setSolventAccessibilitySurface(_sasa[index]);
 }
 
