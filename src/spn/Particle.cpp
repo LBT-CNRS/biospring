@@ -91,10 +91,17 @@ void Particle::applyViscosity(float viscosity)
 
 void Particle::IntegrateVelocityVerlet(float timestep)
 {
-    Vector3f var = (_force / getMass()) * 0.5f * timestep;
-    _velocity = _velocity + var;
-    _position = _position + _velocity * timestep;
-    _velocity = _velocity + var;
+    // A configured mass of 0 (e.g. a haptic probe meant to be positioned
+    // externally rather than driven by F=ma) would otherwise divide by
+    // zero and send velocity/position to NaN; treat it as immovable by
+    // force instead.
+    if (getMass() > 0.0f)
+    {
+        Vector3f var = (_force / getMass()) * 0.5f * timestep;
+        _velocity = _velocity + var;
+        _position = _position + _velocity * timestep;
+        _velocity = _velocity + var;
+    }
     float vitesse = _velocity.norm();
     _kineticenergy = 0.5f * getMass() * (vitesse * vitesse) * biospring::forcefield::GLOBAL_KINETIC_ENERGY_CONVERT;
 }
@@ -107,7 +114,9 @@ void Particle::IntegrateEuler(float timestep)
 
 void Particle::_integrateForce(float timestep)
 {
-    _velocity = _velocity + (_force / getMass()) * timestep;
+    // See IntegrateVelocityVerlet: guard against a configured mass of 0.
+    if (getMass() > 0.0f)
+        _velocity = _velocity + (_force / getMass()) * timestep;
     float vitesse = _velocity.norm();
     _kineticenergy = 0.5f * getMass() * (vitesse * vitesse) * biospring::forcefield::GLOBAL_KINETIC_ENERGY_CONVERT;
 }
