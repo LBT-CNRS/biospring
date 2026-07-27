@@ -26,16 +26,19 @@ static bool sameParticles(const topology::Particle & left, const topology::Parti
 //
 topology::Particle PDBReader::parseAtomLine(const std::string & line)
 {
-    // Element name (cols 77-78) and charge (cols 79-80) are the last,
-    // optional columns of a PDB ATOM/HETATM record; a number of real-world
-    // files (including some of BioSpring's own historical examples) omit
-    // them entirely. Only require the line to be long enough for the data
-    // actually used below (through the temperature factor, ending at
-    // column 66), and treat the two trailing fields as absent rather than
-    // dying when the line doesn't reach that far.
-    if (line.size() < 66)
+    // Occupancy (cols 55-60), temperature factor (cols 61-66), element name
+    // (cols 77-78) and charge (cols 79-80) are all optional trailing columns
+    // of a PDB ATOM/HETATM record; a number of real-world files (including
+    // some of BioSpring's own historical examples, e.g. bare xyz-only DNA
+    // models with no occupancy/B-factor at all, sometimes not even padded
+    // to the nominal 8-character-wide z column) omit some or all of them.
+    // Only require the line to reach into the z column (position 47) so
+    // std::stof below has at least one digit to parse, and treat each
+    // trailing field as absent/defaulted rather than dying when the line
+    // doesn't reach that far.
+    if (line.size() < 47)
     {
-        logging::error("PDB format requires a line that is at least 66 characters long");
+        logging::error("PDB format requires a line that is at least 47 characters long");
         logging::die("line too short: '%s'", line.c_str());
     }
     int id = std::stoi(line.substr(6, 5));
@@ -46,8 +49,12 @@ topology::Particle PDBReader::parseAtomLine(const std::string & line)
     float x = std::stof(line.substr(30, 8));
     float y = std::stof(line.substr(38, 8));
     float z = std::stof(line.substr(46, 8));
-    float occupancy = std::stof(line.substr(54, 6));
-    float tempfactor = std::stof(line.substr(60, 6));
+    float occupancy = line.size() >= 60 && !biospring::utils::string::trim(line.substr(54, 6)).empty()
+                           ? std::stof(line.substr(54, 6))
+                           : 1.0f;
+    float tempfactor = line.size() >= 66 && !biospring::utils::string::trim(line.substr(60, 6)).empty()
+                            ? std::stof(line.substr(60, 6))
+                            : 0.0f;
     std::string elementname = line.size() >= 78 ? biospring::utils::string::trim(line.substr(76, 2)) : "";
     float charge = 0.0;
     if (line.size() > 78 and biospring::utils::string::trim(line.substr(78, 2)) != "")
