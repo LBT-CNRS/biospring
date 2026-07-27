@@ -229,8 +229,8 @@ class Topology
     {
         Topology result;
         result._particles += top1._particles + top2._particles;
-        result._copy_springs(top1);
-        result._copy_springs(top2);
+        result._copy_springs(top1, 0);
+        result._copy_springs(top2, top1.number_of_particles());
         return result;
     }
 
@@ -292,15 +292,28 @@ class Topology
         _particles = other._particles;
     }
 
-    // Copies `other`'s springs to this topology.
-    void _copy_springs(const Topology & other)
+    // Copies `other`'s springs to this topology. `offset` is the position
+    // at which `other`'s particles begin in `this` collection: 0 when
+    // `this` is an exact copy of `other` (copy constructor/assignment
+    // operator, same particles in the same order), or the particle count
+    // already present in `this` when appending `other` as part of a merge.
+    //
+    // Note this can't be resolved via unique_id() instead of a plain
+    // offset: Particle::copy() (used by ParticleCollection::push_back(),
+    // which is what `_particles +=` calls into) assigns each copy a *new*
+    // unique id, so by the time this runs, `this->_particles` no longer
+    // shares any unique_id with `other._particles` at all -- `other`'s own
+    // unique_id lookup only ever finds `other`'s own *local* position.
+    void _copy_springs(const Topology & other, size_t offset = 0)
     {
         // Copies springs.
         for (const Spring & source : other._springs)
         {
-            // Retrieves the positions of the particles making up the spring.
-            size_t i = other._particles.by_uid().at(source.first().unique_id());
-            size_t j = other._particles.by_uid().at(source.second().unique_id());
+            // Retrieves the positions of the particles making up the
+            // spring within `other`'s own particle collection, then
+            // shifts them by `offset` to their position in `this`.
+            size_t i = offset + other._particles.by_uid().at(source.first().unique_id());
+            size_t j = offset + other._particles.by_uid().at(source.second().unique_id());
 
             // Two merged topologies may share overlapping particles (e.g. the
             // boundary residues between two structures reduced separately
