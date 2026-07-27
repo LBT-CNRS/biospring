@@ -1,0 +1,82 @@
+# This example needs the --rigidbody option and data/reducerules/
+# ProteinAtomRigidGroups.rbody, not yet part of any released BioSpring
+# build: no Docker image has them yet, so there is no Makefile.docker here
+# (unlike the other example/ subdirectories) -- a local build is required.
+
+PDB2SPN = pdb2spn
+BIOSPRING = biospring
+
+# BS_DATA_DIR points at the forcefield/reduce-rule data bundled with a local
+# BioSpring install: source <biospring_install_path>/bin/BioSpring-config.sh
+# first to set BioSpring_DATA_PATH (see doc/BUILDING.md). Requires a build
+# that includes data/reducerules/ProteinAtomRigidGroups.rbody.
+BS_DATA_DIR = $(BioSpring_DATA_PATH)
+
+# ProteinAtomRigidGroups.rbody: springs-only rotamer/hinge mechanism (all
+# pairwise springs within each named rigid-body group -- CA tetrahedron,
+# peptide plane, chi1..4 pivots, rings, hydroxyl/thiol rotations -- instead
+# of a distance cutoff). See that file's header for the full convention.
+RIGIDBODY = $(BS_DATA_DIR)/reducerules/ProteinAtomRigidGroups.rbody
+
+# amber.grp/amber.ff: a genuine one-atom-per-rule identity mapping (not a
+# real coarse-grain reduction) used here only to assign real per-atom AMBER
+# masses/charges. Since it renames particles (e.g. CA -> ACA for ALA),
+# pdb2spn reuses this same --grp file as --rigidbody's naming-translation
+# table so it can still find atoms under their original name. amber.grp has
+# no entries for the free N/C-termini's extra atoms (H1/H2/H3 ammonium,
+# OXT carboxylate): those 4 atoms are dropped by the reduction step, the
+# rest of the structure (all backbone phi/psi and every side-chain chi/
+# ring/hydroxyl hinge) is unaffected.
+GRP = $(BS_DATA_DIR)/reducerules/amber.grp
+FF = $(BS_DATA_DIR)/forcefield/amber.ff
+
+# Rigid-body springs represent real bonds/valence angles, not a soft elastic
+# network: a much higher stiffness than a cutoff-based model, validated
+# stable (real AMBER masses, 20000-step perturbed run) at the timestep set
+# in model.msp.
+STIFFNESS = 250.0
+
+# Ubiquitin (1D3Z, NMR, all-atom + hydrogens): 18 of the 20 standard amino
+# acids (only Cys and Trp are missing), a real Pro, a real Gly, both
+# termini -- a broad exercise of the .rbody file above.
+PDB = ubiquitin.pdb
+
+NC = model.nc
+NC_PDB = model.nc.pdb
+MSP = model.msp
+
+# MDDriver option
+# -wait, if the simulation server has to wait for client connection before starting (no value: presence = wait)
+# -port port
+# -debug debug level : 0 no log - 2 verbose log
+# -log logfilename
+IMDLOG = mddriver.log
+IMDOPT = -wait -port 3000 -debug 0 -log $(IMDLOG)
+
+prep : $(NC) $(NC_PDB)
+
+$(NC) : $(PDB)
+	$(PDB2SPN) -s $(PDB) -o $(NC) --grp $(GRP) --ff $(FF) --rigidbody $(RIGIDBODY) --stiffness $(STIFFNESS)
+
+# PDB of the network with CONECT records for every rigid-body spring, for
+# visualization (model.vmd loads this). Uses pdb2spn, not editspn: editspn
+# has no --pdbconect equivalent. Passing --stiffness again here just
+# restates the existing springs' own value (read from $(NC)); no cutoff/
+# rigidbody is given, so no new spring is created at this step.
+$(NC_PDB) : $(NC)
+	$(PDB2SPN) -s $(NC) -o $(NC_PDB) --pdbconect --stiffness $(STIFFNESS)
+
+run : $(NC) $(MSP)
+	$(BIOSPRING) -nc $(NC) -msp $(MSP) $(IMDOPT)
+
+run_now : $(NC) $(MSP)
+	$(BIOSPRING) -nc $(NC) -msp $(MSP) -port 3000 -debug 0 -log $(IMDLOG)
+
+vis : $(NC_PDB)
+	vmd -e model.vmd
+
+gdb : $(NC) $(MSP)
+	gdb --args $(BIOSPRING) -nc $(NC) -msp $(MSP) $(IMDOPT)
+
+clean :
+	rm -rf $(NC) $(NC_PDB) $(IMDLOG)

@@ -19,6 +19,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     std::string pathTopology;
     std::string pathForceField;
     std::string pathGroup;
+    std::string pathRigidBody;
     std::vector<std::string> pathOutputList;
 
 
@@ -42,6 +43,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     bool useUserCutoff() const { return _parser.get_option("--cutoff").is_set(); }
     bool useUserStiffness() const { return _parser.get_option("--stiffness").is_set(); }
     bool useUserCharge() const { return _parser.get_option("--charge").is_set(); }
+    bool useRigidBody() const { return _parser.get_option("--rigidbody").is_set(); }
 };
 
 void reduceToCoarseGrain(topology::Topology & top, const CommandLineArguments & args);
