@@ -1,0 +1,28 @@
+#070.RigidBodyRotamere - Molecular Simulation Parameter file
+#
+#Real AMBER masses (amber.ff, assigned via pdb2spn --grp/--ff at topology-
+#build time -- see the Makefile). Rigid-body springs are much stiffer than a
+#soft cutoff-based elastic network (bond/valence-angle level), so the
+#timestep is smaller than usual: 1.5 fs is the largest found stable on a
+#perturbed run (5000 steps, clean monotonic relaxation) -- 1.75 fs already
+#stalls at a high-energy plateau instead of relaxing, 2.0 fs diverges. A
+#smaller dt directly slows down interactive responsiveness (less simulated
+#time per real second of pulling), so this is the fastest safe choice, not
+#an arbitrarily conservative one.
+
+#fs
+simulation.timestep = 1.5
+simulation.nbsteps = -1
+
+#Da.fs-1
+#The physically-derived value (Stokes' law, real water viscosity) would be
+#~1.5 for a typical heavy atom, but friction is what actually governs
+#interactive responsiveness here: with springs this stiff (dt already
+#capped at 1.5 fs, see above), a low friction lets the structure react
+#immediately to a pull instead of being damped away before it can move.
+#Confirmed stable at this timestep on a 5000-step perturbed run.
+viscosity.enable = 1
+viscosity.value = 0.01
+
+spring.enable = 1
+spring.scale = 1.0
