@@ -117,11 +117,36 @@ class Interactor
             T* pointer;
             char* dataName;
 
+            // dataName is always either nullptr or an 8-byte buffer (see the
+            // default constructor): a fixed-size duplicate is enough to give
+            // this type a correct (non-shallow) copy.
+            static char* duplicateDataName(const char* source) {
+                if (source == nullptr) return nullptr;
+                char* copy = (char *) malloc(sizeof(char) * 8);
+                memcpy(copy, source, sizeof(char) * 8);
+                return copy;
+            }
+
         public:
-            ExternalDataRef() {
+            ExternalDataRef() : pointer(nullptr) {
                 dataName = (char *) malloc(sizeof(char) * 8);
             }
-            ExternalDataRef(T* externalData) : pointer(externalData) {}
+            ExternalDataRef(T* externalData) : pointer(externalData), dataName(nullptr) {}
+
+            // Explicit deep copy: the implicit (shallow) copy would leave two
+            // instances owning the same dataName pointer, freed twice.
+            ExternalDataRef(const ExternalDataRef& other)
+                : pointer(other.pointer), dataName(duplicateDataName(other.dataName)) {}
+
+            ExternalDataRef& operator=(const ExternalDataRef& other) {
+                if (this != &other) {
+                    free(dataName);
+                    pointer = other.pointer;
+                    dataName = duplicateDataName(other.dataName);
+                }
+                return *this;
+            }
+
             ~ExternalDataRef() { if (dataName) { free(dataName); } }
 
             T* getPointer() const { return pointer; }
