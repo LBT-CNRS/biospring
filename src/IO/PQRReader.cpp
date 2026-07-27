@@ -42,9 +42,16 @@ void PQRReader::read()
 //
 topology::Particle PQRReader::parseAtomLine(const std::string & line)
 {
-    if (line.size() < 68)
+    // The nominal fixed-width columns run through 69 (radius, cols 62-69),
+    // but many real-world PQR files (including some of BioSpring's own
+    // historical examples) write charge/radius without padding to the full
+    // field width, e.g. "1.8" instead of "1.800  ". Only require the line
+    // to reach into the radius field at all (col 62); std::stof on
+    // whatever is actually there still parses a short-but-complete value,
+    // and throws its own clear error on a genuinely missing/malformed one.
+    if (line.size() < 63)
     {
-        logging::error("PQR format requires a line that is at least 68 characters long");
+        logging::error("PQR format requires a line that is at least 63 characters long");
         logging::die("line too short: '%s'", line.c_str());
     }
     int id = std::stoi(line.substr(6, 5));
