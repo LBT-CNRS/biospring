@@ -123,12 +123,23 @@ void PDBReader::read()
             if (isInFilter(p.properties().name()))
             {
                 int atom_id = p.properties().atom_id();
-                if (_extidtoindex.find(atom_id) != _extidtoindex.end())
+                if (_extidtoindex.find(atom_id) == _extidtoindex.end())
                 {
-                    logging::error("%s", buffer.c_str());
-                    logging::die("particle with id '%d' already exists", atom_id);
+                    _extidtoindex[atom_id] = _topology.number_of_particles();
                 }
-                _extidtoindex[atom_id] = _topology.number_of_particles();
+                else
+                {
+                    // Some real-world PDB files (e.g. biological-assembly dumps that
+                    // concatenate several symmetry copies without renumbering) reuse
+                    // atom serials across otherwise-distinct atoms. CONECT resolution
+                    // for such a serial is inherently ambiguous, so only the first
+                    // occurrence stays addressable; every atom is still added below.
+                    BIOSPRING_WARN_ONCE("PDB file reuses atom serial '%d' for multiple atoms "
+                                        "(e.g. unrenumbered symmetry copies in a biological "
+                                        "assembly): CONECT records referring to it will only "
+                                        "resolve to its first occurrence",
+                                        atom_id);
+                }
                 _topology.add_particle(p);
             }
         }
