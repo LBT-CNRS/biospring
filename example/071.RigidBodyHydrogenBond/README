@@ -1,0 +1,163 @@
+# Rigid-body rotamer/hinge mechanism + dynamic hydrogen bonds (synthetic helix-loop-sheet, unfolded)
+
+Combines two mechanisms on a synthetic, from-scratch peptide, supplied here
+**fully unfolded**, meant to be pulled into shape interactively:
+
+* `--rigidbody` (see 070.RigidBodyRotamere): springs built directly from
+  `data/reducerules/ProteinAtomRigidGroups.rbody`, one pairwise spring per
+  named rigid-body group (CA tetrahedron, peptide plane, chi pivots,
+  hydroxyl/thiol rotations). Backbone phi/psi and every side-chain chi
+  remain genuine, free rotational degrees of freedom.
+* Dynamic hydrogen bonds (`hbond.enable` in `model.msp`): a distance-only
+  Morse potential between donor and acceptor heavy atoms, no explicit H
+  particle, no angular term (see `src/forcefield/energy/hydrogenbond.hpp`
+  for the literature-derived parameters). Donor/acceptor roles come from
+  `amber.hbond` (a local copy of `data/reducerules/amber.hbond`, referenced
+  by `hbond.path` in `model.msp`). Each particle can be engaged in at most
+  one active pair at a time, matched by mutual nearest neighbor and held
+  until the pair drifts apart beyond cutoff (see
+  `SpringNetwork::_assignHydrogenBondPairs`).
+* Coulomb electrostatics (`coulomb.enable`) and steric exclusion
+  (`steric.enable`), both already built into BioSpring, added specifically
+  to help close the large starting gap that `--hbond` alone cannot (see
+  below): electrostatics reaches twice as far (16 A vs hbond's 7 A) and
+  acts on the construct's real AMBER partial charges (Lys/Arg positive,
+  Asp/Glu negative), while steric exclusion keeps charged residues from
+  collapsing into an overlapping, physically impossible clash as they are
+  pulled together.
+
+### The construct: 10-residue helix + 10-residue loop + 9-residue beta hairpin
+
+`helix_loop_sheet.pdb` is entirely synthetic, built from scratch (no PDB
+excerpt), because reproducing hydrogen-bond-driven secondary structure
+formation is the actual point of this example:
+
+* **Residues 1-10** (`AEAAKEAAKA`): ideal alpha-helix backbone (phi=-57,
+  psi=-47 throughout).
+* **Residues 11-20** (`GSGSGSGSNG`): flexible Gly/Ser-rich loop, no
+  secondary-structure target.
+* **Residues 21-29** (`VKTLTGKTI`): a beta hairpin. Note this is 9 residues,
+  not 10 -- a real antiparallel strand only hydrogen-bonds every *other*
+  residue (the alternating in-register/solvent-facing pattern of a pleated
+  sheet), which forces any exactly-symmetric hairpin window to be
+  odd-length, centered on one self-paired turn residue. There is no valid
+  even-length window for a clean two-strand hairpin. This segment reuses
+  the *measured* backbone dihedrals of ubiquitin's own real, independently
+  validated N-terminal hairpin (residues 5-13) rather than idealized
+  textbook turn values, which turned out not to keep a hairpin in register
+  over its full length when tested.
+
+Backbone coordinates were built residue by residue with the standard NeRF
+(Natural Extension Reference Frame) construction from ideal bond
+lengths/angles and the phi/psi values above; side chains were transplanted
+as a rigid body (exact rotation+translation, so all internal bond
+lengths/angles are preserved exactly) from a real ubiquitin residue of the
+matching amino acid type. The folded (helix/hairpin formed) geometry was
+verified numerically before use -- backbone N...O distances at the expected
+i,i-4 register for the helix, and at the hairpin's cross-strand register --
+then every residue's phi/psi was overridden to a single extended value
+(-120, 140) to produce the actual starting structure shipped here: no
+helix, no turn, no sheet register anywhere, residues that belong together
+in the fold starting tens of Angstroms apart.
+
+### What to actually expect when you pull on this
+
+This was tested end to end before shipping, at each stage, and the result
+matters for how you use it interactively.
+
+**With only `--hbond` enabled** (Morse potential, `hbond.cutoff` = 7 A) and
+*no* intervention, nothing refolds on its own over a 15000-step (22.5 ps)
+test run -- the backbone barely moves past its starting extended geometry.
+This is not a bug in the mechanism; it is a real consequence of the model:
+in the unfolded structure the helix and sheet segments start ~10-30 A
+apart, far outside hbond's 7 A reach, and `viscosity` in this model only
+damps motion -- nothing re-injects random thermal motion the way a real
+Langevin thermostat would, so once kinetic energy is damped out (which
+happens quickly) there is no more spontaneous exploration left to bring
+distant segments into range.
+
+**Adding Coulomb electrostatics (16 A reach) and steric exclusion, and
+lowering friction from 0.5 to 0.05** (all in `model.msp` as shipped) does
+measurably better: over an 8000-step (12 ps) test run, several backbone
+N...O distances that started within electrostatic range shrank
+noticeably (e.g. one hairpin pair went from 11.2 A to 9.0 A; the chain's
+overall end-to-end extent dropped from ~95.5 A to ~90.1 A). But the
+segments that start furthest apart (up to ~30 A for some hairpin pairs)
+are still beyond electrostatics' own 16 A reach, and 12 ps of movement at
+this rate is nowhere near enough to close a 10-30 A gap on its own within
+any reasonable simulated time.
+
+**In other words: you still have to bring the segments together
+yourself** (pull the helix toward the sheet via the interactive MDDriver
+connection) to get them within range -- electrostatics now helps carry
+them the rest of the way once you have closed most of the gap, instead of
+leaving hbond to do all the work alone from far away.
+
+**Steric mode**: `steric.mode = lennard-jones-8-6Amber` -- despite the
+name, this is actually AMBER's real 12-6 potential (the genuinely-8-6
+"Lewitt"/"Zacharias" modes are softer, non-AMBER alternatives). This mode
+originally produced single-step kinetic-energy spikes into the hundreds of
+thousands of kJ.mol-1. Softening the exponent (Lewitt) only reduced the
+spike by about an order of magnitude -- it turned out not to be a steric
+problem at all. Reproducible logging traced a specific spike to the
+hydrogen-bond mechanism: a particle "occupied" by an exclusive bond
+elsewhere was excluded from all hbond force computation with everyone
+else, including short-range repulsion, so it could drift arbitrarily close
+to another donor/acceptor while unbonded, and only feel a (by then
+enormous) corrective force once finally reassigned to that too-close
+neighbor (caught in the act: THR28:TOG1 released from a distant partner
+and immediately reassigned to ILE29:IN at 2.4 A, well inside the Morse
+well). The fix -- an always-on, short-range-only repulsive floor between
+any donor/acceptor pair, independent of engagement status
+(`Particle::addHydrogenBondCoreRepulsion`), mirroring how patchy-particle
+models keep an isotropic excluded-volume core entirely separate from the
+exclusive directional attractive patch term -- removed the problem
+outright. With it in place, 12-6 "Amber" and 8-6 "Lewitt" now produce
+bit-identical trajectories over a 90 ps test here (steric's own reported
+energy stays at 0.00 kJ.mol-1 throughout either way -- it is no longer
+doing meaningful work, because hbond's own core repulsion now keeps
+donor/acceptor pairs apart before steric would ever need to). AMBER's real
+12-6 was kept since it is the mode that actually matches amber.ff/
+amber.grp's own parameterization.
+
+Once the segments are in hydrogen-bonding range, this mechanism has already been validated
+(separately, on ubiquitin's own real, folded alpha helix and beta hairpin)
+to correctly identify and hold the native backbone hydrogen-bond pattern --
+10/10 helix i,i-4 pairs and 7/7 hairpin cross-strand pairs recovered
+exactly, starting from the native fold. The open, unresolved question this
+example lets you explore interactively is whether pulling this *unfolded*
+chain into rough proximity is enough for --hbond to then find and lock in
+the correct register on its own, or whether it settles for some other,
+non-native contact instead.
+
+### Coloring and secondary-structure view (model.vmd)
+
+Two complementary representations on the same structure:
+
+* **NewCartoon, colored by Structure**: VMD's built-in (STRIDE) secondary
+  structure assignment, recalculated every frame during the interactive
+  session (VMD does not do this automatically past the first frame, so
+  `model.vmd` sets up a trace on frame updates to force it) -- this is the
+  actual live view of whether the chain regains a helix ribbon and a sheet
+  ribbon as you pull it. Because STRIDE only recognizes the standard
+  backbone atom names, `model.vmd` renames backbone N/CA/C/O back from
+  amber.grp's per-residue-type renamed forms (e.g. "EN" -> "N" for
+  glutamate) right after loading, once, before the interactive session
+  starts.
+* **Ball-and-stick (CPK), colored by hydrogen-bond role**: grey (not a
+  donor or acceptor), blue (donor only), red (acceptor only), purple (both
+  -- Ser/Thr/Tyr hydroxyls), plus a thin orange `Bonds` overlay for the
+  rigid-body spring network itself.
+
+This example needs a local BioSpring build with `--rigidbody`, the hbond
+mechanism (`hbond.*` settings) and the data files listed above -- see the
+Makefile.
+
+### Build and visualize
+
+    make prep
+    make vis   (VMD: NewCartoon by secondary structure + CPK by donor/acceptor role + spring-network overlay)
+
+### Launch the simulation
+
+    make run / make run_now
