@@ -169,6 +169,36 @@ Hydrophobicity forces (per-particle hydrophobicity/transfer scale, in kJ.mol-1, 
 * **hydrophobicity.cutoff = 15.0** *(Angstroms, float)* Cutoff distance for Hydrophobicity.
 
 
+Hydrogen bond (experimental)
+--------------
+
+Add a dynamic hydrogen-bond interaction: a distance-only Morse potential between donor and
+acceptor heavy atoms (no explicit H particle, so no angular term). Donor/acceptor roles are not
+derived automatically -- they must be assigned via hbond.path (see data/reducerules/
+ProteinDonorAcceptor.hbond for a plain-PDB-atom-name table, or data/reducerules/amber.hbond for
+the same classification keyed by amber.grp's renamed types, for use with a --grp amber.grp
+--ff amber.ff -reduced topology).
+
+Each particle (donor or acceptor) is engaged in at most one active pair at a time: pairs are
+matched by mutual nearest neighbor among still-free particles and held until they drift apart
+beyond hbond.cutoff, rather than summing the potential over every neighbor in range (see
+SpringNetwork::_assignHydrogenBondPairs). This saturation is necessary because nothing else in
+this simplified model (no explicit H, no angular term, no steric exclusion from the hbond
+mechanism itself) would otherwise stop a single donor or acceptor from being pulled by several
+partners at once -- the same reason pairwise attractive potentials in patchy-colloid physics
+enforce a "single bond per patch" limit, and coarse-grained protein hydrogen-bond models such as
+UNRES cap the number of simultaneous bonds per residue.
+
+* **hbond.enable = 0** *(boolean)* Enable the dynamic hydrogen-bond interaction.
+* **hbond.scale = 1.0** *(dimensionless factor, float)* Multiplier applied to hydrogen-bond forces.
+* **hbond.cutoff = 7.0** *(Angstroms, float)* Cutoff distance for the hydrogen-bond neighbor grid:
+the practical range of the Morse potential (well depth 16.7 kJ.mol-1, equilibrium distance 2.9 Å,
+width 1.34 Å-1, all literature-derived -- see src/forcefield/energy/hydrogenbond.hpp), not a
+long-range electrostatics-style cutoff.
+* **hbond.path = ""** *(string)* Path to the donor/acceptor table (.hbond format). Required when
+hbond.enable is set.
+
+
 Probe
 -----
 
