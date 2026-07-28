@@ -234,6 +234,35 @@ class DihedralSetting : public SettingBase
     }
 };
 
+// Same enable/scale/cutoff triplet as EnergySetting, plus a `path` to the
+// donor/acceptor table (see IO/DonorAcceptorRuleReader.h and
+// data/reducerules/*.hbond) -- mirrors how GridSetting/TrajectorySetting
+// carry their own input/output file path directly in the .msp file, rather
+// than as a separate command-line-only option.
+class HydrogenBondSetting : public EnergySetting
+{
+  public:
+    std::string path;
+
+    HydrogenBondSetting(const std::string & name) : EnergySetting(name), path()
+    {
+        _parameterNames = {"enable", "scale", "cutoff", "path"};
+    }
+
+    void setFromString(const std::string & param, const std::string & s) override
+    {
+        if (param == "path")
+            path = s;
+        else
+            EnergySetting::setFromString(param, s);
+    }
+
+    void print(std::ostream & os = std::cout) const override
+    {
+        EnergySetting::print(os);
+        _mspFormatter.print("path", path, os);
+    }
+};
 class TrajectorySetting : public SettingBase
 {
   public:

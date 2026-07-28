@@ -22,7 +22,9 @@ class ForceField
     ForceField()
         : _stericscale(1.0), _springscale(1.0), _impscale(1.0), _impuppermebraneoffset(0.0), _implowermembraneoffset(0.0),
           _uppermembtubecurv(0.0), _lowermembtubecurv(0.0),
-          _forcefieldscale(1.0), _coulombscale(1.0), _hydrophobicityscale(1.0), _dielectric(1.0)
+          _forcefieldscale(1.0), _coulombscale(1.0), _hydrophobicityscale(1.0), _dielectric(1.0),
+          _hydrogenbondscale(1.0), _hydrogenbondwelldepth(16.7), _hydrogenbondequilibrium(2.9),
+          _hydrogenbondwidth(1.34)
     {
     }
     virtual ~ForceField() {}
@@ -37,6 +39,10 @@ class ForceField
         _coulombscale = other._coulombscale;
         _hydrophobicityscale = other._hydrophobicityscale;
         _dielectric = other._dielectric;
+        _hydrogenbondscale = other._hydrogenbondscale;
+        _hydrogenbondwelldepth = other._hydrogenbondwelldepth;
+        _hydrogenbondequilibrium = other._hydrogenbondequilibrium;
+        _hydrogenbondwidth = other._hydrogenbondwidth;
         _propertiesfromname = other._propertiesfromname;
         return *this;
     }
@@ -70,6 +76,11 @@ class ForceField
 
     virtual float computeHydrophobicityEnergy(float hydrophobicity1, float hydrophobicity2, float distance) const;
     virtual float computeHydrophobicityForceModule(float hydrophobicity1, float hydrophobicity2, float distance) const;
+
+    // Morse potential between a donor and an acceptor heavy atom (see
+    // energy/hydrogenbond.hpp for the derivation of the default De/re/a).
+    virtual float computeHydrogenBondEnergy(float distance) const;
+    virtual float computeHydrogenBondForceModule(float distance) const;
 
     // ================================================================================
     // Getters and setters
@@ -115,6 +126,20 @@ class ForceField
     float getDielectric() const { return _dielectric; }
     void setDielectric(float dielectric) { _dielectric = dielectric; }
 
+    // Hydrogen-bond Morse potential parameters. Defaults derived from
+    // literature (see energy/hydrogenbond.hpp); settable mainly for testing.
+    float getHydrogenBondScale() const { return _hydrogenbondscale; }
+    void setHydrogenBondScale(float scale) { _hydrogenbondscale = scale; }
+
+    float getHydrogenBondWellDepth() const { return _hydrogenbondwelldepth; }
+    void setHydrogenBondWellDepth(float welldepth) { _hydrogenbondwelldepth = welldepth; }
+
+    float getHydrogenBondEquilibrium() const { return _hydrogenbondequilibrium; }
+    void setHydrogenBondEquilibrium(float equilibrium) { _hydrogenbondequilibrium = equilibrium; }
+
+    float getHydrogenBondWidth() const { return _hydrogenbondwidth; }
+    void setHydrogenBondWidth(float width) { _hydrogenbondwidth = width; }
+
   protected:
     float _stericscale;
     float _springscale;
@@ -127,6 +152,10 @@ class ForceField
     float _coulombscale;
     float _hydrophobicityscale;
     float _dielectric;
+    float _hydrogenbondscale;
+    float _hydrogenbondwelldepth;
+    float _hydrogenbondequilibrium;
+    float _hydrogenbondwidth;
 
   private:
     propertiesmap _propertiesfromname;
