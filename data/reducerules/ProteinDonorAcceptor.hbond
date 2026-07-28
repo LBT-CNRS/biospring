@@ -1,0 +1,107 @@
+#Donor/acceptor classification for the dynamic hydrogen-bond mechanism
+#(distance-only Morse potential between donor and acceptor heavy atoms, no
+#explicit H needed -- see the hbond.* settings in doc/MSP_Options.md).
+#
+#Same classification as used by standard structural-biology H-bond tools
+#(HBPLUS/McDonald & Thornton, Reduce/Probe): not invented here, just encoded
+#for BioSpring's own per-residue lookup.
+#
+#Format: <resname> <atomname> <donor> <acceptor>, donor/acceptor are 0 or 1
+#(a hydroxyl oxygen is both: it carries a donatable H and has a lone pair to
+#accept one).
+#
+#Keyed by plain, unreduced PDB atom names -- use this table when the
+#topology was built without --grp/--ff (e.g. plain -cutoff spring
+#creation). For a topology reduced with --grp amber.grp --ff amber.ff,
+#particles are renamed (e.g. ALA:N -> AN), so use amber.hbond instead,
+#which carries the same classification keyed by those renamed types.
+#
+#Backbone (every residue, standard rules below):
+#  N  1 0  -- amide H (absent for Pro, which has no entry for N here)
+#  O  0 1
+#
+#His is listed donor+acceptor on both ring nitrogens: without an explicit H,
+#the actual tautomer/protonation state is unknown, so either ring nitrogen
+#may act as donor or acceptor depending on the real structure.
+#
+#Cys SG is a weak, optional donor/acceptor (sulfur, much less electronegative
+#than N/O) -- included for completeness, matching HBPLUS, but expect it to
+#contribute far less than a N/O-mediated hydrogen bond.
+
+ALA N 1 0
+ALA O 0 1
+
+ARG N 1 0
+ARG O 0 1
+ARG NE 1 0
+ARG NH1 1 0
+ARG NH2 1 0
+
+ASN N 1 0
+ASN O 0 1
+ASN ND2 1 0
+ASN OD1 0 1
+
+ASP N 1 0
+ASP O 0 1
+ASP OD1 0 1
+ASP OD2 0 1
+
+CYS N 1 0
+CYS O 0 1
+CYS SG 1 1
+
+GLN N 1 0
+GLN O 0 1
+GLN NE2 1 0
+GLN OE1 0 1
+
+GLU N 1 0
+GLU O 0 1
+GLU OE1 0 1
+GLU OE2 0 1
+
+GLY N 1 0
+GLY O 0 1
+
+HIS N 1 0
+HIS O 0 1
+HIS ND1 1 1
+HIS NE2 1 1
+
+ILE N 1 0
+ILE O 0 1
+
+LEU N 1 0
+LEU O 0 1
+
+LYS N 1 0
+LYS O 0 1
+LYS NZ 1 0
+
+MET N 1 0
+MET O 0 1
+
+PHE N 1 0
+PHE O 0 1
+
+PRO O 0 1
+
+SER N 1 0
+SER O 0 1
+SER OG 1 1
+
+THR N 1 0
+THR O 0 1
+THR OG1 1 1
+
+TRP N 1 0
+TRP O 0 1
+TRP NE1 1 0
+
+TYR N 1 0
+TYR O 0 1
+TYR OH 1 1
+
+VAL N 1 0
+VAL O 0 1

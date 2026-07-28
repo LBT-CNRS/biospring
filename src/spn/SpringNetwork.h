@@ -56,6 +56,7 @@ class SpringNetwork
         float kinetic = 0.0f;
         float imp = 0.0f;
         float hydrophobic = 0.0f;
+        float hbond = 0.0f;
 
         void reset()
         {
@@ -65,6 +66,7 @@ class SpringNetwork
             kinetic = 0.0;
             imp = 0.0;
             hydrophobic = 0.0;
+            hbond = 0.0;
         }
     };
 
@@ -85,6 +87,12 @@ class SpringNetwork
         SearcherPtr steric;
         SearcherPtr electrostatic;
         SearcherPtr hydrophobic;
+
+        // Shared grid holding every donor AND acceptor particle together
+        // (not split in two): a donor queries it and filters the returned
+        // candidates by isAcceptor() itself, mirroring how steric's single
+        // "all particles" grid is filtered per-pair rather than pre-split.
+        SearcherPtr hbond;
     };
 
     static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
@@ -104,7 +112,9 @@ class SpringNetwork
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
           _dynamicsprings(), _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
-          _hydrophobicPairScratch(), _energies(), _nsearch(), _neighborSearchesDirty(false),
+          _hydrophobicPairScratch(), _hydrogenBondCoreRepulsionPairScratch(), _hydrogenBondPartner(),
+          _hydrogenBondForceScratch(), _energies(), _nsearch(),
+          _neighborSearchesDirty(false),
           _nbiter(0), _end(false), _pause(false), _grids(), _constraintenabled(false), _framerate(0.0),
           _freesasaState(), _ff(nullptr), _trajectories(), _insertionVector(nullptr), _constraints(),
           _meanConstraintsDistances(0.0), _structid(_currentstructid++), _config(), _profiler()
@@ -160,6 +170,7 @@ class SpringNetwork
     float getElectrostaticEnergy() const { return _energies.electrostatic; }
     float getIMPEnergy() const { return _energies.imp; }
     float getHydrophobicEnergy() const { return _energies.hydrophobic; }
+    float getHydrogenBondEnergy() const { return _energies.hbond; }
 
     // ================================================================================
     // Used to define the minimum IMP energy of all possible conformations at a 
@@ -253,7 +264,16 @@ class SpringNetwork
     float getStericCutoff() const { return _config.steric.cutoff; }
     float getElectrostaticCutoff() const { return _config.electrostatic.cutoff; }
     float getHydrophobicCutoff() const { return _config.hydrophobicity.cutoff; }
+    float getHydrogenBondCutoff() const { return _config.hbond.cutoff; }
     float getNeighborSkin() const { return _config.sim.neighborskin; }
+
+    // -1 if particle `index` is not currently engaged in an exclusive
+    // hydrogen bond, otherwise the index of its current partner. See
+    // _assignHydrogenBondPairs / Particle::addHydrogenBondCoreRepulsion.
+    int getHydrogenBondPartner(size_t index) const
+    {
+        return index < _hydrogenBondPartner.size() ? _hydrogenBondPartner[index] : -1;
+    }
 
     bool isSpringEnabled() const { return _config.spring.enable; }
     bool isViscosityEnabled() const { return _config.viscosity.enable; }
@@ -265,6 +285,7 @@ class SpringNetwork
     bool isDensityGridEnabled() const { return _config.densitygrid.enable; }
     bool isConstraintEnabled() const { return _constraintenabled; }
     bool isHydrophobicityEnabled() const { return _config.hydrophobicity.enable; }
+    bool isHydrogenBondEnabled() const { return _config.hbond.enable; }
     bool isProbeEnabled() const { return _config.probe.enable; }
     bool isProbeElectrostaticEnabled() const { return _config.probe.enableelectrostatic; }
     bool isProbeStericEnabled() const { return _config.probe.enablesteric; }
@@ -304,6 +325,7 @@ class SpringNetwork
     virtual void computeStep();
     virtual void computeForces();
     virtual void computeSpringForces();
+    virtual void computeHydrogenBondForces();
     virtual void computeParticleForces();
     virtual void updateParticlePositions();
 
@@ -352,6 +374,7 @@ class SpringNetwork
   protected:
     void _setupSteric();
     void _setupHydrophobic();
+    void _setupHydrogenBond();
     void _setupForceField();
     void _setupElectrostatic();
     void _setupDensityGrid();
@@ -362,6 +385,16 @@ class SpringNetwork
     void _setupConstraints();
     std::vector<size_t> _chargedParticleIndexes() const;
     std::vector<size_t> _hydrophobicParticleIndexes() const;
+    std::vector<size_t> _donorAcceptorParticleIndexes() const;
+
+    // Updates _hydrogenBondPartner: breaks any active pair that has drifted
+    // beyond the hbond cutoff, then matches newly-free donors and acceptors
+    // by mutual nearest neighbor (a pair forms only if each is the other's
+    // closest still-free candidate within cutoff -- the same reciprocal-best-
+    // hit criterion used to detect orthologs between two gene sets). Already-
+    // engaged particles are excluded from this matching entirely.
+    void _assignHydrogenBondPairs();
+
     void _excludeProbeFromNeighborSearch(NeighborSearch::Searcher & searcher);
     void _updateNeighborSearches();
     void _markNeighborSearchesDirty();
@@ -431,6 +464,25 @@ class SpringNetwork
     std::vector<std::vector<spn::DeferredNonbondedContribution>> _stericPairScratch;
     std::vector<std::vector<spn::DeferredNonbondedContribution>> _electrostaticPairScratch;
     std::vector<std::vector<spn::DeferredNonbondedContribution>> _hydrophobicPairScratch;
+
+    // For Particle::addHydrogenBondCoreRepulsion's always-on, short-range-
+    // only repulsive floor -- a neighbor-summed interaction like the
+    // buffers above (unlike the exclusive attractive mechanism below),
+    // since a particle can be pushed on by several nearby donors/acceptors
+    // at once regardless of its own engagement status.
+    std::vector<std::vector<spn::DeferredNonbondedContribution>> _hydrogenBondCoreRepulsionPairScratch;
+
+    // Hydrogen bonds are exclusive pairs, not a neighbor-summed interaction:
+    // each particle (donor or acceptor) may be engaged with at most one
+    // partner at a time (see _assignHydrogenBondPairs). _hydrogenBondPartner
+    // is indexed by particle index and persists across steps: -1 means free,
+    // otherwise the index of the current partner. A bonded particle is not
+    // even considered as a candidate for re-matching until its bond breaks
+    // (current distance exceeds the hbond cutoff), so bonds do not flicker
+    // toward a momentarily closer alternative. One force contribution per
+    // active pair, reused between steps like _springForceScratch.
+    std::vector<int> _hydrogenBondPartner;
+    std::vector<Vector3f> _hydrogenBondForceScratch;
 
     Energies _energies;
     NeighborSearch _nsearch;

@@ -20,7 +20,7 @@ class ParticleProperty
     ParticleProperty()
         : _mass(1.0), _charge(0.0), _electroncharge(0), _radius(1.0), _epsilon(0.0), _tempfactor(0.0), _occupancy(0.0),
           _hydrophobicity(0.0), _solventaccessibilitysurface(0.0), _transferenergybyaccessiblesurface(0.0),
-          _ischarged(false), _ishydrophobic(false), _burying(1.0)
+          _ischarged(false), _ishydrophobic(false), _burying(1.0), _isdonor(false), _isacceptor(false)
     {
     }
 
@@ -60,6 +60,17 @@ class ParticleProperty
     float getBurying() const { return _burying; }
     void setBurying(float burying) { _burying = burying; }
 
+    // Hydrogen-bond donor/acceptor role. Unlike isCharged()/isHydrophobic(),
+    // this is not derived from an existing numeric property: it is an
+    // independent chemistry classification, set explicitly (see the
+    // ProteinDonorAcceptor.hbond table and its loader). A particle can be
+    // both (e.g. a Ser/Thr/Tyr hydroxyl oxygen).
+    bool isDonor() const { return _isdonor; }
+    void setDonor(bool isdonor) { _isdonor = isdonor; }
+
+    bool isAcceptor() const { return _isacceptor; }
+    void setAcceptor(bool isacceptor) { _isacceptor = isacceptor; }
+
   protected:
   private:
     float _mass;
@@ -75,6 +86,8 @@ class ParticleProperty
     bool _ischarged;
     bool _ishydrophobic;
     float _burying;
+    bool _isdonor;
+    bool _isacceptor;
 };
 
 } // namespace spn
