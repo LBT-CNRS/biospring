@@ -268,7 +268,7 @@ class StericSetting : public SettingBase
 
     StericSetting(const std::string & name)
         : SettingBase(name), enable(false), gridscale(1.0), cutoff(0.0),
-          mode("linear", {"linear", "lennard-jones-8-6Lewitt", "lennard-jones-8-6Zacharias", "lennard-jones-8-6Amber"})
+          mode("linear", {"linear", "lennard-jones-8-6Lewitt", "lennard-jones-8-6Zacharias", "lennard-jones-12-6Amber"})
     {
         _parameterNames = {"enable", "gridscale", "cutoff", "mode"};
     }
