@@ -3,7 +3,7 @@
 #include "measure.hpp"
 
 #include "forcefield/ForceField.h"
-#include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Amber.h"
+#include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Lewitt.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLinear.h"
@@ -695,8 +695,8 @@ void SpringNetwork::_setupForceField()
         _ff = std::make_unique<forcefield::ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Lewitt>();
     else if (steric == "lennard-jones-8-6Zacharias")
         _ff = std::make_unique<forcefield::ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias>();
-    else if (steric == "lennard-jones-8-6Amber")
-        _ff = std::make_unique<forcefield::ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Amber>();
+    else if (steric == "lennard-jones-12-6Amber")
+        _ff = std::make_unique<forcefield::ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber>();
     else
         _ff = std::make_unique<forcefield::ForceFieldElectrostaticCoulombAndStericLinear>();
 
