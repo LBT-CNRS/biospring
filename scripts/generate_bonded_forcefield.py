@@ -342,8 +342,30 @@ generate_bends(
 # mode; the price is not capturing chi2's finer real multi-term structure
 # for now -- an open item, not silently dropped.
 traj_ubq = md.load(PDB, standard_names=False)
-_arg42 = next(r for r in traj_ubq.topology.residues if r.name == "ARG" and r.resSeq == 42)
-_atoms_by_name = {a.name: a for a in _arg42.atoms}
+
+# Real 3D geometry (bond neighbours, measured dihedral deltas) is sourced
+# per-residue-type from an actual interior instance of that residue in
+# ubiquitin -- generalizes the single hardcoded Arg42 instance used while
+# only Arg was covered. Picks a non-terminal instance when one exists
+# (terminal residues carry the N/C-cap-specific bonding, not the plain
+# interior template STRETCH/BEND/DIHEDRAL all assume elsewhere).
+_residue_instance_cache = {}
+
+def _residue_instance(resname):
+    # Sourced from `residues` (the same top-based object graph `bonds` is
+    # built from), not traj_ubq.topology's own separate parse of the same
+    # file -- atom identity (used by the backbone axis below to walk
+    # `bonds`) only works within a single consistent graph, even though
+    # atom .index values are safely comparable across both parses (same
+    # file, same order, checked directly: fully consistent).
+    if resname not in _residue_instance_cache:
+        interior = [r for r in residues if r.name == resname and 0 < r.index < n_res - 1]
+        candidates = interior or [r for r in residues if r.name == resname]
+        _residue_instance_cache[resname] = candidates[0]
+    return _residue_instance_cache[resname]
+
+def _atoms_by_name_for(resname):
+    return {a.name: a for a in _residue_instance(resname).atoms}
 
 PHI_GRID_DEG = np.linspace(0.0, 360.0, 3600, endpoint=False)
 
@@ -366,6 +388,21 @@ def lookup_torsion_wildcard(c2, c3):
             return torsion_params[key]
     return None
 
+def lookup_torsion_specific(c1, c2, c3, c4):
+    # Exact (non-wildcarded) match for one specific real substituent pair,
+    # tried in both read directions (a dihedral read backwards names the
+    # same physical angle). Used for backbone phi/psi, which -- unlike
+    # chi1's single generic X-CT-CT-X term -- amber99sb.xml encodes as a
+    # handful of pair-specific entries (verified directly against the XML,
+    # not assumed): the axis's own generic wildcard entry exists but carries
+    # k=0 for every periodicity (a real, deliberate null placeholder, not a
+    # missing table), so it never survives the `if _k != 0.0` filter above
+    # and correctly never matches here either.
+    for key in ((c1, c2, c3, c4), (c4, c3, c2, c1)):
+        if key in torsion_params:
+            return torsion_params[key]
+    return None
+
 def bond_len_A(c1, c2):
     p = bond_params.get(frozenset((c1, c2)))
     return p[0] * 10.0 if p else None
@@ -374,14 +411,16 @@ def valence_deg(vertex_class, c1, c2):
     p = angle_params.get((vertex_class, frozenset((c1, c2))))
     return p[0] if p else None
 
-def real_dihedral_deg(n1, n2, n3, n4):
-    idx = [[_atoms_by_name[n].index for n in (n1, n2, n3, n4)]]
+def real_dihedral_deg(resname, n1, n2, n3, n4):
+    atoms_by_name = _atoms_by_name_for(resname)
+    idx = [[atoms_by_name[n].index for n in (n1, n2, n3, n4)]]
     return float(np.degrees(md.compute_dihedrals(traj_ubq, idx)[0, 0]))
 
-def real_bond_neighbors(vertex_name, exclude_name):
+def real_bond_neighbors(resname, vertex_name, exclude_name):
+    res = _residue_instance(resname)
     out = []
     for a1, a2 in bonds:
-        if a1.residue.index != _arg42.index or a2.residue.index != _arg42.index:
+        if a1.residue.index != res.index or a2.residue.index != res.index:
             continue
         if a1.name == vertex_name and a2.name != exclude_name:
             out.append(a2.name)
@@ -415,6 +454,40 @@ n_dihedral_ok = 0
 n_dihedral_skip = 0
 dihedral_lines = []
 
+def solve_term(pairs, n, k_amber, phase_rad, L_axis, label):
+    """Exact linear solve (Step 3 of the derivation) of the one shared
+    stiffness that makes this group of ghost-spring pairs reproduce AMBER's
+    real k for this one Fourier term, trying both d0 conventions (see
+    doc/BondedForceFieldSprings.md). Returns (k_solved, use_min_d0,
+    reproduced, residual) or None if neither d0 convention gives a
+    physical (positive-k) solution."""
+    global n_dihedral_skip
+    e_max = group_energy(pairs, 1.0, L_axis, use_min_d0=False)
+    proj_max = signed_projection(e_max, n, phase_rad)
+    use_min_d0, proj = False, proj_max
+    if proj_max <= 0:
+        e_min = group_energy(pairs, 1.0, L_axis, use_min_d0=True)
+        proj_min = signed_projection(e_min, n, phase_rad)
+        if proj_min > 0:
+            use_min_d0, proj = True, proj_min
+        else:
+            print(f"SKIP DIHEDRAL term ({label} n={n}): no physical (positive-k) solution "
+                 f"with either d0 convention -- projections {proj_max:.4g}/{proj_min:.4g}")
+            n_dihedral_skip += 1
+            return None
+
+    k_solved = k_amber / proj
+    e_final = group_energy(pairs, k_solved, L_axis, use_min_d0)
+    reproduced = signed_projection(e_final, n, phase_rad)
+    fft_final = np.fft.rfft(e_final) / len(e_final)
+    residual = {m: round(2.0 * abs(fft_final[m]), 4)
+               for m in range(1, 4 * max(n, 1) + 1)
+               if m != n and 2.0 * abs(fft_final[m]) > 0.005 * abs(reproduced)}
+    print(f"DIHEDRAL {label} n={n} phase={np.degrees(phase_rad):.0f}deg "
+         f"AMBER_k={k_amber:.4f} solved_k={k_solved:.4f} d0={'min' if use_min_d0 else 'max'} "
+         f"reproduced={reproduced:.4f} residual(>0.5%)={residual}")
+    return k_solved, use_min_d0
+
 def generate_sidechain_axis(resname, b_name, c_name, axis_label):
     global n_dihedral_ok, n_dihedral_skip
 
@@ -424,14 +497,19 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label):
 
     terms = lookup_torsion_wildcard(b_class, c_class)
     if terms is None:
-        print(f"SKIP DIHEDRAL ({axis_label}): no generic X-{b_class}-{c_class}-X torsion entry")
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}): no generic X-{b_class}-{c_class}-X torsion entry")
         n_dihedral_skip += 1
         return
 
-    b_neighbors = real_bond_neighbors(b_name, c_name)
-    c_neighbors = real_bond_neighbors(c_name, b_name)
+    b_neighbors = real_bond_neighbors(resname, b_name, c_name)
+    c_neighbors = real_bond_neighbors(resname, c_name, b_name)
+    if not b_neighbors or not c_neighbors:
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}): axis {b_name}-{c_name} has no real "
+             f"substituent on one side")
+        n_dihedral_skip += 1
+        return
     b_ref, c_ref = b_neighbors[0], c_neighbors[0]
-    ref_phi = real_dihedral_deg(b_ref, b_name, c_name, c_ref)
+    ref_phi = real_dihedral_deg(resname, b_ref, b_name, c_name, c_ref)
 
     def side_geom(neighbors, vertex_class, other_class, ref_name, is_b_side):
         geom = {}
@@ -442,9 +520,9 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label):
             if n == ref_name:
                 phi_meas = ref_phi
             elif is_b_side:
-                phi_meas = real_dihedral_deg(n, b_name, c_name, c_ref)
+                phi_meas = real_dihedral_deg(resname, n, b_name, c_name, c_ref)
             else:
-                phi_meas = real_dihedral_deg(b_ref, b_name, c_name, n)
+                phi_meas = real_dihedral_deg(resname, b_ref, b_name, c_name, n)
             geom[n] = (r, theta, phi_meas - ref_phi)
         return geom
 
@@ -456,30 +534,10 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label):
              for cn, (r2, t2, d2) in c_geom.items()]
 
     for (n, k_amber, phase_rad) in terms:
-        e_max = group_energy(pairs, 1.0, L_axis, use_min_d0=False)
-        proj_max = signed_projection(e_max, n, phase_rad)
-        use_min_d0, proj = False, proj_max
-        if proj_max <= 0:
-            e_min = group_energy(pairs, 1.0, L_axis, use_min_d0=True)
-            proj_min = signed_projection(e_min, n, phase_rad)
-            if proj_min > 0:
-                use_min_d0, proj = True, proj_min
-            else:
-                print(f"SKIP DIHEDRAL term ({axis_label} n={n}): no physical (positive-k) solution "
-                     f"with either d0 convention -- projections {proj_max:.4g}/{proj_min:.4g}")
-                n_dihedral_skip += 1
-                continue
-
-        k_solved = k_amber / proj
-        e_final = group_energy(pairs, k_solved, L_axis, use_min_d0)
-        reproduced = signed_projection(e_final, n, phase_rad)
-        fft_final = np.fft.rfft(e_final) / len(e_final)
-        residual = {m: round(2.0 * abs(fft_final[m]), 4)
-                   for m in range(1, 4 * max(n, 1) + 1)
-                   if m != n and 2.0 * abs(fft_final[m]) > 0.005 * abs(reproduced)}
-        print(f"DIHEDRAL {axis_label} n={n} phase={np.degrees(phase_rad):.0f}deg "
-             f"AMBER_k={k_amber:.4f} solved_k={k_solved:.4f} d0={'min' if use_min_d0 else 'max'} "
-             f"reproduced={reproduced:.4f} residual(>0.5%)={residual}")
+        solved = solve_term(pairs, n, k_amber, phase_rad, L_axis, f"{resname} {axis_label}")
+        if solved is None:
+            continue
+        k_solved, use_min_d0 = solved
 
         for (bn, cn, r1, t1, r2, t2, delta) in pairs:
             anchor_phi = delta if use_min_d0 else 180.0 + delta
@@ -490,12 +548,148 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label):
                 f"{d0:7.4f} {k_solved:10.4f}")
             n_dihedral_ok += 1
 
-generate_sidechain_axis("ARG", "CA", "CB", "chi1")
-generate_sidechain_axis("ARG", "CB", "CG", "chi2")
+# chi1 axis (CA-CB): every one of ubiquitin's 18 residue types that has a
+# real, freely-rotating first side-chain torsion. Excluded: GLY (no CB),
+# ALA (CB is a symmetric terminal methyl, no meaningful rotamer) and PRO
+# (CA-CB is part of the ring --rigidbody already holds rigid, not a free
+# single-bond rotation). Every one of these residues' CB is a plain
+# aliphatic AMBER class (CT), so all 15 hit the same generic X-CT-CT-X
+# wildcard term already validated for Arg -- no per-residue special-casing
+# needed, confirmed by running this (not assumed from the residue list).
+CHI1_RESIDUES = ["ARG", "ASN", "ASP", "GLN", "GLU", "HIS", "ILE", "LEU",
+                 "LYS", "MET", "PHE", "SER", "THR", "TYR", "VAL"]
+for _resname in CHI1_RESIDUES:
+    generate_sidechain_axis(_resname, "CA", "CB", "chi1")
+
+# chi2 axis (CB-CG, or CB-CG1 for Ile's branched beta carbon): attempted
+# for every residue whose real side chain continues past CB. Only fires a
+# real term for the ones where CG is itself a plain aliphatic carbon (CT):
+# Arg, Gln, Glu, Ile, Leu, Lys, Met. For Asn/Asp (CG is the amide/
+# carboxylate carbon, AMBER class C) and His/Phe/Tyr (CG is an aromatic
+# ring carbon, class CA), no generic X-CT-CT-X term matches -- the function
+# reports and skips those rather than fabricating a torsion that isn't in
+# amber99sb.xml (their ring/group planarity is deferred PLANARITY work, see
+# doc/BondedForceFieldSprings.md and the plan's ring-closure TODO).
+CHI2_AXIS = {"ARG": "CG", "GLN": "CG", "GLU": "CG", "ILE": "CG1", "LEU": "CG",
+             "LYS": "CG", "MET": "CG", "ASN": "CG", "ASP": "CG", "HIS": "CG",
+             "PHE": "CG", "TYR": "CG"}
+for _resname, _c_name in CHI2_AXIS.items():
+    generate_sidechain_axis(_resname, "CB", _c_name, "chi2")
+
+# ===========================================================================
+# DIHEDRAL BACKBONE: phi (N-CA axis) and psi (CA-C axis). CMAP checked and
+# confirmed absent from amber99sb.xml (see doc/BondedForceFieldSprings.md) --
+# no coupling term is silently missed. Unlike chi1's single generic
+# X-CT-CT-X term, amber99sb.xml gives phi/psi *pair-specific* real entries
+# (verified directly against the XML): only two real substituent pairs
+# carry a nonzero term per axis (the canonical all-backbone pair, and the
+# one involving CB), everything else -- both backbone hydrogens, the
+# carbonyl oxygen -- fall on that axis's own generic wildcard entry, which
+# is present in the table but carries k=0 for every periodicity (a real,
+# deliberate null, not a gap). So generation here matches each real
+# substituent pair to its own specific AMBER entry (or drops it if only the
+# null wildcard applies) instead of averaging one shared term over the
+# whole real substituent grid.
+def real_bond_neighbors_atoms(vertex_atom, exclude_atom):
+    out = []
+    for a1, a2 in bonds:
+        if a1 is vertex_atom and a2 is not exclude_atom:
+            out.append(a2)
+        elif a2 is vertex_atom and a1 is not exclude_atom:
+            out.append(a1)
+    return out
+
+def real_dihedral_deg_atoms(a1, a2, a3, a4):
+    idx = [[a1.index, a2.index, a3.index, a4.index]]
+    return float(np.degrees(md.compute_dihedrals(traj_ubq, idx)[0, 0]))
+
+def bb_atom_class(a):
+    return resolved_class(a.residue.name, a.name, a.residue.index == 0, a.residue.index == n_res - 1)
+
+def generate_backbone_axis(resname, b_name, c_name, axis_label):
+    global n_dihedral_ok, n_dihedral_skip
+
+    res = _residue_instance(resname)
+    if res.index == 0 or res.index == n_res - 1:
+        print(f"SKIP DIHEDRAL BACKBONE ({resname} {axis_label}): only real ubiquitin instance "
+             f"of this residue is a chain terminus, no real neighbouring residue to source from")
+        n_dihedral_skip += 1
+        return
+
+    b_atom = next(a for a in res.atoms if a.name == b_name)
+    c_atom = next(a for a in res.atoms if a.name == c_name)
+    b_class = resolved_class(resname, b_name, False, False)
+    c_class = resolved_class(resname, c_name, False, False)
+    L_axis = bond_len_A(b_class, c_class)
+
+    b_neighbors = real_bond_neighbors_atoms(b_atom, c_atom)
+    c_neighbors = real_bond_neighbors_atoms(c_atom, b_atom)
+    if not b_neighbors or not c_neighbors:
+        print(f"SKIP DIHEDRAL BACKBONE ({resname} {axis_label}): axis {b_name}-{c_name} has no "
+             f"real substituent on one side")
+        n_dihedral_skip += 1
+        return
+
+    ref_b, ref_c = b_neighbors[0], c_neighbors[0]
+    ref_phi = real_dihedral_deg_atoms(ref_b, b_atom, c_atom, ref_c)
+
+    def delta_of(atom, is_b_side):
+        if atom is (ref_b if is_b_side else ref_c):
+            return 0.0
+        if is_b_side:
+            return real_dihedral_deg_atoms(atom, b_atom, c_atom, ref_c) - ref_phi
+        return real_dihedral_deg_atoms(ref_b, b_atom, c_atom, atom) - ref_phi
+
+    b_geom = {a: (bond_len_A(bb_atom_class(a), b_class), valence_deg(b_class, bb_atom_class(a), c_class),
+                 delta_of(a, True)) for a in b_neighbors}
+    c_geom = {a: (bond_len_A(bb_atom_class(a), c_class), valence_deg(c_class, bb_atom_class(a), b_class),
+                 delta_of(a, False)) for a in c_neighbors}
+
+    n_pairs_matched = 0
+    for bn_atom, (r1, t1, d1) in b_geom.items():
+        for cn_atom, (r2, t2, d2) in c_geom.items():
+            terms = lookup_torsion_specific(bb_atom_class(bn_atom), b_class, c_class, bb_atom_class(cn_atom))
+            if terms is None:
+                continue  # correctly zero: falls on the null wildcard, not a gap
+            n_pairs_matched += 1
+            delta = d2 - d1
+            pair = [(0, 0, r1, t1, r2, t2, delta)]
+            _, rule_bn = rel_name(b_atom, bn_atom)
+            _, rule_cn = rel_name(c_atom, cn_atom)
+            plain_bn, plain_cn = rule_bn.lstrip("+-"), rule_cn.lstrip("+-")
+
+            for (n, k_amber, phase_rad) in terms:
+                solved = solve_term(pair, n, k_amber, phase_rad, L_axis,
+                                    f"BACKBONE {resname} {axis_label} {plain_bn}-{plain_cn}")
+                if solved is None:
+                    continue
+                k_solved, use_min_d0 = solved
+
+                anchor_phi = delta if use_min_d0 else 180.0 + delta
+                d0 = np.sqrt(closed_form_d2(L_axis, r1, t1, r2, t2, delta, anchor_phi))
+                rule_name = f"{resname}_{axis_label}_{plain_bn}_{plain_cn}_n{n}"
+                dihedral_lines.append(
+                    f"DIHEDRAL {rule_name:28s} {resname:7s} BACKBONE {rule_bn:5s} {rule_cn:6s} "
+                    f"{d0:7.4f} {k_solved:10.4f}")
+                n_dihedral_ok += 1
+
+    if n_pairs_matched == 0:
+        print(f"SKIP DIHEDRAL BACKBONE ({resname} {axis_label}): no real substituent pair matches "
+             f"a specific AMBER Proper entry (all fall on the null wildcard)")
+        n_dihedral_skip += 1
+
+# All 18 residue types found in ubiquitin.pdb; generate_backbone_axis itself
+# skips (and reports) any residue whose only real instance is a true chain
+# terminus (Met1 here -- the only residue type with no other occurrence).
+BACKBONE_RESIDUES = sorted({r.name for r in residues})
+for _resname in BACKBONE_RESIDUES:
+    generate_backbone_axis(_resname, "N", "CA", "phi")
+    generate_backbone_axis(_resname, "CA", "C", "psi")
 
 lines.append("#")
-lines.append("# DIHEDRAL (proper, side chain): ghost springs reproducing Arg chi1/chi2's")
-lines.append("# generic C-C rotation term, see doc/BondedForceFieldSprings.md Section 3.2.")
+lines.append("# DIHEDRAL (proper): ghost springs reproducing each covered residue's")
+lines.append("# chi1/chi2 (family SIDECHAIN) and phi/psi (family BACKBONE) generic")
+lines.append("# rotation terms, see doc/BondedForceFieldSprings.md Section 3.2.")
 lines.append("#    type     name                       resname family    atom_ref atom_rotant  d0_A       k")
 lines.extend(dihedral_lines)
 

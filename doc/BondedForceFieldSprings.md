@@ -354,13 +354,43 @@ independent Python recomputation of `0.5*k*(d-d0)^2` over the resulting 72
 ghost springs matches BioSpring's own reported dihedral energy exactly:
 136.8747 kJ/mol (Python) vs 136.87 kJ/mol (BioSpring).
 
-**Backbone phi/psi.** Same table, backbone atom classes. Checked explicitly
-for a CMAP correction (a 2D phi-psi coupling table used in some force
-fields, e.g. CHARMM and later AMBER revisions) before generating anything:
-`amber99sb.xml` contains no `CMAPTorsionForce` element and no mention of
-CMAP anywhere — ff99SB describes phi/psi with independent 1D terms only,
-exactly like a side-chain chi. The methodology applies with no documented
-gap for this force field.
+**Backbone phi/psi — implemented.** Same table, backbone atom classes.
+Checked explicitly for a CMAP correction (a 2D phi-psi coupling table used
+in some force fields, e.g. CHARMM and later AMBER revisions) before
+generating anything: `amber99sb.xml` contains no `CMAPTorsionForce` element
+and no mention of CMAP anywhere — ff99SB describes phi/psi with independent
+1D terms only.
+
+Unlike chi1's single generic `X-CT-CT-X` wildcard shared across the whole
+real substituent grid, phi/psi turned out *not* to be a generic-wildcard
+axis at all: `amber99sb.xml`'s own generic entries for both axes
+(`X-CT-N-X`, `X-C-CT-X`) carry `k=0` for every periodicity — a real,
+deliberate null placeholder, not a missing table. The real energy instead
+comes from a handful of *pair-specific* entries, each naming one exact real
+substituent pair: phi's axis (N-CA) has `(C_prev, C_own)` [the canonical
+backbone pair, terms n=3/n=2] and `(C_prev, CB)` [terms n=3/n=2/n=1]; psi's
+axis (CA-C) has `(N, N_next)` [canonical, terms n=3/n=2/n=1] and `(CB,
+N_next)`/`(HA, O)` [terms n=1/n=3 and n=1/n=3 respectively]. Every other
+real pair (the amide H, most H-CB/H-N combinations) matches only the null
+wildcard and correctly contributes nothing — confirmed directly against
+the XML, not assumed. Generation therefore matches each real substituent
+pair to its own specific entry (or drops it if only the null wildcard
+applies), rather than averaging one shared term over the whole grid.
+
+Generated for all 17 residue types with a real non-terminal ubiquitin
+instance (Met is skipped: its only occurrence is the true N-terminus, with
+no real previous residue to source phi's `C_prev` from). The two canonical
+terms (`(C_prev,C_own)` for phi, `(N,N_next)` for psi — together the
+dominant real contribction to the Ramachandran landscape) solve cleanly for
+every one of them. Three secondary/auxiliary single-pair terms do not:
+`phi (C_prev,CB) n=2`, `psi (CB,N_next) n=3`, `psi (HA,O) n=3` all give a
+negative projection under both `d0` conventions and are skipped (reported,
+not silently dropped) — the same single-pair harmonic-representability
+limit already documented above for chi2's finer breakdown: a lone real pair
+has an intrinsically single-cosine (n=1) `d(phi)` shape, and forcing a
+higher-harmonic fit onto it can flip sign. The two dominant canonical terms
+and the other secondary harmonics (phi/psi's own n=1/n=3 or n=1/n=2
+companions) are unaffected.
 
 **Improper (planarity) — deprioritized, not implemented.** Worth stating
 precisely what this term would and would not fix: `--rigidbody`'s
