@@ -1,0 +1,112 @@
+#071.RigidBodyHydrogenBond - Molecular Simulation Parameter file
+#
+#Real AMBER masses (amber.ff, assigned via pdb2spn --grp/--ff at topology-
+#build time -- see the Makefile). Rigid-body springs are much stiffer than a
+#soft cutoff-based elastic network (bond/valence-angle level), so the
+#timestep is smaller than usual: 1.5 fs, the same value validated stable
+#for --rigidbody alone in 070.RigidBodyRotamere.
+
+#fs
+simulation.timestep = 1.5
+simulation.nbsteps = -1
+
+#Da.fs-1
+#Lowered from 0.5 to 0.05 to let electrostatics (below) actually move the
+#chain over tens of Angstroms instead of being damped out immediately --
+#the previous 0.5 was tuned only for --rigidbody+--hbond's short-range,
+#already-in-contact regime, not for a force meant to close a large gap.
+viscosity.enable = 1
+viscosity.value = 0.05
+
+spring.enable = 1
+spring.scale = 1.0
+
+#Steric exclusion: without this, nothing stops electrostatics (below) from
+#pulling charged residues into an overlapping, physically impossible clash
+#as they approach each other -- cutoff=8.0/gridscale=1.0 matches this
+#codebase's existing convention (see example/001_GKinase/*.msp).
+#
+#mode=lennard-jones-8-6Amber matches amber.ff/amber.grp used everywhere
+#else in this example -- despite the name, this is actually AMBER's real
+#12-6 potential (see src/forcefield/energy/steric.hpp:steric_energy_amber,
+#exponents 12 and 6; "lennard-jones-8-6Lewitt"/"...Zacharias" are the
+#genuinely-8-6, softer, non-AMBER alternatives).
+#
+#This mode originally caused single-step kinetic-energy spikes into the
+#hundreds of thousands of kJ.mol-1: not because 12-6 itself is unstable,
+#but because of a real bug in the hydrogen-bond mechanism below, since
+#fixed (see Particle::addHydrogenBondCoreRepulsion). A particle "occupied"
+#by an exclusive hydrogen bond elsewhere was excluded from all hbond force
+#computation with every other donor/acceptor, including any short-range
+#repulsion -- so it could drift arbitrarily close to one while unbonded,
+#and only feel a (by then enormous) corrective force once it finally
+#became free and was reassigned to that too-close neighbor. Switching to
+#the softer 8-6 Lewitt exponent only reduced the spike by about an order
+#of magnitude; it did not address the actual cause, confirmed by
+#reproducible logging that traced a specific spike to exactly this kind of
+#hand-off (THR28:TOG1 released from a distant partner and immediately
+#reassigned to ILE29:IN at 2.4 A, well inside the Morse well). The real
+#fix -- an always-on, short-range-only repulsive floor between any
+#donor/acceptor pair, independent of engagement status, mirroring how
+#patchy-particle models keep an isotropic excluded-volume core entirely
+#separate from the exclusive directional attractive patch term -- removed
+#the problem outright rather than merely softening it: with the fix in
+#place, 12-6 "Amber" and 8-6 "Lewitt" produce bit-identical trajectories
+#over a 60000-step (90 ps) test here, because steric itself is essentially
+#never asked to do anything anymore (its own reported energy stays at
+#0.00 kJ.mol-1 throughout either way) -- the donor/acceptor pairs that used
+#to need steric's help are now kept apart by hbond's own core repulsion
+#well before steric would matter. lennard-jones-8-6Amber was kept here
+#specifically because it is the one that actually matches amber.ff/
+#amber.grp's own parameterization.
+steric.enable = 1
+steric.gridscale = 1.0
+steric.cutoff = 8.0
+steric.mode = lennard-jones-8-6Amber
+
+#Coulomb electrostatics: real AMBER partial charges (from amber.ff),
+#dielectric=40 matches this codebase's existing convention for implicit-
+#solvent screening (see example/001_GKinase/*.msp) -- vacuum's dielectric=1
+#would make charged side chains (Lys/Arg/Asp/Glu) attract each other far
+#too strongly without any water around to screen them. cutoff=16.0 (vs
+#hbond's 7.0) is the actual point of turning this on here: it reaches
+#roughly twice as far, so charged residues can start pulling the unfolded
+#helix and sheet segments toward each other before they are anywhere near
+#hydrogen-bonding range, which --hbond alone cannot do on its own (see the
+#hbond.* comment below for why).
+coulomb.enable = 1
+coulomb.scale = 1.0
+coulomb.dielectric = 40.0
+coulomb.cutoff = 16.0
+
+#Dynamic hydrogen-bond mechanism (distance-only Morse potential between
+#donor and acceptor heavy atoms -- see src/forcefield/energy/hydrogenbond.hpp
+#for the literature-derived parameters). path points at a local copy of
+#data/reducerules/amber.hbond (donor/acceptor role per amber.grp-renamed
+#atom type, matching this example's --grp/--ff reduction). cutoff=7.0 is
+#the table's own default (practical range of the Morse potential, <1% of
+#well depth beyond it), kept explicit here for clarity.
+#
+#Each donor/acceptor may hold at most one exclusive, attraction-capable
+#partner at a time (see SpringNetwork::_assignHydrogenBondPairs) -- but,
+#separately and always regardless of that engagement, every donor/acceptor
+#also repels any other donor/acceptor that gets closer than the Morse
+#equilibrium distance (Particle::addHydrogenBondCoreRepulsion). That
+#always-on repulsive floor is what keeps this mechanism numerically safe
+#(see the steric.mode comment above for the instability it used to cause
+#without it).
+#
+#IMPORTANT for this specific example: the starting structure is FULLY
+#UNFOLDED (helix_loop_sheet.pdb), with residues that belong together in the
+#native fold starting tens of Angstroms apart -- far beyond this 7 A cutoff.
+#Nothing in this model injects thermal noise (viscosity only damps, it does
+#not also re-inject random motion the way a real Langevin thermostat would),
+#so there is no spontaneous force to bring distant segments into range on
+#its own. An interactive pull (bringing the helix and sheet segments within
+#hbond range by hand) is what starts things off; from there on, --hbond has
+#already been confirmed (on ubiquitin's own real, folded hairpin and helix)
+#to correctly find and hold the native pattern once it is in reach.
+hbond.enable = 1
+hbond.cutoff = 7.0
+hbond.scale = 1.0
+hbond.path = amber.hbond

@@ -22,6 +22,7 @@ class Configuration
     StericSetting steric;
     EnergySetting spring;
     EnergySetting hydrophobicity;
+    HydrogenBondSetting hbond;
     ElectrostaticSetting electrostatic;
     ImpalaSetting imp;
     InsertionVectorSetting ivector;
@@ -35,7 +36,7 @@ class Configuration
     RigidBodySetting rigidbody;
 
     Configuration()
-        : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"),
+        : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"), hbond("hbond"),
           electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"),
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), potentialgrid("potentialgrid"),
           densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody")
@@ -44,6 +45,7 @@ class Configuration
         _register(steric);
         _register(spring);
         _register(hydrophobicity);
+        _register(hbond);
         _register(electrostatic);
         _register(imp);
         _register(ivector);
@@ -66,6 +68,8 @@ class Configuration
         spring.print();
         os << "\n";
         hydrophobicity.print();
+        os << "\n";
+        hbond.print();
         os << "\n";
         electrostatic.print();
         os << "\n";
@@ -114,6 +118,8 @@ class Configuration
             spring.setFromString(name, value);
         else if (group == hydrophobicity.name)
             hydrophobicity.setFromString(name, value);
+        else if (group == hbond.name)
+            hbond.setFromString(name, value);
         else if (group == electrostatic.name)
             electrostatic.setFromString(name, value);
         else if (group == imp.name)
@@ -171,6 +177,15 @@ inline Configuration defaultConfiguration()
     config.hydrophobicity.enable = false;
     config.hydrophobicity.cutoff = 15.0;
     config.hydrophobicity.scale = 1.0;
+
+    // Cutoff sizes the --hbond neighbor grid's cells: it is the practical
+    // range of the Morse potential (<1% of well depth left beyond ~7 A with
+    // the default De/re/a, see energy/hydrogenbond.hpp), not a long-range
+    // electrostatics-style cutoff.
+    config.hbond.enable = false;
+    config.hbond.cutoff = 7.0;
+    config.hbond.scale = 1.0;
+    config.hbond.path = "";
 
     config.electrostatic.enable = false;
     config.electrostatic.cutoff = 16.0;

@@ -25,11 +25,15 @@ std::string atom_record(const spn::Particle & p)
 
     // Particle name formatting.
     // If the name has less than 4 letters, it is left aligned on column 14, else it's left align on column 13.
+    // Truncated to the strict 4-character PDB atom-name field width (a 5+
+    // character renamed particle, e.g. from a --grp reduction, would
+    // otherwise overflow into the following columns and shift every field
+    // after it -- see PDBWriter.cpp's atom_record for the same fix).
     std::string name;
     if (p.getName().size() < 4)
-        name = utils::string::format(" %-3s", p.getName().c_str());
+        name = utils::string::format(" %-3.3s", p.getName().c_str());
     else
-        name = utils::string::format("%-4s", p.getName().c_str());
+        name = utils::string::format("%-4.4s", p.getName().c_str());
 
     // Charge formatting.
     std::string charge = "";
