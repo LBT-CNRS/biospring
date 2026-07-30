@@ -91,6 +91,66 @@ struct SpringBuffer
     }
 };
 
+// Buffers one dihedral ghost-spring family (backbone/sidechain/planarity --
+// see SpringNetwork's _dihedral*springs) for NetCDF I/O. Deliberately
+// simpler than SpringBuffer: no `nbofspringsperparticle` companion array,
+// since ghost springs are never registered as spring-neighbours (see
+// SpringNetwork::addDihedralBackboneSpring's comment) and nothing reads
+// that field back on the SpringBuffer side either (write-only, informational).
+struct DihedralSpringBuffer
+{
+    size_t number_of_springs;
+    int (*springs)[2];
+    float * springsstiffnesses;
+    float * springsequilibriums;
+
+    ~DihedralSpringBuffer() { clear(); }
+
+    DihedralSpringBuffer(const DihedralSpringBuffer &) = delete;
+    DihedralSpringBuffer & operator=(const DihedralSpringBuffer &) = delete;
+
+    void clear()
+    {
+        delete[] springs;
+        delete[] springsstiffnesses;
+        delete[] springsequilibriums;
+        springs = nullptr;
+        springsstiffnesses = nullptr;
+        springsequilibriums = nullptr;
+        number_of_springs = 0;
+    }
+
+    DihedralSpringBuffer() : number_of_springs(0), springs(0), springsstiffnesses(0), springsequilibriums(0) {}
+
+    DihedralSpringBuffer(size_t number_of_springs) : DihedralSpringBuffer() { initialize(number_of_springs); }
+
+    void initialize(size_t nSprings)
+    {
+        clear();
+        number_of_springs = nSprings;
+        if (nSprings > 0)
+        {
+            springs = new int[nSprings][2]{};
+            springsstiffnesses = new float[nSprings]{};
+            springsequilibriums = new float[nSprings]{};
+        }
+    }
+
+    // Copies one dihedral spring family's data (from SpringNetwork's own
+    // vector, e.g. getDihedralBackboneSprings()) into these buffers.
+    void bufferize(const std::vector<biospring::spn::Spring> & source)
+    {
+        for (size_t i = 0; i < source.size(); ++i)
+        {
+            const biospring::spn::Spring & s = source[i];
+            springs[i][0] = s.getParticle1().getId();
+            springs[i][1] = s.getParticle2().getId();
+            springsequilibriums[i] = s.getEquilibrium();
+            springsstiffnesses[i] = s.getStiffness();
+        }
+    }
+};
+
 struct ParticleBuffer
 {
     size_t number_of_particles;

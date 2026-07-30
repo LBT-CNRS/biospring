@@ -139,6 +139,7 @@ set(BIOSPRING_CORE_SOURCES
     src/reduce/Reducer.cpp
     src/reduce/ReduceRule.cpp
     src/IO/io.cpp
+    src/IO/BondedForceFieldReader.cpp
     src/IO/CSVSampleWriter.cpp
     src/IO/ForceFieldReader.cpp
     src/IO/NetCDFReader.cpp

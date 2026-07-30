@@ -51,6 +51,7 @@ class SpringNetwork
     struct Energies
     {
         float spring = 0.0f;
+        float dihedral = 0.0f;
         float electrostatic = 0.0f;
         float steric = 0.0f;
         float kinetic = 0.0f;
@@ -60,6 +61,7 @@ class SpringNetwork
         void reset()
         {
             spring = 0.0;
+            dihedral = 0.0;
             electrostatic = 0.0;
             steric = 0.0;
             kinetic = 0.0;
@@ -103,7 +105,8 @@ class SpringNetwork
     SpringNetwork()
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
-          _dynamicsprings(), _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
+          _dynamicsprings(), _dihedralbackbonesprings(), _dihedralsidechainsprings(), _dihedralplanaritysprings(),
+          _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
           _hydrophobicPairScratch(), _energies(), _nsearch(), _neighborSearchesDirty(false),
           _nbiter(0), _end(false), _pause(false), _grids(), _constraintenabled(false), _framerate(0.0),
           _freesasaState(), _ff(nullptr), _trajectories(), _insertionVector(nullptr), _constraints(),
@@ -156,6 +159,7 @@ class SpringNetwork
     // Returns energies (read-only).
     float getKineticEnergy() const { return _energies.kinetic; }
     float getSpringEnergy() const { return _energies.spring; }
+    float getDihedralEnergy() const { return _energies.dihedral; }
     float getStericEnergy() const { return _energies.steric; }
     float getElectrostaticEnergy() const { return _energies.electrostatic; }
     float getIMPEnergy() const { return _energies.imp; }
@@ -190,6 +194,20 @@ class SpringNetwork
     // Adds a spring to the network.
     void addSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
 
+    // Adds a dihedral ghost spring to the network -- always a new spring
+    // (unlike addSpring, never checked against existing spring-neighbours),
+    // and deliberately not registered as a spring-neighbour: a ghost spring
+    // connects two real substituent atoms that are a real 1-4 pair (never a
+    // real 1-2/1-3 bond), and BioSpring's nonbonded exclusion is driven
+    // entirely by spring-neighbour membership (see Particle::isInSpringNeighbors) --
+    // registering ghost springs there would silently exclude 1-4 pairs from
+    // nonbonded forces as a side effect, which is a separate physical
+    // modelling decision (matching AMBER's scaled 1-4 nonbonded convention)
+    // that this feature does not make. See doc/BondedForceFieldSprings.md.
+    void addDihedralBackboneSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
+    void addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
+    void addDihedralPlanaritySpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
+
     void updateSpringState(unsigned id, bool isStatic);
     void addStaticSpring(unsigned id) { _staticsprings.push_back(id); }
     void addDynamicSpring(unsigned id) { _dynamicsprings.push_back(id); }
@@ -216,6 +234,11 @@ class SpringNetwork
 
     // Returns the list of springs.
     const std::vector<Spring> & getSprings() const { return _springs; }
+
+    // Returns each dihedral ghost-spring family's list, for NetCDF I/O.
+    const std::vector<Spring> & getDihedralBackboneSprings() const { return _dihedralbackbonesprings; }
+    const std::vector<Spring> & getDihedralSidechainSprings() const { return _dihedralsidechainsprings; }
+    const std::vector<Spring> & getDihedralPlanaritySprings() const { return _dihedralplanaritysprings; }
 
     // Returns ith spring in spring list.
     std::vector<Spring>::const_reference getSpring(unsigned index) const { return _springs[index]; }
@@ -304,6 +327,7 @@ class SpringNetwork
     virtual void computeStep();
     virtual void computeForces();
     virtual void computeSpringForces();
+    virtual void computeDihedralForces();
     virtual void computeParticleForces();
     virtual void updateParticlePositions();
 
@@ -417,6 +441,19 @@ class SpringNetwork
     std::vector<Spring> _springs;
     std::vector<unsigned> _staticsprings;
     std::vector<unsigned> _dynamicsprings;
+
+    // Dihedral ghost springs, kept in their own arrays (rather than tagged
+    // entries in _springs) so each family stays identifiable for NetCDF I/O
+    // (see getDihedralBackboneSprings etc.) without touching Spring/_springs
+    // at all -- there is no per-family runtime switch: whichever families
+    // were built (see -dihedral/--dihedral in pdb2spn-cli.cpp) are always
+    // computed, gated by the same isSpringEnabled() as regular springs.
+    // Always fully iterated in computeDihedralForces (no static/dynamic
+    // split): a ghost spring connecting two fully static particles is an
+    // unusual, not a performance-critical, case.
+    std::vector<Spring> _dihedralbackbonesprings;
+    std::vector<Spring> _dihedralsidechainsprings;
+    std::vector<Spring> _dihedralplanaritysprings;
 
     // One force contribution per dynamic spring. Reused between steps to avoid
     // allocations in the simulation loop and to keep OpenMP writes disjoint.

@@ -16,6 +16,33 @@ void NetCDFReader::addSpringsToSpn()
     }
 }
 
+void NetCDFReader::addDihedralBackboneSpringsToSpn()
+{
+    for (size_t i = 0; i < _dihedralbackbonebuffer.number_of_springs; ++i)
+        _topology.add_dihedral_backbone_spring(
+            _topology.get_particle(static_cast<size_t>(_dihedralbackbonebuffer.springs[i][0])),
+            _topology.get_particle(static_cast<size_t>(_dihedralbackbonebuffer.springs[i][1])),
+            _dihedralbackbonebuffer.springsequilibriums[i], _dihedralbackbonebuffer.springsstiffnesses[i]);
+}
+
+void NetCDFReader::addDihedralSidechainSpringsToSpn()
+{
+    for (size_t i = 0; i < _dihedralsidechainbuffer.number_of_springs; ++i)
+        _topology.add_dihedral_sidechain_spring(
+            _topology.get_particle(static_cast<size_t>(_dihedralsidechainbuffer.springs[i][0])),
+            _topology.get_particle(static_cast<size_t>(_dihedralsidechainbuffer.springs[i][1])),
+            _dihedralsidechainbuffer.springsequilibriums[i], _dihedralsidechainbuffer.springsstiffnesses[i]);
+}
+
+void NetCDFReader::addDihedralPlanaritySpringsToSpn()
+{
+    for (size_t i = 0; i < _dihedralplanaritybuffer.number_of_springs; ++i)
+        _topology.add_dihedral_planarity_spring(
+            _topology.get_particle(static_cast<size_t>(_dihedralplanaritybuffer.springs[i][0])),
+            _topology.get_particle(static_cast<size_t>(_dihedralplanaritybuffer.springs[i][1])),
+            _dihedralplanaritybuffer.springsequilibriums[i], _dihedralplanaritybuffer.springsstiffnesses[i]);
+}
+
 void NetCDFReader::addParticlesToSpn()
 {
     char buf[5] = "";
@@ -79,6 +106,13 @@ void NetCDFReader::read()
 
         readSprings();
         addSpringsToSpn();
+
+        readDihedralSpringGroup("dihedralbackbone", _dihedralbackbonebuffer);
+        addDihedralBackboneSpringsToSpn();
+        readDihedralSpringGroup("dihedralsidechain", _dihedralsidechainbuffer);
+        addDihedralSidechainSpringsToSpn();
+        readDihedralSpringGroup("dihedralplanarity", _dihedralplanaritybuffer);
+        addDihedralPlanaritySpringsToSpn();
     }
     catch (netCDF::exceptions::NcException & e)
     {
@@ -205,6 +239,46 @@ void NetCDFReader::readSprings()
         checkDim(data, 0, _sbuffer.number_of_springs);
         data.getVar(_sbuffer.springsequilibriums);
     }
+}
+
+void NetCDFReader::readDihedralSpringGroup(const char * prefix, DihedralSpringBuffer & buffer)
+{
+    // A dihedral ghost-spring family's dimension is entirely optional: an
+    // older .nc file (written before dihedral support existed), or one
+    // where this particular family happened to be empty, simply doesn't
+    // have it -- silently leave `buffer` at zero springs rather than warn
+    // (unlike the real springs' dimension, whose absence is unusual enough
+    // to warrant a warning).
+    const std::string number_dim = std::string(prefix) + "_number";
+    netCDF::NcDim dim = _file->getDim(number_dim);
+    if (dim.isNull())
+    {
+        buffer.initialize(0);
+        return;
+    }
+
+    const size_t n = dim.getSize();
+    buffer.initialize(n);
+    if (n == 0)
+        return;
+
+    netCDF::NcVar data;
+
+    data = getNcVar((std::string(prefix) + "springs").c_str());
+    checkNDims(data, 2);
+    checkDim(data, 0, n);
+    checkDim(data, 1, 2);
+    data.getVar(buffer.springs);
+
+    data = getNcVar((std::string(prefix) + "springsstiffness").c_str());
+    checkNDims(data, 1);
+    checkDim(data, 0, n);
+    data.getVar(buffer.springsstiffnesses);
+
+    data = getNcVar((std::string(prefix) + "springsequilibrium").c_str());
+    checkNDims(data, 1);
+    checkDim(data, 0, n);
+    data.getVar(buffer.springsequilibriums);
 }
 
 void NetCDFReader::readNumberOfParticles()

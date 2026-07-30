@@ -14,8 +14,19 @@ including a real Pro (whole side chain treated as one rigid ring closing
 back onto the backbone N, no free chi) and both a free N-terminus and
 C-terminus.
 
-This example needs a local BioSpring build with `--rigidbody` and
-`data/reducerules/ProteinAtomRigidGroups.rbody` -- see the Makefile.
+`--rigidbody` alone gives every one of these springs the same uniform
+"rigid" stiffness. `pdb2spn --bondedinteraction
+data/reducerules/ProteinAtomBonded.bi.ff` retunes them in place with real
+AMBER ff99SB parameters (stretching only for now -- bending is a documented,
+deferred follow-up) instead: real bonds get their real equilibrium
+distance/stiffness, translated straight from OpenMM's bundled amber99sb.xml
+(see `scripts/generate_bonded_forcefield.py`). This changes nothing about
+which pairs are connected -- phi/psi/chi stay exactly as free as before,
+only the springs that were already there get realistic parameters.
+
+This example needs a local BioSpring build with `--rigidbody`/
+`--bondedinteraction` and `data/reducerules/ProteinAtomRigidGroups.rbody` +
+`ProteinAtomBonded.bi.ff` -- see the Makefile.
 
 ### Build and visualize
 

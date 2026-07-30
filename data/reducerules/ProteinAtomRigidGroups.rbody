@@ -160,6 +160,13 @@ F_PSI PHE CA C O +N +H +CA
 F_CB PHE CA CB CG HB2 HB3
 F_RING PHE CB CG CD1 CD2 CE1 CE2 CZ HD1 HD2 HE1 HE2 HZ
 
+#Note: P_PHI/P_RING deliberately never connect "-C" to CD (the real
+#(-C)-N-CD angle, from the ring closing onto N instead of an amide H, is
+#the actual physical restriction on Pro's phi). It's added by
+#--bondedinteraction alone (BondedForceFieldReader's fallback spring, with
+#the real AMBER angle constant), not here: a uniform --stiffness spring
+#with no real angle constant would freeze phi completely instead of
+#realistically restricting it -- see IO/BondedForceFieldReader.h.
 P_RING PRO N CA C CB CG CD HA HB2 HB3 HG2 HG3 HD2 HD3
 P_NTER PRO N CA CD H2 H3
 P_CTER PRO CA C O OXT
@@ -208,3 +215,15 @@ V_PSI VAL CA C O +N +H +CA
 V_CB VAL CA CB CG1 CG2 HB
 V_CG1 VAL CB CG1 HG11 HG12 HG13
 V_CG2 VAL CB CG2 HG21 HG22 HG23
+
+#ACE/NME: standard N-/C-terminal capping groups (acetyl / N-methylamide),
+#used instead of NTER/CTER on a capped peptide. Verified against real
+#connectivity (mdtraj on a real ACE/NME-capped peptide): ACE has no CA, so
+#the next residue's own _PHI rule silently drops its "-CA" atom (missing,
+#skipped per convention) -- the real -C/-O peptide-bond pairs it still
+#finds are enough; nothing extra is needed on the ACE side beyond the two
+#groups below. Same idea for NME on the C-terminal side.
+ACE_C ACE CH3 C O +N
+ACE_CH3 ACE C CH3 H1 H2 H3
+NME_N NME -C N H C
+NME_C NME N C H1 H2 H3

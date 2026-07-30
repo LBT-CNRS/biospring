@@ -20,6 +20,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     std::string pathForceField;
     std::string pathGroup;
     std::string pathRigidBody;
+    std::string pathBondedInteraction;
     std::vector<std::string> pathOutputList;
 
 
@@ -31,6 +32,11 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     bool ignoreDuplicates;
     bool ignoreMissing;
     bool writePdbConect;
+    bool stretching;
+    bool bending;
+    bool dihedral;
+    bool dihedralBackbone;
+    bool dihedralSidechain;
 
     // Constructor (inherited from argparse::CommandLineArgumentsBase).
     CommandLineArguments(const std::string & name, const argparse::description_t & description,
@@ -41,9 +47,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     void parseCommandLine(int argc, const char * const argv[]);
 
     bool useUserCutoff() const { return _parser.get_option("--cutoff").is_set(); }
-    bool useUserStiffness() const { return _parser.get_option("--stiffness").is_set(); }
     bool useUserCharge() const { return _parser.get_option("--charge").is_set(); }
-    bool useRigidBody() const { return _parser.get_option("--rigidbody").is_set(); }
 };
 
 void reduceToCoarseGrain(topology::Topology & top, const CommandLineArguments & args);

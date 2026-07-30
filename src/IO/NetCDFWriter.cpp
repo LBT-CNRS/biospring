@@ -11,6 +11,98 @@ using namespace netCDF::exceptions;
 
 namespace logging = biospring::logging;
 
+// Writes one dihedral ghost-spring family's binary NetCDF dimension/variable
+// pair (particle-id pairs, stiffness, equilibrium -- no per-particle count,
+// see DihedralSpringBuffer's comment), or nothing at all if `source` is
+// empty (mirrors the `springnb > 0` guard already used for the real
+// springs, so old readers and empty families stay silent/backward
+// compatible).
+static void writeDihedralSpringGroupBinary(NcFile * nc, const std::string & prefix,
+                                           const std::vector<biospring::spn::Spring> & source)
+{
+    const size_t n = source.size();
+    if (n == 0)
+        return;
+
+    NcDim dim2 = nc->addDim(prefix + "dim", 2);
+    NcDim ndim = nc->addDim(prefix + "_number", n);
+    std::vector<NcDim> ssdim(2);
+    ssdim[0] = ndim;
+    ssdim[1] = dim2;
+
+    NcVar springs = nc->addVar(prefix + "springs", ncInt, ssdim);
+    springs.putAtt("long_name", "Dihedral ghost spring between particles referenced by 2 particle ids");
+
+    NcVar stiffness = nc->addVar(prefix + "springsstiffness", ncFloat, ndim);
+    stiffness.putAtt("long_name", "Dihedral ghost spring stiffness");
+
+    NcVar equilibrium = nc->addVar(prefix + "springsequilibrium", ncFloat, ndim);
+    equilibrium.putAtt("long_name", "Dihedral ghost spring distance equilibrium");
+
+    DihedralSpringBuffer buffer(n);
+    buffer.bufferize(source);
+
+    springs.putVar(buffer.springs);
+    stiffness.putVar(buffer.springsstiffnesses);
+    equilibrium.putVar(buffer.springsequilibriums);
+}
+
+// CDL (text NetCDF) equivalents of the above, split the same way the real
+// springs are (_writeHeaderCDL declares dims/vars, _writeSpringDataCDL
+// writes the data), so each can be called from the matching method.
+static void writeDihedralHeaderCDL(std::ostream & os, const std::string & prefix, size_t n)
+{
+    if (n == 0)
+        return;
+    os << "\t" << prefix << "dim = 2; " << std::endl;
+    os << "\t" << prefix << "_number = " << n << ";" << std::endl;
+    os << std::endl;
+}
+
+static void writeDihedralVariablesCDL(std::ostream & os, const std::string & prefix, size_t n)
+{
+    if (n == 0)
+        return;
+    os << "\tint     " << prefix << "springs(" << prefix << "_number," << prefix << "dim); " << std::endl;
+    os << "\t        " << prefix
+       << "springs:long_name = \"Dihedral ghost spring between particles referenced by 2 particle ids\"; "
+       << std::endl;
+    os << std::endl;
+    os << "\tfloat   " << prefix << "springsstiffness(" << prefix << "_number); " << std::endl;
+    os << "\t        " << prefix << "springsstiffness:long_name = \"Dihedral ghost spring stiffness\";" << std::endl;
+    os << "\tfloat   " << prefix << "springsequilibrium(" << prefix << "_number); " << std::endl;
+    os << "\t        " << prefix
+       << "springsequilibrium:long_name = \"Dihedral ghost spring distance equilibrium\";" << std::endl;
+    os << std::endl;
+}
+
+static void writeDihedralDataCDL(std::ostream & os, const std::string & prefix,
+                                 const std::vector<biospring::spn::Spring> & source)
+{
+    const size_t n = source.size();
+    if (n == 0)
+        return;
+
+    os << "\t" << prefix << "springs = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].getParticle1().getId() << ", " << source[i].getParticle2().getId();
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\t" << prefix << "springsstiffness = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << static_cast<float>(source[i].getStiffness());
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\t" << prefix << "springsequilibrium = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << static_cast<float>(source[i].getEquilibrium());
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+}
+
 NcFile * NetCDFWriter::safeOpenBinary()
 {
     NcFile * nc = nullptr;
@@ -150,6 +242,10 @@ void NetCDFWriter::writeBinary()
         nbofsprings.putVar(sbuffer.nbofspringsperparticle);
     }
 
+    writeDihedralSpringGroupBinary(nc, "dihedralbackbone", _spn->getDihedralBackboneSprings());
+    writeDihedralSpringGroupBinary(nc, "dihedralsidechain", _spn->getDihedralSidechainSprings());
+    writeDihedralSpringGroupBinary(nc, "dihedralplanarity", _spn->getDihedralPlanaritySprings());
+
     delete nc;
 }
 
@@ -181,6 +277,10 @@ void NetCDFWriter::_writeHeaderCDL()
         _ostream << "\tspring_number = " << nbsprings << ";" << std::endl;
         _ostream << std::endl;
     }
+
+    writeDihedralHeaderCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings().size());
+    writeDihedralHeaderCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings().size());
+    writeDihedralHeaderCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings().size());
 
     _ostream << "variables:" << std::endl;
     _ostream << "\tfloat   coordinates(particle_number, spatialdim); " << std::endl;
@@ -255,7 +355,12 @@ void NetCDFWriter::_writeHeaderCDL()
 
         _ostream << "\tfloat   springsequilibrium(spring_number); " << std::endl;
         _ostream << "\t        springsequilibrium:long_name = \"Spring distance equilibrium\";" << std::endl;
+        _ostream << std::endl;
     }
+
+    writeDihedralVariablesCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings().size());
+    writeDihedralVariablesCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings().size());
+    writeDihedralVariablesCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings().size());
 }
 
 void NetCDFWriter::_writeParticleDataCDL()
@@ -468,5 +573,10 @@ void NetCDFWriter::_writeSpringDataCDL()
                 _ostream << "," << std::endl;
         }
     }
+
+    writeDihedralDataCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings());
+    writeDihedralDataCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings());
+    writeDihedralDataCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings());
+
     _ostream << "}" << std::endl;
 }
