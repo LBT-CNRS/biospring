@@ -75,6 +75,7 @@ void Particle::resetForce()
     _kineticenergy = 0.0;
     _impenergy = 0.0;
     _hydrophobicityenergy = 0.0;
+    _hydrogenbondcorerepulsionenergy = 0.0;
 }
 
 void Particle::applyViscosity(float viscosity)
