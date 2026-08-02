@@ -68,6 +68,7 @@ set(TEST_MODULES
     Box
     Configuration
     ForceFieldReader
+    GhostParticle
     NetCDFRoundTrip
     OpenDXReader
     PDBReader

@@ -164,6 +164,7 @@ set(BIOSPRING_CORE_SOURCES
     src/interactor/Interactor.cpp
     src/logging.cpp
     src/measure.cpp
+    src/spn/GhostParticle.cpp
     src/spn/Particle.cpp
     src/spn/ParticleProperty.cpp
     src/spn/Spring.cpp
