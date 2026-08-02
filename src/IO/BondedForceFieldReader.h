@@ -66,14 +66,35 @@ struct DihedralEntry
     double k;
 };
 
+// One massless virtual-site ("GHOSTPARTICLE" line): a ghost particle that
+// does not correspond to any real PDB atom, placed algebraically from 3
+// real anchor atoms (atom_B, atom_C -- the dihedral axis -- and atom_ref,
+// which fixes the azimuthal reference direction) and 3 calibrated
+// parameters (r, theta_deg, delta_deg -- see spn::GhostParticle for the
+// placement formula). A DihedralEntry's atom_ref/atom_rotant may name a
+// GhostParticleEntry's own `name` instead of a real atom name, for a
+// ghost-to-ghost dihedral spring -- resolved against the ghost particles
+// already created for the same residue (see buildSprings).
+struct GhostParticleEntry
+{
+    std::string resname, name, atom_B, atom_C, atom_ref;
+    double r;
+    double theta_deg;
+    double delta_deg;
+};
+
 // Parses a .bi.ff file ("bonded interaction .force field" -- see the
 // .nbi.ff/.bi.ff naming note in data/forcefield/*.nbi.ff): lines of
 // "STRETCH <name> <resname> <atom1> <atom2> <r0_A> <k_kJ.mol-1.A-2>",
 // "BEND <name> <resname> <atom1> <atom2> <atom3> <theta0_deg>
-// <k_kJ.mol-1.rad-2>", or "DIHEDRAL <name> <resname>
+// <k_kJ.mol-1.rad-2>", "GHOSTPARTICLE <name> <resname> <atom_B> <atom_C>
+// <atom_ref> <r_A> <theta_deg> <delta_deg>" (a massless virtual site, see
+// GhostParticleEntry), or "DIHEDRAL <name> <resname>
 // <BACKBONE|SIDECHAIN|PLANARITY> <atom_ref> <atom_rotant> <d0_A>
-// <k_kJ.mol-1.A-2>". Atom names may carry a "+"/"-" prefix (CHARMM-style:
-// next/previous residue), same convention as .rbody.
+// <k_kJ.mol-1.A-2>" (atom_ref/atom_rotant may each name either a real atom
+// or a GHOSTPARTICLE defined earlier in the same residue). Atom names may
+// carry a "+"/"-" prefix (CHARMM-style: next/previous residue), same
+// convention as .rbody.
 //
 // TODO(ring planarity): ring groups in ProteinAtomRigidGroups.rbody
 // (aromatic side chains, guanidinium, proline ring) also carry pairwise
@@ -174,12 +195,30 @@ class BondedForceFieldReader : public ReaderBase
     std::vector<StretchEntry> _stretch;
     std::vector<BendEntry> _bend;
     std::vector<DihedralEntry> _dihedral;
+    std::vector<GhostParticleEntry> _ghostparticles;
 
     using ResidueParticleIndices = std::vector<size_t>;
 
     void _parse_line(const std::string & line, size_t line_id);
 
     std::vector<ResidueParticleIndices> _group_particles_by_residue(const topology::Topology & topology) const;
+
+    // Creates the topology::Particle ghosts described by every
+    // GhostParticleEntry matching `resname`, resolving their 3 anchors the
+    // same way STRETCH/BEND/DIHEDRAL do (via _resolve_atom, so the same
+    // +/- cross-residue convention applies). Each newly-created ghost's
+    // index is appended to `residues[index]` so later DIHEDRAL entries in
+    // the same residue can resolve a ghost particle's name exactly like a
+    // real atom's, via the ordinary _resolve_atom lookup -- no separate
+    // resolution path is needed. residues is intentionally non-const:
+    // creating a particle changes topology.number_of_particles(), which is
+    // exactly why this mutates the local grouping instead of the
+    // once-computed groups staying accurate on their own.
+    // Returns the number of ghost particles actually created (for
+    // buildSprings's summary log -- see the .cpp).
+    unsigned _create_ghost_particles(topology::Topology & topology, std::vector<ResidueParticleIndices> & residues,
+                                     size_t index, const std::string & resname,
+                                     const reduce::ReduceRuleContainer * translation) const;
 
     // Resolves a single (possibly +/- prefixed) atom name relative to the
     // residue at `index`. Returns nullptr if the neighbour residue does not

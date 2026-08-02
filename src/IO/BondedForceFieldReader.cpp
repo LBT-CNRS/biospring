@@ -89,9 +89,34 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
                          tokens[7].c_str());
         _dihedral.push_back(entry);
     }
+    else if (type == "GHOSTPARTICLE")
+    {
+        if (tokens.size() != 9)
+            logging::die("BondedForceFieldReader: line %d: GHOSTPARTICLE expects 9 tokens (type name resname atom_B "
+                         "atom_C atom_ref r theta delta), found %d",
+                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
+
+        GhostParticleEntry entry;
+        entry.name = tokens[1];
+        entry.resname = tokens[2];
+        entry.atom_B = tokens[3];
+        entry.atom_C = tokens[4];
+        entry.atom_ref = tokens[5];
+        if (!utils::string::from_string(entry.r, tokens[6]))
+            logging::die("BondedForceFieldReader: line %d: invalid r '%s'", static_cast<int>(line_id),
+                         tokens[6].c_str());
+        if (!utils::string::from_string(entry.theta_deg, tokens[7]))
+            logging::die("BondedForceFieldReader: line %d: invalid theta '%s'", static_cast<int>(line_id),
+                         tokens[7].c_str());
+        if (!utils::string::from_string(entry.delta_deg, tokens[8]))
+            logging::die("BondedForceFieldReader: line %d: invalid delta '%s'", static_cast<int>(line_id),
+                         tokens[8].c_str());
+        _ghostparticles.push_back(entry);
+    }
     else
     {
-        logging::die("BondedForceFieldReader: line %d: unknown entry type '%s' (expected STRETCH, BEND or DIHEDRAL)",
+        logging::die("BondedForceFieldReader: line %d: unknown entry type '%s' (expected STRETCH, BEND, "
+                     "GHOSTPARTICLE or DIHEDRAL)",
                      static_cast<int>(line_id), type.c_str());
     }
 }
@@ -112,8 +137,9 @@ void BondedForceFieldReader::read()
     }
     close();
 
-    logging::info("BondedForceFieldReader: read %zu stretching, %zu bending and %zu dihedral rule(s).",
-                  _stretch.size(), _bend.size(), _dihedral.size());
+    logging::info("BondedForceFieldReader: read %zu stretching, %zu bending, %zu ghost particle and %zu dihedral "
+                 "rule(s).",
+                 _stretch.size(), _bend.size(), _ghostparticles.size(), _dihedral.size());
 }
 
 std::vector<BondedForceFieldReader::ResidueParticleIndices>
@@ -250,6 +276,54 @@ bool BondedForceFieldReader::_existing_equilibrium(topology::Topology & topology
     return true;
 }
 
+unsigned BondedForceFieldReader::_create_ghost_particles(topology::Topology & topology,
+                                                          std::vector<ResidueParticleIndices> & residues,
+                                                          size_t index, const std::string & resname,
+                                                          const reduce::ReduceRuleContainer * translation) const
+{
+    unsigned nb_created = 0;
+    for (const GhostParticleEntry & entry : _ghostparticles)
+    {
+        if (entry.resname != resname)
+            continue;
+
+        topology::Particle * anchor_b = _resolve_atom(entry.atom_B, residues, index, topology, translation);
+        topology::Particle * anchor_c = _resolve_atom(entry.atom_C, residues, index, topology, translation);
+        topology::Particle * anchor_ref = _resolve_atom(entry.atom_ref, residues, index, topology, translation);
+        if (anchor_b == nullptr || anchor_c == nullptr || anchor_ref == nullptr)
+        {
+            logging::warning("BondedForceFieldReader: GHOSTPARTICLE %s %s has an unresolved anchor (%s/%s/%s), "
+                             "skipped.",
+                             resname.c_str(), entry.name.c_str(), entry.atom_B.c_str(), entry.atom_C.c_str(),
+                             entry.atom_ref.c_str());
+            continue;
+        }
+
+        // Belongs to the same residue the GHOSTPARTICLE rule matched
+        // (residues[index][0]'s own identity), not necessarily anchor_B's:
+        // a ghost's anchors may include a +/- cross-residue atom, but the
+        // ghost itself is a property of the residue the .bi.ff rule was
+        // written for.
+        const topology::ParticleProperties & residue_properties = topology.get_particle(residues[index][0]).properties();
+
+        topology::ParticleProperties properties;
+        properties.set_name(entry.name);
+        properties.set_residue_name(residue_properties.residue_name());
+        properties.set_chain_name(residue_properties.chain_name());
+        properties.set_residue_id(residue_properties.residue_id());
+        properties.set_static(true);
+        properties.set_mass(0.0f);
+
+        topology::Particle ghost_template(properties);
+        topology.add_ghost_particle(ghost_template, *anchor_b, *anchor_c, *anchor_ref, entry.r, entry.theta_deg,
+                                    entry.delta_deg);
+
+        residues[index].push_back(topology.number_of_particles() - 1);
+        nb_created++;
+    }
+    return nb_created;
+}
+
 void BondedForceFieldReader::_add_or_combine_dihedral_spring(topology::SpringCollection & collection,
                                                               topology::Particle & p1, topology::Particle & p2,
                                                               double equilibrium, double stiffness) const
@@ -313,16 +387,30 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                      "needs the real (AMBER) 1-2 bond lengths STRETCH provides; without them it would silently use "
                      "whichever arbitrary equilibrium --rigidbody happened to set instead, an inconsistent result.");
 
-    const std::vector<ResidueParticleIndices> residues = _group_particles_by_residue(topology);
+    // Non-const: _create_ghost_particles appends each newly-created ghost's
+    // index to residues[index] so later DIHEDRAL entries in the same
+    // residue can resolve it exactly like a real atom (see its own
+    // comment in the header).
+    std::vector<ResidueParticleIndices> residues = _group_particles_by_residue(topology);
 
     unsigned nb_stretch_applied = 0;
     unsigned nb_bend_applied = 0;
     unsigned nb_bend_skipped = 0;
     unsigned nb_dihedral_applied = 0;
+    unsigned nb_ghostparticles_created = 0;
+
+    // Only worth creating ghost particles at all if some dihedral family is
+    // actually enabled -- otherwise every DIHEDRAL entry that would use them
+    // is skipped anyway (see the family_enabled check below), and they'd
+    // just be dead, unused particles sitting in the topology.
+    const bool enableGhostParticles = enableDihedralBackbone || enableDihedralSidechain;
 
     for (size_t index = 0; index < residues.size(); index++)
     {
         const std::string resname = topology.get_particle(residues[index][0]).properties().residue_name();
+
+        if (enableGhostParticles)
+            nb_ghostparticles_created += _create_ghost_particles(topology, residues, index, resname, translation);
 
         if (enableStretch)
             for (const StretchEntry & entry : _stretch)
@@ -428,9 +516,9 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
         }
     }
 
-    logging::info("BondedForceFieldReader: applied %u stretching, %u bending and %u dihedral spring(s) (%u bending "
-                 "rule(s) skipped for missing STRETCH cross-reference).",
-                 nb_stretch_applied, nb_bend_applied, nb_dihedral_applied, nb_bend_skipped);
+    logging::info("BondedForceFieldReader: applied %u stretching, %u bending and %u dihedral spring(s), created %u "
+                 "ghost particle(s) (%u bending rule(s) skipped for missing STRETCH cross-reference).",
+                 nb_stretch_applied, nb_bend_applied, nb_dihedral_applied, nb_ghostparticles_created, nb_bend_skipped);
 }
 
 } // namespace rigidbodygroup

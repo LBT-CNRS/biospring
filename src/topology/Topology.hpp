@@ -1,6 +1,8 @@
 #ifndef __TOPOLOGY_TOPOLOGY_HPP__
 #define __TOPOLOGY_TOPOLOGY_HPP__
 
+#include <unordered_map>
+
 #include "Particle.hpp"
 #include "ParticleCollection.hpp"
 #include "Spring.hpp"
@@ -40,6 +42,29 @@ class Topology
     SpringCollection _dihedral_backbone_springs;
     SpringCollection _dihedral_sidechain_springs;
     SpringCollection _dihedral_planarity_springs;
+
+  public:
+    // Binds a ghost (massless virtual-site) Particle -- created by
+    // add_ghost_particle below, never 1:1 with a PDB atom -- to its 3 real
+    // anchor particles (by unique id, not by index: unlike SpringNetwork's
+    // particle vector, Topology's ParticleCollection can be reordered by
+    // remove_particle, so a uid-keyed lookup via ParticleCollection::at_uid
+    // stays correct even then) and its 3 calibrated placement parameters.
+    // See spn::GhostParticle for the placement/force-redistribution
+    // formulas this drives, applied once the topology is converted to a
+    // SpringNetwork (see to_spring_network below).
+    struct GhostParticleInfo
+    {
+        pid_t anchor_B_uid;
+        pid_t anchor_C_uid;
+        pid_t anchor_ref_uid;
+        double r;
+        double theta_deg;
+        double delta_deg;
+    };
+
+  protected:
+    std::unordered_map<pid_t, GhostParticleInfo> _ghost_particles;
 
   public:
     // =============================================================================
@@ -107,6 +132,31 @@ class Topology
     // Adds a collection of particles to the topology.
     template <typename container> void add_particles(const container & particles) { _particles.push_back(particles); }
     void add_particles(const std::initializer_list<Particle> & particles) { _particles.push_back(particles); }
+
+    // Adds a ghost (massless virtual-site) particle -- the first case
+    // where Topology creates a particle with no 1:1 PDB atom behind it.
+    // `particle` carries this ghost's own name/resname/residue_id/
+    // chain_name (typically copied from `anchor_B`'s, since a ghost
+    // conceptually belongs to the same residue as its anchors); its
+    // position is not set here (to_spring_network/BondedForceFieldReader
+    // compute it from the anchors via spn::GhostParticle::computePosition
+    // once all 3 anchors are known to actually be resolved). Returns the
+    // newly-added particle (with its own freshly-minted unique id, see
+    // Particle::copy()/ParticleCollection::push_back).
+    Particle & add_ghost_particle(const Particle & particle, const Particle & anchor_B, const Particle & anchor_C,
+                                  const Particle & anchor_ref, double r, double theta_deg, double delta_deg)
+    {
+        _particles.push_back(particle);
+        Particle & added = _particles[_particles.size() - 1];
+        _ghost_particles[added.unique_id()] =
+            GhostParticleInfo{anchor_B.unique_id(), anchor_C.unique_id(), anchor_ref.unique_id(), r, theta_deg,
+                              delta_deg};
+        return added;
+    }
+
+    bool is_ghost_particle(pid_t uid) const { return _ghost_particles.find(uid) != _ghost_particles.end(); }
+
+    const GhostParticleInfo & get_ghost_particle_info(pid_t uid) const { return _ghost_particles.at(uid); }
 
     // =============================================================================
     // Spring manipulation.
@@ -302,9 +352,26 @@ class Topology
         // Removes all springs and particles from the SpringNetwork.
         spn.clear();
 
-        // Copies particles.
+        // Copies particles. Ghost particles (see add_ghost_particle) are
+        // never copied via the regular spn::Particle path: their 3 anchors
+        // must already exist on the SpringNetwork side (true here, since
+        // they were always added earlier in `_particles` -- a ghost's
+        // anchors are real PDB atoms, always created before any ghost
+        // referencing them), so their spn-side indices are resolved via
+        // the same by_uid() lookup already used for springs below.
         for (const topology::Particle & source : _particles)
         {
+            if (is_ghost_particle(source.unique_id()))
+            {
+                const GhostParticleInfo & info = get_ghost_particle_info(source.unique_id());
+                const unsigned anchor_b_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_B_uid));
+                const unsigned anchor_c_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_C_uid));
+                const unsigned anchor_ref_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_ref_uid));
+                spn.addGhostParticle(anchor_b_index, anchor_c_index, anchor_ref_index, static_cast<float>(info.r),
+                                    static_cast<float>(info.theta_deg), static_cast<float>(info.delta_deg));
+                continue;
+            }
+
             spn::Particle target;
             target.setName(source.properties().name());
             target.setResName(source.properties().residue_name());

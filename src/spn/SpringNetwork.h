@@ -15,6 +15,7 @@
 #include "timeit.hpp"
 
 #include "Constraint.h"
+#include "GhostParticle.h"
 #include "InsertionVector.h"
 #include "interactor/Interactor.h"
 #include "Particle.h"
@@ -114,6 +115,7 @@ class SpringNetwork
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
           _dynamicsprings(), _dihedralbackbonesprings(), _dihedralsidechainsprings(), _dihedralplanaritysprings(),
+          _ghostparticles(),
           _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
           _hydrophobicPairScratch(), _hydrogenBondCoreRepulsionPairScratch(), _hydrogenBondPartner(),
           _hydrogenBondForceScratch(), _energies(), _nsearch(),
@@ -227,6 +229,36 @@ class SpringNetwork
 
     // Adds a particle to the network.
     void addParticle(const Particle & p);
+
+    // Adds a massless virtual-site ("ghost") particle to the network,
+    // bound to 3 already-added real anchor particles (by index -- see
+    // GhostParticle.h for why an index, not a pointer/reference, is used).
+    // Must be called during the same "add every particle" phase as
+    // addParticle (before any spring is added -- enforced the same way,
+    // via addParticle's own check), and anchorBIndex/anchorCIndex/
+    // anchorRefIndex must already refer to previously-added particles.
+    // Creates the ghost's own Particle entry (isStatic()=true, mass=0,
+    // initial position placed from the anchors' current positions) and
+    // returns its index. See redistributeGhostForces/updateGhostPositions
+    // for the two per-step operations this binding drives.
+    unsigned addGhostParticle(unsigned anchorBIndex, unsigned anchorCIndex, unsigned anchorRefIndex, float r,
+                              float theta_deg, float delta_deg);
+
+    // Redistributes every ghost particle's currently accumulated force
+    // (from ordinary spring force computation, e.g. a dihedral ghost
+    // spring between two ghost particles) onto its 3 anchors, then resets
+    // the ghost's own force to zero (it is static, so it never reaches
+    // updateParticlePositions's normal per-dynamic-particle resetForce()).
+    // Called once per step, right after computeForces().
+    void redistributeGhostForces();
+
+    // Recomputes every ghost particle's position from its 3 anchors'
+    // CURRENT positions. Called once per step, right after
+    // updateParticlePositions() (i.e. after the anchors themselves have
+    // been integrated).
+    void updateGhostPositions();
+
+    const std::vector<GhostParticleBinding> & getGhostParticles() const { return _ghostparticles; }
 
     void updateParticleState(unsigned id, bool isStatic);
     void addStaticParticle(unsigned id) { _staticparticules.push_back(id); }
@@ -487,6 +519,12 @@ class SpringNetwork
     std::vector<Spring> _dihedralbackbonesprings;
     std::vector<Spring> _dihedralsidechainsprings;
     std::vector<Spring> _dihedralplanaritysprings;
+
+    // Ghost (massless virtual-site) particle bindings -- see
+    // GhostParticle.h. Each entry's own Particle lives in _particles like
+    // any other (isStatic()=true, mass=0); this only records which 3
+    // anchor particles (by index) drive its position/force.
+    std::vector<GhostParticleBinding> _ghostparticles;
 
     // One force contribution per dynamic spring. Reused between steps to avoid
     // allocations in the simulation loop and to keep OpenMP writes disjoint.

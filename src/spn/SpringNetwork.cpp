@@ -355,14 +355,16 @@ void SpringNetwork::computeStep()
     _meanConstraintsDistances = 0.0;
 
     computeForces();
+    redistributeGhostForces();
 
     if (isConstraintEnabled())
         applyConstraints();
 
     if (isRigidBodyEnabled())
-        rigidbody::RigidBodiesManager::SolveRigidBodiesDynamic(); 
+        rigidbody::RigidBodiesManager::SolveRigidBodiesDynamic();
 
     updateParticlePositions();
+    updateGhostPositions();
 
     if (isInsertionVectorEnabled())
         _updateInsertionVector();
@@ -664,6 +666,56 @@ void SpringNetwork::addParticle(const Particle & source)
     _markNeighborSearchesDirty();
 }
 
+unsigned SpringNetwork::addGhostParticle(unsigned anchorBIndex, unsigned anchorCIndex, unsigned anchorRefIndex,
+                                         float r, float theta_deg, float delta_deg)
+{
+    const Vector3f position =
+        GhostParticle::computePosition(getParticle(anchorBIndex).getPosition(), getParticle(anchorCIndex).getPosition(),
+                                       getParticle(anchorRefIndex).getPosition(), r, theta_deg, delta_deg);
+
+    Particle p;
+    p.setPosition(position);
+    p.setStatic(true);
+    p.setMass(0.0f);
+    addParticle(p);
+
+    const unsigned ownIndex = static_cast<unsigned>(_particles.size() - 1);
+    _ghostparticles.push_back(GhostParticleBinding{ownIndex, anchorBIndex, anchorCIndex, anchorRefIndex, r, theta_deg,
+                                                   delta_deg});
+    return ownIndex;
+}
+
+void SpringNetwork::redistributeGhostForces()
+{
+    for (const GhostParticleBinding & binding : _ghostparticles)
+    {
+        Particle & ghost = getParticle(binding.ownIndex);
+        Particle & anchorB = getParticle(binding.anchorBIndex);
+        Particle & anchorC = getParticle(binding.anchorCIndex);
+        Particle & anchorRef = getParticle(binding.anchorRefIndex);
+
+        Vector3f F_B, F_C, F_Ref;
+        GhostParticle::redistributeForce(anchorB.getPosition(), anchorC.getPosition(), anchorRef.getPosition(),
+                                         binding.r, binding.theta_deg, binding.delta_deg, ghost.getForce(), F_B, F_C,
+                                         F_Ref);
+        anchorB.addForce(F_B);
+        anchorC.addForce(F_C);
+        anchorRef.addForce(F_Ref);
+        ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
+    }
+}
+
+void SpringNetwork::updateGhostPositions()
+{
+    for (const GhostParticleBinding & binding : _ghostparticles)
+    {
+        const Vector3f position = GhostParticle::computePosition(
+            getParticle(binding.anchorBIndex).getPosition(), getParticle(binding.anchorCIndex).getPosition(),
+            getParticle(binding.anchorRefIndex).getPosition(), binding.r, binding.theta_deg, binding.delta_deg);
+        getParticle(binding.ownIndex).setPosition(position);
+    }
+}
+
 void SpringNetwork::updateParticleState(unsigned id, bool isStatic) {
     if (isStatic) {
         removeDynamicParticle(id);
@@ -689,6 +741,7 @@ void SpringNetwork::clear()
     _dihedralbackbonesprings.clear();
     _dihedralsidechainsprings.clear();
     _dihedralplanaritysprings.clear();
+    _ghostparticles.clear();
     _springForceScratch.clear();
     _nsearch.steric.reset();
     _nsearch.electrostatic.reset();

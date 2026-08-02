@@ -184,6 +184,81 @@ TEST(Topology, to_spring_network)
     EXPECT_EQ(spn.getNumberOfSprings(), top.number_of_springs());
 }
 
+TEST(Topology, to_spring_network_with_ghost_particle)
+{
+    topology::Topology top;
+
+    topology::ParticleProperties propsB, propsC, propsRef;
+    propsB.set_name("B");
+    propsB.set_position(Vector3f(0.0, 0.0, 0.0));
+    propsC.set_name("C");
+    propsC.set_position(Vector3f(0.0, 0.0, 2.0));
+    propsRef.set_name("REF");
+    propsRef.set_position(Vector3f(1.0, 0.0, 0.0));
+
+    top.add_particle(topology::Particle(propsB));
+    top.add_particle(topology::Particle(propsC));
+    top.add_particle(topology::Particle(propsRef));
+
+    topology::ParticleProperties ghost_props;
+    ghost_props.set_name("GHOST");
+    ghost_props.set_static(true);
+    ghost_props.set_mass(0.0f);
+
+    const float r = 1.5f, theta_deg = 90.0f, delta_deg = 0.0f;
+    top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0), top.get_particle(1),
+                           top.get_particle(2), r, theta_deg, delta_deg);
+
+    ASSERT_EQ(top.number_of_particles(), 4);
+    EXPECT_TRUE(top.is_ghost_particle(top.get_particle(3).unique_id()));
+    EXPECT_FALSE(top.is_ghost_particle(top.get_particle(0).unique_id()));
+
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+
+    ASSERT_EQ(spn.getNumberOfParticles(), 4);
+    ASSERT_EQ(spn.getGhostParticles().size(), 1);
+
+    const spn::GhostParticleBinding & binding = spn.getGhostParticles()[0];
+    EXPECT_EQ(binding.ownIndex, 3u);
+    EXPECT_EQ(binding.anchorBIndex, 0u);
+    EXPECT_EQ(binding.anchorCIndex, 1u);
+    EXPECT_EQ(binding.anchorRefIndex, 2u);
+
+    const spn::Particle & ghost = spn.getParticle(3);
+    EXPECT_TRUE(ghost.isStatic());
+    EXPECT_FLOAT_EQ(ghost.getMass(), 0.0f);
+    // theta=90deg, delta=0 -> r straight along +x from B (same geometry as
+    // GhostParticle's own unit test), placed here through the full
+    // Topology -> SpringNetwork conversion instead of calling the
+    // placement formula directly.
+    EXPECT_NEAR(ghost.getPosition().getX(), r, 1e-4);
+    EXPECT_NEAR(ghost.getPosition().getY(), 0.0f, 1e-4);
+    EXPECT_NEAR(ghost.getPosition().getZ(), 0.0f, 1e-4);
+
+    // Force redistribution: push on the ghost, redistribute, check it
+    // landed on the 3 anchors and the ghost's own force was reset.
+    spn.getParticle(3).addForce(Vector3f(1.0f, 2.0f, 3.0f));
+    spn.redistributeGhostForces();
+
+    EXPECT_FLOAT_EQ(spn.getParticle(3).getForce().getX(), 0.0f);
+    EXPECT_FLOAT_EQ(spn.getParticle(3).getForce().getY(), 0.0f);
+    EXPECT_FLOAT_EQ(spn.getParticle(3).getForce().getZ(), 0.0f);
+
+    Vector3f total_redistributed =
+        spn.getParticle(0).getForce() + spn.getParticle(1).getForce() + spn.getParticle(2).getForce();
+    EXPECT_NEAR(total_redistributed.getX(), 1.0f, 1e-3);
+    EXPECT_NEAR(total_redistributed.getY(), 2.0f, 1e-3);
+    EXPECT_NEAR(total_redistributed.getZ(), 3.0f, 1e-3);
+
+    // Position tracking: move anchor C, update, check the ghost followed.
+    spn.getParticle(1).setPosition(Vector3f(0.0f, 0.0f, 5.0f));
+    spn.updateGhostPositions();
+    EXPECT_NEAR(spn.getParticle(3).getPosition().getX(), r, 1e-4);
+    EXPECT_NEAR(spn.getParticle(3).getPosition().getY(), 0.0f, 1e-4);
+    EXPECT_NEAR(spn.getParticle(3).getPosition().getZ(), 0.0f, 1e-4);
+}
+
 // -- Main function  ----------------------------------------------------------
 int main(int argc, char * argv[])
 {

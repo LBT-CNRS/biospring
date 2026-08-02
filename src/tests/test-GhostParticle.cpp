@@ -9,10 +9,8 @@
 #include <gtest/gtest.h>
 
 #include "spn/GhostParticle.h"
-#include "spn/Particle.h"
 
 using biospring::spn::GhostParticle;
-using biospring::spn::Particle;
 
 // =====================================================================================
 // computePosition places the virtual site at the expected distance from B
@@ -139,67 +137,26 @@ TEST(TestGhostParticle, redistributeForce_conserves_total_force)
 }
 
 // =====================================================================================
-// GhostParticle (as a Particle) is always static and massless, and
-// updatePositionFromAnchors()/redistributeForceToAnchors() route through
-// the same verified static formulas above.
-TEST(TestGhostParticle, is_always_static_and_massless)
+// Translation invariance: computePosition only ever depends on position
+// DIFFERENCES (C-B, Ref-B) plus an additive B, so rigidly translating all
+// 3 anchors must translate the placed virtual site by exactly the same
+// amount (this is also what makes the total-force conservation test above
+// hold, by Noether's theorem).
+TEST(TestGhostParticle, computePosition_is_translation_invariant)
 {
-    Particle B, C, Ref;
-    B.setPosition(Vector3f(0.0f, 0.0f, 0.0f));
-    C.setPosition(Vector3f(0.0f, 0.0f, 1.5f));
-    Ref.setPosition(Vector3f(1.0f, 0.0f, 0.0f));
+    Vector3f B(0.2f, 0.1f, -0.3f);
+    Vector3f C(1.5f, 0.4f, 0.8f);
+    Vector3f Ref(0.9f, -1.2f, 0.1f);
+    float r = 1.1f, theta_deg = 65.0f, delta_deg = 20.0f;
 
-    GhostParticle ghost(&B, &C, &Ref, 1.0f, 90.0f, 0.0f);
+    Vector3f X_before = GhostParticle::computePosition(B, C, Ref, r, theta_deg, delta_deg);
 
-    EXPECT_TRUE(ghost.isStatic());
-    EXPECT_FLOAT_EQ(ghost.getMass(), 0.0f);
-}
-
-TEST(TestGhostParticle, updatePositionFromAnchors_follows_moving_anchors)
-{
-    Particle B, C, Ref;
-    B.setPosition(Vector3f(0.0f, 0.0f, 0.0f));
-    C.setPosition(Vector3f(0.0f, 0.0f, 1.5f));
-    Ref.setPosition(Vector3f(1.0f, 0.0f, 0.0f));
-
-    GhostParticle ghost(&B, &C, &Ref, 1.0f, 90.0f, 0.0f);
-    Vector3f initial = ghost.getPosition();
-
-    // Move the whole local frame by a rigid translation: the ghost must
-    // follow exactly (translation invariance, see the conservation test
-    // above).
     Vector3f shift(2.0f, -1.0f, 0.5f);
-    B.setPosition(B.getPosition() + shift);
-    C.setPosition(C.getPosition() + shift);
-    Ref.setPosition(Ref.getPosition() + shift);
-    ghost.updatePositionFromAnchors();
+    Vector3f X_after =
+        GhostParticle::computePosition(B + shift, C + shift, Ref + shift, r, theta_deg, delta_deg);
 
-    Vector3f expected = initial + shift;
-    EXPECT_NEAR(ghost.getPosition().getX(), expected.getX(), 1e-4);
-    EXPECT_NEAR(ghost.getPosition().getY(), expected.getY(), 1e-4);
-    EXPECT_NEAR(ghost.getPosition().getZ(), expected.getZ(), 1e-4);
-}
-
-TEST(TestGhostParticle, redistributeForceToAnchors_zeroes_own_force)
-{
-    Particle B, C, Ref;
-    B.setPosition(Vector3f(0.2f, 0.1f, -0.3f));
-    C.setPosition(Vector3f(1.5f, 0.4f, 0.8f));
-    Ref.setPosition(Vector3f(0.9f, -1.2f, 0.1f));
-
-    GhostParticle ghost(&B, &C, &Ref, 1.1f, 65.0f, 20.0f);
-    ghost.addForce(Vector3f(1.0f, 2.0f, 3.0f));
-
-    ghost.redistributeForceToAnchors();
-
-    EXPECT_FLOAT_EQ(ghost.getForce().getX(), 0.0f);
-    EXPECT_FLOAT_EQ(ghost.getForce().getY(), 0.0f);
-    EXPECT_FLOAT_EQ(ghost.getForce().getZ(), 0.0f);
-
-    // Redistributed force must sum back to what was accumulated (same
-    // conservation property as the static test above).
-    Vector3f total = B.getForce() + C.getForce() + Ref.getForce();
-    EXPECT_NEAR(total.getX(), 1.0f, 1e-3);
-    EXPECT_NEAR(total.getY(), 2.0f, 1e-3);
-    EXPECT_NEAR(total.getZ(), 3.0f, 1e-3);
+    Vector3f expected = X_before + shift;
+    EXPECT_NEAR(X_after.getX(), expected.getX(), 1e-4);
+    EXPECT_NEAR(X_after.getY(), expected.getY(), 1e-4);
+    EXPECT_NEAR(X_after.getZ(), expected.getZ(), 1e-4);
 }

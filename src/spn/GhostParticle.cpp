@@ -167,16 +167,6 @@ LocalFrame computeLocalFrame(const Vector3f & B, const Vector3f & C, const Vecto
 
 } // namespace
 
-GhostParticle::GhostParticle(Particle * anchorB, Particle * anchorC, Particle * anchorRef, float r, float theta_deg,
-                             float delta_deg)
-    : Particle(), _anchorB(anchorB), _anchorC(anchorC), _anchorRef(anchorRef), _r(r), _theta_deg(theta_deg),
-      _delta_deg(delta_deg)
-{
-    setStatic(true);
-    setMass(0.0f);
-    updatePositionFromAnchors();
-}
-
 Vector3f GhostParticle::computePosition(const Vector3f & B, const Vector3f & C, const Vector3f & Ref, float r,
                                         float theta_deg, float delta_deg)
 {
@@ -220,23 +210,6 @@ void GhostParticle::redistributeForce(const Vector3f & B, const Vector3f & C, co
     F_B = JX_B.transpose() * force;
     F_C = JX_C.transpose() * force;
     F_Ref = JX_R.transpose() * force;
-}
-
-void GhostParticle::updatePositionFromAnchors()
-{
-    setPosition(computePosition(_anchorB->getPosition(), _anchorC->getPosition(), _anchorRef->getPosition(), _r,
-                                _theta_deg, _delta_deg));
-}
-
-void GhostParticle::redistributeForceToAnchors()
-{
-    Vector3f F_B, F_C, F_Ref;
-    redistributeForce(_anchorB->getPosition(), _anchorC->getPosition(), _anchorRef->getPosition(), _r, _theta_deg,
-                      _delta_deg, getForce(), F_B, F_C, F_Ref);
-    _anchorB->addForce(F_B);
-    _anchorC->addForce(F_C);
-    _anchorRef->addForce(F_Ref);
-    setForce(Vector3f(0.0f, 0.0f, 0.0f));
 }
 
 } // namespace spn
