@@ -434,59 +434,180 @@ def closed_form_d2(L, r1, theta1_deg, r2, theta2_deg, delta_deg, phi_deg):
     C2 = 2.0 * r1 * r2 * np.sin(t1) * np.sin(t2)
     return C1 - C2 * np.cos(p - d)
 
-def signed_projection(energy_over_phi_deg, n, phase_rad):
-    # Real, signed component along cos(n*phi-phase) -- preserves sign/phase
-    # alignment with AMBER's convention, so the linear solve below never
-    # silently produces an unphysical negative stiffness without being caught.
+def complex_fourier_coeff(energy_over_phi_deg, n):
+    # n=0 (DC/mean) needs a plain average, not the 2x-oscillation-amplitude
+    # normalization that's correct for n>=1 (cos^2 integrates to 1/2 over a
+    # period, a constant's own self-overlap integrates to 1 -- using the
+    # n>=1 formula for n=0 silently doubles the DC target/coefficient, an
+    # easy-to-miss bug found and fixed during the ghost-particle work, see
+    # doc/BondedForceFieldSprings.md).
     phi_rad = np.radians(PHI_GRID_DEG)
-    return (2.0 / len(phi_rad)) * float(np.sum(energy_over_phi_deg * np.cos(n * phi_rad - phase_rad)))
+    if n == 0:
+        return complex(np.mean(energy_over_phi_deg))
+    return (2.0 / len(phi_rad)) * np.sum(energy_over_phi_deg * np.exp(-1j * n * phi_rad))
 
-def group_energy(pairs, k, L_axis, use_min_d0):
-    total = np.zeros_like(PHI_GRID_DEG)
-    for (bn, cn, r1, t1, r2, t2, delta) in pairs:
-        d2v = closed_form_d2(L_axis, r1, t1, r2, t2, delta, PHI_GRID_DEG)
-        anchor_phi = delta if use_min_d0 else 180.0 + delta
-        d0 = np.sqrt(closed_form_d2(L_axis, r1, t1, r2, t2, delta, anchor_phi))
-        total += 0.5 * k * (np.sqrt(np.maximum(d2v, 0.0)) - d0) ** 2
-    return total
+# Deterministic, closed-form ghost-PARTICLE construction (see
+# doc/BondedForceFieldSprings.md, "particules fantômes"/ghost-particle
+# sections for the full derivation): replaces the earlier ghost-SPRING
+# method (fixed real-atom geometry, only k free, sometimes had no
+# non-negative-k solution for a multi-term real target) with springs
+# between fully-free virtual points, ANCHORED to real atoms only through
+# a 3-point placement (see spn::GhostParticle) -- r/theta/delta become
+# real degrees of freedom instead of a choice among a few fixed shapes.
+#
+# For a target harmonic n>=2, a ring of M=N=n ghost-ghost springs (same
+# base shape, evenly spaced by 360/n around the axis on each side) cancels
+# -- by an exact roots-of-unity argument, verified numerically -- every
+# harmonic that isn't a multiple of n, leaving a pure (up to a small,
+# quantified leakage into 2n, 3n...) contribution at exactly n. n=1 is a
+# special, EXACT case: a single ghost-ghost spring with d0=0 (zero rest
+# length) gives a provably pure n=1 harmonic with ZERO leakage into any
+# other harmonic (energy = 0.5*k*d(phi)^2, and d(phi)^2 is exactly
+# C1-C2*cos(phi-delta) by the closed_form_d2 identity above -- no sqrt
+# nonlinearity survives at d0=0) -- this is why n=1 uses mu=0 below, not a
+# leak-minimized (rho,mu) like n>=2.
+#
+# (rho, mu) for n=2,3 were found by maximizing the achievable
+# |a_n|/a0 ratio (the harmonic-to-DC-offset efficiency of one ring's own
+# base shape) subject to leakage into the first unwanted multiple (2n)
+# staying <=0.5% -- a small, one-time 2D grid search over the ABSTRACT
+# shape function sqrt(1-rho*cos(x)), independent of any specific axis or
+# residue (verified: reused identically across all 70 axes below).
+RING_SHAPES = {1: (0.5, 0.0), 2: (0.245, 1.0), 3: (0.465, 1.0)}
+
+def ring_shape_to_geometry(L_axis, n):
+    rho, mu = RING_SHAPES[n]
+    r = np.sqrt(rho / (2.0 * (1.0 - rho))) * L_axis
+    R = np.sqrt(2.0 * r * r + L_axis * L_axis)
+    d0 = mu * R
+    return r, d0
+
+def ring_curve_abstract(L_axis, n, r, d0, k, delta_base, phi_grid_deg):
+    # The 1D Fourier-space model used to CALIBRATE k/delta_base (see
+    # calibrate_ring) -- exactly the M=N=n comb-filter sum, evaluated over
+    # an abstract phi grid. NOT the real 3D placement (see emit_ghost_ring
+    # for that, and its header comment for the sign convention linking the
+    # two -- verified by direct 3D simulation against a real axis before
+    # being trusted here, see doc/BondedForceFieldSprings.md).
+    e = np.zeros_like(phi_grid_deg)
+    for i in range(n):
+        beta = i * 360.0 / n
+        for j in range(n):
+            gamma = j * 360.0 / n
+            delta_ij = delta_base + beta - gamma
+            d2v = closed_form_d2(L_axis, r, 90.0, r, 90.0, delta_ij, phi_grid_deg)
+            d = np.sqrt(np.maximum(d2v, 0.0))
+            e += 0.5 * k * (d - d0) ** 2
+    return e
+
+def calibrate_ring(L_axis, n, r, d0, target_complex):
+    # Energy is exactly linear in k at fixed geometry (see
+    # doc/BondedForceFieldSprings.md, step 3 of the closed-form derivation)
+    # -- one evaluation at k=1 gives the ring's own harmonic-n Fourier
+    # coefficient (magnitude AND phase), from which k (magnitude match) and
+    # delta_base (phase match) solve directly, no iteration.
+    e0 = ring_curve_abstract(L_axis, n, r, d0, 1.0, 0.0, PHI_GRID_DEG)
+    z0 = complex_fourier_coeff(e0, n)
+    phase_needed = np.angle(target_complex) - np.angle(z0)
+    # Rotating delta_base by D shifts the ring's own harmonic-n phase by
+    # -n*D, not +n*D (verified numerically -- an easy sign error, since the
+    # naive expectation is +n*D). Using the wrong sign gives the complex
+    # CONJUGATE of the target: invisible for a purely-real target (chi1's
+    # single-term case) but ~45-60% wrong for any axis with a genuinely
+    # complex target (phi/psi, chi2's 3-term case).
+    delta_base_deg = np.degrees(-phase_needed / n)
+    k = abs(target_complex) / abs(z0)
+    return k, delta_base_deg
 
 n_dihedral_ok = 0
 n_dihedral_skip = 0
+n_ghost_particles = 0
 dihedral_lines = []
+ghostparticle_lines = []
 
-def solve_term(pairs, n, k_amber, phase_rad, L_axis, label):
-    """Exact linear solve (Step 3 of the derivation) of the one shared
-    stiffness that makes this group of ghost-spring pairs reproduce AMBER's
-    real k for this one Fourier term, trying both d0 conventions (see
-    doc/BondedForceFieldSprings.md). Returns (k_solved, use_min_d0,
-    reproduced, residual) or None if neither d0 convention gives a
-    physical (positive-k) solution."""
-    global n_dihedral_skip
-    e_max = group_energy(pairs, 1.0, L_axis, use_min_d0=False)
-    proj_max = signed_projection(e_max, n, phase_rad)
-    use_min_d0, proj = False, proj_max
-    if proj_max <= 0:
-        e_min = group_energy(pairs, 1.0, L_axis, use_min_d0=True)
-        proj_min = signed_projection(e_min, n, phase_rad)
-        if proj_min > 0:
-            use_min_d0, proj = True, proj_min
-        else:
-            print(f"SKIP DIHEDRAL term ({label} n={n}): no physical (positive-k) solution "
-                 f"with either d0 convention -- projections {proj_max:.4g}/{proj_min:.4g}")
-            n_dihedral_skip += 1
-            return None
+def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom_B, atom_C, atom_ref_b, atom_ref_c):
+    """Emits one full ring group (M=N=n ghost-ghost springs) reproducing
+    one target Fourier harmonic exactly (up to the small, bounded leakage
+    quantified in RING_SHAPES's own derivation). atom_B/atom_C are the
+    real dihedral axis atoms (already +/- resolved); atom_ref_b/atom_ref_c
+    are each side's own real reference atom (fixes what "azimuth=0" means
+    for that side -- must be the SAME atoms used to measure the target's
+    own phase convention, i.e. b_neighbors[0]/c_neighbors[0], see
+    combined_target_for_axis).
 
-    k_solved = k_amber / proj
-    e_final = group_energy(pairs, k_solved, L_axis, use_min_d0)
-    reproduced = signed_projection(e_final, n, phase_rad)
-    fft_final = np.fft.rfft(e_final) / len(e_final)
-    residual = {m: round(2.0 * abs(fft_final[m]), 4)
-               for m in range(1, 4 * max(n, 1) + 1)
-               if m != n and 2.0 * abs(fft_final[m]) > 0.005 * abs(reproduced)}
-    print(f"DIHEDRAL {label} n={n} phase={np.degrees(phase_rad):.0f}deg "
-         f"AMBER_k={k_amber:.4f} solved_k={k_solved:.4f} d0={'min' if use_min_d0 else 'max'} "
-         f"reproduced={reproduced:.4f} residual(>0.5%)={residual}")
-    return k_solved, use_min_d0
+    Placement/sign convention (verified by a full 3D rotating simulation
+    against a real axis before being trusted here -- see
+    doc/BondedForceFieldSprings.md): a b-side ghost i sits at azimuth
+    i*360/n (measured from atom_B, relative to atom_ref_b, via
+    spn::GhostParticle::computePosition(atom_B, atom_C, atom_ref_b, ...)).
+    A c-side ghost j sits at azimuth delta_base - j*360/n (note the
+    MINUS -- placed via computePosition(atom_C, atom_B, atom_ref_c, ...),
+    i.e. B/C swapped since the c-side ghost's own axis direction points
+    the other way). This combination reproduces exactly the SAME abstract
+    delta_ij = delta_base + beta_i - gamma_j used to calibrate k/delta_base
+    in Fourier space above -- get either the swap or the minus sign wrong
+    and the real 3D energy has the wrong phase relative to the molecule's
+    true dihedral angle, silently, without any local check catching it.
+    """
+    global n_dihedral_ok, n_ghost_particles
+
+    r, d0 = ring_shape_to_geometry(L_axis, n)
+    k, delta_base = calibrate_ring(L_axis, n, r, d0, target_complex)
+
+    b_names, c_names = [], []
+    for i in range(n):
+        name = f"GH{axis_label}n{n}B{i}"
+        beta = i * 360.0 / n
+        ghostparticle_lines.append(
+            f"GHOSTPARTICLE {name:16s} {resname:7s} {atom_B:5s} {atom_C:6s} {atom_ref_b:6s} "
+            f"{r:7.4f} {90.0:7.2f} {beta:9.3f}")
+        b_names.append(name)
+        n_ghost_particles += 1
+    for j in range(n):
+        name = f"GH{axis_label}n{n}C{j}"
+        gamma = delta_base - j * 360.0 / n
+        ghostparticle_lines.append(
+            f"GHOSTPARTICLE {name:16s} {resname:7s} {atom_C:5s} {atom_B:6s} {atom_ref_c:6s} "
+            f"{r:7.4f} {90.0:7.2f} {gamma:9.3f}")
+        c_names.append(name)
+        n_ghost_particles += 1
+
+    for bn in b_names:
+        for cn in c_names:
+            rule_name = f"{resname}_{axis_label}_n{n}_{bn[-1]}{cn[-1]}"
+            dihedral_lines.append(
+                f"DIHEDRAL {rule_name:28s} {resname:7s} {family:9s} {bn:16s} {cn:17s} "
+                f"{d0:7.4f} {k:10.4f}")
+            n_dihedral_ok += 1
+
+def combined_target_for_axis(b_geom, c_geom, b_class, c_class, class_of):
+    """b_geom/c_geom: {atom: (r, theta, delta_deg)} for each side's real
+    substituents (delta already phase-corrected relative to that side's
+    own reference atom, i.e. b_neighbors[0]/c_neighbors[0] -- ref_phi
+    itself cancels out of the pairwise delta and is never needed, see
+    doc/BondedForceFieldSprings.md). class_of(atom) resolves an atom to
+    its AMBER class. Tries each real substituent pair's specific AMBER
+    entry first, falls back to the axis's generic wildcard (matches
+    amber99sb.xml's own matching order) -- a pair whose specific entry
+    exists but carries k=0 for every periodicity (a genuine AMBER zero,
+    e.g. chi2 for Asp/His/Phe/Tyr, chi3 for Glu, chi4 for Arg, chi2 for
+    Trp -- all confirmed by direct XML inspection) correctly contributes
+    nothing, not a gap."""
+    target = {0: 0j}
+    any_term = False
+    for bn, (r1, t1, d1) in b_geom.items():
+        for cn, (r2, t2, d2) in c_geom.items():
+            terms = lookup_torsion_specific(class_of(bn), b_class, c_class, class_of(cn))
+            if terms is None:
+                terms = lookup_torsion_wildcard(b_class, c_class)
+            if terms is None:
+                continue
+            any_term = True
+            delta_pair_rad = np.radians(d2 - d1)
+            for (n, k, phase) in terms:
+                target[n] = target.get(n, 0j) + k * np.exp(-1j * phase) * np.exp(1j * n * delta_pair_rad)
+                target[0] += k
+    return target if any_term else None
 
 def generate_sidechain_axis(resname, b_name, c_name, axis_label):
     global n_dihedral_ok, n_dihedral_skip
@@ -494,12 +615,6 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label):
     b_class = resolved_class(resname, b_name, False, False)
     c_class = resolved_class(resname, c_name, False, False)
     L_axis = bond_len_A(b_class, c_class)
-
-    terms = lookup_torsion_wildcard(b_class, c_class)
-    if terms is None:
-        print(f"SKIP DIHEDRAL ({resname} {axis_label}): no generic X-{b_class}-{c_class}-X torsion entry")
-        n_dihedral_skip += 1
-        return
 
     b_neighbors = real_bond_neighbors(resname, b_name, c_name)
     c_neighbors = real_bond_neighbors(resname, c_name, b_name)
@@ -529,24 +644,18 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label):
     b_geom = side_geom(b_neighbors, b_class, c_class, b_ref, True)
     c_geom = side_geom(c_neighbors, c_class, b_class, c_ref, False)
 
-    pairs = [(bn, cn, r1, t1, r2, t2, d2 - d1)
-             for bn, (r1, t1, d1) in b_geom.items()
-             for cn, (r2, t2, d2) in c_geom.items()]
+    class_of = lambda n: resolved_class(resname, n, False, False)
+    target = combined_target_for_axis(b_geom, c_geom, b_class, c_class, class_of)
+    if target is None:
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}): no real substituent pair matches a "
+             f"specific AMBER entry and no generic wildcard either")
+        n_dihedral_skip += 1
+        return
 
-    for (n, k_amber, phase_rad) in terms:
-        solved = solve_term(pairs, n, k_amber, phase_rad, L_axis, f"{resname} {axis_label}")
-        if solved is None:
+    for n, zt in target.items():
+        if n == 0 or abs(zt) < 1e-6:
             continue
-        k_solved, use_min_d0 = solved
-
-        for (bn, cn, r1, t1, r2, t2, delta) in pairs:
-            anchor_phi = delta if use_min_d0 else 180.0 + delta
-            d0 = np.sqrt(closed_form_d2(L_axis, r1, t1, r2, t2, delta, anchor_phi))
-            rule_name = f"{resname}_{axis_label}_{bn}_{cn}_n{n}"
-            dihedral_lines.append(
-                f"DIHEDRAL {rule_name:28s} {resname:7s} SIDECHAIN {bn:5s} {cn:6s} "
-                f"{d0:7.4f} {k_solved:10.4f}")
-            n_dihedral_ok += 1
+        emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, zt, b_name, c_name, b_ref, c_ref)
 
 # chi1 axis (CA-CB): every one of ubiquitin's 18 residue types that has a
 # real, freely-rotating first side-chain torsion. Excluded: GLY (no CB),
@@ -575,6 +684,118 @@ CHI2_AXIS = {"ARG": "CG", "GLN": "CG", "GLU": "CG", "ILE": "CG1", "LEU": "CG",
              "PHE": "CG", "TYR": "CG"}
 for _resname, _c_name in CHI2_AXIS.items():
     generate_sidechain_axis(_resname, "CB", _c_name, "chi2")
+
+# chi3 (CG-CD, or CG-SD for Met's thioether) and chi4 (CD-NE for Arg,
+# CD-CE for Lys): only the residues whose side chain actually continues
+# that far. No new matching logic needed -- same generate_sidechain_axis,
+# just further down each chain.
+CHI3_AXIS = {"ARG": ("CG", "CD"), "GLN": ("CG", "CD"), "GLU": ("CG", "CD"),
+            "LYS": ("CG", "CD"), "MET": ("CG", "SD")}
+for _resname, (_b_name, _c_name) in CHI3_AXIS.items():
+    generate_sidechain_axis(_resname, _b_name, _c_name, "chi3")
+
+CHI4_AXIS = {"ARG": ("CD", "NE"), "LYS": ("CD", "CE")}
+for _resname, (_b_name, _c_name) in CHI4_AXIS.items():
+    generate_sidechain_axis(_resname, _b_name, _c_name, "chi4")
+
+# Cys/Trp chi1 (and Trp chi2): ubiquitin.pdb has neither residue at all
+# (not even a terminal instance, unlike Met) -- sourced from a second real
+# structure, example/001_GKinase/model.pdb, which has both. This is
+# needed only for chi (side-chain-specific geometry, genuinely different
+# per residue) -- NOT for phi/psi, whose N/CA/C/CB pattern is generic and
+# already covered by reusing Leu below (see the backbone section).
+GKINASE_PDB = os.path.join(REPO_ROOT, "example/001_GKinase/model.pdb")
+# This PDB names hydrogens with the leading-digit convention (1HB, 2HB),
+# not AMBER's trailing-digit one (HB2, HB3) -- standard_names=True lets
+# mdtraj normalize them, unlike ubiquitin.pdb above which is already in
+# the AMBER convention and uses standard_names=False to avoid any
+# reduction-name remapping surprises.
+_gk_top = md.load_topology(GKINASE_PDB, standard_names=True)
+_gk_residues = list(_gk_top.residues)
+_gk_n_res = len(_gk_residues)
+_gk_bonds = list(_gk_top.bonds)
+_gk_traj = md.load(GKINASE_PDB, standard_names=True)
+_gk_residue_instance_cache = {}
+
+def _gk_residue_instance(resname):
+    if resname not in _gk_residue_instance_cache:
+        interior = [r for r in _gk_residues if r.name == resname and 0 < r.index < _gk_n_res - 1]
+        candidates = interior or [r for r in _gk_residues if r.name == resname]
+        _gk_residue_instance_cache[resname] = candidates[0]
+    return _gk_residue_instance_cache[resname]
+
+def _gk_real_bond_neighbors(resname, vertex_name, exclude_name):
+    res = _gk_residue_instance(resname)
+    out = []
+    for a1, a2 in _gk_bonds:
+        if a1.residue.index != res.index or a2.residue.index != res.index:
+            continue
+        if a1.name == vertex_name and a2.name != exclude_name:
+            out.append(a2.name)
+        elif a2.name == vertex_name and a1.name != exclude_name:
+            out.append(a1.name)
+    return out
+
+def _gk_real_dihedral_deg(resname, n1, n2, n3, n4):
+    res = _gk_residue_instance(resname)
+    atoms_by_name = {a.name: a for a in res.atoms}
+    idx = [[atoms_by_name[n].index for n in (n1, n2, n3, n4)]]
+    return float(np.degrees(md.compute_dihedrals(_gk_traj, idx)[0, 0]))
+
+def generate_sidechain_axis_gkinase(resname, b_name, c_name, axis_label):
+    global n_dihedral_ok, n_dihedral_skip
+
+    b_class = resolved_class(resname, b_name, False, False)
+    c_class = resolved_class(resname, c_name, False, False)
+    L_axis = bond_len_A(b_class, c_class)
+
+    b_neighbors = _gk_real_bond_neighbors(resname, b_name, c_name)
+    c_neighbors = _gk_real_bond_neighbors(resname, c_name, b_name)
+    if not b_neighbors or not c_neighbors:
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}, GKinase): axis {b_name}-{c_name} has no "
+             f"real substituent on one side")
+        n_dihedral_skip += 1
+        return
+    b_ref, c_ref = b_neighbors[0], c_neighbors[0]
+    ref_phi = _gk_real_dihedral_deg(resname, b_ref, b_name, c_name, c_ref)
+
+    def side_geom(neighbors, vertex_class, other_class, ref_name, is_b_side):
+        geom = {}
+        for n in neighbors:
+            nc = resolved_class(resname, n, False, False)
+            r = bond_len_A(nc, vertex_class)
+            theta = valence_deg(vertex_class, nc, other_class)
+            if n == ref_name:
+                phi_meas = ref_phi
+            elif is_b_side:
+                phi_meas = _gk_real_dihedral_deg(resname, n, b_name, c_name, c_ref)
+            else:
+                phi_meas = _gk_real_dihedral_deg(resname, b_ref, b_name, c_name, n)
+            geom[n] = (r, theta, phi_meas - ref_phi)
+        return geom
+
+    b_geom = side_geom(b_neighbors, b_class, c_class, b_ref, True)
+    c_geom = side_geom(c_neighbors, c_class, b_class, c_ref, False)
+
+    class_of = lambda n: resolved_class(resname, n, False, False)
+    target = combined_target_for_axis(b_geom, c_geom, b_class, c_class, class_of)
+    if target is None:
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}, GKinase): no real substituent pair "
+             f"matches a specific AMBER entry and no generic wildcard either -- confirmed genuine "
+             f"AMBER zero-barrier torsion, not a gap")
+        n_dihedral_skip += 1
+        return
+
+    for n, zt in target.items():
+        if n == 0 or abs(zt) < 1e-6:
+            continue
+        emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, zt, b_name, c_name, b_ref, c_ref)
+
+generate_sidechain_axis_gkinase("CYS", "CA", "CB", "chi1")
+generate_sidechain_axis_gkinase("TRP", "CA", "CB", "chi1")
+generate_sidechain_axis_gkinase("TRP", "CB", "CG", "chi2")  # expected to correctly SKIP (aromatic
+                                                            # ring, same zero-barrier family as
+                                                            # Phe/Tyr/His chi2)
 
 # ===========================================================================
 # DIHEDRAL BACKBONE: phi (N-CA axis) and psi (CA-C axis). CMAP checked and
@@ -606,13 +827,23 @@ def real_dihedral_deg_atoms(a1, a2, a3, a4):
 def bb_atom_class(a):
     return resolved_class(a.residue.name, a.name, a.residue.index == 0, a.residue.index == n_res - 1)
 
-def generate_backbone_axis(resname, b_name, c_name, axis_label):
+def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=None):
+    """source_resname: sources the real 3D geometry (which substituents,
+    their bond lengths/angles/relative azimuths) from a DIFFERENT
+    residue's real ubiquitin instance instead of `resname`'s own -- valid
+    because phi/psi's N/CA/C/CB pattern never depends on anything past CB
+    (verified: Met's own target is bit-identical to Leu's sourced this
+    way), used for Met/Cys/Trp, none of which has a usable non-terminal
+    real instance of their own in ubiquitin.pdb. AMBER classes are always
+    resolved via `resname` itself (a class-based lookup needs no real
+    instance at all, so this is correct regardless of source_resname)."""
     global n_dihedral_ok, n_dihedral_skip
 
-    res = _residue_instance(resname)
+    geom_resname = source_resname or resname
+    res = _residue_instance(geom_resname)
     if res.index == 0 or res.index == n_res - 1:
         print(f"SKIP DIHEDRAL BACKBONE ({resname} {axis_label}): only real ubiquitin instance "
-             f"of this residue is a chain terminus, no real neighbouring residue to source from")
+             f"of {geom_resname} is a chain terminus, no real neighbouring residue to source from")
         n_dihedral_skip += 1
         return
 
@@ -645,51 +876,45 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label):
     c_geom = {a: (bond_len_A(bb_atom_class(a), c_class), valence_deg(c_class, bb_atom_class(a), b_class),
                  delta_of(a, False)) for a in c_neighbors}
 
-    n_pairs_matched = 0
-    for bn_atom, (r1, t1, d1) in b_geom.items():
-        for cn_atom, (r2, t2, d2) in c_geom.items():
-            terms = lookup_torsion_specific(bb_atom_class(bn_atom), b_class, c_class, bb_atom_class(cn_atom))
-            if terms is None:
-                continue  # correctly zero: falls on the null wildcard, not a gap
-            n_pairs_matched += 1
-            delta = d2 - d1
-            pair = [(0, 0, r1, t1, r2, t2, delta)]
-            _, rule_bn = rel_name(b_atom, bn_atom)
-            _, rule_cn = rel_name(c_atom, cn_atom)
-            plain_bn, plain_cn = rule_bn.lstrip("+-"), rule_cn.lstrip("+-")
-
-            for (n, k_amber, phase_rad) in terms:
-                solved = solve_term(pair, n, k_amber, phase_rad, L_axis,
-                                    f"BACKBONE {resname} {axis_label} {plain_bn}-{plain_cn}")
-                if solved is None:
-                    continue
-                k_solved, use_min_d0 = solved
-
-                anchor_phi = delta if use_min_d0 else 180.0 + delta
-                d0 = np.sqrt(closed_form_d2(L_axis, r1, t1, r2, t2, delta, anchor_phi))
-                rule_name = f"{resname}_{axis_label}_{plain_bn}_{plain_cn}_n{n}"
-                dihedral_lines.append(
-                    f"DIHEDRAL {rule_name:28s} {resname:7s} BACKBONE {rule_bn:5s} {rule_cn:6s} "
-                    f"{d0:7.4f} {k_solved:10.4f}")
-                n_dihedral_ok += 1
-
-    if n_pairs_matched == 0:
+    target = combined_target_for_axis(b_geom, c_geom, b_class, c_class, bb_atom_class)
+    if target is None:
         print(f"SKIP DIHEDRAL BACKBONE ({resname} {axis_label}): no real substituent pair matches "
              f"a specific AMBER Proper entry (all fall on the null wildcard)")
         n_dihedral_skip += 1
+        return
 
-# All 18 residue types found in ubiquitin.pdb; generate_backbone_axis itself
-# skips (and reports) any residue whose only real instance is a true chain
-# terminus (Met1 here -- the only residue type with no other occurrence).
+    _, rule_b_ref = rel_name(b_atom, ref_b)
+    _, rule_c_ref = rel_name(c_atom, ref_c)
+
+    for n, zt in target.items():
+        if n == 0 or abs(zt) < 1e-6:
+            continue
+        emit_ghost_ring(resname, axis_label, "BACKBONE", n, L_axis, zt, b_name, c_name, rule_b_ref, rule_c_ref)
+
+# All 18 residue types found in ubiquitin.pdb, plus Cys/Trp (also generic-
+# sourced from Leu -- ubiquitin has neither at all, not even a terminal
+# instance like Met). Met/Cys/Trp all source their real geometry from Leu
+# (confirmed identical target either way -- the N/CA/C/CB pattern doesn't
+# depend on anything past CB); every other residue uses its own real
+# instance directly.
 BACKBONE_RESIDUES = sorted({r.name for r in residues})
-for _resname in BACKBONE_RESIDUES:
-    generate_backbone_axis(_resname, "N", "CA", "phi")
-    generate_backbone_axis(_resname, "CA", "C", "psi")
+GENERIC_BACKBONE_SOURCE = {"MET": "LEU", "CYS": "LEU", "TRP": "LEU"}
+for _resname in BACKBONE_RESIDUES + ["CYS", "TRP"]:
+    _source = GENERIC_BACKBONE_SOURCE.get(_resname)
+    generate_backbone_axis(_resname, "N", "CA", "phi", source_resname=_source)
+    generate_backbone_axis(_resname, "CA", "C", "psi", source_resname=_source)
 
 lines.append("#")
-lines.append("# DIHEDRAL (proper): ghost springs reproducing each covered residue's")
-lines.append("# chi1/chi2 (family SIDECHAIN) and phi/psi (family BACKBONE) generic")
-lines.append("# rotation terms, see doc/BondedForceFieldSprings.md Section 3.2.")
+lines.append("# GHOSTPARTICLE: massless virtual sites (see spn::GhostParticle), placed")
+lines.append("# algebraically from 3 real anchor atoms. One M=N=n ring (2n particles)")
+lines.append("# per real AMBER Fourier harmonic n of each covered axis -- see")
+lines.append("# doc/BondedForceFieldSprings.md for the closed-form derivation.")
+lines.append("#    type          name             resname atom_B atom_C atom_ref     r_A   theta_deg delta_deg")
+lines.extend(ghostparticle_lines)
+lines.append("#")
+lines.append("# DIHEDRAL (proper): ghost-ghost springs, one ring group per real AMBER")
+lines.append("# Fourier harmonic of each covered chi1-4 (family SIDECHAIN) and phi/psi")
+lines.append("# (family BACKBONE) axis -- see doc/BondedForceFieldSprings.md.")
 lines.append("#    type     name                       resname family    atom_ref atom_rotant  d0_A       k")
 lines.extend(dihedral_lines)
 
@@ -783,5 +1008,5 @@ if os.path.exists(FS_PEPTIDE_PDB):
 with open(OUT, "w") as f:
     f.write("\n".join(lines) + "\n")
 
-print(f"\nWrote {n_ok} unique STRETCH/BEND entries ({n_skip} skipped) and "
-     f"{n_dihedral_ok} DIHEDRAL entries ({n_dihedral_skip} skipped) to {OUT}")
+print(f"\nWrote {n_ok} unique STRETCH/BEND entries ({n_skip} skipped), {n_ghost_particles} "
+     f"GHOSTPARTICLE entries and {n_dihedral_ok} DIHEDRAL entries ({n_dihedral_skip} skipped) to {OUT}")

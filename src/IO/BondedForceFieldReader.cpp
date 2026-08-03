@@ -374,6 +374,22 @@ void BondedForceFieldReader::_retune_or_add_spring(topology::Topology & topology
     }
 }
 
+size_t BondedForceFieldReader::countExpectedGhostParticles(const topology::Topology & topology) const
+{
+    const std::vector<ResidueParticleIndices> residues = _group_particles_by_residue(topology);
+    size_t count = 0;
+    for (const ResidueParticleIndices & residue : residues)
+    {
+        if (residue.empty())
+            continue;
+        const std::string resname = topology.get_particle(residue[0]).properties().residue_name();
+        for (const GhostParticleEntry & entry : _ghostparticles)
+            if (entry.resname == resname)
+                count++;
+    }
+    return count;
+}
+
 void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                                           const reduce::ReduceRuleContainer * translation, bool enableStretch,
                                           bool enableBend, bool enableDihedralBackbone,

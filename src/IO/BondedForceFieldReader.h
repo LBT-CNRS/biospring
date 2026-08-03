@@ -191,6 +191,20 @@ class BondedForceFieldReader : public ReaderBase
                       bool enableStretch, bool enableBend, bool enableDihedralBackbone,
                       bool enableDihedralSidechain) const;
 
+    // Upper bound on how many ghost particles buildSprings will create for
+    // `topology` (a residue-name match only, not a full anchor resolution
+    // -- some may still be skipped for an unresolved anchor, e.g. a
+    // chain-terminus residue, so this can overcount, never undercount).
+    // MUST be called (and the result reserved via
+    // Topology::reserve_particles) before any spring exists anywhere in
+    // `topology` -- see Topology::reserve_particles's own comment for why:
+    // ghost particle creation grows the particle vector, and any
+    // reallocation silently invalidates every Spring's Particle&
+    // reference created so far (that includes --rigidbody's springs,
+    // built before -bondedinteraction ever runs -- see pdb2spn-cli.cpp's
+    // call site, placed before RigidBodyBuilder for exactly this reason).
+    size_t countExpectedGhostParticles(const topology::Topology & topology) const;
+
   protected:
     std::vector<StretchEntry> _stretch;
     std::vector<BendEntry> _bend;

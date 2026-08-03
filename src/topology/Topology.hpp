@@ -133,6 +133,21 @@ class Topology
     template <typename container> void add_particles(const container & particles) { _particles.push_back(particles); }
     void add_particles(const std::initializer_list<Particle> & particles) { _particles.push_back(particles); }
 
+    // Reserves capacity for at least `n` particles. MUST be called before
+    // any Spring exists that references a particle already in this
+    // topology: Spring stores Particle& (a real C++ reference, not an
+    // index), so growing the underlying vector past its current capacity
+    // reallocates its buffer and silently turns every such reference into
+    // a dangling one (read back as garbage -- huge unique_id, empty name
+    // -- the exact failure mode found and fixed by adding this call
+    // before ghost-particle creation, see BondedForceFieldReader and
+    // pdb2spn-cli.cpp's call site, which reserves before --rigidbody ever
+    // runs). A plain add_particle/add_ghost_particle call is NOT enough
+    // on its own to avoid this: reserving capacity upfront is the only
+    // fix, since the reference-based design means no reallocation may
+    // ever happen once a Spring exists.
+    void reserve_particles(size_t n) { _particles.data().reserve(n); }
+
     // Adds a ghost (massless virtual-site) particle -- the first case
     // where Topology creates a particle with no 1:1 PDB atom behind it.
     // `particle` carries this ghost's own name/resname/residue_id/

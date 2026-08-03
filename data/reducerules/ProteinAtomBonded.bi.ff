@@ -855,375 +855,1586 @@ BEND HIS_CE1_ND1_HD1      HIS     CE1   ND1   HD1    120.000   418.4000
 BEND HIS_CG_ND1_HD1       HIS     CG    ND1   HD1    120.000   418.4000
 BEND GLY_CA_C_OXT         GLY     CA    C     OXT    117.000   585.7600
 #
-# DIHEDRAL (proper): ghost springs reproducing each covered residue's
-# chi1/chi2 (family SIDECHAIN) and phi/psi (family BACKBONE) generic
-# rotation terms, see doc/BondedForceFieldSprings.md Section 3.2.
+# GHOSTPARTICLE: massless virtual sites (see spn::GhostParticle), placed
+# algebraically from 3 real anchor atoms. One M=N=n ring (2n particles)
+# per real AMBER Fourier harmonic n of each covered axis -- see
+# doc/BondedForceFieldSprings.md for the closed-form derivation.
+#    type          name             resname atom_B atom_C atom_ref     r_A   theta_deg delta_deg
+GHOSTPARTICLE GHchi1n3B0       ARG     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       ARG     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       ARG     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       ARG     CB    CA     CG      1.0060   90.00     0.719
+GHOSTPARTICLE GHchi1n3C1       ARG     CB    CA     CG      1.0060   90.00  -119.281
+GHOSTPARTICLE GHchi1n3C2       ARG     CB    CA     CG      1.0060   90.00  -239.281
+GHOSTPARTICLE GHchi1n3B0       ASN     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       ASN     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       ASN     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       ASN     CB    CA     CG      1.0060   90.00     0.190
+GHOSTPARTICLE GHchi1n3C1       ASN     CB    CA     CG      1.0060   90.00  -119.810
+GHOSTPARTICLE GHchi1n3C2       ASN     CB    CA     CG      1.0060   90.00  -239.810
+GHOSTPARTICLE GHchi1n3B0       ASP     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       ASP     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       ASP     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       ASP     CB    CA     CG      1.0060   90.00    -0.292
+GHOSTPARTICLE GHchi1n3C1       ASP     CB    CA     CG      1.0060   90.00  -120.292
+GHOSTPARTICLE GHchi1n3C2       ASP     CB    CA     CG      1.0060   90.00  -240.292
+GHOSTPARTICLE GHchi1n3B0       GLN     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       GLN     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       GLN     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       GLN     CB    CA     CG      1.0060   90.00     0.520
+GHOSTPARTICLE GHchi1n3C1       GLN     CB    CA     CG      1.0060   90.00  -119.480
+GHOSTPARTICLE GHchi1n3C2       GLN     CB    CA     CG      1.0060   90.00  -239.480
+GHOSTPARTICLE GHchi1n3B0       GLU     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       GLU     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       GLU     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       GLU     CB    CA     CG      1.0060   90.00    -1.111
+GHOSTPARTICLE GHchi1n3C1       GLU     CB    CA     CG      1.0060   90.00  -121.111
+GHOSTPARTICLE GHchi1n3C2       GLU     CB    CA     CG      1.0060   90.00  -241.111
+GHOSTPARTICLE GHchi1n3B0       HIS     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       HIS     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       HIS     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       HIS     CB    CA     CG      1.0060   90.00     0.518
+GHOSTPARTICLE GHchi1n3C1       HIS     CB    CA     CG      1.0060   90.00  -119.482
+GHOSTPARTICLE GHchi1n3C2       HIS     CB    CA     CG      1.0060   90.00  -239.482
+GHOSTPARTICLE GHchi1n3B0       ILE     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       ILE     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       ILE     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       ILE     CB    CA     CG1     1.0060   90.00     0.325
+GHOSTPARTICLE GHchi1n3C1       ILE     CB    CA     CG1     1.0060   90.00  -119.675
+GHOSTPARTICLE GHchi1n3C2       ILE     CB    CA     CG1     1.0060   90.00  -239.675
+GHOSTPARTICLE GHchi1n3B0       LEU     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       LEU     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       LEU     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       LEU     CB    CA     CG      1.0060   90.00     1.222
+GHOSTPARTICLE GHchi1n3C1       LEU     CB    CA     CG      1.0060   90.00  -118.778
+GHOSTPARTICLE GHchi1n3C2       LEU     CB    CA     CG      1.0060   90.00  -238.778
+GHOSTPARTICLE GHchi1n3B0       LYS     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       LYS     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       LYS     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       LYS     CB    CA     CG      1.0060   90.00     1.836
+GHOSTPARTICLE GHchi1n3C1       LYS     CB    CA     CG      1.0060   90.00  -118.164
+GHOSTPARTICLE GHchi1n3C2       LYS     CB    CA     CG      1.0060   90.00  -238.164
+GHOSTPARTICLE GHchi1n3B0       MET     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       MET     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       MET     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       MET     CB    CA     CG      1.0060   90.00     0.137
+GHOSTPARTICLE GHchi1n3C1       MET     CB    CA     CG      1.0060   90.00  -119.863
+GHOSTPARTICLE GHchi1n3C2       MET     CB    CA     CG      1.0060   90.00  -239.863
+GHOSTPARTICLE GHchi1n3B0       PHE     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       PHE     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       PHE     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       PHE     CB    CA     CG      1.0060   90.00     1.376
+GHOSTPARTICLE GHchi1n3C1       PHE     CB    CA     CG      1.0060   90.00  -118.624
+GHOSTPARTICLE GHchi1n3C2       PHE     CB    CA     CG      1.0060   90.00  -238.624
+GHOSTPARTICLE GHchi1n3B0       SER     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       SER     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       SER     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       SER     CB    CA     HB2     1.0060   90.00     1.998
+GHOSTPARTICLE GHchi1n3C1       SER     CB    CA     HB2     1.0060   90.00  -118.002
+GHOSTPARTICLE GHchi1n3C2       SER     CB    CA     HB2     1.0060   90.00  -238.002
+GHOSTPARTICLE GHchi1n1B0       SER     CA    CB     C       1.0790   90.00     0.000
+GHOSTPARTICLE GHchi1n1C0       SER     CB    CA     HB2     1.0790   90.00  -178.094
+GHOSTPARTICLE GHchi1n3B0       THR     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       THR     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       THR     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       THR     CB    CA     CG2     1.0060   90.00     0.348
+GHOSTPARTICLE GHchi1n3C1       THR     CB    CA     CG2     1.0060   90.00  -119.652
+GHOSTPARTICLE GHchi1n3C2       THR     CB    CA     CG2     1.0060   90.00  -239.652
+GHOSTPARTICLE GHchi1n1B0       THR     CA    CB     C       1.0790   90.00     0.000
+GHOSTPARTICLE GHchi1n1C0       THR     CB    CA     CG2     1.0790   90.00   -59.861
+GHOSTPARTICLE GHchi1n3B0       TYR     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       TYR     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       TYR     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       TYR     CB    CA     CG      1.0060   90.00     1.775
+GHOSTPARTICLE GHchi1n3C1       TYR     CB    CA     CG      1.0060   90.00  -118.225
+GHOSTPARTICLE GHchi1n3C2       TYR     CB    CA     CG      1.0060   90.00  -238.225
+GHOSTPARTICLE GHchi1n3B0       VAL     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       VAL     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       VAL     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       VAL     CB    CA     CG1     1.0060   90.00     0.609
+GHOSTPARTICLE GHchi1n3C1       VAL     CB    CA     CG1     1.0060   90.00  -119.391
+GHOSTPARTICLE GHchi1n3C2       VAL     CB    CA     CG1     1.0060   90.00  -239.391
+GHOSTPARTICLE GHchi2n3B0       ARG     CB    CG     CA      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi2n3B1       ARG     CB    CG     CA      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi2n3B2       ARG     CB    CG     CA      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi2n3C0       ARG     CG    CB     CD      1.0060   90.00     0.244
+GHOSTPARTICLE GHchi2n3C1       ARG     CG    CB     CD      1.0060   90.00  -119.756
+GHOSTPARTICLE GHchi2n3C2       ARG     CG    CB     CD      1.0060   90.00  -239.756
+GHOSTPARTICLE GHchi2n2B0       ARG     CB    CG     CA      0.6147   90.00     0.000
+GHOSTPARTICLE GHchi2n2B1       ARG     CB    CG     CA      0.6147   90.00   180.000
+GHOSTPARTICLE GHchi2n2C0       ARG     CG    CB     CD      0.6147   90.00   -90.000
+GHOSTPARTICLE GHchi2n2C1       ARG     CG    CB     CD      0.6147   90.00  -270.000
+GHOSTPARTICLE GHchi2n1B0       ARG     CB    CG     CA      1.0790   90.00     0.000
+GHOSTPARTICLE GHchi2n1C0       ARG     CG    CB     CD      1.0790   90.00  -360.000
+GHOSTPARTICLE GHchi2n3B0       GLN     CB    CG     CA      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi2n3B1       GLN     CB    CG     CA      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi2n3B2       GLN     CB    CG     CA      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi2n3C0       GLN     CG    CB     CD      1.0060   90.00    -0.277
+GHOSTPARTICLE GHchi2n3C1       GLN     CG    CB     CD      1.0060   90.00  -120.277
+GHOSTPARTICLE GHchi2n3C2       GLN     CG    CB     CD      1.0060   90.00  -240.277
+GHOSTPARTICLE GHchi2n3B0       GLU     CB    CG     CA      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi2n3B1       GLU     CB    CG     CA      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi2n3B2       GLU     CB    CG     CA      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi2n3C0       GLU     CG    CB     CD      1.0060   90.00    -0.136
+GHOSTPARTICLE GHchi2n3C1       GLU     CG    CB     CD      1.0060   90.00  -120.136
+GHOSTPARTICLE GHchi2n3C2       GLU     CG    CB     CD      1.0060   90.00  -240.136
+GHOSTPARTICLE GHchi2n3B0       ILE     CB    CG1    CA      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi2n3B1       ILE     CB    CG1    CA      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi2n3B2       ILE     CB    CG1    CA      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi2n3C0       ILE     CG1   CB     CD1     1.0060   90.00    -0.109
+GHOSTPARTICLE GHchi2n3C1       ILE     CG1   CB     CD1     1.0060   90.00  -120.109
+GHOSTPARTICLE GHchi2n3C2       ILE     CG1   CB     CD1     1.0060   90.00  -240.109
+GHOSTPARTICLE GHchi2n2B0       ILE     CB    CG1    CA      0.6147   90.00     0.000
+GHOSTPARTICLE GHchi2n2B1       ILE     CB    CG1    CA      0.6147   90.00   180.000
+GHOSTPARTICLE GHchi2n2C0       ILE     CG1   CB     CD1     0.6147   90.00    60.181
+GHOSTPARTICLE GHchi2n2C1       ILE     CG1   CB     CD1     0.6147   90.00  -119.819
+GHOSTPARTICLE GHchi2n1B0       ILE     CB    CG1    CA      1.0790   90.00     0.000
+GHOSTPARTICLE GHchi2n1C0       ILE     CG1   CB     CD1     1.0790   90.00  -299.819
+GHOSTPARTICLE GHchi2n3B0       LEU     CB    CG     CA      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi2n3B1       LEU     CB    CG     CA      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi2n3B2       LEU     CB    CG     CA      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi2n3C0       LEU     CG    CB     CD1     1.0060   90.00    -0.536
+GHOSTPARTICLE GHchi2n3C1       LEU     CG    CB     CD1     1.0060   90.00  -120.536
+GHOSTPARTICLE GHchi2n3C2       LEU     CG    CB     CD1     1.0060   90.00  -240.536
+GHOSTPARTICLE GHchi2n2B0       LEU     CB    CG     CA      0.6147   90.00     0.000
+GHOSTPARTICLE GHchi2n2B1       LEU     CB    CG     CA      0.6147   90.00   180.000
+GHOSTPARTICLE GHchi2n2C0       LEU     CG    CB     CD1     0.6147   90.00   -60.291
+GHOSTPARTICLE GHchi2n2C1       LEU     CG    CB     CD1     0.6147   90.00  -240.291
+GHOSTPARTICLE GHchi2n1B0       LEU     CB    CG     CA      1.0790   90.00     0.000
+GHOSTPARTICLE GHchi2n1C0       LEU     CG    CB     CD1     1.0790   90.00   -60.291
+GHOSTPARTICLE GHchi2n3B0       LYS     CB    CG     CA      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi2n3B1       LYS     CB    CG     CA      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi2n3B2       LYS     CB    CG     CA      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi2n3C0       LYS     CG    CB     CD      1.0060   90.00     0.374
+GHOSTPARTICLE GHchi2n3C1       LYS     CG    CB     CD      1.0060   90.00  -119.626
+GHOSTPARTICLE GHchi2n3C2       LYS     CG    CB     CD      1.0060   90.00  -239.626
+GHOSTPARTICLE GHchi2n2B0       LYS     CB    CG     CA      0.6147   90.00     0.000
+GHOSTPARTICLE GHchi2n2B1       LYS     CB    CG     CA      0.6147   90.00   180.000
+GHOSTPARTICLE GHchi2n2C0       LYS     CG    CB     CD      0.6147   90.00   -90.000
+GHOSTPARTICLE GHchi2n2C1       LYS     CG    CB     CD      0.6147   90.00  -270.000
+GHOSTPARTICLE GHchi2n1B0       LYS     CB    CG     CA      1.0790   90.00     0.000
+GHOSTPARTICLE GHchi2n1C0       LYS     CG    CB     CD      1.0790   90.00  -360.000
+GHOSTPARTICLE GHchi2n3B0       MET     CB    CG     CA      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi2n3B1       MET     CB    CG     CA      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi2n3B2       MET     CB    CG     CA      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi2n3C0       MET     CG    CB     HG2     1.0060   90.00    -0.084
+GHOSTPARTICLE GHchi2n3C1       MET     CG    CB     HG2     1.0060   90.00  -120.084
+GHOSTPARTICLE GHchi2n3C2       MET     CG    CB     HG2     1.0060   90.00  -240.084
+GHOSTPARTICLE GHchi2n3B0       ASN     CB    CG     CA      1.0033   90.00     0.000
+GHOSTPARTICLE GHchi2n3B1       ASN     CB    CG     CA      1.0033   90.00   120.000
+GHOSTPARTICLE GHchi2n3B2       ASN     CB    CG     CA      1.0033   90.00   240.000
+GHOSTPARTICLE GHchi2n3C0       ASN     CG    CB     ND2     1.0033   90.00     0.020
+GHOSTPARTICLE GHchi2n3C1       ASN     CG    CB     ND2     1.0033   90.00  -119.980
+GHOSTPARTICLE GHchi2n3C2       ASN     CG    CB     ND2     1.0033   90.00  -239.980
+GHOSTPARTICLE GHchi2n2B0       ASN     CB    CG     CA      0.6131   90.00     0.000
+GHOSTPARTICLE GHchi2n2B1       ASN     CB    CG     CA      0.6131   90.00   180.000
+GHOSTPARTICLE GHchi2n2C0       ASN     CG    CB     ND2     0.6131   90.00    -0.000
+GHOSTPARTICLE GHchi2n2C1       ASN     CG    CB     ND2     0.6131   90.00  -180.000
+GHOSTPARTICLE GHchi2n1B0       ASN     CB    CG     CA      1.0762   90.00     0.000
+GHOSTPARTICLE GHchi2n1C0       ASN     CG    CB     ND2     1.0762   90.00   180.055
+GHOSTPARTICLE GHchi3n3B0       ARG     CG    CD     CB      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi3n3B1       ARG     CG    CD     CB      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi3n3B2       ARG     CG    CD     CB      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi3n3C0       ARG     CD    CG     HD2     1.0060   90.00     0.129
+GHOSTPARTICLE GHchi3n3C1       ARG     CD    CG     HD2     1.0060   90.00  -119.871
+GHOSTPARTICLE GHchi3n3C2       ARG     CD    CG     HD2     1.0060   90.00  -239.871
+GHOSTPARTICLE GHchi3n3B0       GLN     CG    CD     CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHchi3n3B1       GLN     CG    CD     CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHchi3n3B2       GLN     CG    CD     CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHchi3n3C0       GLN     CD    CG     NE2     1.0033   90.00     0.242
+GHOSTPARTICLE GHchi3n3C1       GLN     CD    CG     NE2     1.0033   90.00  -119.758
+GHOSTPARTICLE GHchi3n3C2       GLN     CD    CG     NE2     1.0033   90.00  -239.758
+GHOSTPARTICLE GHchi3n2B0       GLN     CG    CD     CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHchi3n2B1       GLN     CG    CD     CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHchi3n2C0       GLN     CD    CG     NE2     0.6131   90.00    -0.000
+GHOSTPARTICLE GHchi3n2C1       GLN     CD    CG     NE2     0.6131   90.00  -180.000
+GHOSTPARTICLE GHchi3n1B0       GLN     CG    CD     CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHchi3n1C0       GLN     CD    CG     NE2     1.0762   90.00   180.679
+GHOSTPARTICLE GHchi3n3B0       LYS     CG    CD     CB      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi3n3B1       LYS     CG    CD     CB      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi3n3B2       LYS     CG    CD     CB      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi3n3C0       LYS     CD    CG     CE      1.0060   90.00     0.319
+GHOSTPARTICLE GHchi3n3C1       LYS     CD    CG     CE      1.0060   90.00  -119.681
+GHOSTPARTICLE GHchi3n3C2       LYS     CD    CG     CE      1.0060   90.00  -239.681
+GHOSTPARTICLE GHchi3n2B0       LYS     CG    CD     CB      0.6147   90.00     0.000
+GHOSTPARTICLE GHchi3n2B1       LYS     CG    CD     CB      0.6147   90.00   180.000
+GHOSTPARTICLE GHchi3n2C0       LYS     CD    CG     CE      0.6147   90.00   -90.000
+GHOSTPARTICLE GHchi3n2C1       LYS     CD    CG     CE      0.6147   90.00  -270.000
+GHOSTPARTICLE GHchi3n1B0       LYS     CG    CD     CB      1.0790   90.00     0.000
+GHOSTPARTICLE GHchi3n1C0       LYS     CD    CG     CE      1.0790   90.00  -360.000
+GHOSTPARTICLE GHchi3n3B0       MET     CG    SD     CB      1.1932   90.00     0.000
+GHOSTPARTICLE GHchi3n3B1       MET     CG    SD     CB      1.1932   90.00   120.000
+GHOSTPARTICLE GHchi3n3B2       MET     CG    SD     CB      1.1932   90.00   240.000
+GHOSTPARTICLE GHchi3n3C0       MET     SD    CG     CE      1.1932   90.00     0.098
+GHOSTPARTICLE GHchi3n3C1       MET     SD    CG     CE      1.1932   90.00  -119.902
+GHOSTPARTICLE GHchi3n3C2       MET     SD    CG     CE      1.1932   90.00  -239.902
+GHOSTPARTICLE GHchi4n3B0       LYS     CD    CE     CG      1.0060   90.00     0.000
+GHOSTPARTICLE GHchi4n3B1       LYS     CD    CE     CG      1.0060   90.00   120.000
+GHOSTPARTICLE GHchi4n3B2       LYS     CD    CE     CG      1.0060   90.00   240.000
+GHOSTPARTICLE GHchi4n3C0       LYS     CE    CD     HE2     1.0060   90.00    -0.146
+GHOSTPARTICLE GHchi4n3C1       LYS     CE    CD     HE2     1.0060   90.00  -120.146
+GHOSTPARTICLE GHchi4n3C2       LYS     CE    CD     HE2     1.0060   90.00  -240.146
+GHOSTPARTICLE GHchi1n3B0       CYS     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       CYS     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       CYS     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       CYS     CB    CA     HB2     1.0060   90.00     0.278
+GHOSTPARTICLE GHchi1n3C1       CYS     CB    CA     HB2     1.0060   90.00  -119.722
+GHOSTPARTICLE GHchi1n3C2       CYS     CB    CA     HB2     1.0060   90.00  -239.722
+GHOSTPARTICLE GHchi1n3B0       TRP     CA    CB     C       1.0060   90.00     0.000
+GHOSTPARTICLE GHchi1n3B1       TRP     CA    CB     C       1.0060   90.00   120.000
+GHOSTPARTICLE GHchi1n3B2       TRP     CA    CB     C       1.0060   90.00   240.000
+GHOSTPARTICLE GHchi1n3C0       TRP     CB    CA     CG      1.0060   90.00     0.864
+GHOSTPARTICLE GHchi1n3C1       TRP     CB    CA     CG      1.0060   90.00  -119.136
+GHOSTPARTICLE GHchi1n3C2       TRP     CB    CA     CG      1.0060   90.00  -239.136
+GHOSTPARTICLE GHphin3B0        ALA     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        ALA     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        ALA     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        ALA     CA    N      C       0.9552   90.00     1.358
+GHOSTPARTICLE GHphin3C1        ALA     CA    N      C       0.9552   90.00  -118.642
+GHOSTPARTICLE GHphin3C2        ALA     CA    N      C       0.9552   90.00  -238.642
+GHOSTPARTICLE GHphin2B0        ALA     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        ALA     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        ALA     CA    N      C       0.5837   90.00   -53.507
+GHOSTPARTICLE GHphin2C1        ALA     CA    N      C       0.5837   90.00  -233.507
+GHOSTPARTICLE GHphin1B0        ALA     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        ALA     CA    N      C       1.0246   90.00   302.785
+GHOSTPARTICLE GHpsin3B0        ALA     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        ALA     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        ALA     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        ALA     C     CA     O       1.0033   90.00   -18.400
+GHOSTPARTICLE GHpsin3C1        ALA     C     CA     O       1.0033   90.00  -138.400
+GHOSTPARTICLE GHpsin3C2        ALA     C     CA     O       1.0033   90.00  -258.400
+GHOSTPARTICLE GHpsin2B0        ALA     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        ALA     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        ALA     C     CA     O       0.6131   90.00   -30.768
+GHOSTPARTICLE GHpsin2C1        ALA     C     CA     O       0.6131   90.00  -210.768
+GHOSTPARTICLE GHpsin1B0        ALA     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        ALA     C     CA     O       1.0762   90.00   338.335
+GHOSTPARTICLE GHphin3B0        ARG     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        ARG     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        ARG     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        ARG     CA    N      C       0.9552   90.00     0.141
+GHOSTPARTICLE GHphin3C1        ARG     CA    N      C       0.9552   90.00  -119.859
+GHOSTPARTICLE GHphin3C2        ARG     CA    N      C       0.9552   90.00  -239.859
+GHOSTPARTICLE GHphin2B0        ARG     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        ARG     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        ARG     CA    N      C       0.5837   90.00   -56.122
+GHOSTPARTICLE GHphin2C1        ARG     CA    N      C       0.5837   90.00  -236.122
+GHOSTPARTICLE GHphin1B0        ARG     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        ARG     CA    N      C       1.0246   90.00   300.289
+GHOSTPARTICLE GHpsin3B0        ARG     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        ARG     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        ARG     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        ARG     C     CA     O       1.0033   90.00   -10.844
+GHOSTPARTICLE GHpsin3C1        ARG     C     CA     O       1.0033   90.00  -130.844
+GHOSTPARTICLE GHpsin3C2        ARG     C     CA     O       1.0033   90.00  -250.844
+GHOSTPARTICLE GHpsin2B0        ARG     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        ARG     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        ARG     C     CA     O       0.6131   90.00   -27.972
+GHOSTPARTICLE GHpsin2C1        ARG     C     CA     O       0.6131   90.00  -207.972
+GHOSTPARTICLE GHpsin1B0        ARG     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        ARG     C     CA     O       1.0762   90.00   339.386
+GHOSTPARTICLE GHphin3B0        ASN     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        ASN     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        ASN     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        ASN     CA    N      C       0.9552   90.00     0.472
+GHOSTPARTICLE GHphin3C1        ASN     CA    N      C       0.9552   90.00  -119.528
+GHOSTPARTICLE GHphin3C2        ASN     CA    N      C       0.9552   90.00  -239.528
+GHOSTPARTICLE GHphin2B0        ASN     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        ASN     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        ASN     CA    N      C       0.5837   90.00   -55.407
+GHOSTPARTICLE GHphin2C1        ASN     CA    N      C       0.5837   90.00  -235.407
+GHOSTPARTICLE GHphin1B0        ASN     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        ASN     CA    N      C       1.0246   90.00   300.968
+GHOSTPARTICLE GHpsin3B0        ASN     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        ASN     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        ASN     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        ASN     C     CA     O       1.0033   90.00   -13.677
+GHOSTPARTICLE GHpsin3C1        ASN     C     CA     O       1.0033   90.00  -133.677
+GHOSTPARTICLE GHpsin3C2        ASN     C     CA     O       1.0033   90.00  -253.677
+GHOSTPARTICLE GHpsin2B0        ASN     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        ASN     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        ASN     C     CA     O       0.6131   90.00   -29.538
+GHOSTPARTICLE GHpsin2C1        ASN     C     CA     O       0.6131   90.00  -209.538
+GHOSTPARTICLE GHpsin1B0        ASN     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        ASN     C     CA     O       1.0762   90.00   339.043
+GHOSTPARTICLE GHphin3B0        ASP     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        ASP     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        ASP     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        ASP     CA    N      C       0.9552   90.00     0.150
+GHOSTPARTICLE GHphin3C1        ASP     CA    N      C       0.9552   90.00  -119.850
+GHOSTPARTICLE GHphin3C2        ASP     CA    N      C       0.9552   90.00  -239.850
+GHOSTPARTICLE GHphin2B0        ASP     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        ASP     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        ASP     CA    N      C       0.5837   90.00   -56.102
+GHOSTPARTICLE GHphin2C1        ASP     CA    N      C       0.5837   90.00  -236.102
+GHOSTPARTICLE GHphin1B0        ASP     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        ASP     CA    N      C       1.0246   90.00   300.308
+GHOSTPARTICLE GHpsin3B0        ASP     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        ASP     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        ASP     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        ASP     C     CA     O       1.0033   90.00    -7.680
+GHOSTPARTICLE GHpsin3C1        ASP     C     CA     O       1.0033   90.00  -127.680
+GHOSTPARTICLE GHpsin3C2        ASP     C     CA     O       1.0033   90.00  -247.680
+GHOSTPARTICLE GHpsin2B0        ASP     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        ASP     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        ASP     C     CA     O       0.6131   90.00   -29.179
+GHOSTPARTICLE GHpsin2C1        ASP     C     CA     O       0.6131   90.00  -209.179
+GHOSTPARTICLE GHpsin1B0        ASP     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        ASP     C     CA     O       1.0762   90.00   339.642
+GHOSTPARTICLE GHphin3B0        GLN     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        GLN     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        GLN     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        GLN     CA    N      C       0.9552   90.00    -0.167
+GHOSTPARTICLE GHphin3C1        GLN     CA    N      C       0.9552   90.00  -120.167
+GHOSTPARTICLE GHphin3C2        GLN     CA    N      C       0.9552   90.00  -240.167
+GHOSTPARTICLE GHphin2B0        GLN     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        GLN     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        GLN     CA    N      C       0.5837   90.00   -56.790
+GHOSTPARTICLE GHphin2C1        GLN     CA    N      C       0.5837   90.00  -236.790
+GHOSTPARTICLE GHphin1B0        GLN     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        GLN     CA    N      C       1.0246   90.00   299.657
+GHOSTPARTICLE GHpsin3B0        GLN     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        GLN     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        GLN     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        GLN     C     CA     O       1.0033   90.00   -10.551
+GHOSTPARTICLE GHpsin3C1        GLN     C     CA     O       1.0033   90.00  -130.551
+GHOSTPARTICLE GHpsin3C2        GLN     C     CA     O       1.0033   90.00  -250.551
+GHOSTPARTICLE GHpsin2B0        GLN     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        GLN     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        GLN     C     CA     O       0.6131   90.00   -30.131
+GHOSTPARTICLE GHpsin2C1        GLN     C     CA     O       0.6131   90.00  -210.131
+GHOSTPARTICLE GHpsin1B0        GLN     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        GLN     C     CA     O       1.0762   90.00   338.039
+GHOSTPARTICLE GHphin3B0        GLU     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        GLU     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        GLU     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        GLU     CA    N      C       0.9552   90.00     0.206
+GHOSTPARTICLE GHphin3C1        GLU     CA    N      C       0.9552   90.00  -119.794
+GHOSTPARTICLE GHphin3C2        GLU     CA    N      C       0.9552   90.00  -239.794
+GHOSTPARTICLE GHphin2B0        GLU     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        GLU     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        GLU     CA    N      C       0.5837   90.00   -55.982
+GHOSTPARTICLE GHphin2C1        GLU     CA    N      C       0.5837   90.00  -235.982
+GHOSTPARTICLE GHphin1B0        GLU     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        GLU     CA    N      C       1.0246   90.00   300.422
+GHOSTPARTICLE GHpsin3B0        GLU     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        GLU     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        GLU     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        GLU     C     CA     O       1.0033   90.00    -5.700
+GHOSTPARTICLE GHpsin3C1        GLU     C     CA     O       1.0033   90.00  -125.700
+GHOSTPARTICLE GHpsin3C2        GLU     C     CA     O       1.0033   90.00  -245.700
+GHOSTPARTICLE GHpsin2B0        GLU     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        GLU     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        GLU     C     CA     O       0.6131   90.00   -26.477
+GHOSTPARTICLE GHpsin2C1        GLU     C     CA     O       0.6131   90.00  -206.477
+GHOSTPARTICLE GHpsin1B0        GLU     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        GLU     C     CA     O       1.0762   90.00   341.332
+GHOSTPARTICLE GHphin3B0        GLY     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        GLY     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        GLY     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        GLY     CA    N      C       0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3C1        GLY     CA    N      C       0.9552   90.00  -120.000
+GHOSTPARTICLE GHphin3C2        GLY     CA    N      C       0.9552   90.00  -240.000
+GHOSTPARTICLE GHphin2B0        GLY     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        GLY     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        GLY     CA    N      C       0.5837   90.00    -0.000
+GHOSTPARTICLE GHphin2C1        GLY     CA    N      C       0.5837   90.00  -180.000
+GHOSTPARTICLE GHpsin1B0        GLY     CA    C      HA2     1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        GLY     C     CA     O       1.0762   90.00   121.921
+GHOSTPARTICLE GHpsin3B0        GLY     CA    C      HA2     1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        GLY     CA    C      HA2     1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        GLY     CA    C      HA2     1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        GLY     C     CA     O       1.0033   90.00     0.229
+GHOSTPARTICLE GHpsin3C1        GLY     C     CA     O       1.0033   90.00  -119.771
+GHOSTPARTICLE GHpsin3C2        GLY     C     CA     O       1.0033   90.00  -239.771
+GHOSTPARTICLE GHpsin2B0        GLY     CA    C      HA2     0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        GLY     CA    C      HA2     0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        GLY     C     CA     O       0.6131   90.00    30.495
+GHOSTPARTICLE GHpsin2C1        GLY     C     CA     O       0.6131   90.00  -149.505
+GHOSTPARTICLE GHphin3B0        HIS     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        HIS     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        HIS     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        HIS     CA    N      C       0.9552   90.00    -0.068
+GHOSTPARTICLE GHphin3C1        HIS     CA    N      C       0.9552   90.00  -120.068
+GHOSTPARTICLE GHphin3C2        HIS     CA    N      C       0.9552   90.00  -240.068
+GHOSTPARTICLE GHphin2B0        HIS     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        HIS     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        HIS     CA    N      C       0.5837   90.00   -56.574
+GHOSTPARTICLE GHphin2C1        HIS     CA    N      C       0.5837   90.00  -236.574
+GHOSTPARTICLE GHphin1B0        HIS     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        HIS     CA    N      C       1.0246   90.00   299.861
+GHOSTPARTICLE GHpsin3B0        HIS     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        HIS     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        HIS     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        HIS     C     CA     O       1.0033   90.00    -1.183
+GHOSTPARTICLE GHpsin3C1        HIS     C     CA     O       1.0033   90.00  -121.183
+GHOSTPARTICLE GHpsin3C2        HIS     C     CA     O       1.0033   90.00  -241.183
+GHOSTPARTICLE GHpsin2B0        HIS     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        HIS     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        HIS     C     CA     O       0.6131   90.00   -26.999
+GHOSTPARTICLE GHpsin2C1        HIS     C     CA     O       0.6131   90.00  -206.999
+GHOSTPARTICLE GHpsin1B0        HIS     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        HIS     C     CA     O       1.0762   90.00   339.569
+GHOSTPARTICLE GHphin3B0        ILE     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        ILE     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        ILE     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        ILE     CA    N      C       0.9552   90.00     1.333
+GHOSTPARTICLE GHphin3C1        ILE     CA    N      C       0.9552   90.00  -118.667
+GHOSTPARTICLE GHphin3C2        ILE     CA    N      C       0.9552   90.00  -238.667
+GHOSTPARTICLE GHphin2B0        ILE     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        ILE     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        ILE     CA    N      C       0.5837   90.00   -53.561
+GHOSTPARTICLE GHphin2C1        ILE     CA    N      C       0.5837   90.00  -233.561
+GHOSTPARTICLE GHphin1B0        ILE     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        ILE     CA    N      C       1.0246   90.00   302.733
+GHOSTPARTICLE GHpsin3B0        ILE     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        ILE     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        ILE     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        ILE     C     CA     O       1.0033   90.00   -16.376
+GHOSTPARTICLE GHpsin3C1        ILE     C     CA     O       1.0033   90.00  -136.376
+GHOSTPARTICLE GHpsin3C2        ILE     C     CA     O       1.0033   90.00  -256.376
+GHOSTPARTICLE GHpsin2B0        ILE     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        ILE     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        ILE     C     CA     O       0.6131   90.00   -29.934
+GHOSTPARTICLE GHpsin2C1        ILE     C     CA     O       0.6131   90.00  -209.934
+GHOSTPARTICLE GHpsin1B0        ILE     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        ILE     C     CA     O       1.0762   90.00   338.844
+GHOSTPARTICLE GHphin3B0        LEU     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        LEU     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        LEU     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        LEU     CA    N      C       0.9552   90.00     0.234
+GHOSTPARTICLE GHphin3C1        LEU     CA    N      C       0.9552   90.00  -119.766
+GHOSTPARTICLE GHphin3C2        LEU     CA    N      C       0.9552   90.00  -239.766
+GHOSTPARTICLE GHphin2B0        LEU     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        LEU     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        LEU     CA    N      C       0.5837   90.00   -55.922
+GHOSTPARTICLE GHphin2C1        LEU     CA    N      C       0.5837   90.00  -235.922
+GHOSTPARTICLE GHphin1B0        LEU     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        LEU     CA    N      C       1.0246   90.00   300.479
+GHOSTPARTICLE GHpsin3B0        LEU     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        LEU     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        LEU     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        LEU     C     CA     O       1.0033   90.00    -7.379
+GHOSTPARTICLE GHpsin3C1        LEU     C     CA     O       1.0033   90.00  -127.379
+GHOSTPARTICLE GHpsin3C2        LEU     C     CA     O       1.0033   90.00  -247.379
+GHOSTPARTICLE GHpsin2B0        LEU     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        LEU     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        LEU     C     CA     O       0.6131   90.00   -27.368
+GHOSTPARTICLE GHpsin2C1        LEU     C     CA     O       0.6131   90.00  -207.368
+GHOSTPARTICLE GHpsin1B0        LEU     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        LEU     C     CA     O       1.0762   90.00   338.890
+GHOSTPARTICLE GHphin3B0        LYS     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        LYS     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        LYS     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        LYS     CA    N      C       0.9552   90.00     0.962
+GHOSTPARTICLE GHphin3C1        LYS     CA    N      C       0.9552   90.00  -119.038
+GHOSTPARTICLE GHphin3C2        LYS     CA    N      C       0.9552   90.00  -239.038
+GHOSTPARTICLE GHphin2B0        LYS     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        LYS     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        LYS     CA    N      C       0.5837   90.00   -54.354
+GHOSTPARTICLE GHphin2C1        LYS     CA    N      C       0.5837   90.00  -234.354
+GHOSTPARTICLE GHphin1B0        LYS     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        LYS     CA    N      C       1.0246   90.00   301.973
+GHOSTPARTICLE GHpsin3B0        LYS     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        LYS     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        LYS     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        LYS     C     CA     O       1.0033   90.00   -14.652
+GHOSTPARTICLE GHpsin3C1        LYS     C     CA     O       1.0033   90.00  -134.652
+GHOSTPARTICLE GHpsin3C2        LYS     C     CA     O       1.0033   90.00  -254.652
+GHOSTPARTICLE GHpsin2B0        LYS     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        LYS     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        LYS     C     CA     O       0.6131   90.00   -29.525
+GHOSTPARTICLE GHpsin2C1        LYS     C     CA     O       0.6131   90.00  -209.525
+GHOSTPARTICLE GHpsin1B0        LYS     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        LYS     C     CA     O       1.0762   90.00   338.516
+GHOSTPARTICLE GHphin3B0        MET     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        MET     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        MET     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        MET     CA    N      C       0.9552   90.00     0.234
+GHOSTPARTICLE GHphin3C1        MET     CA    N      C       0.9552   90.00  -119.766
+GHOSTPARTICLE GHphin3C2        MET     CA    N      C       0.9552   90.00  -239.766
+GHOSTPARTICLE GHphin2B0        MET     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        MET     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        MET     CA    N      C       0.5837   90.00   -55.922
+GHOSTPARTICLE GHphin2C1        MET     CA    N      C       0.5837   90.00  -235.922
+GHOSTPARTICLE GHphin1B0        MET     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        MET     CA    N      C       1.0246   90.00   300.479
+GHOSTPARTICLE GHpsin3B0        MET     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        MET     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        MET     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        MET     C     CA     O       1.0033   90.00    -7.379
+GHOSTPARTICLE GHpsin3C1        MET     C     CA     O       1.0033   90.00  -127.379
+GHOSTPARTICLE GHpsin3C2        MET     C     CA     O       1.0033   90.00  -247.379
+GHOSTPARTICLE GHpsin2B0        MET     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        MET     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        MET     C     CA     O       0.6131   90.00   -27.368
+GHOSTPARTICLE GHpsin2C1        MET     C     CA     O       0.6131   90.00  -207.368
+GHOSTPARTICLE GHpsin1B0        MET     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        MET     C     CA     O       1.0762   90.00   338.890
+GHOSTPARTICLE GHphin3B0        PHE     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        PHE     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        PHE     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        PHE     CA    N      C       0.9552   90.00     0.227
+GHOSTPARTICLE GHphin3C1        PHE     CA    N      C       0.9552   90.00  -119.773
+GHOSTPARTICLE GHphin3C2        PHE     CA    N      C       0.9552   90.00  -239.773
+GHOSTPARTICLE GHphin2B0        PHE     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        PHE     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        PHE     CA    N      C       0.5837   90.00   -55.936
+GHOSTPARTICLE GHphin2C1        PHE     CA    N      C       0.5837   90.00  -235.936
+GHOSTPARTICLE GHphin1B0        PHE     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        PHE     CA    N      C       1.0246   90.00   300.465
+GHOSTPARTICLE GHpsin3B0        PHE     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        PHE     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        PHE     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        PHE     C     CA     O       1.0033   90.00   -11.565
+GHOSTPARTICLE GHpsin3C1        PHE     C     CA     O       1.0033   90.00  -131.565
+GHOSTPARTICLE GHpsin3C2        PHE     C     CA     O       1.0033   90.00  -251.565
+GHOSTPARTICLE GHpsin2B0        PHE     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        PHE     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        PHE     C     CA     O       0.6131   90.00   -30.386
+GHOSTPARTICLE GHpsin2C1        PHE     C     CA     O       0.6131   90.00  -210.386
+GHOSTPARTICLE GHpsin1B0        PHE     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        PHE     C     CA     O       1.0762   90.00   337.784
+GHOSTPARTICLE GHphin3B0        PRO     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        PRO     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        PRO     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        PRO     CA    N      C       0.9552   90.00     0.825
+GHOSTPARTICLE GHphin3C1        PRO     CA    N      C       0.9552   90.00  -119.175
+GHOSTPARTICLE GHphin3C2        PRO     CA    N      C       0.9552   90.00  -239.175
+GHOSTPARTICLE GHphin2B0        PRO     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        PRO     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        PRO     CA    N      C       0.5837   90.00   -54.648
+GHOSTPARTICLE GHphin2C1        PRO     CA    N      C       0.5837   90.00  -234.648
+GHOSTPARTICLE GHphin1B0        PRO     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        PRO     CA    N      C       1.0246   90.00   301.692
+GHOSTPARTICLE GHpsin3B0        PRO     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        PRO     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        PRO     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        PRO     C     CA     O       1.0033   90.00    13.034
+GHOSTPARTICLE GHpsin3C1        PRO     C     CA     O       1.0033   90.00  -106.966
+GHOSTPARTICLE GHpsin3C2        PRO     C     CA     O       1.0033   90.00  -226.966
+GHOSTPARTICLE GHpsin2B0        PRO     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        PRO     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        PRO     C     CA     O       0.6131   90.00   -24.736
+GHOSTPARTICLE GHpsin2C1        PRO     C     CA     O       0.6131   90.00  -204.736
+GHOSTPARTICLE GHpsin1B0        PRO     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        PRO     C     CA     O       1.0762   90.00   340.134
+GHOSTPARTICLE GHphin3B0        SER     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        SER     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        SER     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        SER     CA    N      C       0.9552   90.00     0.983
+GHOSTPARTICLE GHphin3C1        SER     CA    N      C       0.9552   90.00  -119.017
+GHOSTPARTICLE GHphin3C2        SER     CA    N      C       0.9552   90.00  -239.017
+GHOSTPARTICLE GHphin2B0        SER     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        SER     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        SER     CA    N      C       0.5837   90.00   -54.311
+GHOSTPARTICLE GHphin2C1        SER     CA    N      C       0.5837   90.00  -234.311
+GHOSTPARTICLE GHphin1B0        SER     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        SER     CA    N      C       1.0246   90.00   302.014
+GHOSTPARTICLE GHpsin3B0        SER     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        SER     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        SER     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        SER     C     CA     O       1.0033   90.00   -16.564
+GHOSTPARTICLE GHpsin3C1        SER     C     CA     O       1.0033   90.00  -136.564
+GHOSTPARTICLE GHpsin3C2        SER     C     CA     O       1.0033   90.00  -256.564
+GHOSTPARTICLE GHpsin2B0        SER     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        SER     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        SER     C     CA     O       0.6131   90.00   -30.661
+GHOSTPARTICLE GHpsin2C1        SER     C     CA     O       0.6131   90.00  -210.661
+GHOSTPARTICLE GHpsin1B0        SER     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        SER     C     CA     O       1.0762   90.00   337.615
+GHOSTPARTICLE GHphin3B0        THR     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        THR     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        THR     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        THR     CA    N      C       0.9552   90.00     0.477
+GHOSTPARTICLE GHphin3C1        THR     CA    N      C       0.9552   90.00  -119.523
+GHOSTPARTICLE GHphin3C2        THR     CA    N      C       0.9552   90.00  -239.523
+GHOSTPARTICLE GHphin2B0        THR     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        THR     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        THR     CA    N      C       0.5837   90.00   -55.398
+GHOSTPARTICLE GHphin2C1        THR     CA    N      C       0.5837   90.00  -235.398
+GHOSTPARTICLE GHphin1B0        THR     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        THR     CA    N      C       1.0246   90.00   300.977
+GHOSTPARTICLE GHpsin3B0        THR     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        THR     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        THR     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        THR     C     CA     O       1.0033   90.00   -13.112
+GHOSTPARTICLE GHpsin3C1        THR     C     CA     O       1.0033   90.00  -133.112
+GHOSTPARTICLE GHpsin3C2        THR     C     CA     O       1.0033   90.00  -253.112
+GHOSTPARTICLE GHpsin2B0        THR     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        THR     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        THR     C     CA     O       0.6131   90.00   -29.086
+GHOSTPARTICLE GHpsin2C1        THR     C     CA     O       0.6131   90.00  -209.086
+GHOSTPARTICLE GHpsin1B0        THR     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        THR     C     CA     O       1.0762   90.00   338.530
+GHOSTPARTICLE GHphin3B0        TYR     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        TYR     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        TYR     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        TYR     CA    N      C       0.9552   90.00     0.441
+GHOSTPARTICLE GHphin3C1        TYR     CA    N      C       0.9552   90.00  -119.559
+GHOSTPARTICLE GHphin3C2        TYR     CA    N      C       0.9552   90.00  -239.559
+GHOSTPARTICLE GHphin2B0        TYR     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        TYR     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        TYR     CA    N      C       0.5837   90.00   -55.475
+GHOSTPARTICLE GHphin2C1        TYR     CA    N      C       0.5837   90.00  -235.475
+GHOSTPARTICLE GHphin1B0        TYR     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        TYR     CA    N      C       1.0246   90.00   300.904
+GHOSTPARTICLE GHpsin3B0        TYR     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        TYR     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        TYR     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        TYR     C     CA     O       1.0033   90.00   -12.051
+GHOSTPARTICLE GHpsin3C1        TYR     C     CA     O       1.0033   90.00  -132.051
+GHOSTPARTICLE GHpsin3C2        TYR     C     CA     O       1.0033   90.00  -252.051
+GHOSTPARTICLE GHpsin2B0        TYR     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        TYR     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        TYR     C     CA     O       0.6131   90.00   -28.877
+GHOSTPARTICLE GHpsin2C1        TYR     C     CA     O       0.6131   90.00  -208.877
+GHOSTPARTICLE GHpsin1B0        TYR     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        TYR     C     CA     O       1.0762   90.00   338.416
+GHOSTPARTICLE GHphin3B0        VAL     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        VAL     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        VAL     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        VAL     CA    N      C       0.9552   90.00     0.138
+GHOSTPARTICLE GHphin3C1        VAL     CA    N      C       0.9552   90.00  -119.862
+GHOSTPARTICLE GHphin3C2        VAL     CA    N      C       0.9552   90.00  -239.862
+GHOSTPARTICLE GHphin2B0        VAL     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        VAL     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        VAL     CA    N      C       0.5837   90.00   -56.128
+GHOSTPARTICLE GHphin2C1        VAL     CA    N      C       0.5837   90.00  -236.128
+GHOSTPARTICLE GHphin1B0        VAL     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        VAL     CA    N      C       1.0246   90.00   300.283
+GHOSTPARTICLE GHpsin3B0        VAL     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        VAL     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        VAL     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        VAL     C     CA     O       1.0033   90.00   -11.919
+GHOSTPARTICLE GHpsin3C1        VAL     C     CA     O       1.0033   90.00  -131.919
+GHOSTPARTICLE GHpsin3C2        VAL     C     CA     O       1.0033   90.00  -251.919
+GHOSTPARTICLE GHpsin2B0        VAL     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        VAL     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        VAL     C     CA     O       0.6131   90.00   -29.523
+GHOSTPARTICLE GHpsin2C1        VAL     C     CA     O       0.6131   90.00  -209.523
+GHOSTPARTICLE GHpsin1B0        VAL     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        VAL     C     CA     O       1.0762   90.00   338.581
+GHOSTPARTICLE GHphin3B0        CYS     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        CYS     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        CYS     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        CYS     CA    N      C       0.9552   90.00     0.234
+GHOSTPARTICLE GHphin3C1        CYS     CA    N      C       0.9552   90.00  -119.766
+GHOSTPARTICLE GHphin3C2        CYS     CA    N      C       0.9552   90.00  -239.766
+GHOSTPARTICLE GHphin2B0        CYS     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        CYS     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        CYS     CA    N      C       0.5837   90.00   -55.922
+GHOSTPARTICLE GHphin2C1        CYS     CA    N      C       0.5837   90.00  -235.922
+GHOSTPARTICLE GHphin1B0        CYS     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        CYS     CA    N      C       1.0246   90.00   300.479
+GHOSTPARTICLE GHpsin3B0        CYS     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        CYS     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        CYS     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        CYS     C     CA     O       1.0033   90.00    -7.379
+GHOSTPARTICLE GHpsin3C1        CYS     C     CA     O       1.0033   90.00  -127.379
+GHOSTPARTICLE GHpsin3C2        CYS     C     CA     O       1.0033   90.00  -247.379
+GHOSTPARTICLE GHpsin2B0        CYS     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        CYS     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        CYS     C     CA     O       0.6131   90.00   -27.368
+GHOSTPARTICLE GHpsin2C1        CYS     C     CA     O       0.6131   90.00  -207.368
+GHOSTPARTICLE GHpsin1B0        CYS     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        CYS     C     CA     O       1.0762   90.00   338.890
+GHOSTPARTICLE GHphin3B0        TRP     N     CA     -C      0.9552   90.00     0.000
+GHOSTPARTICLE GHphin3B1        TRP     N     CA     -C      0.9552   90.00   120.000
+GHOSTPARTICLE GHphin3B2        TRP     N     CA     -C      0.9552   90.00   240.000
+GHOSTPARTICLE GHphin3C0        TRP     CA    N      C       0.9552   90.00     0.234
+GHOSTPARTICLE GHphin3C1        TRP     CA    N      C       0.9552   90.00  -119.766
+GHOSTPARTICLE GHphin3C2        TRP     CA    N      C       0.9552   90.00  -239.766
+GHOSTPARTICLE GHphin2B0        TRP     N     CA     -C      0.5837   90.00     0.000
+GHOSTPARTICLE GHphin2B1        TRP     N     CA     -C      0.5837   90.00   180.000
+GHOSTPARTICLE GHphin2C0        TRP     CA    N      C       0.5837   90.00   -55.922
+GHOSTPARTICLE GHphin2C1        TRP     CA    N      C       0.5837   90.00  -235.922
+GHOSTPARTICLE GHphin1B0        TRP     N     CA     -C      1.0246   90.00     0.000
+GHOSTPARTICLE GHphin1C0        TRP     CA    N      C       1.0246   90.00   300.479
+GHOSTPARTICLE GHpsin3B0        TRP     CA    C      CB      1.0033   90.00     0.000
+GHOSTPARTICLE GHpsin3B1        TRP     CA    C      CB      1.0033   90.00   120.000
+GHOSTPARTICLE GHpsin3B2        TRP     CA    C      CB      1.0033   90.00   240.000
+GHOSTPARTICLE GHpsin3C0        TRP     C     CA     O       1.0033   90.00    -7.379
+GHOSTPARTICLE GHpsin3C1        TRP     C     CA     O       1.0033   90.00  -127.379
+GHOSTPARTICLE GHpsin3C2        TRP     C     CA     O       1.0033   90.00  -247.379
+GHOSTPARTICLE GHpsin2B0        TRP     CA    C      CB      0.6131   90.00     0.000
+GHOSTPARTICLE GHpsin2B1        TRP     CA    C      CB      0.6131   90.00   180.000
+GHOSTPARTICLE GHpsin2C0        TRP     C     CA     O       0.6131   90.00   -27.368
+GHOSTPARTICLE GHpsin2C1        TRP     C     CA     O       0.6131   90.00  -207.368
+GHOSTPARTICLE GHpsin1B0        TRP     CA    C      CB      1.0762   90.00     0.000
+GHOSTPARTICLE GHpsin1C0        TRP     C     CA     O       1.0762   90.00   338.890
+#
+# DIHEDRAL (proper): ghost-ghost springs, one ring group per real AMBER
+# Fourier harmonic of each covered chi1-4 (family SIDECHAIN) and phi/psi
+# (family BACKBONE) axis -- see doc/BondedForceFieldSprings.md.
 #    type     name                       resname family    atom_ref atom_rotant  d0_A       k
-DIHEDRAL ARG_chi1_C_CG_n3             ARG     SIDECHAIN C     CG      3.8528    10.9772
-DIHEDRAL ARG_chi1_C_HB2_n3            ARG     SIDECHAIN C     HB2     3.4544    10.9772
-DIHEDRAL ARG_chi1_C_HB3_n3            ARG     SIDECHAIN C     HB3     3.4544    10.9772
-DIHEDRAL ARG_chi1_HA_CG_n3            ARG     SIDECHAIN HA    CG      3.4405    10.9772
-DIHEDRAL ARG_chi1_HA_HB2_n3           ARG     SIDECHAIN HA    HB2     3.0499    10.9772
-DIHEDRAL ARG_chi1_HA_HB3_n3           ARG     SIDECHAIN HA    HB3     3.0499    10.9772
-DIHEDRAL ARG_chi1_N_CG_n3             ARG     SIDECHAIN N     CG      3.7716    10.9772
-DIHEDRAL ARG_chi1_N_HB2_n3            ARG     SIDECHAIN N     HB2     3.3729    10.9772
-DIHEDRAL ARG_chi1_N_HB3_n3            ARG     SIDECHAIN N     HB3     3.3729    10.9772
-DIHEDRAL ASN_chi1_C_CG_n3             ASN     SIDECHAIN C     CG      3.8651    11.3782
-DIHEDRAL ASN_chi1_C_HB2_n3            ASN     SIDECHAIN C     HB2     3.4544    11.3782
-DIHEDRAL ASN_chi1_C_HB3_n3            ASN     SIDECHAIN C     HB3     3.4544    11.3782
-DIHEDRAL ASN_chi1_HA_CG_n3            ASN     SIDECHAIN HA    CG      3.4544    11.3782
-DIHEDRAL ASN_chi1_HA_HB2_n3           ASN     SIDECHAIN HA    HB2     3.0499    11.3782
-DIHEDRAL ASN_chi1_HA_HB3_n3           ASN     SIDECHAIN HA    HB3     3.0499    11.3782
-DIHEDRAL ASN_chi1_N_CG_n3             ASN     SIDECHAIN N     CG      3.7838    11.3782
-DIHEDRAL ASN_chi1_N_HB2_n3            ASN     SIDECHAIN N     HB2     3.3729    11.3782
-DIHEDRAL ASN_chi1_N_HB3_n3            ASN     SIDECHAIN N     HB3     3.3729    11.3782
-DIHEDRAL ASP_chi1_C_CG_n3             ASP     SIDECHAIN C     CG      3.8651    11.3799
-DIHEDRAL ASP_chi1_C_HB2_n3            ASP     SIDECHAIN C     HB2     3.4544    11.3799
-DIHEDRAL ASP_chi1_C_HB3_n3            ASP     SIDECHAIN C     HB3     3.4544    11.3799
-DIHEDRAL ASP_chi1_HA_CG_n3            ASP     SIDECHAIN HA    CG      3.4544    11.3799
-DIHEDRAL ASP_chi1_HA_HB2_n3           ASP     SIDECHAIN HA    HB2     3.0499    11.3799
-DIHEDRAL ASP_chi1_HA_HB3_n3           ASP     SIDECHAIN HA    HB3     3.0499    11.3799
-DIHEDRAL ASP_chi1_N_CG_n3             ASP     SIDECHAIN N     CG      3.7838    11.3799
-DIHEDRAL ASP_chi1_N_HB2_n3            ASP     SIDECHAIN N     HB2     3.3729    11.3799
-DIHEDRAL ASP_chi1_N_HB3_n3            ASP     SIDECHAIN N     HB3     3.3729    11.3799
-DIHEDRAL GLN_chi1_C_CG_n3             GLN     SIDECHAIN C     CG      3.8528    10.9745
-DIHEDRAL GLN_chi1_C_HB2_n3            GLN     SIDECHAIN C     HB2     3.4544    10.9745
-DIHEDRAL GLN_chi1_C_HB3_n3            GLN     SIDECHAIN C     HB3     3.4544    10.9745
-DIHEDRAL GLN_chi1_HA_CG_n3            GLN     SIDECHAIN HA    CG      3.4405    10.9745
-DIHEDRAL GLN_chi1_HA_HB2_n3           GLN     SIDECHAIN HA    HB2     3.0499    10.9745
-DIHEDRAL GLN_chi1_HA_HB3_n3           GLN     SIDECHAIN HA    HB3     3.0499    10.9745
-DIHEDRAL GLN_chi1_N_CG_n3             GLN     SIDECHAIN N     CG      3.7716    10.9745
-DIHEDRAL GLN_chi1_N_HB2_n3            GLN     SIDECHAIN N     HB2     3.3729    10.9745
-DIHEDRAL GLN_chi1_N_HB3_n3            GLN     SIDECHAIN N     HB3     3.3729    10.9745
-DIHEDRAL GLU_chi1_C_CG_n3             GLU     SIDECHAIN C     CG      3.8528    10.9989
-DIHEDRAL GLU_chi1_C_HB2_n3            GLU     SIDECHAIN C     HB2     3.4544    10.9989
-DIHEDRAL GLU_chi1_C_HB3_n3            GLU     SIDECHAIN C     HB3     3.4544    10.9989
-DIHEDRAL GLU_chi1_HA_CG_n3            GLU     SIDECHAIN HA    CG      3.4405    10.9989
-DIHEDRAL GLU_chi1_HA_HB2_n3           GLU     SIDECHAIN HA    HB2     3.0499    10.9989
-DIHEDRAL GLU_chi1_HA_HB3_n3           GLU     SIDECHAIN HA    HB3     3.0499    10.9989
-DIHEDRAL GLU_chi1_N_CG_n3             GLU     SIDECHAIN N     CG      3.7716    10.9989
-DIHEDRAL GLU_chi1_N_HB2_n3            GLU     SIDECHAIN N     HB2     3.3729    10.9989
-DIHEDRAL GLU_chi1_N_HB3_n3            GLU     SIDECHAIN N     HB3     3.3729    10.9989
-DIHEDRAL HIS_chi1_C_CG_n3             HIS     SIDECHAIN C     CG      3.8673    11.9790
-DIHEDRAL HIS_chi1_C_HB2_n3            HIS     SIDECHAIN C     HB2     3.4544    11.9790
-DIHEDRAL HIS_chi1_C_HB3_n3            HIS     SIDECHAIN C     HB3     3.4544    11.9790
-DIHEDRAL HIS_chi1_HA_CG_n3            HIS     SIDECHAIN HA    CG      3.4587    11.9790
-DIHEDRAL HIS_chi1_HA_HB2_n3           HIS     SIDECHAIN HA    HB2     3.0499    11.9790
-DIHEDRAL HIS_chi1_HA_HB3_n3           HIS     SIDECHAIN HA    HB3     3.0499    11.9790
-DIHEDRAL HIS_chi1_N_CG_n3             HIS     SIDECHAIN N     CG      3.7859    11.9790
-DIHEDRAL HIS_chi1_N_HB2_n3            HIS     SIDECHAIN N     HB2     3.3729    11.9790
-DIHEDRAL HIS_chi1_N_HB3_n3            HIS     SIDECHAIN N     HB3     3.3729    11.9790
-DIHEDRAL ILE_chi1_C_CG1_n3            ILE     SIDECHAIN C     CG1     3.8528     8.8282
-DIHEDRAL ILE_chi1_C_CG2_n3            ILE     SIDECHAIN C     CG2     3.8528     8.8282
-DIHEDRAL ILE_chi1_C_HB_n3             ILE     SIDECHAIN C     HB      3.4544     8.8282
-DIHEDRAL ILE_chi1_HA_CG1_n3           ILE     SIDECHAIN HA    CG1     3.4405     8.8282
-DIHEDRAL ILE_chi1_HA_CG2_n3           ILE     SIDECHAIN HA    CG2     3.4405     8.8282
-DIHEDRAL ILE_chi1_HA_HB_n3            ILE     SIDECHAIN HA    HB      3.0499     8.8282
-DIHEDRAL ILE_chi1_N_CG1_n3            ILE     SIDECHAIN N     CG1     3.7716     8.8282
-DIHEDRAL ILE_chi1_N_CG2_n3            ILE     SIDECHAIN N     CG2     3.7716     8.8282
-DIHEDRAL ILE_chi1_N_HB_n3             ILE     SIDECHAIN N     HB      3.3729     8.8282
-DIHEDRAL LEU_chi1_C_CG_n3             LEU     SIDECHAIN C     CG      3.8528    11.0021
-DIHEDRAL LEU_chi1_C_HB2_n3            LEU     SIDECHAIN C     HB2     3.4544    11.0021
-DIHEDRAL LEU_chi1_C_HB3_n3            LEU     SIDECHAIN C     HB3     3.4544    11.0021
-DIHEDRAL LEU_chi1_HA_CG_n3            LEU     SIDECHAIN HA    CG      3.4405    11.0021
-DIHEDRAL LEU_chi1_HA_HB2_n3           LEU     SIDECHAIN HA    HB2     3.0499    11.0021
-DIHEDRAL LEU_chi1_HA_HB3_n3           LEU     SIDECHAIN HA    HB3     3.0499    11.0021
-DIHEDRAL LEU_chi1_N_CG_n3             LEU     SIDECHAIN N     CG      3.7716    11.0021
-DIHEDRAL LEU_chi1_N_HB2_n3            LEU     SIDECHAIN N     HB2     3.3729    11.0021
-DIHEDRAL LEU_chi1_N_HB3_n3            LEU     SIDECHAIN N     HB3     3.3729    11.0021
-DIHEDRAL LYS_chi1_C_CG_n3             LYS     SIDECHAIN C     CG      3.8528    11.0268
-DIHEDRAL LYS_chi1_C_HB2_n3            LYS     SIDECHAIN C     HB2     3.4544    11.0268
-DIHEDRAL LYS_chi1_C_HB3_n3            LYS     SIDECHAIN C     HB3     3.4544    11.0268
-DIHEDRAL LYS_chi1_HA_CG_n3            LYS     SIDECHAIN HA    CG      3.4405    11.0268
-DIHEDRAL LYS_chi1_HA_HB2_n3           LYS     SIDECHAIN HA    HB2     3.0499    11.0268
-DIHEDRAL LYS_chi1_HA_HB3_n3           LYS     SIDECHAIN HA    HB3     3.0499    11.0268
-DIHEDRAL LYS_chi1_N_CG_n3             LYS     SIDECHAIN N     CG      3.7716    11.0268
-DIHEDRAL LYS_chi1_N_HB2_n3            LYS     SIDECHAIN N     HB2     3.3729    11.0268
-DIHEDRAL LYS_chi1_N_HB3_n3            LYS     SIDECHAIN N     HB3     3.3729    11.0268
-DIHEDRAL MET_chi1_C_CG_n3             MET     SIDECHAIN C     CG      3.8528    10.9690
-DIHEDRAL MET_chi1_C_HB2_n3            MET     SIDECHAIN C     HB2     3.4544    10.9690
-DIHEDRAL MET_chi1_C_HB3_n3            MET     SIDECHAIN C     HB3     3.4544    10.9690
-DIHEDRAL MET_chi1_HA_CG_n3            MET     SIDECHAIN HA    CG      3.4405    10.9690
-DIHEDRAL MET_chi1_HA_HB2_n3           MET     SIDECHAIN HA    HB2     3.0499    10.9690
-DIHEDRAL MET_chi1_HA_HB3_n3           MET     SIDECHAIN HA    HB3     3.0499    10.9690
-DIHEDRAL MET_chi1_N_CG_n3             MET     SIDECHAIN N     CG      3.7716    10.9690
-DIHEDRAL MET_chi1_N_HB2_n3            MET     SIDECHAIN N     HB2     3.3729    10.9690
-DIHEDRAL MET_chi1_N_HB3_n3            MET     SIDECHAIN N     HB3     3.3729    10.9690
-DIHEDRAL PHE_chi1_C_CG_n3             PHE     SIDECHAIN C     CG      3.8810    12.2007
-DIHEDRAL PHE_chi1_C_HB2_n3            PHE     SIDECHAIN C     HB2     3.4544    12.2007
-DIHEDRAL PHE_chi1_C_HB3_n3            PHE     SIDECHAIN C     HB3     3.4544    12.2007
-DIHEDRAL PHE_chi1_HA_CG_n3            PHE     SIDECHAIN HA    CG      3.4732    12.2007
-DIHEDRAL PHE_chi1_HA_HB2_n3           PHE     SIDECHAIN HA    HB2     3.0499    12.2007
-DIHEDRAL PHE_chi1_HA_HB3_n3           PHE     SIDECHAIN HA    HB3     3.0499    12.2007
-DIHEDRAL PHE_chi1_N_CG_n3             PHE     SIDECHAIN N     CG      3.7996    12.2007
-DIHEDRAL PHE_chi1_N_HB2_n3            PHE     SIDECHAIN N     HB2     3.3729    12.2007
-DIHEDRAL PHE_chi1_N_HB3_n3            PHE     SIDECHAIN N     HB3     3.3729    12.2007
-DIHEDRAL SER_chi1_C_HB2_n3            SER     SIDECHAIN C     HB2     3.4544    11.8551
-DIHEDRAL SER_chi1_C_HB3_n3            SER     SIDECHAIN C     HB3     3.4544    11.8551
-DIHEDRAL SER_chi1_C_OG_n3             SER     SIDECHAIN C     OG      3.7460    11.8551
-DIHEDRAL SER_chi1_HA_HB2_n3           SER     SIDECHAIN HA    HB2     3.0499    11.8551
-DIHEDRAL SER_chi1_HA_HB3_n3           SER     SIDECHAIN HA    HB3     3.0499    11.8551
-DIHEDRAL SER_chi1_HA_OG_n3            SER     SIDECHAIN HA    OG      3.3355    11.8551
-DIHEDRAL SER_chi1_N_HB2_n3            SER     SIDECHAIN N     HB2     3.3729    11.8551
-DIHEDRAL SER_chi1_N_HB3_n3            SER     SIDECHAIN N     HB3     3.3729    11.8551
-DIHEDRAL SER_chi1_N_OG_n3             SER     SIDECHAIN N     OG      3.6647    11.8551
-DIHEDRAL THR_chi1_C_CG2_n3            THR     SIDECHAIN C     CG2     3.8528     9.3444
-DIHEDRAL THR_chi1_C_HB_n3             THR     SIDECHAIN C     HB      3.4544     9.3444
-DIHEDRAL THR_chi1_C_OG1_n3            THR     SIDECHAIN C     OG1     3.7460     9.3444
-DIHEDRAL THR_chi1_HA_CG2_n3           THR     SIDECHAIN HA    CG2     3.4405     9.3444
-DIHEDRAL THR_chi1_HA_HB_n3            THR     SIDECHAIN HA    HB      3.0499     9.3444
-DIHEDRAL THR_chi1_HA_OG1_n3           THR     SIDECHAIN HA    OG1     3.3355     9.3444
-DIHEDRAL THR_chi1_N_CG2_n3            THR     SIDECHAIN N     CG2     3.7716     9.3444
-DIHEDRAL THR_chi1_N_HB_n3             THR     SIDECHAIN N     HB      3.3729     9.3444
-DIHEDRAL THR_chi1_N_OG1_n3            THR     SIDECHAIN N     OG1     3.6647     9.3444
-DIHEDRAL TYR_chi1_C_CG_n3             TYR     SIDECHAIN C     CG      3.8810    12.2310
-DIHEDRAL TYR_chi1_C_HB2_n3            TYR     SIDECHAIN C     HB2     3.4544    12.2310
-DIHEDRAL TYR_chi1_C_HB3_n3            TYR     SIDECHAIN C     HB3     3.4544    12.2310
-DIHEDRAL TYR_chi1_HA_CG_n3            TYR     SIDECHAIN HA    CG      3.4732    12.2310
-DIHEDRAL TYR_chi1_HA_HB2_n3           TYR     SIDECHAIN HA    HB2     3.0499    12.2310
-DIHEDRAL TYR_chi1_HA_HB3_n3           TYR     SIDECHAIN HA    HB3     3.0499    12.2310
-DIHEDRAL TYR_chi1_N_CG_n3             TYR     SIDECHAIN N     CG      3.7996    12.2310
-DIHEDRAL TYR_chi1_N_HB2_n3            TYR     SIDECHAIN N     HB2     3.3729    12.2310
-DIHEDRAL TYR_chi1_N_HB3_n3            TYR     SIDECHAIN N     HB3     3.3729    12.2310
-DIHEDRAL VAL_chi1_C_CG1_n3            VAL     SIDECHAIN C     CG1     3.8528     8.8283
-DIHEDRAL VAL_chi1_C_CG2_n3            VAL     SIDECHAIN C     CG2     3.8528     8.8283
-DIHEDRAL VAL_chi1_C_HB_n3             VAL     SIDECHAIN C     HB      3.4544     8.8283
-DIHEDRAL VAL_chi1_HA_CG1_n3           VAL     SIDECHAIN HA    CG1     3.4405     8.8283
-DIHEDRAL VAL_chi1_HA_CG2_n3           VAL     SIDECHAIN HA    CG2     3.4405     8.8283
-DIHEDRAL VAL_chi1_HA_HB_n3            VAL     SIDECHAIN HA    HB      3.0499     8.8283
-DIHEDRAL VAL_chi1_N_CG1_n3            VAL     SIDECHAIN N     CG1     3.7716     8.8283
-DIHEDRAL VAL_chi1_N_CG2_n3            VAL     SIDECHAIN N     CG2     3.7716     8.8283
-DIHEDRAL VAL_chi1_N_HB_n3             VAL     SIDECHAIN N     HB      3.3729     8.8283
-DIHEDRAL ARG_chi2_CA_CD_n3            ARG     SIDECHAIN CA    CD      3.8409    12.6650
-DIHEDRAL ARG_chi2_CA_HG2_n3           ARG     SIDECHAIN CA    HG2     3.4405    12.6650
-DIHEDRAL ARG_chi2_CA_HG3_n3           ARG     SIDECHAIN CA    HG3     3.4405    12.6650
-DIHEDRAL ARG_chi2_HB2_CD_n3           ARG     SIDECHAIN HB2   CD      3.4405    12.6650
-DIHEDRAL ARG_chi2_HB2_HG2_n3          ARG     SIDECHAIN HB2   HG2     3.0499    12.6650
-DIHEDRAL ARG_chi2_HB2_HG3_n3          ARG     SIDECHAIN HB2   HG3     3.0499    12.6650
-DIHEDRAL ARG_chi2_HB3_CD_n3           ARG     SIDECHAIN HB3   CD      3.4405    12.6650
-DIHEDRAL ARG_chi2_HB3_HG2_n3          ARG     SIDECHAIN HB3   HG2     3.0499    12.6650
-DIHEDRAL ARG_chi2_HB3_HG3_n3          ARG     SIDECHAIN HB3   HG3     3.0499    12.6650
-DIHEDRAL GLN_chi2_CA_CD_n3            GLN     SIDECHAIN CA    CD      3.8528    13.1289
-DIHEDRAL GLN_chi2_CA_HG2_n3           GLN     SIDECHAIN CA    HG2     3.4405    13.1289
-DIHEDRAL GLN_chi2_CA_HG3_n3           GLN     SIDECHAIN CA    HG3     3.4405    13.1289
-DIHEDRAL GLN_chi2_HB2_CD_n3           GLN     SIDECHAIN HB2   CD      3.4544    13.1289
-DIHEDRAL GLN_chi2_HB2_HG2_n3          GLN     SIDECHAIN HB2   HG2     3.0499    13.1289
-DIHEDRAL GLN_chi2_HB2_HG3_n3          GLN     SIDECHAIN HB2   HG3     3.0499    13.1289
-DIHEDRAL GLN_chi2_HB3_CD_n3           GLN     SIDECHAIN HB3   CD      3.4544    13.1289
-DIHEDRAL GLN_chi2_HB3_HG2_n3          GLN     SIDECHAIN HB3   HG2     3.0499    13.1289
-DIHEDRAL GLN_chi2_HB3_HG3_n3          GLN     SIDECHAIN HB3   HG3     3.0499    13.1289
-DIHEDRAL GLU_chi2_CA_CD_n3            GLU     SIDECHAIN CA    CD      3.8528    13.1274
-DIHEDRAL GLU_chi2_CA_HG2_n3           GLU     SIDECHAIN CA    HG2     3.4405    13.1274
-DIHEDRAL GLU_chi2_CA_HG3_n3           GLU     SIDECHAIN CA    HG3     3.4405    13.1274
-DIHEDRAL GLU_chi2_HB2_CD_n3           GLU     SIDECHAIN HB2   CD      3.4544    13.1274
-DIHEDRAL GLU_chi2_HB2_HG2_n3          GLU     SIDECHAIN HB2   HG2     3.0499    13.1274
-DIHEDRAL GLU_chi2_HB2_HG3_n3          GLU     SIDECHAIN HB2   HG3     3.0499    13.1274
-DIHEDRAL GLU_chi2_HB3_CD_n3           GLU     SIDECHAIN HB3   CD      3.4544    13.1274
-DIHEDRAL GLU_chi2_HB3_HG2_n3          GLU     SIDECHAIN HB3   HG2     3.0499    13.1274
-DIHEDRAL GLU_chi2_HB3_HG3_n3          GLU     SIDECHAIN HB3   HG3     3.0499    13.1274
-DIHEDRAL ILE_chi2_CA_CD1_n3           ILE     SIDECHAIN CA    CD1     3.8409    10.2415
-DIHEDRAL ILE_chi2_CA_HG12_n3          ILE     SIDECHAIN CA    HG12    3.4405    10.2415
-DIHEDRAL ILE_chi2_CA_HG13_n3          ILE     SIDECHAIN CA    HG13    3.4405    10.2415
-DIHEDRAL ILE_chi2_CG2_CD1_n3          ILE     SIDECHAIN CG2   CD1     3.8409    10.2415
-DIHEDRAL ILE_chi2_CG2_HG12_n3         ILE     SIDECHAIN CG2   HG12    3.4405    10.2415
-DIHEDRAL ILE_chi2_CG2_HG13_n3         ILE     SIDECHAIN CG2   HG13    3.4405    10.2415
-DIHEDRAL ILE_chi2_HB_CD1_n3           ILE     SIDECHAIN HB    CD1     3.4405    10.2415
-DIHEDRAL ILE_chi2_HB_HG12_n3          ILE     SIDECHAIN HB    HG12    3.0499    10.2415
-DIHEDRAL ILE_chi2_HB_HG13_n3          ILE     SIDECHAIN HB    HG13    3.0499    10.2415
-DIHEDRAL LEU_chi2_CA_CD1_n3           LEU     SIDECHAIN CA    CD1     3.8409    10.2455
-DIHEDRAL LEU_chi2_CA_CD2_n3           LEU     SIDECHAIN CA    CD2     3.8409    10.2455
-DIHEDRAL LEU_chi2_CA_HG_n3            LEU     SIDECHAIN CA    HG      3.4405    10.2455
-DIHEDRAL LEU_chi2_HB2_CD1_n3          LEU     SIDECHAIN HB2   CD1     3.4405    10.2455
-DIHEDRAL LEU_chi2_HB2_CD2_n3          LEU     SIDECHAIN HB2   CD2     3.4405    10.2455
-DIHEDRAL LEU_chi2_HB2_HG_n3           LEU     SIDECHAIN HB2   HG      3.0499    10.2455
-DIHEDRAL LEU_chi2_HB3_CD1_n3          LEU     SIDECHAIN HB3   CD1     3.4405    10.2455
-DIHEDRAL LEU_chi2_HB3_CD2_n3          LEU     SIDECHAIN HB3   CD2     3.4405    10.2455
-DIHEDRAL LEU_chi2_HB3_HG_n3           LEU     SIDECHAIN HB3   HG      3.0499    10.2455
-DIHEDRAL LYS_chi2_CA_CD_n3            LYS     SIDECHAIN CA    CD      3.8409    12.6639
-DIHEDRAL LYS_chi2_CA_HG2_n3           LYS     SIDECHAIN CA    HG2     3.4405    12.6639
-DIHEDRAL LYS_chi2_CA_HG3_n3           LYS     SIDECHAIN CA    HG3     3.4405    12.6639
-DIHEDRAL LYS_chi2_HB2_CD_n3           LYS     SIDECHAIN HB2   CD      3.4405    12.6639
-DIHEDRAL LYS_chi2_HB2_HG2_n3          LYS     SIDECHAIN HB2   HG2     3.0499    12.6639
-DIHEDRAL LYS_chi2_HB2_HG3_n3          LYS     SIDECHAIN HB2   HG3     3.0499    12.6639
-DIHEDRAL LYS_chi2_HB3_CD_n3           LYS     SIDECHAIN HB3   CD      3.4405    12.6639
-DIHEDRAL LYS_chi2_HB3_HG2_n3          LYS     SIDECHAIN HB3   HG2     3.0499    12.6639
-DIHEDRAL LYS_chi2_HB3_HG3_n3          LYS     SIDECHAIN HB3   HG3     3.0499    12.6639
-DIHEDRAL MET_chi2_CA_HG2_n3           MET     SIDECHAIN CA    HG2     3.4405    12.4872
-DIHEDRAL MET_chi2_CA_HG3_n3           MET     SIDECHAIN CA    HG3     3.4405    12.4872
-DIHEDRAL MET_chi2_CA_SD_n3            MET     SIDECHAIN CA    SD      4.1591    12.4872
-DIHEDRAL MET_chi2_HB2_HG2_n3          MET     SIDECHAIN HB2   HG2     3.0499    12.4872
-DIHEDRAL MET_chi2_HB2_HG3_n3          MET     SIDECHAIN HB2   HG3     3.0499    12.4872
-DIHEDRAL MET_chi2_HB2_SD_n3           MET     SIDECHAIN HB2   SD      3.7605    12.4872
-DIHEDRAL MET_chi2_HB3_HG2_n3          MET     SIDECHAIN HB3   HG2     3.0499    12.4872
-DIHEDRAL MET_chi2_HB3_HG3_n3          MET     SIDECHAIN HB3   HG3     3.0499    12.4872
-DIHEDRAL MET_chi2_HB3_SD_n3           MET     SIDECHAIN HB3   SD      3.7605    12.4872
-DIHEDRAL ALA_phi_C_C_n3               ALA     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL ALA_phi_C_C_n2               ALA     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL ALA_phi_C_CB_n3              ALA     BACKBONE -C    CB      3.7051   284.1867
-DIHEDRAL ALA_phi_C_CB_n1              ALA     BACKBONE -C    CB      2.6861    58.5367
-DIHEDRAL ALA_psi_CB_N_n2              ALA     BACKBONE CB    +N      3.7383    10.3181
-DIHEDRAL ALA_psi_CB_N_n1              ALA     BACKBONE CB    +N      2.6790     2.9327
-DIHEDRAL ALA_psi_HA_O_n1              ALA     BACKBONE HA    O       2.5080    48.2428
-DIHEDRAL ALA_psi_N_N_n3               ALA     BACKBONE N     +N      3.6575   369.4285
-DIHEDRAL ALA_psi_N_N_n2               ALA     BACKBONE N     +N      3.6575   226.1348
-DIHEDRAL ALA_psi_N_N_n1               ALA     BACKBONE N     +N      2.6230    12.4031
-DIHEDRAL ARG_phi_C_C_n3               ARG     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL ARG_phi_C_C_n2               ARG     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL ARG_phi_C_CB_n3              ARG     BACKBONE -C    CB      3.7051   281.2029
-DIHEDRAL ARG_phi_C_CB_n1              ARG     BACKBONE -C    CB      2.6861    62.8460
-DIHEDRAL ARG_psi_CB_N_n2              ARG     BACKBONE CB    +N      3.7383    10.3164
-DIHEDRAL ARG_psi_CB_N_n1              ARG     BACKBONE CB    +N      2.6790     2.9326
-DIHEDRAL ARG_psi_HA_O_n1              ARG     BACKBONE HA    O       2.5080    47.4086
-DIHEDRAL ARG_psi_N_N_n3               ARG     BACKBONE N     +N      3.6575   362.2882
-DIHEDRAL ARG_psi_N_N_n2               ARG     BACKBONE N     +N      3.6575   182.4745
-DIHEDRAL ARG_psi_N_N_n1               ARG     BACKBONE N     +N      2.6230    13.4160
-DIHEDRAL ASN_phi_C_C_n3               ASN     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL ASN_phi_C_C_n2               ASN     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL ASN_phi_C_CB_n3              ASN     BACKBONE -C    CB      3.7051   281.5326
-DIHEDRAL ASN_phi_C_CB_n1              ASN     BACKBONE -C    CB      2.6861    61.5993
-DIHEDRAL ASN_psi_CB_N_n2              ASN     BACKBONE CB    +N      3.7383    10.3155
-DIHEDRAL ASN_psi_CB_N_n1              ASN     BACKBONE CB    +N      2.6790     2.9325
-DIHEDRAL ASN_psi_HA_O_n1              ASN     BACKBONE HA    O       2.5080    47.1043
-DIHEDRAL ASN_psi_N_N_n3               ASN     BACKBONE N     +N      3.6575   365.1410
-DIHEDRAL ASN_psi_N_N_n2               ASN     BACKBONE N     +N      3.6575   203.7629
-DIHEDRAL ASN_psi_N_N_n1               ASN     BACKBONE N     +N      2.6230    12.8385
-DIHEDRAL ASP_phi_C_C_n3               ASP     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL ASP_phi_C_C_n2               ASP     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL ASP_phi_C_CB_n3              ASP     BACKBONE -C    CB      3.7051   281.2072
-DIHEDRAL ASP_phi_C_CB_n1              ASP     BACKBONE -C    CB      2.6861    62.8106
-DIHEDRAL ASP_psi_CB_N_n2              ASP     BACKBONE CB    +N      3.7383    10.3298
-DIHEDRAL ASP_psi_CB_N_n1              ASP     BACKBONE CB    +N      2.6790     2.9336
-DIHEDRAL ASP_psi_HA_O_n1              ASP     BACKBONE HA    O       2.5080    45.5786
-DIHEDRAL ASP_psi_N_N_n3               ASP     BACKBONE N     +N      3.6575   364.0651
-DIHEDRAL ASP_psi_N_N_n2               ASP     BACKBONE N     +N      3.6575   197.0856
-DIHEDRAL ASP_psi_N_N_n1               ASP     BACKBONE N     +N      2.6230    12.9985
-DIHEDRAL GLN_phi_C_C_n3               GLN     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL GLN_phi_C_C_n2               GLN     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL GLN_phi_C_CB_n3              GLN     BACKBONE -C    CB      3.7051   281.2162
-DIHEDRAL GLN_phi_C_CB_n1              GLN     BACKBONE -C    CB      2.6861    64.0596
-DIHEDRAL GLN_psi_CB_N_n2              GLN     BACKBONE CB    +N      3.7383    10.3394
-DIHEDRAL GLN_psi_CB_N_n1              GLN     BACKBONE CB    +N      2.6790     2.9342
-DIHEDRAL GLN_psi_HA_O_n1              GLN     BACKBONE HA    O       2.5080    48.5638
-DIHEDRAL GLN_psi_N_N_n3               GLN     BACKBONE N     +N      3.6575   366.7136
-DIHEDRAL GLN_psi_N_N_n2               GLN     BACKBONE N     +N      3.6575   212.4890
-DIHEDRAL GLN_psi_N_N_n1               GLN     BACKBONE N     +N      2.6230    12.6523
-DIHEDRAL GLU_phi_C_C_n3               GLU     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL GLU_phi_C_C_n2               GLU     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL GLU_phi_C_CB_n3              GLU     BACKBONE -C    CB      3.7051   281.2393
-DIHEDRAL GLU_phi_C_CB_n1              GLU     BACKBONE -C    CB      2.6861    62.5977
-DIHEDRAL GLU_psi_CB_N_n2              GLU     BACKBONE CB    +N      3.7383    10.3248
-DIHEDRAL GLU_psi_CB_N_n1              GLU     BACKBONE CB    +N      2.6790     2.9332
-DIHEDRAL GLU_psi_HA_O_n1              GLU     BACKBONE HA    O       2.5080    44.1306
-DIHEDRAL GLU_psi_N_N_n3               GLU     BACKBONE N     +N      3.6575   361.8838
-DIHEDRAL GLU_psi_N_N_n2               GLU     BACKBONE N     +N      3.6575   165.7164
-DIHEDRAL GLU_psi_N_N_n1               GLU     BACKBONE N     +N      2.6230    14.0564
-DIHEDRAL GLY_phi_C_C_n3               GLY     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL GLY_phi_C_C_n2               GLY     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL GLY_psi_HA2_O_n1             GLY     BACKBONE HA2   O       3.2629    23.9358
-DIHEDRAL GLY_psi_HA3_O_n1             GLY     BACKBONE HA3   O       2.5080    49.8145
-DIHEDRAL GLY_psi_N_N_n3               GLY     BACKBONE N     +N      3.6575   361.8723
-DIHEDRAL GLY_psi_N_N_n2               GLY     BACKBONE N     +N      3.6575   176.1784
-DIHEDRAL GLY_psi_N_N_n1               GLY     BACKBONE N     +N      2.6230    13.6322
-DIHEDRAL HIS_phi_C_C_n3               HIS     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL HIS_phi_C_C_n2               HIS     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL HIS_phi_C_CB_n3              HIS     BACKBONE -C    CB      3.7051   281.1782
-DIHEDRAL HIS_phi_C_CB_n1              HIS     BACKBONE -C    CB      2.6861    63.6615
-DIHEDRAL HIS_psi_CB_N_n2              HIS     BACKBONE CB    +N      3.7383    10.3127
-DIHEDRAL HIS_psi_CB_N_n1              HIS     BACKBONE CB    +N      2.6790     2.9323
-DIHEDRAL HIS_psi_HA_O_n1              HIS     BACKBONE HA    O       2.5080    47.0072
-DIHEDRAL HIS_psi_N_N_n3               HIS     BACKBONE N     +N      3.6575   361.7514
-DIHEDRAL HIS_psi_N_N_n2               HIS     BACKBONE N     +N      3.6575   170.5106
-DIHEDRAL HIS_psi_N_N_n1               HIS     BACKBONE N     +N      2.6230    13.8507
-DIHEDRAL ILE_phi_C_C_n3               ILE     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL ILE_phi_C_C_n2               ILE     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL ILE_phi_C_CB_n3              ILE     BACKBONE -C    CB      3.7051   284.0740
-DIHEDRAL ILE_phi_C_CB_n1              ILE     BACKBONE -C    CB      2.6861    58.6195
-DIHEDRAL ILE_psi_CB_N_n2              ILE     BACKBONE CB    +N      3.7383    10.3136
-DIHEDRAL ILE_psi_CB_N_n1              ILE     BACKBONE CB    +N      2.6790     2.9324
-DIHEDRAL ILE_psi_HA_O_n1              ILE     BACKBONE HA    O       2.5080    47.5403
-DIHEDRAL ILE_psi_N_N_n3               ILE     BACKBONE N     +N      3.6575   366.3929
-DIHEDRAL ILE_psi_N_N_n2               ILE     BACKBONE N     +N      3.6575   210.7778
-DIHEDRAL ILE_psi_N_N_n1               ILE     BACKBONE N     +N      2.6230    12.6869
-DIHEDRAL LEU_phi_C_C_n3               LEU     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL LEU_phi_C_C_n2               LEU     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL LEU_phi_C_CB_n3              LEU     BACKBONE -C    CB      3.7051   281.2592
-DIHEDRAL LEU_phi_C_CB_n1              LEU     BACKBONE -C    CB      2.6861    62.4911
-DIHEDRAL LEU_psi_CB_N_n2              LEU     BACKBONE CB    +N      3.7383    10.3200
-DIHEDRAL LEU_psi_CB_N_n1              LEU     BACKBONE CB    +N      2.6790     2.9329
-DIHEDRAL LEU_psi_HA_O_n1              LEU     BACKBONE HA    O       2.5080    48.7486
-DIHEDRAL LEU_psi_N_N_n3               LEU     BACKBONE N     +N      3.6575   361.8364
-DIHEDRAL LEU_psi_N_N_n2               LEU     BACKBONE N     +N      3.6575   175.3005
-DIHEDRAL LEU_psi_N_N_n1               LEU     BACKBONE N     +N      2.6230    13.6645
-DIHEDRAL LYS_phi_C_C_n3               LYS     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL LYS_phi_C_C_n2               LYS     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL LYS_phi_C_CB_n3              LYS     BACKBONE -C    CB      3.7051   282.6774
-DIHEDRAL LYS_phi_C_CB_n1              LYS     BACKBONE -C    CB      2.6861    59.8601
-DIHEDRAL LYS_psi_CB_N_n2              LYS     BACKBONE CB    +N      3.7383    10.3125
-DIHEDRAL LYS_psi_CB_N_n1              LYS     BACKBONE CB    +N      2.6790     2.9323
-DIHEDRAL LYS_psi_HA_O_n1              LYS     BACKBONE HA    O       2.5080    48.4520
-DIHEDRAL LYS_psi_N_N_n3               LYS     BACKBONE N     +N      3.6575   365.1829
-DIHEDRAL LYS_psi_N_N_n2               LYS     BACKBONE N     +N      3.6575   204.0085
-DIHEDRAL LYS_psi_N_N_n1               LYS     BACKBONE N     +N      2.6230    12.8329
-DIHEDRAL PHE_phi_C_C_n3               PHE     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL PHE_phi_C_C_n2               PHE     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL PHE_phi_C_CB_n3              PHE     BACKBONE -C    CB      3.7051   281.2542
-DIHEDRAL PHE_phi_C_CB_n1              PHE     BACKBONE -C    CB      2.6861    62.5166
-DIHEDRAL PHE_psi_CB_N_n2              PHE     BACKBONE CB    +N      3.7383    10.3420
-DIHEDRAL PHE_psi_CB_N_n1              PHE     BACKBONE CB    +N      2.6790     2.9344
-DIHEDRAL PHE_psi_HA_O_n1              PHE     BACKBONE HA    O       2.5080    49.0407
-DIHEDRAL PHE_psi_N_N_n3               PHE     BACKBONE N     +N      3.6575   367.6005
-DIHEDRAL PHE_psi_N_N_n2               PHE     BACKBONE N     +N      3.6575   217.0901
-DIHEDRAL PHE_psi_N_N_n1               PHE     BACKBONE N     +N      2.6230    12.5631
-DIHEDRAL PRO_phi_C_C_n3               PRO     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL PRO_phi_C_C_n2               PRO     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL PRO_phi_C_CB_n3              PRO     BACKBONE -C    CB      3.7051   282.2778
-DIHEDRAL PRO_phi_C_CB_n1              PRO     BACKBONE -C    CB      2.6861    60.3344
-DIHEDRAL PRO_psi_CB_N_n2              PRO     BACKBONE CB    +N      3.7383    10.3160
-DIHEDRAL PRO_psi_CB_N_n1              PRO     BACKBONE CB    +N      2.6790     2.9326
-DIHEDRAL PRO_psi_HA_O_n1              PRO     BACKBONE HA    O       2.5080    46.4405
-DIHEDRAL PRO_psi_N_N_n3               PRO     BACKBONE N     +N      3.6575   364.7175
-DIHEDRAL PRO_psi_N_N_n2               PRO     BACKBONE N     +N      3.6575   149.4232
-DIHEDRAL PRO_psi_N_N_n1               PRO     BACKBONE N     +N      2.6230    14.9507
-DIHEDRAL SER_phi_C_C_n3               SER     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL SER_phi_C_C_n2               SER     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL SER_phi_C_CB_n3              SER     BACKBONE -C    CB      3.7051   282.7419
-DIHEDRAL SER_phi_C_CB_n1              SER     BACKBONE -C    CB      2.6861    59.7905
-DIHEDRAL SER_psi_CB_N_n2              SER     BACKBONE CB    +N      3.7383    10.3221
-DIHEDRAL SER_psi_CB_N_n1              SER     BACKBONE CB    +N      2.6790     2.9330
-DIHEDRAL SER_psi_HA_O_n1              SER     BACKBONE HA    O       2.5080    49.8100
-DIHEDRAL SER_psi_N_N_n3               SER     BACKBONE N     +N      3.6575   368.9068
-DIHEDRAL SER_psi_N_N_n2               SER     BACKBONE N     +N      3.6575   223.6007
-DIHEDRAL SER_psi_N_N_n1               SER     BACKBONE N     +N      2.6230    12.4460
-DIHEDRAL THR_phi_C_C_n3               THR     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL THR_phi_C_C_n2               THR     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL THR_phi_C_CB_n3              THR     BACKBONE -C    CB      3.7051   281.5393
-DIHEDRAL THR_phi_C_CB_n1              THR     BACKBONE -C    CB      2.6861    61.5833
-DIHEDRAL THR_psi_CB_N_n2              THR     BACKBONE CB    +N      3.7383    10.3119
-DIHEDRAL THR_psi_CB_N_n1              THR     BACKBONE CB    +N      2.6790     2.9323
-DIHEDRAL THR_psi_HA_O_n1              THR     BACKBONE HA    O       2.5080    48.6390
-DIHEDRAL THR_psi_N_N_n3               THR     BACKBONE N     +N      3.6575   364.0963
-DIHEDRAL THR_psi_N_N_n2               THR     BACKBONE N     +N      3.6575   197.2916
-DIHEDRAL THR_psi_N_N_n1               THR     BACKBONE N     +N      2.6230    12.9933
-DIHEDRAL TYR_phi_C_C_n3               TYR     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL TYR_phi_C_C_n2               TYR     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL TYR_phi_C_CB_n3              TYR     BACKBONE -C    CB      3.7051   281.4858
-DIHEDRAL TYR_phi_C_CB_n1              TYR     BACKBONE -C    CB      2.6861    61.7156
-DIHEDRAL TYR_psi_CB_N_n2              TYR     BACKBONE CB    +N      3.7383    10.3119
-DIHEDRAL TYR_psi_CB_N_n1              TYR     BACKBONE CB    +N      2.6790     2.9323
-DIHEDRAL TYR_psi_HA_O_n1              TYR     BACKBONE HA    O       2.5080    48.9845
-DIHEDRAL TYR_psi_N_N_n3               TYR     BACKBONE N     +N      3.6575   363.6480
-DIHEDRAL TYR_psi_N_N_n2               TYR     BACKBONE N     +N      3.6575   194.2315
-DIHEDRAL TYR_psi_N_N_n1               TYR     BACKBONE N     +N      2.6230    13.0722
-DIHEDRAL VAL_phi_C_C_n3               VAL     BACKBONE -C    C       3.7063   301.7887
-DIHEDRAL VAL_phi_C_C_n2               VAL     BACKBONE -C    C       3.7063    15.3210
-DIHEDRAL VAL_phi_C_CB_n3              VAL     BACKBONE -C    CB      3.7051   281.2016
-DIHEDRAL VAL_phi_C_CB_n1              VAL     BACKBONE -C    CB      2.6861    62.8570
-DIHEDRAL VAL_psi_CB_N_n2              VAL     BACKBONE CB    +N      3.7383    10.3187
-DIHEDRAL VAL_psi_CB_N_n1              VAL     BACKBONE CB    +N      2.6790     2.9328
-DIHEDRAL VAL_psi_HA_O_n1              VAL     BACKBONE HA    O       2.5080    47.9774
-DIHEDRAL VAL_psi_N_N_n3               VAL     BACKBONE N     +N      3.6575   365.0498
-DIHEDRAL VAL_psi_N_N_n2               VAL     BACKBONE N     +N      3.6575   203.2255
-DIHEDRAL VAL_psi_N_N_n1               VAL     BACKBONE N     +N      2.6230    12.8508
+DIHEDRAL ARG_chi1_n3_00               ARG     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.6766
+DIHEDRAL ARG_chi1_n3_01               ARG     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.6766
+DIHEDRAL ARG_chi1_n3_02               ARG     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.6766
+DIHEDRAL ARG_chi1_n3_10               ARG     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.6766
+DIHEDRAL ARG_chi1_n3_11               ARG     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.6766
+DIHEDRAL ARG_chi1_n3_12               ARG     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.6766
+DIHEDRAL ARG_chi1_n3_20               ARG     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.6766
+DIHEDRAL ARG_chi1_n3_21               ARG     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.6766
+DIHEDRAL ARG_chi1_n3_22               ARG     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.6766
+DIHEDRAL ASN_chi1_n3_00               ASN     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.6997
+DIHEDRAL ASN_chi1_n3_01               ASN     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.6997
+DIHEDRAL ASN_chi1_n3_02               ASN     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.6997
+DIHEDRAL ASN_chi1_n3_10               ASN     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.6997
+DIHEDRAL ASN_chi1_n3_11               ASN     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.6997
+DIHEDRAL ASN_chi1_n3_12               ASN     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.6997
+DIHEDRAL ASN_chi1_n3_20               ASN     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.6997
+DIHEDRAL ASN_chi1_n3_21               ASN     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.6997
+DIHEDRAL ASN_chi1_n3_22               ASN     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.6997
+DIHEDRAL ASP_chi1_n3_00               ASP     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.6961
+DIHEDRAL ASP_chi1_n3_01               ASP     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.6961
+DIHEDRAL ASP_chi1_n3_02               ASP     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.6961
+DIHEDRAL ASP_chi1_n3_10               ASP     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.6961
+DIHEDRAL ASP_chi1_n3_11               ASP     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.6961
+DIHEDRAL ASP_chi1_n3_12               ASP     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.6961
+DIHEDRAL ASP_chi1_n3_20               ASP     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.6961
+DIHEDRAL ASP_chi1_n3_21               ASP     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.6961
+DIHEDRAL ASP_chi1_n3_22               ASP     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.6961
+DIHEDRAL GLN_chi1_n3_00               GLN     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.7020
+DIHEDRAL GLN_chi1_n3_01               GLN     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.7020
+DIHEDRAL GLN_chi1_n3_02               GLN     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.7020
+DIHEDRAL GLN_chi1_n3_10               GLN     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.7020
+DIHEDRAL GLN_chi1_n3_11               GLN     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.7020
+DIHEDRAL GLN_chi1_n3_12               GLN     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.7020
+DIHEDRAL GLN_chi1_n3_20               GLN     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.7020
+DIHEDRAL GLN_chi1_n3_21               GLN     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.7020
+DIHEDRAL GLN_chi1_n3_22               GLN     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.7020
+DIHEDRAL GLU_chi1_n3_00               GLU     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.6399
+DIHEDRAL GLU_chi1_n3_01               GLU     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.6399
+DIHEDRAL GLU_chi1_n3_02               GLU     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.6399
+DIHEDRAL GLU_chi1_n3_10               GLU     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.6399
+DIHEDRAL GLU_chi1_n3_11               GLU     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.6399
+DIHEDRAL GLU_chi1_n3_12               GLU     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.6399
+DIHEDRAL GLU_chi1_n3_20               GLU     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.6399
+DIHEDRAL GLU_chi1_n3_21               GLU     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.6399
+DIHEDRAL GLU_chi1_n3_22               GLU     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.6399
+DIHEDRAL HIS_chi1_n3_00               HIS     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.7012
+DIHEDRAL HIS_chi1_n3_01               HIS     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.7012
+DIHEDRAL HIS_chi1_n3_02               HIS     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.7012
+DIHEDRAL HIS_chi1_n3_10               HIS     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.7012
+DIHEDRAL HIS_chi1_n3_11               HIS     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.7012
+DIHEDRAL HIS_chi1_n3_12               HIS     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.7012
+DIHEDRAL HIS_chi1_n3_20               HIS     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.7012
+DIHEDRAL HIS_chi1_n3_21               HIS     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.7012
+DIHEDRAL HIS_chi1_n3_22               HIS     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.7012
+DIHEDRAL ILE_chi1_n3_00               ILE     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.6594
+DIHEDRAL ILE_chi1_n3_01               ILE     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.6594
+DIHEDRAL ILE_chi1_n3_02               ILE     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.6594
+DIHEDRAL ILE_chi1_n3_10               ILE     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.6594
+DIHEDRAL ILE_chi1_n3_11               ILE     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.6594
+DIHEDRAL ILE_chi1_n3_12               ILE     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.6594
+DIHEDRAL ILE_chi1_n3_20               ILE     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.6594
+DIHEDRAL ILE_chi1_n3_21               ILE     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.6594
+DIHEDRAL ILE_chi1_n3_22               ILE     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.6594
+DIHEDRAL LEU_chi1_n3_00               LEU     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.6272
+DIHEDRAL LEU_chi1_n3_01               LEU     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.6272
+DIHEDRAL LEU_chi1_n3_02               LEU     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.6272
+DIHEDRAL LEU_chi1_n3_10               LEU     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.6272
+DIHEDRAL LEU_chi1_n3_11               LEU     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.6272
+DIHEDRAL LEU_chi1_n3_12               LEU     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.6272
+DIHEDRAL LEU_chi1_n3_20               LEU     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.6272
+DIHEDRAL LEU_chi1_n3_21               LEU     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.6272
+DIHEDRAL LEU_chi1_n3_22               LEU     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.6272
+DIHEDRAL LYS_chi1_n3_00               LYS     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.5931
+DIHEDRAL LYS_chi1_n3_01               LYS     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.5931
+DIHEDRAL LYS_chi1_n3_02               LYS     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.5931
+DIHEDRAL LYS_chi1_n3_10               LYS     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.5931
+DIHEDRAL LYS_chi1_n3_11               LYS     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.5931
+DIHEDRAL LYS_chi1_n3_12               LYS     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.5931
+DIHEDRAL LYS_chi1_n3_20               LYS     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.5931
+DIHEDRAL LYS_chi1_n3_21               LYS     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.5931
+DIHEDRAL LYS_chi1_n3_22               LYS     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.5931
+DIHEDRAL MET_chi1_n3_00               MET     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.7208
+DIHEDRAL MET_chi1_n3_01               MET     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.7208
+DIHEDRAL MET_chi1_n3_02               MET     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.7208
+DIHEDRAL MET_chi1_n3_10               MET     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.7208
+DIHEDRAL MET_chi1_n3_11               MET     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.7208
+DIHEDRAL MET_chi1_n3_12               MET     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.7208
+DIHEDRAL MET_chi1_n3_20               MET     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.7208
+DIHEDRAL MET_chi1_n3_21               MET     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.7208
+DIHEDRAL MET_chi1_n3_22               MET     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.7208
+DIHEDRAL PHE_chi1_n3_00               PHE     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.6234
+DIHEDRAL PHE_chi1_n3_01               PHE     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.6234
+DIHEDRAL PHE_chi1_n3_02               PHE     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.6234
+DIHEDRAL PHE_chi1_n3_10               PHE     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.6234
+DIHEDRAL PHE_chi1_n3_11               PHE     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.6234
+DIHEDRAL PHE_chi1_n3_12               PHE     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.6234
+DIHEDRAL PHE_chi1_n3_20               PHE     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.6234
+DIHEDRAL PHE_chi1_n3_21               PHE     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.6234
+DIHEDRAL PHE_chi1_n3_22               PHE     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.6234
+DIHEDRAL SER_chi1_n3_00               SER     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    74.1581
+DIHEDRAL SER_chi1_n3_01               SER     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    74.1581
+DIHEDRAL SER_chi1_n3_02               SER     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    74.1581
+DIHEDRAL SER_chi1_n3_10               SER     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    74.1581
+DIHEDRAL SER_chi1_n3_11               SER     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    74.1581
+DIHEDRAL SER_chi1_n3_12               SER     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    74.1581
+DIHEDRAL SER_chi1_n3_20               SER     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    74.1581
+DIHEDRAL SER_chi1_n3_21               SER     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    74.1581
+DIHEDRAL SER_chi1_n3_22               SER     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    74.1581
+DIHEDRAL SER_chi1_n1_00               SER     SIDECHAIN GHchi1n1B0       GHchi1n1C0         0.0000     0.8984
+DIHEDRAL THR_chi1_n3_00               THR     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    74.2661
+DIHEDRAL THR_chi1_n3_01               THR     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    74.2661
+DIHEDRAL THR_chi1_n3_02               THR     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    74.2661
+DIHEDRAL THR_chi1_n3_10               THR     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    74.2661
+DIHEDRAL THR_chi1_n3_11               THR     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    74.2661
+DIHEDRAL THR_chi1_n3_12               THR     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    74.2661
+DIHEDRAL THR_chi1_n3_20               THR     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    74.2661
+DIHEDRAL THR_chi1_n3_21               THR     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    74.2661
+DIHEDRAL THR_chi1_n3_22               THR     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    74.2661
+DIHEDRAL THR_chi1_n1_00               THR     SIDECHAIN GHchi1n1B0       GHchi1n1C0         0.0000     0.8984
+DIHEDRAL TYR_chi1_n3_00               TYR     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.5410
+DIHEDRAL TYR_chi1_n3_01               TYR     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.5410
+DIHEDRAL TYR_chi1_n3_02               TYR     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.5410
+DIHEDRAL TYR_chi1_n3_10               TYR     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.5410
+DIHEDRAL TYR_chi1_n3_11               TYR     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.5410
+DIHEDRAL TYR_chi1_n3_12               TYR     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.5410
+DIHEDRAL TYR_chi1_n3_20               TYR     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.5410
+DIHEDRAL TYR_chi1_n3_21               TYR     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.5410
+DIHEDRAL TYR_chi1_n3_22               TYR     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.5410
+DIHEDRAL VAL_chi1_n3_00               VAL     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.6742
+DIHEDRAL VAL_chi1_n3_01               VAL     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.6742
+DIHEDRAL VAL_chi1_n3_02               VAL     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.6742
+DIHEDRAL VAL_chi1_n3_10               VAL     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.6742
+DIHEDRAL VAL_chi1_n3_11               VAL     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.6742
+DIHEDRAL VAL_chi1_n3_12               VAL     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.6742
+DIHEDRAL VAL_chi1_n3_20               VAL     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.6742
+DIHEDRAL VAL_chi1_n3_21               VAL     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.6742
+DIHEDRAL VAL_chi1_n3_22               VAL     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.6742
+DIHEDRAL ARG_chi2_n3_00               ARG     SIDECHAIN GHchi2n3B0       GHchi2n3C0         2.0863    84.8995
+DIHEDRAL ARG_chi2_n3_01               ARG     SIDECHAIN GHchi2n3B0       GHchi2n3C1         2.0863    84.8995
+DIHEDRAL ARG_chi2_n3_02               ARG     SIDECHAIN GHchi2n3B0       GHchi2n3C2         2.0863    84.8995
+DIHEDRAL ARG_chi2_n3_10               ARG     SIDECHAIN GHchi2n3B1       GHchi2n3C0         2.0863    84.8995
+DIHEDRAL ARG_chi2_n3_11               ARG     SIDECHAIN GHchi2n3B1       GHchi2n3C1         2.0863    84.8995
+DIHEDRAL ARG_chi2_n3_12               ARG     SIDECHAIN GHchi2n3B1       GHchi2n3C2         2.0863    84.8995
+DIHEDRAL ARG_chi2_n3_20               ARG     SIDECHAIN GHchi2n3B2       GHchi2n3C0         2.0863    84.8995
+DIHEDRAL ARG_chi2_n3_21               ARG     SIDECHAIN GHchi2n3B2       GHchi2n3C1         2.0863    84.8995
+DIHEDRAL ARG_chi2_n3_22               ARG     SIDECHAIN GHchi2n3B2       GHchi2n3C2         2.0863    84.8995
+DIHEDRAL ARG_chi2_n2_00               ARG     SIDECHAIN GHchi2n2B0       GHchi2n2C0         1.7562    22.1708
+DIHEDRAL ARG_chi2_n2_01               ARG     SIDECHAIN GHchi2n2B0       GHchi2n2C1         1.7562    22.1708
+DIHEDRAL ARG_chi2_n2_10               ARG     SIDECHAIN GHchi2n2B1       GHchi2n2C0         1.7562    22.1708
+DIHEDRAL ARG_chi2_n2_11               ARG     SIDECHAIN GHchi2n2B1       GHchi2n2C1         1.7562    22.1708
+DIHEDRAL ARG_chi2_n1_00               ARG     SIDECHAIN GHchi2n1B0       GHchi2n1C0         0.0000     0.7187
+DIHEDRAL GLN_chi2_n3_00               GLN     SIDECHAIN GHchi2n3B0       GHchi2n3C0         2.0863    82.9200
+DIHEDRAL GLN_chi2_n3_01               GLN     SIDECHAIN GHchi2n3B0       GHchi2n3C1         2.0863    82.9200
+DIHEDRAL GLN_chi2_n3_02               GLN     SIDECHAIN GHchi2n3B0       GHchi2n3C2         2.0863    82.9200
+DIHEDRAL GLN_chi2_n3_10               GLN     SIDECHAIN GHchi2n3B1       GHchi2n3C0         2.0863    82.9200
+DIHEDRAL GLN_chi2_n3_11               GLN     SIDECHAIN GHchi2n3B1       GHchi2n3C1         2.0863    82.9200
+DIHEDRAL GLN_chi2_n3_12               GLN     SIDECHAIN GHchi2n3B1       GHchi2n3C2         2.0863    82.9200
+DIHEDRAL GLN_chi2_n3_20               GLN     SIDECHAIN GHchi2n3B2       GHchi2n3C0         2.0863    82.9200
+DIHEDRAL GLN_chi2_n3_21               GLN     SIDECHAIN GHchi2n3B2       GHchi2n3C1         2.0863    82.9200
+DIHEDRAL GLN_chi2_n3_22               GLN     SIDECHAIN GHchi2n3B2       GHchi2n3C2         2.0863    82.9200
+DIHEDRAL GLU_chi2_n3_00               GLU     SIDECHAIN GHchi2n3B0       GHchi2n3C0         2.0863    82.9256
+DIHEDRAL GLU_chi2_n3_01               GLU     SIDECHAIN GHchi2n3B0       GHchi2n3C1         2.0863    82.9256
+DIHEDRAL GLU_chi2_n3_02               GLU     SIDECHAIN GHchi2n3B0       GHchi2n3C2         2.0863    82.9256
+DIHEDRAL GLU_chi2_n3_10               GLU     SIDECHAIN GHchi2n3B1       GHchi2n3C0         2.0863    82.9256
+DIHEDRAL GLU_chi2_n3_11               GLU     SIDECHAIN GHchi2n3B1       GHchi2n3C1         2.0863    82.9256
+DIHEDRAL GLU_chi2_n3_12               GLU     SIDECHAIN GHchi2n3B1       GHchi2n3C2         2.0863    82.9256
+DIHEDRAL GLU_chi2_n3_20               GLU     SIDECHAIN GHchi2n3B2       GHchi2n3C0         2.0863    82.9256
+DIHEDRAL GLU_chi2_n3_21               GLU     SIDECHAIN GHchi2n3B2       GHchi2n3C1         2.0863    82.9256
+DIHEDRAL GLU_chi2_n3_22               GLU     SIDECHAIN GHchi2n3B2       GHchi2n3C2         2.0863    82.9256
+DIHEDRAL ILE_chi2_n3_00               ILE     SIDECHAIN GHchi2n3B0       GHchi2n3C0         2.0863    87.3029
+DIHEDRAL ILE_chi2_n3_01               ILE     SIDECHAIN GHchi2n3B0       GHchi2n3C1         2.0863    87.3029
+DIHEDRAL ILE_chi2_n3_02               ILE     SIDECHAIN GHchi2n3B0       GHchi2n3C2         2.0863    87.3029
+DIHEDRAL ILE_chi2_n3_10               ILE     SIDECHAIN GHchi2n3B1       GHchi2n3C0         2.0863    87.3029
+DIHEDRAL ILE_chi2_n3_11               ILE     SIDECHAIN GHchi2n3B1       GHchi2n3C1         2.0863    87.3029
+DIHEDRAL ILE_chi2_n3_12               ILE     SIDECHAIN GHchi2n3B1       GHchi2n3C2         2.0863    87.3029
+DIHEDRAL ILE_chi2_n3_20               ILE     SIDECHAIN GHchi2n3B2       GHchi2n3C0         2.0863    87.3029
+DIHEDRAL ILE_chi2_n3_21               ILE     SIDECHAIN GHchi2n3B2       GHchi2n3C1         2.0863    87.3029
+DIHEDRAL ILE_chi2_n3_22               ILE     SIDECHAIN GHchi2n3B2       GHchi2n3C2         2.0863    87.3029
+DIHEDRAL ILE_chi2_n2_00               ILE     SIDECHAIN GHchi2n2B0       GHchi2n2C0         1.7562    22.4125
+DIHEDRAL ILE_chi2_n2_01               ILE     SIDECHAIN GHchi2n2B0       GHchi2n2C1         1.7562    22.4125
+DIHEDRAL ILE_chi2_n2_10               ILE     SIDECHAIN GHchi2n2B1       GHchi2n2C0         1.7562    22.4125
+DIHEDRAL ILE_chi2_n2_11               ILE     SIDECHAIN GHchi2n2B1       GHchi2n2C1         1.7562    22.4125
+DIHEDRAL ILE_chi2_n1_00               ILE     SIDECHAIN GHchi2n1B0       GHchi2n1C0         0.0000     0.7148
+DIHEDRAL LEU_chi2_n3_00               LEU     SIDECHAIN GHchi2n3B0       GHchi2n3C0         2.0863    87.2931
+DIHEDRAL LEU_chi2_n3_01               LEU     SIDECHAIN GHchi2n3B0       GHchi2n3C1         2.0863    87.2931
+DIHEDRAL LEU_chi2_n3_02               LEU     SIDECHAIN GHchi2n3B0       GHchi2n3C2         2.0863    87.2931
+DIHEDRAL LEU_chi2_n3_10               LEU     SIDECHAIN GHchi2n3B1       GHchi2n3C0         2.0863    87.2931
+DIHEDRAL LEU_chi2_n3_11               LEU     SIDECHAIN GHchi2n3B1       GHchi2n3C1         2.0863    87.2931
+DIHEDRAL LEU_chi2_n3_12               LEU     SIDECHAIN GHchi2n3B1       GHchi2n3C2         2.0863    87.2931
+DIHEDRAL LEU_chi2_n3_20               LEU     SIDECHAIN GHchi2n3B2       GHchi2n3C0         2.0863    87.2931
+DIHEDRAL LEU_chi2_n3_21               LEU     SIDECHAIN GHchi2n3B2       GHchi2n3C1         2.0863    87.2931
+DIHEDRAL LEU_chi2_n3_22               LEU     SIDECHAIN GHchi2n3B2       GHchi2n3C2         2.0863    87.2931
+DIHEDRAL LEU_chi2_n2_00               LEU     SIDECHAIN GHchi2n2B0       GHchi2n2C0         1.7562    22.5591
+DIHEDRAL LEU_chi2_n2_01               LEU     SIDECHAIN GHchi2n2B0       GHchi2n2C1         1.7562    22.5591
+DIHEDRAL LEU_chi2_n2_10               LEU     SIDECHAIN GHchi2n2B1       GHchi2n2C0         1.7562    22.5591
+DIHEDRAL LEU_chi2_n2_11               LEU     SIDECHAIN GHchi2n2B1       GHchi2n2C1         1.7562    22.5591
+DIHEDRAL LEU_chi2_n1_00               LEU     SIDECHAIN GHchi2n1B0       GHchi2n1C0         0.0000     0.7124
+DIHEDRAL LYS_chi2_n3_00               LYS     SIDECHAIN GHchi2n3B0       GHchi2n3C0         2.0863    84.9114
+DIHEDRAL LYS_chi2_n3_01               LYS     SIDECHAIN GHchi2n3B0       GHchi2n3C1         2.0863    84.9114
+DIHEDRAL LYS_chi2_n3_02               LYS     SIDECHAIN GHchi2n3B0       GHchi2n3C2         2.0863    84.9114
+DIHEDRAL LYS_chi2_n3_10               LYS     SIDECHAIN GHchi2n3B1       GHchi2n3C0         2.0863    84.9114
+DIHEDRAL LYS_chi2_n3_11               LYS     SIDECHAIN GHchi2n3B1       GHchi2n3C1         2.0863    84.9114
+DIHEDRAL LYS_chi2_n3_12               LYS     SIDECHAIN GHchi2n3B1       GHchi2n3C2         2.0863    84.9114
+DIHEDRAL LYS_chi2_n3_20               LYS     SIDECHAIN GHchi2n3B2       GHchi2n3C0         2.0863    84.9114
+DIHEDRAL LYS_chi2_n3_21               LYS     SIDECHAIN GHchi2n3B2       GHchi2n3C1         2.0863    84.9114
+DIHEDRAL LYS_chi2_n3_22               LYS     SIDECHAIN GHchi2n3B2       GHchi2n3C2         2.0863    84.9114
+DIHEDRAL LYS_chi2_n2_00               LYS     SIDECHAIN GHchi2n2B0       GHchi2n2C0         1.7562    22.1708
+DIHEDRAL LYS_chi2_n2_01               LYS     SIDECHAIN GHchi2n2B0       GHchi2n2C1         1.7562    22.1708
+DIHEDRAL LYS_chi2_n2_10               LYS     SIDECHAIN GHchi2n2B1       GHchi2n2C0         1.7562    22.1708
+DIHEDRAL LYS_chi2_n2_11               LYS     SIDECHAIN GHchi2n2B1       GHchi2n2C1         1.7562    22.1708
+DIHEDRAL LYS_chi2_n1_00               LYS     SIDECHAIN GHchi2n1B0       GHchi2n1C0         0.0000     0.7187
+DIHEDRAL MET_chi2_n3_00               MET     SIDECHAIN GHchi2n3B0       GHchi2n3C0         2.0863    83.7215
+DIHEDRAL MET_chi2_n3_01               MET     SIDECHAIN GHchi2n3B0       GHchi2n3C1         2.0863    83.7215
+DIHEDRAL MET_chi2_n3_02               MET     SIDECHAIN GHchi2n3B0       GHchi2n3C2         2.0863    83.7215
+DIHEDRAL MET_chi2_n3_10               MET     SIDECHAIN GHchi2n3B1       GHchi2n3C0         2.0863    83.7215
+DIHEDRAL MET_chi2_n3_11               MET     SIDECHAIN GHchi2n3B1       GHchi2n3C1         2.0863    83.7215
+DIHEDRAL MET_chi2_n3_12               MET     SIDECHAIN GHchi2n3B1       GHchi2n3C2         2.0863    83.7215
+DIHEDRAL MET_chi2_n3_20               MET     SIDECHAIN GHchi2n3B2       GHchi2n3C0         2.0863    83.7215
+DIHEDRAL MET_chi2_n3_21               MET     SIDECHAIN GHchi2n3B2       GHchi2n3C1         2.0863    83.7215
+DIHEDRAL MET_chi2_n3_22               MET     SIDECHAIN GHchi2n3B2       GHchi2n3C2         2.0863    83.7215
+DIHEDRAL ASN_chi2_n3_00               ASN     SIDECHAIN GHchi2n3B0       GHchi2n3C0         2.0808    33.6649
+DIHEDRAL ASN_chi2_n3_01               ASN     SIDECHAIN GHchi2n3B0       GHchi2n3C1         2.0808    33.6649
+DIHEDRAL ASN_chi2_n3_02               ASN     SIDECHAIN GHchi2n3B0       GHchi2n3C2         2.0808    33.6649
+DIHEDRAL ASN_chi2_n3_10               ASN     SIDECHAIN GHchi2n3B1       GHchi2n3C0         2.0808    33.6649
+DIHEDRAL ASN_chi2_n3_11               ASN     SIDECHAIN GHchi2n3B1       GHchi2n3C1         2.0808    33.6649
+DIHEDRAL ASN_chi2_n3_12               ASN     SIDECHAIN GHchi2n3B1       GHchi2n3C2         2.0808    33.6649
+DIHEDRAL ASN_chi2_n3_20               ASN     SIDECHAIN GHchi2n3B2       GHchi2n3C0         2.0808    33.6649
+DIHEDRAL ASN_chi2_n3_21               ASN     SIDECHAIN GHchi2n3B2       GHchi2n3C1         2.0808    33.6649
+DIHEDRAL ASN_chi2_n3_22               ASN     SIDECHAIN GHchi2n3B2       GHchi2n3C2         2.0808    33.6649
+DIHEDRAL ASN_chi2_n2_00               ASN     SIDECHAIN GHchi2n2B0       GHchi2n2C0         1.7516    17.8300
+DIHEDRAL ASN_chi2_n2_01               ASN     SIDECHAIN GHchi2n2B0       GHchi2n2C1         1.7516    17.8300
+DIHEDRAL ASN_chi2_n2_10               ASN     SIDECHAIN GHchi2n2B1       GHchi2n2C0         1.7516    17.8300
+DIHEDRAL ASN_chi2_n2_11               ASN     SIDECHAIN GHchi2n2B1       GHchi2n2C1         1.7516    17.8300
+DIHEDRAL ASN_chi2_n1_00               ASN     SIDECHAIN GHchi2n1B0       GHchi2n1C0         0.0000     3.5869
+DIHEDRAL ARG_chi3_n3_00               ARG     SIDECHAIN GHchi3n3B0       GHchi3n3C0         2.0863    83.7092
+DIHEDRAL ARG_chi3_n3_01               ARG     SIDECHAIN GHchi3n3B0       GHchi3n3C1         2.0863    83.7092
+DIHEDRAL ARG_chi3_n3_02               ARG     SIDECHAIN GHchi3n3B0       GHchi3n3C2         2.0863    83.7092
+DIHEDRAL ARG_chi3_n3_10               ARG     SIDECHAIN GHchi3n3B1       GHchi3n3C0         2.0863    83.7092
+DIHEDRAL ARG_chi3_n3_11               ARG     SIDECHAIN GHchi3n3B1       GHchi3n3C1         2.0863    83.7092
+DIHEDRAL ARG_chi3_n3_12               ARG     SIDECHAIN GHchi3n3B1       GHchi3n3C2         2.0863    83.7092
+DIHEDRAL ARG_chi3_n3_20               ARG     SIDECHAIN GHchi3n3B2       GHchi3n3C0         2.0863    83.7092
+DIHEDRAL ARG_chi3_n3_21               ARG     SIDECHAIN GHchi3n3B2       GHchi3n3C1         2.0863    83.7092
+DIHEDRAL ARG_chi3_n3_22               ARG     SIDECHAIN GHchi3n3B2       GHchi3n3C2         2.0863    83.7092
+DIHEDRAL GLN_chi3_n3_00               GLN     SIDECHAIN GHchi3n3B0       GHchi3n3C0         2.0808    33.6591
+DIHEDRAL GLN_chi3_n3_01               GLN     SIDECHAIN GHchi3n3B0       GHchi3n3C1         2.0808    33.6591
+DIHEDRAL GLN_chi3_n3_02               GLN     SIDECHAIN GHchi3n3B0       GHchi3n3C2         2.0808    33.6591
+DIHEDRAL GLN_chi3_n3_10               GLN     SIDECHAIN GHchi3n3B1       GHchi3n3C0         2.0808    33.6591
+DIHEDRAL GLN_chi3_n3_11               GLN     SIDECHAIN GHchi3n3B1       GHchi3n3C1         2.0808    33.6591
+DIHEDRAL GLN_chi3_n3_12               GLN     SIDECHAIN GHchi3n3B1       GHchi3n3C2         2.0808    33.6591
+DIHEDRAL GLN_chi3_n3_20               GLN     SIDECHAIN GHchi3n3B2       GHchi3n3C0         2.0808    33.6591
+DIHEDRAL GLN_chi3_n3_21               GLN     SIDECHAIN GHchi3n3B2       GHchi3n3C1         2.0808    33.6591
+DIHEDRAL GLN_chi3_n3_22               GLN     SIDECHAIN GHchi3n3B2       GHchi3n3C2         2.0808    33.6591
+DIHEDRAL GLN_chi3_n2_00               GLN     SIDECHAIN GHchi3n2B0       GHchi3n2C0         1.7516    17.8300
+DIHEDRAL GLN_chi3_n2_01               GLN     SIDECHAIN GHchi3n2B0       GHchi3n2C1         1.7516    17.8300
+DIHEDRAL GLN_chi3_n2_10               GLN     SIDECHAIN GHchi3n2B1       GHchi3n2C0         1.7516    17.8300
+DIHEDRAL GLN_chi3_n2_11               GLN     SIDECHAIN GHchi3n2B1       GHchi3n2C1         1.7516    17.8300
+DIHEDRAL GLN_chi3_n1_00               GLN     SIDECHAIN GHchi3n1B0       GHchi3n1C0         0.0000     3.6227
+DIHEDRAL LYS_chi3_n3_00               LYS     SIDECHAIN GHchi3n3B0       GHchi3n3C0         2.0863    84.9142
+DIHEDRAL LYS_chi3_n3_01               LYS     SIDECHAIN GHchi3n3B0       GHchi3n3C1         2.0863    84.9142
+DIHEDRAL LYS_chi3_n3_02               LYS     SIDECHAIN GHchi3n3B0       GHchi3n3C2         2.0863    84.9142
+DIHEDRAL LYS_chi3_n3_10               LYS     SIDECHAIN GHchi3n3B1       GHchi3n3C0         2.0863    84.9142
+DIHEDRAL LYS_chi3_n3_11               LYS     SIDECHAIN GHchi3n3B1       GHchi3n3C1         2.0863    84.9142
+DIHEDRAL LYS_chi3_n3_12               LYS     SIDECHAIN GHchi3n3B1       GHchi3n3C2         2.0863    84.9142
+DIHEDRAL LYS_chi3_n3_20               LYS     SIDECHAIN GHchi3n3B2       GHchi3n3C0         2.0863    84.9142
+DIHEDRAL LYS_chi3_n3_21               LYS     SIDECHAIN GHchi3n3B2       GHchi3n3C1         2.0863    84.9142
+DIHEDRAL LYS_chi3_n3_22               LYS     SIDECHAIN GHchi3n3B2       GHchi3n3C2         2.0863    84.9142
+DIHEDRAL LYS_chi3_n2_00               LYS     SIDECHAIN GHchi3n2B0       GHchi3n2C0         1.7562    22.1708
+DIHEDRAL LYS_chi3_n2_01               LYS     SIDECHAIN GHchi3n2B0       GHchi3n2C1         1.7562    22.1708
+DIHEDRAL LYS_chi3_n2_10               LYS     SIDECHAIN GHchi3n2B1       GHchi3n2C0         1.7562    22.1708
+DIHEDRAL LYS_chi3_n2_11               LYS     SIDECHAIN GHchi3n2B1       GHchi3n2C1         1.7562    22.1708
+DIHEDRAL LYS_chi3_n1_00               LYS     SIDECHAIN GHchi3n1B0       GHchi3n1C0         0.0000     0.7187
+DIHEDRAL MET_chi3_n3_00               MET     SIDECHAIN GHchi3n3B0       GHchi3n3C0         2.4746    42.5081
+DIHEDRAL MET_chi3_n3_01               MET     SIDECHAIN GHchi3n3B0       GHchi3n3C1         2.4746    42.5081
+DIHEDRAL MET_chi3_n3_02               MET     SIDECHAIN GHchi3n3B0       GHchi3n3C2         2.4746    42.5081
+DIHEDRAL MET_chi3_n3_10               MET     SIDECHAIN GHchi3n3B1       GHchi3n3C0         2.4746    42.5081
+DIHEDRAL MET_chi3_n3_11               MET     SIDECHAIN GHchi3n3B1       GHchi3n3C1         2.4746    42.5081
+DIHEDRAL MET_chi3_n3_12               MET     SIDECHAIN GHchi3n3B1       GHchi3n3C2         2.4746    42.5081
+DIHEDRAL MET_chi3_n3_20               MET     SIDECHAIN GHchi3n3B2       GHchi3n3C0         2.4746    42.5081
+DIHEDRAL MET_chi3_n3_21               MET     SIDECHAIN GHchi3n3B2       GHchi3n3C1         2.4746    42.5081
+DIHEDRAL MET_chi3_n3_22               MET     SIDECHAIN GHchi3n3B2       GHchi3n3C2         2.4746    42.5081
+DIHEDRAL LYS_chi4_n3_00               LYS     SIDECHAIN GHchi4n3B0       GHchi4n3C0         2.0863    83.7184
+DIHEDRAL LYS_chi4_n3_01               LYS     SIDECHAIN GHchi4n3B0       GHchi4n3C1         2.0863    83.7184
+DIHEDRAL LYS_chi4_n3_02               LYS     SIDECHAIN GHchi4n3B0       GHchi4n3C2         2.0863    83.7184
+DIHEDRAL LYS_chi4_n3_10               LYS     SIDECHAIN GHchi4n3B1       GHchi4n3C0         2.0863    83.7184
+DIHEDRAL LYS_chi4_n3_11               LYS     SIDECHAIN GHchi4n3B1       GHchi4n3C1         2.0863    83.7184
+DIHEDRAL LYS_chi4_n3_12               LYS     SIDECHAIN GHchi4n3B1       GHchi4n3C2         2.0863    83.7184
+DIHEDRAL LYS_chi4_n3_20               LYS     SIDECHAIN GHchi4n3B2       GHchi4n3C0         2.0863    83.7184
+DIHEDRAL LYS_chi4_n3_21               LYS     SIDECHAIN GHchi4n3B2       GHchi4n3C1         2.0863    83.7184
+DIHEDRAL LYS_chi4_n3_22               LYS     SIDECHAIN GHchi4n3B2       GHchi4n3C2         2.0863    83.7184
+DIHEDRAL CYS_chi1_n3_00               CYS     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.5621
+DIHEDRAL CYS_chi1_n3_01               CYS     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.5621
+DIHEDRAL CYS_chi1_n3_02               CYS     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.5621
+DIHEDRAL CYS_chi1_n3_10               CYS     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.5621
+DIHEDRAL CYS_chi1_n3_11               CYS     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.5621
+DIHEDRAL CYS_chi1_n3_12               CYS     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.5621
+DIHEDRAL CYS_chi1_n3_20               CYS     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.5621
+DIHEDRAL CYS_chi1_n3_21               CYS     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.5621
+DIHEDRAL CYS_chi1_n3_22               CYS     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.5621
+DIHEDRAL TRP_chi1_n3_00               TRP     SIDECHAIN GHchi1n3B0       GHchi1n3C0         2.0863    83.5568
+DIHEDRAL TRP_chi1_n3_01               TRP     SIDECHAIN GHchi1n3B0       GHchi1n3C1         2.0863    83.5568
+DIHEDRAL TRP_chi1_n3_02               TRP     SIDECHAIN GHchi1n3B0       GHchi1n3C2         2.0863    83.5568
+DIHEDRAL TRP_chi1_n3_10               TRP     SIDECHAIN GHchi1n3B1       GHchi1n3C0         2.0863    83.5568
+DIHEDRAL TRP_chi1_n3_11               TRP     SIDECHAIN GHchi1n3B1       GHchi1n3C1         2.0863    83.5568
+DIHEDRAL TRP_chi1_n3_12               TRP     SIDECHAIN GHchi1n3B1       GHchi1n3C2         2.0863    83.5568
+DIHEDRAL TRP_chi1_n3_20               TRP     SIDECHAIN GHchi1n3B2       GHchi1n3C0         2.0863    83.5568
+DIHEDRAL TRP_chi1_n3_21               TRP     SIDECHAIN GHchi1n3B2       GHchi1n3C1         2.0863    83.5568
+DIHEDRAL TRP_chi1_n3_22               TRP     SIDECHAIN GHchi1n3B2       GHchi1n3C2         2.0863    83.5568
+DIHEDRAL ALA_phi_n3_00                ALA     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.2446
+DIHEDRAL ALA_phi_n3_01                ALA     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.2446
+DIHEDRAL ALA_phi_n3_02                ALA     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.2446
+DIHEDRAL ALA_phi_n3_10                ALA     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.2446
+DIHEDRAL ALA_phi_n3_11                ALA     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.2446
+DIHEDRAL ALA_phi_n3_12                ALA     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.2446
+DIHEDRAL ALA_phi_n3_20                ALA     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.2446
+DIHEDRAL ALA_phi_n3_21                ALA     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.2446
+DIHEDRAL ALA_phi_n3_22                ALA     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.2446
+DIHEDRAL ALA_phi_n2_00                ALA     BACKBONE  GHphin2B0        GHphin2C0          1.6676   187.3015
+DIHEDRAL ALA_phi_n2_01                ALA     BACKBONE  GHphin2B0        GHphin2C1          1.6676   187.3015
+DIHEDRAL ALA_phi_n2_10                ALA     BACKBONE  GHphin2B1        GHphin2C0          1.6676   187.3015
+DIHEDRAL ALA_phi_n2_11                ALA     BACKBONE  GHphin2B1        GHphin2C1          1.6676   187.3015
+DIHEDRAL ALA_phi_n1_00                ALA     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL ALA_psi_n3_00                ALA     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     6.2460
+DIHEDRAL ALA_psi_n3_01                ALA     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     6.2460
+DIHEDRAL ALA_psi_n3_02                ALA     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     6.2460
+DIHEDRAL ALA_psi_n3_10                ALA     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     6.2460
+DIHEDRAL ALA_psi_n3_11                ALA     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     6.2460
+DIHEDRAL ALA_psi_n3_12                ALA     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     6.2460
+DIHEDRAL ALA_psi_n3_20                ALA     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     6.2460
+DIHEDRAL ALA_psi_n3_21                ALA     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     6.2460
+DIHEDRAL ALA_psi_n3_22                ALA     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     6.2460
+DIHEDRAL ALA_psi_n2_00                ALA     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.0511
+DIHEDRAL ALA_psi_n2_01                ALA     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.0511
+DIHEDRAL ALA_psi_n2_10                ALA     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.0511
+DIHEDRAL ALA_psi_n2_11                ALA     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.0511
+DIHEDRAL ALA_psi_n1_00                ALA     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2458
+DIHEDRAL ARG_phi_n3_00                ARG     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3874
+DIHEDRAL ARG_phi_n3_01                ARG     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3874
+DIHEDRAL ARG_phi_n3_02                ARG     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3874
+DIHEDRAL ARG_phi_n3_10                ARG     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3874
+DIHEDRAL ARG_phi_n3_11                ARG     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3874
+DIHEDRAL ARG_phi_n3_12                ARG     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3874
+DIHEDRAL ARG_phi_n3_20                ARG     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3874
+DIHEDRAL ARG_phi_n3_21                ARG     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3874
+DIHEDRAL ARG_phi_n3_22                ARG     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3874
+DIHEDRAL ARG_phi_n2_00                ARG     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.1227
+DIHEDRAL ARG_phi_n2_01                ARG     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.1227
+DIHEDRAL ARG_phi_n2_10                ARG     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.1227
+DIHEDRAL ARG_phi_n2_11                ARG     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.1227
+DIHEDRAL ARG_phi_n1_00                ARG     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL ARG_psi_n3_00                ARG     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.9654
+DIHEDRAL ARG_psi_n3_01                ARG     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.9654
+DIHEDRAL ARG_psi_n3_02                ARG     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.9654
+DIHEDRAL ARG_psi_n3_10                ARG     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.9654
+DIHEDRAL ARG_psi_n3_11                ARG     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.9654
+DIHEDRAL ARG_psi_n3_12                ARG     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.9654
+DIHEDRAL ARG_psi_n3_20                ARG     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.9654
+DIHEDRAL ARG_psi_n3_21                ARG     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.9654
+DIHEDRAL ARG_psi_n3_22                ARG     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.9654
+DIHEDRAL ARG_psi_n2_00                ARG     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.5963
+DIHEDRAL ARG_psi_n2_01                ARG     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.5963
+DIHEDRAL ARG_psi_n2_10                ARG     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.5963
+DIHEDRAL ARG_psi_n2_11                ARG     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.5963
+DIHEDRAL ARG_psi_n1_00                ARG     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1759
+DIHEDRAL ASN_phi_n3_00                ASN     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3715
+DIHEDRAL ASN_phi_n3_01                ASN     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3715
+DIHEDRAL ASN_phi_n3_02                ASN     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3715
+DIHEDRAL ASN_phi_n3_10                ASN     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3715
+DIHEDRAL ASN_phi_n3_11                ASN     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3715
+DIHEDRAL ASN_phi_n3_12                ASN     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3715
+DIHEDRAL ASN_phi_n3_20                ASN     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3715
+DIHEDRAL ASN_phi_n3_21                ASN     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3715
+DIHEDRAL ASN_phi_n3_22                ASN     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3715
+DIHEDRAL ASN_phi_n2_00                ASN     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.7088
+DIHEDRAL ASN_phi_n2_01                ASN     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.7088
+DIHEDRAL ASN_phi_n2_10                ASN     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.7088
+DIHEDRAL ASN_phi_n2_11                ASN     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.7088
+DIHEDRAL ASN_phi_n1_00                ASN     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL ASN_psi_n3_00                ASN     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     5.1989
+DIHEDRAL ASN_psi_n3_01                ASN     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     5.1989
+DIHEDRAL ASN_psi_n3_02                ASN     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     5.1989
+DIHEDRAL ASN_psi_n3_10                ASN     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     5.1989
+DIHEDRAL ASN_psi_n3_11                ASN     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     5.1989
+DIHEDRAL ASN_psi_n3_12                ASN     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     5.1989
+DIHEDRAL ASN_psi_n3_20                ASN     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     5.1989
+DIHEDRAL ASN_psi_n3_21                ASN     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     5.1989
+DIHEDRAL ASN_psi_n3_22                ASN     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     5.1989
+DIHEDRAL ASN_psi_n2_00                ASN     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.6111
+DIHEDRAL ASN_psi_n2_01                ASN     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.6111
+DIHEDRAL ASN_psi_n2_10                ASN     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.6111
+DIHEDRAL ASN_psi_n2_11                ASN     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.6111
+DIHEDRAL ASN_psi_n1_00                ASN     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2333
+DIHEDRAL ASP_phi_n3_00                ASP     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3872
+DIHEDRAL ASP_phi_n3_01                ASP     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3872
+DIHEDRAL ASP_phi_n3_02                ASP     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3872
+DIHEDRAL ASP_phi_n3_10                ASP     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3872
+DIHEDRAL ASP_phi_n3_11                ASP     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3872
+DIHEDRAL ASP_phi_n3_12                ASP     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3872
+DIHEDRAL ASP_phi_n3_20                ASP     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3872
+DIHEDRAL ASP_phi_n3_21                ASP     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3872
+DIHEDRAL ASP_phi_n3_22                ASP     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3872
+DIHEDRAL ASP_phi_n2_00                ASP     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.1389
+DIHEDRAL ASP_phi_n2_01                ASP     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.1389
+DIHEDRAL ASP_phi_n2_10                ASP     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.1389
+DIHEDRAL ASP_phi_n2_11                ASP     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.1389
+DIHEDRAL ASP_phi_n1_00                ASP     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL ASP_psi_n3_00                ASP     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.4483
+DIHEDRAL ASP_psi_n3_01                ASP     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.4483
+DIHEDRAL ASP_psi_n3_02                ASP     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.4483
+DIHEDRAL ASP_psi_n3_10                ASP     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.4483
+DIHEDRAL ASP_psi_n3_11                ASP     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.4483
+DIHEDRAL ASP_psi_n3_12                ASP     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.4483
+DIHEDRAL ASP_psi_n3_20                ASP     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.4483
+DIHEDRAL ASP_psi_n3_21                ASP     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.4483
+DIHEDRAL ASP_psi_n3_22                ASP     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.4483
+DIHEDRAL ASP_psi_n2_00                ASP     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   150.3274
+DIHEDRAL ASP_psi_n2_01                ASP     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   150.3274
+DIHEDRAL ASP_psi_n2_10                ASP     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   150.3274
+DIHEDRAL ASP_psi_n2_11                ASP     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   150.3274
+DIHEDRAL ASP_psi_n1_00                ASP     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2595
+DIHEDRAL GLN_phi_n3_00                GLN     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3868
+DIHEDRAL GLN_phi_n3_01                GLN     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3868
+DIHEDRAL GLN_phi_n3_02                GLN     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3868
+DIHEDRAL GLN_phi_n3_10                GLN     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3868
+DIHEDRAL GLN_phi_n3_11                GLN     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3868
+DIHEDRAL GLN_phi_n3_12                GLN     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3868
+DIHEDRAL GLN_phi_n3_20                GLN     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3868
+DIHEDRAL GLN_phi_n3_21                GLN     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3868
+DIHEDRAL GLN_phi_n3_22                GLN     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3868
+DIHEDRAL GLN_phi_n2_00                GLN     BACKBONE  GHphin2B0        GHphin2C0          1.6676   184.5831
+DIHEDRAL GLN_phi_n2_01                GLN     BACKBONE  GHphin2B0        GHphin2C1          1.6676   184.5831
+DIHEDRAL GLN_phi_n2_10                GLN     BACKBONE  GHphin2B1        GHphin2C0          1.6676   184.5831
+DIHEDRAL GLN_phi_n2_11                GLN     BACKBONE  GHphin2B1        GHphin2C1          1.6676   184.5831
+DIHEDRAL GLN_phi_n1_00                GLN     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL GLN_psi_n3_00                GLN     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.6044
+DIHEDRAL GLN_psi_n3_01                GLN     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.6044
+DIHEDRAL GLN_psi_n3_02                GLN     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.6044
+DIHEDRAL GLN_psi_n3_10                GLN     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.6044
+DIHEDRAL GLN_psi_n3_11                GLN     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.6044
+DIHEDRAL GLN_psi_n3_12                GLN     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.6044
+DIHEDRAL GLN_psi_n3_20                GLN     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.6044
+DIHEDRAL GLN_psi_n3_21                GLN     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.6044
+DIHEDRAL GLN_psi_n3_22                GLN     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.6044
+DIHEDRAL GLN_psi_n2_00                GLN     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   150.0262
+DIHEDRAL GLN_psi_n2_01                GLN     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   150.0262
+DIHEDRAL GLN_psi_n2_10                GLN     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   150.0262
+DIHEDRAL GLN_psi_n2_11                GLN     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   150.0262
+DIHEDRAL GLN_psi_n1_00                GLN     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2230
+DIHEDRAL GLU_phi_n3_00                GLU     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3857
+DIHEDRAL GLU_phi_n3_01                GLU     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3857
+DIHEDRAL GLU_phi_n3_02                GLU     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3857
+DIHEDRAL GLU_phi_n3_10                GLU     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3857
+DIHEDRAL GLU_phi_n3_11                GLU     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3857
+DIHEDRAL GLU_phi_n3_12                GLU     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3857
+DIHEDRAL GLU_phi_n3_20                GLU     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3857
+DIHEDRAL GLU_phi_n3_21                GLU     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3857
+DIHEDRAL GLU_phi_n3_22                GLU     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3857
+DIHEDRAL GLU_phi_n2_00                GLU     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.2368
+DIHEDRAL GLU_phi_n2_01                GLU     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.2368
+DIHEDRAL GLU_phi_n2_10                GLU     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.2368
+DIHEDRAL GLU_phi_n2_11                GLU     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.2368
+DIHEDRAL GLU_phi_n1_00                GLU     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL GLU_psi_n3_00                GLU     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.4794
+DIHEDRAL GLU_psi_n3_01                GLU     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.4794
+DIHEDRAL GLU_psi_n3_02                GLU     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.4794
+DIHEDRAL GLU_psi_n3_10                GLU     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.4794
+DIHEDRAL GLU_psi_n3_11                GLU     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.4794
+DIHEDRAL GLU_psi_n3_12                GLU     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.4794
+DIHEDRAL GLU_psi_n3_20                GLU     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.4794
+DIHEDRAL GLU_psi_n3_21                GLU     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.4794
+DIHEDRAL GLU_psi_n3_22                GLU     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.4794
+DIHEDRAL GLU_psi_n2_00                GLU     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   150.1020
+DIHEDRAL GLU_psi_n2_01                GLU     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   150.1020
+DIHEDRAL GLU_psi_n2_10                GLU     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   150.1020
+DIHEDRAL GLU_psi_n2_11                GLU     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   150.1020
+DIHEDRAL GLU_psi_n1_00                GLU     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2078
+DIHEDRAL GLY_phi_n3_00                GLY     BACKBONE  GHphin3B0        GHphin3C0          1.9810    27.8578
+DIHEDRAL GLY_phi_n3_01                GLY     BACKBONE  GHphin3B0        GHphin3C1          1.9810    27.8578
+DIHEDRAL GLY_phi_n3_02                GLY     BACKBONE  GHphin3B0        GHphin3C2          1.9810    27.8578
+DIHEDRAL GLY_phi_n3_10                GLY     BACKBONE  GHphin3B1        GHphin3C0          1.9810    27.8578
+DIHEDRAL GLY_phi_n3_11                GLY     BACKBONE  GHphin3B1        GHphin3C1          1.9810    27.8578
+DIHEDRAL GLY_phi_n3_12                GLY     BACKBONE  GHphin3B1        GHphin3C2          1.9810    27.8578
+DIHEDRAL GLY_phi_n3_20                GLY     BACKBONE  GHphin3B2        GHphin3C0          1.9810    27.8578
+DIHEDRAL GLY_phi_n3_21                GLY     BACKBONE  GHphin3B2        GHphin3C1          1.9810    27.8578
+DIHEDRAL GLY_phi_n3_22                GLY     BACKBONE  GHphin3B2        GHphin3C2          1.9810    27.8578
+DIHEDRAL GLY_phi_n2_00                GLY     BACKBONE  GHphin2B0        GHphin2C0          1.6676    26.5569
+DIHEDRAL GLY_phi_n2_01                GLY     BACKBONE  GHphin2B0        GHphin2C1          1.6676    26.5569
+DIHEDRAL GLY_phi_n2_10                GLY     BACKBONE  GHphin2B1        GHphin2C0          1.6676    26.5569
+DIHEDRAL GLY_phi_n2_11                GLY     BACKBONE  GHphin2B1        GHphin2C1          1.6676    26.5569
+DIHEDRAL GLY_psi_n1_00                GLY     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     1.3641
+DIHEDRAL GLY_psi_n3_00                GLY     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808    23.4712
+DIHEDRAL GLY_psi_n3_01                GLY     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808    23.4712
+DIHEDRAL GLY_psi_n3_02                GLY     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808    23.4712
+DIHEDRAL GLY_psi_n3_10                GLY     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808    23.4712
+DIHEDRAL GLY_psi_n3_11                GLY     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808    23.4712
+DIHEDRAL GLY_psi_n3_12                GLY     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808    23.4712
+DIHEDRAL GLY_psi_n3_20                GLY     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808    23.4712
+DIHEDRAL GLY_psi_n3_21                GLY     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808    23.4712
+DIHEDRAL GLY_psi_n3_22                GLY     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808    23.4712
+DIHEDRAL GLY_psi_n2_00                GLY     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   140.8570
+DIHEDRAL GLY_psi_n2_01                GLY     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   140.8570
+DIHEDRAL GLY_psi_n2_10                GLY     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   140.8570
+DIHEDRAL GLY_psi_n2_11                GLY     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   140.8570
+DIHEDRAL HIS_phi_n3_00                HIS     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3886
+DIHEDRAL HIS_phi_n3_01                HIS     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3886
+DIHEDRAL HIS_phi_n3_02                HIS     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3886
+DIHEDRAL HIS_phi_n3_10                HIS     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3886
+DIHEDRAL HIS_phi_n3_11                HIS     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3886
+DIHEDRAL HIS_phi_n3_12                HIS     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3886
+DIHEDRAL HIS_phi_n3_20                HIS     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3886
+DIHEDRAL HIS_phi_n3_21                HIS     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3886
+DIHEDRAL HIS_phi_n3_22                HIS     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3886
+DIHEDRAL HIS_phi_n2_00                HIS     BACKBONE  GHphin2B0        GHphin2C0          1.6676   184.7569
+DIHEDRAL HIS_phi_n2_01                HIS     BACKBONE  GHphin2B0        GHphin2C1          1.6676   184.7569
+DIHEDRAL HIS_phi_n2_10                HIS     BACKBONE  GHphin2B1        GHphin2C0          1.6676   184.7569
+DIHEDRAL HIS_phi_n2_11                HIS     BACKBONE  GHphin2B1        GHphin2C1          1.6676   184.7569
+DIHEDRAL HIS_phi_n1_00                HIS     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL HIS_psi_n3_00                HIS     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.2219
+DIHEDRAL HIS_psi_n3_01                HIS     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.2219
+DIHEDRAL HIS_psi_n3_02                HIS     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.2219
+DIHEDRAL HIS_psi_n3_10                HIS     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.2219
+DIHEDRAL HIS_psi_n3_11                HIS     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.2219
+DIHEDRAL HIS_psi_n3_12                HIS     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.2219
+DIHEDRAL HIS_psi_n3_20                HIS     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.2219
+DIHEDRAL HIS_psi_n3_21                HIS     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.2219
+DIHEDRAL HIS_psi_n3_22                HIS     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.2219
+DIHEDRAL HIS_psi_n2_00                HIS     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   150.4055
+DIHEDRAL HIS_psi_n2_01                HIS     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   150.4055
+DIHEDRAL HIS_psi_n2_10                HIS     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   150.4055
+DIHEDRAL HIS_psi_n2_11                HIS     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   150.4055
+DIHEDRAL HIS_psi_n1_00                HIS     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1569
+DIHEDRAL ILE_phi_n3_00                ILE     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.2499
+DIHEDRAL ILE_phi_n3_01                ILE     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.2499
+DIHEDRAL ILE_phi_n3_02                ILE     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.2499
+DIHEDRAL ILE_phi_n3_10                ILE     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.2499
+DIHEDRAL ILE_phi_n3_11                ILE     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.2499
+DIHEDRAL ILE_phi_n3_12                ILE     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.2499
+DIHEDRAL ILE_phi_n3_20                ILE     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.2499
+DIHEDRAL ILE_phi_n3_21                ILE     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.2499
+DIHEDRAL ILE_phi_n3_22                ILE     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.2499
+DIHEDRAL ILE_phi_n2_00                ILE     BACKBONE  GHphin2B0        GHphin2C0          1.6676   187.2554
+DIHEDRAL ILE_phi_n2_01                ILE     BACKBONE  GHphin2B0        GHphin2C1          1.6676   187.2554
+DIHEDRAL ILE_phi_n2_10                ILE     BACKBONE  GHphin2B1        GHphin2C0          1.6676   187.2554
+DIHEDRAL ILE_phi_n2_11                ILE     BACKBONE  GHphin2B1        GHphin2C1          1.6676   187.2554
+DIHEDRAL ILE_phi_n1_00                ILE     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL ILE_psi_n3_00                ILE     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     5.8108
+DIHEDRAL ILE_psi_n3_01                ILE     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     5.8108
+DIHEDRAL ILE_psi_n3_02                ILE     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     5.8108
+DIHEDRAL ILE_psi_n3_10                ILE     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     5.8108
+DIHEDRAL ILE_psi_n3_11                ILE     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     5.8108
+DIHEDRAL ILE_psi_n3_12                ILE     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     5.8108
+DIHEDRAL ILE_psi_n3_20                ILE     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     5.8108
+DIHEDRAL ILE_psi_n3_21                ILE     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     5.8108
+DIHEDRAL ILE_psi_n3_22                ILE     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     5.8108
+DIHEDRAL ILE_psi_n2_00                ILE     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.2511
+DIHEDRAL ILE_psi_n2_01                ILE     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.2511
+DIHEDRAL ILE_psi_n2_10                ILE     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.2511
+DIHEDRAL ILE_psi_n2_11                ILE     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.2511
+DIHEDRAL ILE_psi_n1_00                ILE     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2348
+DIHEDRAL LEU_phi_n3_00                LEU     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3847
+DIHEDRAL LEU_phi_n3_01                LEU     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3847
+DIHEDRAL LEU_phi_n3_02                LEU     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3847
+DIHEDRAL LEU_phi_n3_10                LEU     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3847
+DIHEDRAL LEU_phi_n3_11                LEU     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3847
+DIHEDRAL LEU_phi_n3_12                LEU     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3847
+DIHEDRAL LEU_phi_n3_20                LEU     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3847
+DIHEDRAL LEU_phi_n3_21                LEU     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3847
+DIHEDRAL LEU_phi_n3_22                LEU     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3847
+DIHEDRAL LEU_phi_n2_00                LEU     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.2862
+DIHEDRAL LEU_phi_n2_01                LEU     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.2862
+DIHEDRAL LEU_phi_n2_10                LEU     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.2862
+DIHEDRAL LEU_phi_n2_11                LEU     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.2862
+DIHEDRAL LEU_phi_n1_00                LEU     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL LEU_psi_n3_00                LEU     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.5992
+DIHEDRAL LEU_psi_n3_01                LEU     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.5992
+DIHEDRAL LEU_psi_n3_02                LEU     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.5992
+DIHEDRAL LEU_psi_n3_10                LEU     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.5992
+DIHEDRAL LEU_psi_n3_11                LEU     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.5992
+DIHEDRAL LEU_psi_n3_12                LEU     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.5992
+DIHEDRAL LEU_psi_n3_20                LEU     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.5992
+DIHEDRAL LEU_psi_n3_21                LEU     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.5992
+DIHEDRAL LEU_psi_n3_22                LEU     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.5992
+DIHEDRAL LEU_psi_n2_00                LEU     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.7717
+DIHEDRAL LEU_psi_n2_01                LEU     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.7717
+DIHEDRAL LEU_psi_n2_10                LEU     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.7717
+DIHEDRAL LEU_psi_n2_11                LEU     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.7717
+DIHEDRAL LEU_psi_n1_00                LEU     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1284
+DIHEDRAL LYS_phi_n3_00                LYS     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3165
+DIHEDRAL LYS_phi_n3_01                LYS     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3165
+DIHEDRAL LYS_phi_n3_02                LYS     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3165
+DIHEDRAL LYS_phi_n3_10                LYS     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3165
+DIHEDRAL LYS_phi_n3_11                LYS     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3165
+DIHEDRAL LYS_phi_n3_12                LYS     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3165
+DIHEDRAL LYS_phi_n3_20                LYS     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3165
+DIHEDRAL LYS_phi_n3_21                LYS     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3165
+DIHEDRAL LYS_phi_n3_22                LYS     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3165
+DIHEDRAL LYS_phi_n2_00                LYS     BACKBONE  GHphin2B0        GHphin2C0          1.6676   186.5850
+DIHEDRAL LYS_phi_n2_01                LYS     BACKBONE  GHphin2B0        GHphin2C1          1.6676   186.5850
+DIHEDRAL LYS_phi_n2_10                LYS     BACKBONE  GHphin2B1        GHphin2C0          1.6676   186.5850
+DIHEDRAL LYS_phi_n2_11                LYS     BACKBONE  GHphin2B1        GHphin2C1          1.6676   186.5850
+DIHEDRAL LYS_phi_n1_00                LYS     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL LYS_psi_n3_00                LYS     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     5.4376
+DIHEDRAL LYS_psi_n3_01                LYS     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     5.4376
+DIHEDRAL LYS_psi_n3_02                LYS     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     5.4376
+DIHEDRAL LYS_psi_n3_10                LYS     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     5.4376
+DIHEDRAL LYS_psi_n3_11                LYS     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     5.4376
+DIHEDRAL LYS_psi_n3_12                LYS     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     5.4376
+DIHEDRAL LYS_psi_n3_20                LYS     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     5.4376
+DIHEDRAL LYS_psi_n3_21                LYS     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     5.4376
+DIHEDRAL LYS_psi_n3_22                LYS     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     5.4376
+DIHEDRAL LYS_psi_n2_00                LYS     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.3682
+DIHEDRAL LYS_psi_n2_01                LYS     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.3682
+DIHEDRAL LYS_psi_n2_10                LYS     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.3682
+DIHEDRAL LYS_psi_n2_11                LYS     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.3682
+DIHEDRAL LYS_psi_n1_00                LYS     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2028
+DIHEDRAL MET_phi_n3_00                MET     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3847
+DIHEDRAL MET_phi_n3_01                MET     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3847
+DIHEDRAL MET_phi_n3_02                MET     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3847
+DIHEDRAL MET_phi_n3_10                MET     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3847
+DIHEDRAL MET_phi_n3_11                MET     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3847
+DIHEDRAL MET_phi_n3_12                MET     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3847
+DIHEDRAL MET_phi_n3_20                MET     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3847
+DIHEDRAL MET_phi_n3_21                MET     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3847
+DIHEDRAL MET_phi_n3_22                MET     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3847
+DIHEDRAL MET_phi_n2_00                MET     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.2862
+DIHEDRAL MET_phi_n2_01                MET     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.2862
+DIHEDRAL MET_phi_n2_10                MET     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.2862
+DIHEDRAL MET_phi_n2_11                MET     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.2862
+DIHEDRAL MET_phi_n1_00                MET     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL MET_psi_n3_00                MET     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.5992
+DIHEDRAL MET_psi_n3_01                MET     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.5992
+DIHEDRAL MET_psi_n3_02                MET     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.5992
+DIHEDRAL MET_psi_n3_10                MET     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.5992
+DIHEDRAL MET_psi_n3_11                MET     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.5992
+DIHEDRAL MET_psi_n3_12                MET     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.5992
+DIHEDRAL MET_psi_n3_20                MET     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.5992
+DIHEDRAL MET_psi_n3_21                MET     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.5992
+DIHEDRAL MET_psi_n3_22                MET     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.5992
+DIHEDRAL MET_psi_n2_00                MET     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.7717
+DIHEDRAL MET_psi_n2_01                MET     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.7717
+DIHEDRAL MET_psi_n2_10                MET     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.7717
+DIHEDRAL MET_psi_n2_11                MET     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.7717
+DIHEDRAL MET_psi_n1_00                MET     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1284
+DIHEDRAL PHE_phi_n3_00                PHE     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3849
+DIHEDRAL PHE_phi_n3_01                PHE     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3849
+DIHEDRAL PHE_phi_n3_02                PHE     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3849
+DIHEDRAL PHE_phi_n3_10                PHE     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3849
+DIHEDRAL PHE_phi_n3_11                PHE     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3849
+DIHEDRAL PHE_phi_n3_12                PHE     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3849
+DIHEDRAL PHE_phi_n3_20                PHE     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3849
+DIHEDRAL PHE_phi_n3_21                PHE     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3849
+DIHEDRAL PHE_phi_n3_22                PHE     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3849
+DIHEDRAL PHE_phi_n2_00                PHE     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.2743
+DIHEDRAL PHE_phi_n2_01                PHE     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.2743
+DIHEDRAL PHE_phi_n2_10                PHE     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.2743
+DIHEDRAL PHE_phi_n2_11                PHE     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.2743
+DIHEDRAL PHE_phi_n1_00                PHE     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL PHE_psi_n3_00                PHE     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.6960
+DIHEDRAL PHE_psi_n3_01                PHE     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.6960
+DIHEDRAL PHE_psi_n3_02                PHE     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.6960
+DIHEDRAL PHE_psi_n3_10                PHE     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.6960
+DIHEDRAL PHE_psi_n3_11                PHE     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.6960
+DIHEDRAL PHE_psi_n3_12                PHE     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.6960
+DIHEDRAL PHE_psi_n3_20                PHE     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.6960
+DIHEDRAL PHE_psi_n3_21                PHE     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.6960
+DIHEDRAL PHE_psi_n3_22                PHE     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.6960
+DIHEDRAL PHE_psi_n2_00                PHE     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.9387
+DIHEDRAL PHE_psi_n2_01                PHE     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.9387
+DIHEDRAL PHE_psi_n2_10                PHE     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.9387
+DIHEDRAL PHE_psi_n2_11                PHE     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.9387
+DIHEDRAL PHE_psi_n1_00                PHE     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2211
+DIHEDRAL PRO_phi_n3_00                PRO     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3356
+DIHEDRAL PRO_phi_n3_01                PRO     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3356
+DIHEDRAL PRO_phi_n3_02                PRO     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3356
+DIHEDRAL PRO_phi_n3_10                PRO     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3356
+DIHEDRAL PRO_phi_n3_11                PRO     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3356
+DIHEDRAL PRO_phi_n3_12                PRO     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3356
+DIHEDRAL PRO_phi_n3_20                PRO     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3356
+DIHEDRAL PRO_phi_n3_21                PRO     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3356
+DIHEDRAL PRO_phi_n3_22                PRO     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3356
+DIHEDRAL PRO_phi_n2_00                PRO     BACKBONE  GHphin2B0        GHphin2C0          1.6676   186.3389
+DIHEDRAL PRO_phi_n2_01                PRO     BACKBONE  GHphin2B0        GHphin2C1          1.6676   186.3389
+DIHEDRAL PRO_phi_n2_10                PRO     BACKBONE  GHphin2B1        GHphin2C0          1.6676   186.3389
+DIHEDRAL PRO_phi_n2_11                PRO     BACKBONE  GHphin2B1        GHphin2C1          1.6676   186.3389
+DIHEDRAL PRO_phi_n1_00                PRO     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL PRO_psi_n3_00                PRO     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     5.1037
+DIHEDRAL PRO_psi_n3_01                PRO     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     5.1037
+DIHEDRAL PRO_psi_n3_02                PRO     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     5.1037
+DIHEDRAL PRO_psi_n3_10                PRO     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     5.1037
+DIHEDRAL PRO_psi_n3_11                PRO     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     5.1037
+DIHEDRAL PRO_psi_n3_12                PRO     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     5.1037
+DIHEDRAL PRO_psi_n3_20                PRO     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     5.1037
+DIHEDRAL PRO_psi_n3_21                PRO     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     5.1037
+DIHEDRAL PRO_psi_n3_22                PRO     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     5.1037
+DIHEDRAL PRO_psi_n2_00                PRO     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   151.3740
+DIHEDRAL PRO_psi_n2_01                PRO     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   151.3740
+DIHEDRAL PRO_psi_n2_10                PRO     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   151.3740
+DIHEDRAL PRO_psi_n2_11                PRO     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   151.3740
+DIHEDRAL PRO_psi_n1_00                PRO     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1004
+DIHEDRAL SER_phi_n3_00                SER     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3134
+DIHEDRAL SER_phi_n3_01                SER     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3134
+DIHEDRAL SER_phi_n3_02                SER     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3134
+DIHEDRAL SER_phi_n3_10                SER     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3134
+DIHEDRAL SER_phi_n3_11                SER     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3134
+DIHEDRAL SER_phi_n3_12                SER     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3134
+DIHEDRAL SER_phi_n3_20                SER     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3134
+DIHEDRAL SER_phi_n3_21                SER     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3134
+DIHEDRAL SER_phi_n3_22                SER     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3134
+DIHEDRAL SER_phi_n2_00                SER     BACKBONE  GHphin2B0        GHphin2C0          1.6676   186.6215
+DIHEDRAL SER_phi_n2_01                SER     BACKBONE  GHphin2B0        GHphin2C1          1.6676   186.6215
+DIHEDRAL SER_phi_n2_10                SER     BACKBONE  GHphin2B1        GHphin2C0          1.6676   186.6215
+DIHEDRAL SER_phi_n2_11                SER     BACKBONE  GHphin2B1        GHphin2C1          1.6676   186.6215
+DIHEDRAL SER_phi_n1_00                SER     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL SER_psi_n3_00                SER     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     5.6493
+DIHEDRAL SER_psi_n3_01                SER     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     5.6493
+DIHEDRAL SER_psi_n3_02                SER     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     5.6493
+DIHEDRAL SER_psi_n3_10                SER     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     5.6493
+DIHEDRAL SER_psi_n3_11                SER     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     5.6493
+DIHEDRAL SER_psi_n3_12                SER     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     5.6493
+DIHEDRAL SER_psi_n3_20                SER     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     5.6493
+DIHEDRAL SER_psi_n3_21                SER     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     5.6493
+DIHEDRAL SER_psi_n3_22                SER     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     5.6493
+DIHEDRAL SER_psi_n2_00                SER     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.2707
+DIHEDRAL SER_psi_n2_01                SER     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.2707
+DIHEDRAL SER_psi_n2_10                SER     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.2707
+DIHEDRAL SER_psi_n2_11                SER     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.2707
+DIHEDRAL SER_psi_n1_00                SER     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2117
+DIHEDRAL THR_phi_n3_00                THR     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3712
+DIHEDRAL THR_phi_n3_01                THR     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3712
+DIHEDRAL THR_phi_n3_02                THR     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3712
+DIHEDRAL THR_phi_n3_10                THR     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3712
+DIHEDRAL THR_phi_n3_11                THR     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3712
+DIHEDRAL THR_phi_n3_12                THR     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3712
+DIHEDRAL THR_phi_n3_20                THR     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3712
+DIHEDRAL THR_phi_n3_21                THR     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3712
+DIHEDRAL THR_phi_n3_22                THR     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3712
+DIHEDRAL THR_phi_n2_00                THR     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.7165
+DIHEDRAL THR_phi_n2_01                THR     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.7165
+DIHEDRAL THR_phi_n2_10                THR     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.7165
+DIHEDRAL THR_phi_n2_11                THR     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.7165
+DIHEDRAL THR_phi_n1_00                THR     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL THR_psi_n3_00                THR     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     5.1864
+DIHEDRAL THR_psi_n3_01                THR     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     5.1864
+DIHEDRAL THR_psi_n3_02                THR     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     5.1864
+DIHEDRAL THR_psi_n3_10                THR     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     5.1864
+DIHEDRAL THR_psi_n3_11                THR     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     5.1864
+DIHEDRAL THR_psi_n3_12                THR     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     5.1864
+DIHEDRAL THR_psi_n3_20                THR     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     5.1864
+DIHEDRAL THR_psi_n3_21                THR     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     5.1864
+DIHEDRAL THR_psi_n3_22                THR     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     5.1864
+DIHEDRAL THR_psi_n2_00                THR     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.4731
+DIHEDRAL THR_psi_n2_01                THR     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.4731
+DIHEDRAL THR_psi_n2_10                THR     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.4731
+DIHEDRAL THR_psi_n2_11                THR     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.4731
+DIHEDRAL THR_psi_n1_00                THR     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1852
+DIHEDRAL TYR_phi_n3_00                TYR     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3738
+DIHEDRAL TYR_phi_n3_01                TYR     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3738
+DIHEDRAL TYR_phi_n3_02                TYR     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3738
+DIHEDRAL TYR_phi_n3_10                TYR     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3738
+DIHEDRAL TYR_phi_n3_11                TYR     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3738
+DIHEDRAL TYR_phi_n3_12                TYR     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3738
+DIHEDRAL TYR_phi_n3_20                TYR     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3738
+DIHEDRAL TYR_phi_n3_21                TYR     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3738
+DIHEDRAL TYR_phi_n3_22                TYR     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3738
+DIHEDRAL TYR_phi_n2_00                TYR     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.6527
+DIHEDRAL TYR_phi_n2_01                TYR     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.6527
+DIHEDRAL TYR_phi_n2_10                TYR     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.6527
+DIHEDRAL TYR_phi_n2_11                TYR     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.6527
+DIHEDRAL TYR_phi_n1_00                TYR     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL TYR_psi_n3_00                TYR     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     5.0241
+DIHEDRAL TYR_psi_n3_01                TYR     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     5.0241
+DIHEDRAL TYR_psi_n3_02                TYR     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     5.0241
+DIHEDRAL TYR_psi_n3_10                TYR     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     5.0241
+DIHEDRAL TYR_psi_n3_11                TYR     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     5.0241
+DIHEDRAL TYR_psi_n3_12                TYR     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     5.0241
+DIHEDRAL TYR_psi_n3_20                TYR     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     5.0241
+DIHEDRAL TYR_psi_n3_21                TYR     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     5.0241
+DIHEDRAL TYR_psi_n3_22                TYR     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     5.0241
+DIHEDRAL TYR_psi_n2_00                TYR     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.5436
+DIHEDRAL TYR_psi_n2_01                TYR     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.5436
+DIHEDRAL TYR_psi_n2_10                TYR     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.5436
+DIHEDRAL TYR_psi_n2_11                TYR     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.5436
+DIHEDRAL TYR_psi_n1_00                TYR     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1716
+DIHEDRAL VAL_phi_n3_00                VAL     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3875
+DIHEDRAL VAL_phi_n3_01                VAL     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3875
+DIHEDRAL VAL_phi_n3_02                VAL     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3875
+DIHEDRAL VAL_phi_n3_10                VAL     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3875
+DIHEDRAL VAL_phi_n3_11                VAL     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3875
+DIHEDRAL VAL_phi_n3_12                VAL     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3875
+DIHEDRAL VAL_phi_n3_20                VAL     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3875
+DIHEDRAL VAL_phi_n3_21                VAL     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3875
+DIHEDRAL VAL_phi_n3_22                VAL     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3875
+DIHEDRAL VAL_phi_n2_00                VAL     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.1177
+DIHEDRAL VAL_phi_n2_01                VAL     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.1177
+DIHEDRAL VAL_phi_n2_10                VAL     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.1177
+DIHEDRAL VAL_phi_n2_11                VAL     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.1177
+DIHEDRAL VAL_phi_n1_00                VAL     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL VAL_psi_n3_00                VAL     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.8715
+DIHEDRAL VAL_psi_n3_01                VAL     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.8715
+DIHEDRAL VAL_psi_n3_02                VAL     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.8715
+DIHEDRAL VAL_psi_n3_10                VAL     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.8715
+DIHEDRAL VAL_psi_n3_11                VAL     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.8715
+DIHEDRAL VAL_psi_n3_12                VAL     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.8715
+DIHEDRAL VAL_psi_n3_20                VAL     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.8715
+DIHEDRAL VAL_psi_n3_21                VAL     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.8715
+DIHEDRAL VAL_psi_n3_22                VAL     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.8715
+DIHEDRAL VAL_psi_n2_00                VAL     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.7787
+DIHEDRAL VAL_psi_n2_01                VAL     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.7787
+DIHEDRAL VAL_psi_n2_10                VAL     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.7787
+DIHEDRAL VAL_psi_n2_11                VAL     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.7787
+DIHEDRAL VAL_psi_n1_00                VAL     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.2146
+DIHEDRAL CYS_phi_n3_00                CYS     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3847
+DIHEDRAL CYS_phi_n3_01                CYS     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3847
+DIHEDRAL CYS_phi_n3_02                CYS     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3847
+DIHEDRAL CYS_phi_n3_10                CYS     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3847
+DIHEDRAL CYS_phi_n3_11                CYS     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3847
+DIHEDRAL CYS_phi_n3_12                CYS     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3847
+DIHEDRAL CYS_phi_n3_20                CYS     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3847
+DIHEDRAL CYS_phi_n3_21                CYS     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3847
+DIHEDRAL CYS_phi_n3_22                CYS     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3847
+DIHEDRAL CYS_phi_n2_00                CYS     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.2862
+DIHEDRAL CYS_phi_n2_01                CYS     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.2862
+DIHEDRAL CYS_phi_n2_10                CYS     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.2862
+DIHEDRAL CYS_phi_n2_11                CYS     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.2862
+DIHEDRAL CYS_phi_n1_00                CYS     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL CYS_psi_n3_00                CYS     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.5992
+DIHEDRAL CYS_psi_n3_01                CYS     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.5992
+DIHEDRAL CYS_psi_n3_02                CYS     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.5992
+DIHEDRAL CYS_psi_n3_10                CYS     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.5992
+DIHEDRAL CYS_psi_n3_11                CYS     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.5992
+DIHEDRAL CYS_psi_n3_12                CYS     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.5992
+DIHEDRAL CYS_psi_n3_20                CYS     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.5992
+DIHEDRAL CYS_psi_n3_21                CYS     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.5992
+DIHEDRAL CYS_psi_n3_22                CYS     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.5992
+DIHEDRAL CYS_psi_n2_00                CYS     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.7717
+DIHEDRAL CYS_psi_n2_01                CYS     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.7717
+DIHEDRAL CYS_psi_n2_10                CYS     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.7717
+DIHEDRAL CYS_psi_n2_11                CYS     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.7717
+DIHEDRAL CYS_psi_n1_00                CYS     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1284
+DIHEDRAL TRP_phi_n3_00                TRP     BACKBONE  GHphin3B0        GHphin3C0          1.9810    54.3847
+DIHEDRAL TRP_phi_n3_01                TRP     BACKBONE  GHphin3B0        GHphin3C1          1.9810    54.3847
+DIHEDRAL TRP_phi_n3_02                TRP     BACKBONE  GHphin3B0        GHphin3C2          1.9810    54.3847
+DIHEDRAL TRP_phi_n3_10                TRP     BACKBONE  GHphin3B1        GHphin3C0          1.9810    54.3847
+DIHEDRAL TRP_phi_n3_11                TRP     BACKBONE  GHphin3B1        GHphin3C1          1.9810    54.3847
+DIHEDRAL TRP_phi_n3_12                TRP     BACKBONE  GHphin3B1        GHphin3C2          1.9810    54.3847
+DIHEDRAL TRP_phi_n3_20                TRP     BACKBONE  GHphin3B2        GHphin3C0          1.9810    54.3847
+DIHEDRAL TRP_phi_n3_21                TRP     BACKBONE  GHphin3B2        GHphin3C1          1.9810    54.3847
+DIHEDRAL TRP_phi_n3_22                TRP     BACKBONE  GHphin3B2        GHphin3C2          1.9810    54.3847
+DIHEDRAL TRP_phi_n2_00                TRP     BACKBONE  GHphin2B0        GHphin2C0          1.6676   185.2862
+DIHEDRAL TRP_phi_n2_01                TRP     BACKBONE  GHphin2B0        GHphin2C1          1.6676   185.2862
+DIHEDRAL TRP_phi_n2_10                TRP     BACKBONE  GHphin2B1        GHphin2C0          1.6676   185.2862
+DIHEDRAL TRP_phi_n2_11                TRP     BACKBONE  GHphin2B1        GHphin2C1          1.6676   185.2862
+DIHEDRAL TRP_phi_n1_00                TRP     BACKBONE  GHphin1B0        GHphin1C0          0.0000     7.9710
+DIHEDRAL TRP_psi_n3_00                TRP     BACKBONE  GHpsin3B0        GHpsin3C0          2.0808     4.5992
+DIHEDRAL TRP_psi_n3_01                TRP     BACKBONE  GHpsin3B0        GHpsin3C1          2.0808     4.5992
+DIHEDRAL TRP_psi_n3_02                TRP     BACKBONE  GHpsin3B0        GHpsin3C2          2.0808     4.5992
+DIHEDRAL TRP_psi_n3_10                TRP     BACKBONE  GHpsin3B1        GHpsin3C0          2.0808     4.5992
+DIHEDRAL TRP_psi_n3_11                TRP     BACKBONE  GHpsin3B1        GHpsin3C1          2.0808     4.5992
+DIHEDRAL TRP_psi_n3_12                TRP     BACKBONE  GHpsin3B1        GHpsin3C2          2.0808     4.5992
+DIHEDRAL TRP_psi_n3_20                TRP     BACKBONE  GHpsin3B2        GHpsin3C0          2.0808     4.5992
+DIHEDRAL TRP_psi_n3_21                TRP     BACKBONE  GHpsin3B2        GHpsin3C1          2.0808     4.5992
+DIHEDRAL TRP_psi_n3_22                TRP     BACKBONE  GHpsin3B2        GHpsin3C2          2.0808     4.5992
+DIHEDRAL TRP_psi_n2_00                TRP     BACKBONE  GHpsin2B0        GHpsin2C0          1.7516   149.7717
+DIHEDRAL TRP_psi_n2_01                TRP     BACKBONE  GHpsin2B0        GHpsin2C1          1.7516   149.7717
+DIHEDRAL TRP_psi_n2_10                TRP     BACKBONE  GHpsin2B1        GHpsin2C0          1.7516   149.7717
+DIHEDRAL TRP_psi_n2_11                TRP     BACKBONE  GHpsin2B1        GHpsin2C1          1.7516   149.7717
+DIHEDRAL TRP_psi_n1_00                TRP     BACKBONE  GHpsin1B0        GHpsin1C0          0.0000     3.1284
 STRETCH ACE_C_CH3            ACE     C     CH3     1.5220    2652.66
 STRETCH ACE_C_O              ACE     C     O       1.2290    4769.76
 STRETCH ACE_CH3_H1           ACE     CH3   H1      1.0900    2845.12
