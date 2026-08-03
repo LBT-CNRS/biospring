@@ -49,7 +49,16 @@ class Spring
     // Computes and returns the force applied to particle 1. The opposite force
     // must be applied to particle 2. This split makes parallel force evaluation
     // possible without concurrently modifying particles.
-    Vector3f computeForce(const biospring::forcefield::ForceField & ff);
+    //
+    // `ignoreDynamicState`: bypasses the "skip if both endpoints are
+    // non-dynamic" early exit (see the .cpp). Needed for dihedral ghost-ghost
+    // springs (SpringNetwork::computeDihedralForces): both endpoints are
+    // always static/massless virtual sites (spn::GhostParticle) by design,
+    // so that guard's original intent -- skip pointless work between two
+    // real, frozen atoms -- does not apply: the force/energy still matters
+    // here and gets redistributed onto the ghosts' real, dynamic anchors
+    // afterward (SpringNetwork::redistributeGhostForces).
+    Vector3f computeForce(const biospring::forcefield::ForceField & ff, bool ignoreDynamicState = false);
 
     void applyForceToParticle(const biospring::forcefield::ForceField & ff);
 

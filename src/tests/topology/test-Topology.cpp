@@ -4,6 +4,7 @@
 
 #include "IO/io.h"
 #include "SpringNetwork.h"
+#include "configuration/Configuration.hpp"
 #include "measure.hpp"
 #include "topology/Spring.hpp"
 #include "topology/Topology.hpp"
@@ -319,6 +320,90 @@ TEST(Topology, copy_preserves_ghost_particle)
     spn::SpringNetwork spn2;
     assigned.to_spring_network(spn2);
     ASSERT_EQ(spn2.getGhostParticles().size(), 1);
+}
+
+// Regression test for a bug found while running the first real dynamics
+// validation with the ghost-particle dihedral mechanism active: every
+// single dihedral ghost-ghost spring connects two particles that are BOTH
+// static (spn::GhostParticle virtual sites are always massless/static by
+// design). spn::Spring::computeForce had a long-standing early exit
+// ("skip if both endpoints are non-dynamic" -- a valid optimization for two
+// genuinely frozen real atoms) that silently zeroed out force *and* energy
+// for every dihedral ghost spring, with no error or warning: a whole real
+// dynamics run showed exactly 0.00 dihedral energy for 5000 steps before
+// this was caught. None of the existing ghost-particle tests exercised
+// this path, since they call GhostParticle::redistributeForce/
+// SpringNetwork::redistributeGhostForces directly with a manually-pushed
+// force, bypassing Spring::computeForce entirely.
+TEST(Topology, dihedral_ghost_spring_applies_force)
+{
+    topology::Topology top;
+
+    // First ghost's anchors.
+    topology::ParticleProperties propsB1, propsC1, propsRef1;
+    propsB1.set_position(Vector3f(0.0, 0.0, 0.0));
+    propsC1.set_position(Vector3f(0.0, 0.0, 2.0));
+    propsRef1.set_position(Vector3f(1.0, 0.0, 0.0));
+    top.add_particle(topology::Particle(propsB1));
+    top.add_particle(topology::Particle(propsC1));
+    top.add_particle(topology::Particle(propsRef1));
+
+    // Second ghost's anchors, far away, so the two ghosts end up clearly
+    // separated (a large, unambiguous distance mismatch against the small
+    // d0 chosen below, regardless of the exact placement geometry).
+    topology::ParticleProperties propsB2, propsC2, propsRef2;
+    propsB2.set_position(Vector3f(20.0, 0.0, 0.0));
+    propsC2.set_position(Vector3f(20.0, 0.0, 2.0));
+    propsRef2.set_position(Vector3f(21.0, 0.0, 0.0));
+    top.add_particle(topology::Particle(propsB2));
+    top.add_particle(topology::Particle(propsC2));
+    top.add_particle(topology::Particle(propsRef2));
+
+    topology::ParticleProperties ghost_props;
+    ghost_props.set_static(true);
+    ghost_props.set_mass(0.0f);
+
+    topology::Particle & ghost1 = top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0),
+                                                          top.get_particle(1), top.get_particle(2), 1.0f, 90.0f, 0.0f);
+    topology::Particle & ghost2 = top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(3),
+                                                          top.get_particle(4), top.get_particle(5), 1.0f, 90.0f, 0.0f);
+
+    // d0 = 0.1: guaranteed far from the ~20 A actual distance between the
+    // two ghosts, so (d - d0)^2 is unambiguously large.
+    top.add_dihedral_sidechain_spring(ghost1, ghost2, 0.1, 10.0);
+
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+    ASSERT_EQ(spn.getGhostParticles().size(), 2);
+    // computeDihedralForces() needs a force field (SpringNetwork::_ff) to
+    // compute the harmonic term through -- only setup() constructs it.
+    spn.setup(configuration::defaultConfiguration());
+
+    spn.computeDihedralForces();
+
+    // Before this bug's fix, both would be exactly 0.0f: computeForce's
+    // "both endpoints non-dynamic" early exit silently skipped all real
+    // work for this spring.
+    EXPECT_GT(spn.getDihedralEnergy(), 1.0f);
+
+    bool any_ghost_force_nonzero = false;
+    for (const spn::GhostParticleBinding & binding : spn.getGhostParticles())
+    {
+        if (spn.getParticle(binding.ownIndex).getForce().norm() > 1e-6f)
+            any_ghost_force_nonzero = true;
+    }
+    EXPECT_TRUE(any_ghost_force_nonzero);
+
+    // Redistributing should move that force onto the (real, dynamic)
+    // anchors instead, and reset each ghost's own force back to zero.
+    spn.redistributeGhostForces();
+    for (const spn::GhostParticleBinding & binding : spn.getGhostParticles())
+        EXPECT_FLOAT_EQ(spn.getParticle(binding.ownIndex).getForce().norm(), 0.0f);
+
+    float total_anchor_force = 0.0f;
+    for (size_t i = 0; i < 6; ++i)
+        total_anchor_force += spn.getParticle(i).getForce().norm();
+    EXPECT_GT(total_anchor_force, 0.0f);
 }
 
 // -- Main function  ----------------------------------------------------------

@@ -108,7 +108,11 @@ void SpringNetwork::computeDihedralForces()
     auto accumulate = [&](std::vector<Spring> & springs) {
         for (Spring & spring : springs)
         {
-            const Vector3f force = spring.computeForce(*_ff);
+            // ignoreDynamicState=true: both endpoints of a dihedral ghost
+            // spring are always static virtual sites (see Spring::computeForce's
+            // own doc) -- without this, the force/energy here would silently
+            // stay zero for every single one of these springs.
+            const Vector3f force = spring.computeForce(*_ff, /*ignoreDynamicState=*/true);
             spring.getParticle1().addForce(force);
             spring.getParticle2().addForce(-force);
             dihedralenergy += spring.getEnergy();
