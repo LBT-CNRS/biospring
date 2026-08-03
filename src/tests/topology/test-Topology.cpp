@@ -259,6 +259,68 @@ TEST(Topology, to_spring_network_with_ghost_particle)
     EXPECT_NEAR(spn.getParticle(3).getPosition().getZ(), 0.0f, 1e-4);
 }
 
+// Regression test for a bug found while adding NetCDF ghost-particle I/O:
+// Topology's copy constructor/assignment operator only ever copied
+// particles and springs, never _ghost_particles -- silently dropping every
+// ghost binding whenever a Topology was copied (e.g. io::readTopology's
+// by-value return from NetCDFReader::getTopology()). Also exercises the
+// uid-remapping this required: ParticleCollection::operator= mints a fresh
+// unique id per particle (see its own comment), so a naive `_ghost_particles
+// = other._ghost_particles` would carry over stale, non-matching keys.
+TEST(Topology, copy_preserves_ghost_particle)
+{
+    topology::Topology top;
+
+    topology::ParticleProperties propsB, propsC, propsRef;
+    propsB.set_name("B");
+    propsB.set_position(Vector3f(0.0, 0.0, 0.0));
+    propsC.set_name("C");
+    propsC.set_position(Vector3f(0.0, 0.0, 2.0));
+    propsRef.set_name("REF");
+    propsRef.set_position(Vector3f(1.0, 0.0, 0.0));
+
+    top.add_particle(topology::Particle(propsB));
+    top.add_particle(topology::Particle(propsC));
+    top.add_particle(topology::Particle(propsRef));
+
+    topology::ParticleProperties ghost_props;
+    ghost_props.set_name("GHOST");
+    ghost_props.set_static(true);
+    ghost_props.set_mass(0.0f);
+
+    const float r = 1.5f, theta_deg = 90.0f, delta_deg = 0.0f;
+    top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0), top.get_particle(1),
+                           top.get_particle(2), r, theta_deg, delta_deg);
+
+    // Copy constructor.
+    topology::Topology copy(top);
+    ASSERT_EQ(copy.number_of_particles(), 4);
+    EXPECT_TRUE(copy.is_ghost_particle(copy.get_particle(3).unique_id()));
+    EXPECT_FALSE(copy.is_ghost_particle(copy.get_particle(0).unique_id()));
+    // The copy's uids are freshly minted, distinct from the original's.
+    EXPECT_NE(copy.get_particle(3).unique_id(), top.get_particle(3).unique_id());
+
+    const topology::Topology::GhostParticleInfo & info = copy.get_ghost_particle_info(copy.get_particle(3).unique_id());
+    EXPECT_EQ(info.anchor_B_uid, copy.get_particle(0).unique_id());
+    EXPECT_EQ(info.anchor_C_uid, copy.get_particle(1).unique_id());
+    EXPECT_EQ(info.anchor_ref_uid, copy.get_particle(2).unique_id());
+    EXPECT_FLOAT_EQ(static_cast<float>(info.r), r);
+
+    spn::SpringNetwork spn;
+    copy.to_spring_network(spn);
+    ASSERT_EQ(spn.getGhostParticles().size(), 1);
+
+    // Assignment operator.
+    topology::Topology assigned;
+    assigned = top;
+    ASSERT_EQ(assigned.number_of_particles(), 4);
+    EXPECT_TRUE(assigned.is_ghost_particle(assigned.get_particle(3).unique_id()));
+
+    spn::SpringNetwork spn2;
+    assigned.to_spring_network(spn2);
+    ASSERT_EQ(spn2.getGhostParticles().size(), 1);
+}
+
 // -- Main function  ----------------------------------------------------------
 int main(int argc, char * argv[])
 {

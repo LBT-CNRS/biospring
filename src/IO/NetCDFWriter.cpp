@@ -103,6 +103,124 @@ static void writeDihedralDataCDL(std::ostream & os, const std::string & prefix,
     }
 }
 
+// Writes ghost-particle anchor-binding binary NetCDF dimension/variable set
+// (own particle index + 3 anchor indices + r/theta/delta placement
+// parameters), or nothing at all if `source` is empty (same silent/backward
+// compatible convention as the dihedral ghost-spring families above).
+static void writeGhostParticleGroupBinary(NcFile * nc,
+                                          const std::vector<biospring::spn::GhostParticleBinding> & source)
+{
+    const size_t n = source.size();
+    if (n == 0)
+        return;
+
+    NcDim dim3 = nc->addDim("ghostparticleanchordim", 3);
+    NcDim gndim = nc->addDim("ghostparticle_number", n);
+
+    NcVar ownidx = nc->addVar("ghostparticleownindex", ncInt, gndim);
+    ownidx.putAtt("long_name", "Ghost particle own particle id");
+
+    std::vector<NcDim> andim(2);
+    andim[0] = gndim;
+    andim[1] = dim3;
+    NcVar anchoridx = nc->addVar("ghostparticleanchorindices", ncInt, andim);
+    anchoridx.putAtt("long_name", "Ghost particle anchor B/C/Ref particle ids");
+
+    NcVar rs = nc->addVar("ghostparticler", ncFloat, gndim);
+    rs.putAtt("units", "A");
+    rs.putAtt("long_name", "Ghost particle distance from anchor B");
+
+    NcVar thetas = nc->addVar("ghostparticletheta", ncFloat, gndim);
+    thetas.putAtt("units", "degree");
+    thetas.putAtt("long_name", "Ghost particle angle from the B->C axis");
+
+    NcVar deltas = nc->addVar("ghostparticledelta", ncFloat, gndim);
+    deltas.putAtt("units", "degree");
+    deltas.putAtt("long_name", "Ghost particle azimuthal angle from the reference direction");
+
+    GhostParticleBuffer buffer(n);
+    buffer.bufferize(source);
+
+    ownidx.putVar(buffer.ownindices);
+    anchoridx.putVar(buffer.anchorindices);
+    rs.putVar(buffer.rs);
+    thetas.putVar(buffer.thetas);
+    deltas.putVar(buffer.deltas);
+}
+
+// CDL equivalents of the above, split the same way the dihedral families are.
+static void writeGhostParticleHeaderCDL(std::ostream & os, size_t n)
+{
+    if (n == 0)
+        return;
+    os << "\tghostparticleanchordim = 3; " << std::endl;
+    os << "\tghostparticle_number = " << n << ";" << std::endl;
+    os << std::endl;
+}
+
+static void writeGhostParticleVariablesCDL(std::ostream & os, size_t n)
+{
+    if (n == 0)
+        return;
+    os << "\tint     ghostparticleownindex(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticleownindex:long_name = \"Ghost particle own particle id\"; " << std::endl;
+    os << std::endl;
+    os << "\tint     ghostparticleanchorindices(ghostparticle_number,ghostparticleanchordim); " << std::endl;
+    os << "\t        ghostparticleanchorindices:long_name = \"Ghost particle anchor B/C/Ref particle ids\"; "
+       << std::endl;
+    os << std::endl;
+    os << "\tfloat   ghostparticler(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticler:units = \"A\" ;" << std::endl;
+    os << "\t        ghostparticler:long_name = \"Ghost particle distance from anchor B\";" << std::endl;
+    os << "\tfloat   ghostparticletheta(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticletheta:units = \"degree\" ;" << std::endl;
+    os << "\t        ghostparticletheta:long_name = \"Ghost particle angle from the B->C axis\";" << std::endl;
+    os << "\tfloat   ghostparticledelta(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticledelta:units = \"degree\" ;" << std::endl;
+    os << "\t        ghostparticledelta:long_name = \"Ghost particle azimuthal angle from the reference direction\";"
+       << std::endl;
+    os << std::endl;
+}
+
+static void writeGhostParticleDataCDL(std::ostream & os,
+                                      const std::vector<biospring::spn::GhostParticleBinding> & source)
+{
+    const size_t n = source.size();
+    if (n == 0)
+        return;
+
+    os << "\tghostparticleownindex = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].ownIndex;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticleanchorindices = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].anchorBIndex << ", " << source[i].anchorCIndex << ", " << source[i].anchorRefIndex;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticler = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].r;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticletheta = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].theta_deg;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticledelta = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].delta_deg;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+}
+
 NcFile * NetCDFWriter::safeOpenBinary()
 {
     NcFile * nc = nullptr;
@@ -246,6 +364,8 @@ void NetCDFWriter::writeBinary()
     writeDihedralSpringGroupBinary(nc, "dihedralsidechain", _spn->getDihedralSidechainSprings());
     writeDihedralSpringGroupBinary(nc, "dihedralplanarity", _spn->getDihedralPlanaritySprings());
 
+    writeGhostParticleGroupBinary(nc, _spn->getGhostParticles());
+
     delete nc;
 }
 
@@ -281,6 +401,8 @@ void NetCDFWriter::_writeHeaderCDL()
     writeDihedralHeaderCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings().size());
     writeDihedralHeaderCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings().size());
     writeDihedralHeaderCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings().size());
+
+    writeGhostParticleHeaderCDL(_ostream, _spn->getGhostParticles().size());
 
     _ostream << "variables:" << std::endl;
     _ostream << "\tfloat   coordinates(particle_number, spatialdim); " << std::endl;
@@ -361,6 +483,8 @@ void NetCDFWriter::_writeHeaderCDL()
     writeDihedralVariablesCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings().size());
     writeDihedralVariablesCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings().size());
     writeDihedralVariablesCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings().size());
+
+    writeGhostParticleVariablesCDL(_ostream, _spn->getGhostParticles().size());
 }
 
 void NetCDFWriter::_writeParticleDataCDL()
@@ -577,6 +701,8 @@ void NetCDFWriter::_writeSpringDataCDL()
     writeDihedralDataCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings());
     writeDihedralDataCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings());
     writeDihedralDataCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings());
+
+    writeGhostParticleDataCDL(_ostream, _spn->getGhostParticles());
 
     _ostream << "}" << std::endl;
 }

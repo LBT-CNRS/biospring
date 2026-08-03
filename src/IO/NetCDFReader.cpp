@@ -43,6 +43,17 @@ void NetCDFReader::addDihedralPlanaritySpringsToSpn()
             _dihedralplanaritybuffer.springsequilibriums[i], _dihedralplanaritybuffer.springsstiffnesses[i]);
 }
 
+void NetCDFReader::addGhostParticlesToSpn()
+{
+    for (size_t i = 0; i < _ghostparticlebuffer.number_of_ghostparticles; ++i)
+        _topology.register_ghost_particle(
+            static_cast<size_t>(_ghostparticlebuffer.ownindices[i]),
+            static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][0]),
+            static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][1]),
+            static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][2]), _ghostparticlebuffer.rs[i],
+            _ghostparticlebuffer.thetas[i], _ghostparticlebuffer.deltas[i]);
+}
+
 void NetCDFReader::addParticlesToSpn()
 {
     char buf[5] = "";
@@ -59,7 +70,11 @@ void NetCDFReader::addParticlesToSpn()
         p.properties().set_dynamic((_pbuffer.dynamic_states[i] == 0) ? false : true);
         p.properties().set_mass(_pbuffer.masses[i]);
 
-        if (std::abs(p.properties().mass()) < 1e-6)
+        // Ghost (virtual-site) particles are deliberately massless and static
+        // -- see spn::GhostParticle -- so this guard against an accidental
+        // zero mass only applies to dynamic particles, whose mass actually
+        // matters for integration.
+        if (p.properties().is_dynamic() && std::abs(p.properties().mass()) < 1e-6)
         {
             logging::warning("Mass of particle %d is 0.0. Changing it to 1.0", i);
             p.properties().set_mass(1.0);
@@ -113,6 +128,14 @@ void NetCDFReader::read()
         addDihedralSidechainSpringsToSpn();
         readDihedralSpringGroup("dihedralplanarity", _dihedralplanaritybuffer);
         addDihedralPlanaritySpringsToSpn();
+
+        // Ghost particles already exist as regular particles at this point
+        // (added by addParticlesToSpn() above, in file order) -- this only
+        // registers which ones are ghosts and their anchor/placement info,
+        // so it must run after addParticlesToSpn() but has no other ordering
+        // constraint relative to the spring/dihedral steps above.
+        readGhostParticles();
+        addGhostParticlesToSpn();
     }
     catch (netCDF::exceptions::NcException & e)
     {
@@ -279,6 +302,52 @@ void NetCDFReader::readDihedralSpringGroup(const char * prefix, DihedralSpringBu
     checkNDims(data, 1);
     checkDim(data, 0, n);
     data.getVar(buffer.springsequilibriums);
+}
+
+void NetCDFReader::readGhostParticles()
+{
+    // Entirely optional, same convention as readDihedralSpringGroup: an
+    // older .nc file, or one with no ghost particles at write time, simply
+    // doesn't have this dimension -- silently leave the buffer empty.
+    netCDF::NcDim dim = _file->getDim("ghostparticle_number");
+    if (dim.isNull())
+    {
+        _ghostparticlebuffer.initialize(0);
+        return;
+    }
+
+    const size_t n = dim.getSize();
+    _ghostparticlebuffer.initialize(n);
+    if (n == 0)
+        return;
+
+    netCDF::NcVar data;
+
+    data = getNcVar("ghostparticleownindex");
+    checkNDims(data, 1);
+    checkDim(data, 0, n);
+    data.getVar(_ghostparticlebuffer.ownindices);
+
+    data = getNcVar("ghostparticleanchorindices");
+    checkNDims(data, 2);
+    checkDim(data, 0, n);
+    checkDim(data, 1, 3);
+    data.getVar(_ghostparticlebuffer.anchorindices);
+
+    data = getNcVar("ghostparticler");
+    checkNDims(data, 1);
+    checkDim(data, 0, n);
+    data.getVar(_ghostparticlebuffer.rs);
+
+    data = getNcVar("ghostparticletheta");
+    checkNDims(data, 1);
+    checkDim(data, 0, n);
+    data.getVar(_ghostparticlebuffer.thetas);
+
+    data = getNcVar("ghostparticledelta");
+    checkNDims(data, 1);
+    checkDim(data, 0, n);
+    data.getVar(_ghostparticlebuffer.deltas);
 }
 
 void NetCDFReader::readNumberOfParticles()

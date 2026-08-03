@@ -151,6 +151,82 @@ struct DihedralSpringBuffer
     }
 };
 
+// Buffers ghost-particle anchor bindings (SpringNetwork's _ghostparticles /
+// GhostParticleBinding, see GhostParticle.h) for NetCDF I/O. A ghost
+// particle's own coordinates/mass/etc. are already covered by the regular
+// ParticleBuffer above (it is a real, if massless and static, entry in
+// SpringNetwork's particle list) -- this buffer only carries the extra
+// binding info (which particle is a ghost, its 3 anchor particles, and its
+// placement parameters) needed to reconstruct it on reload.
+struct GhostParticleBuffer
+{
+    size_t number_of_ghostparticles;
+    int * ownindices;
+    int (*anchorindices)[3];
+    float * rs;
+    float * thetas;
+    float * deltas;
+
+    ~GhostParticleBuffer() { clear(); }
+
+    GhostParticleBuffer(const GhostParticleBuffer &) = delete;
+    GhostParticleBuffer & operator=(const GhostParticleBuffer &) = delete;
+
+    void clear()
+    {
+        delete[] ownindices;
+        delete[] anchorindices;
+        delete[] rs;
+        delete[] thetas;
+        delete[] deltas;
+        ownindices = nullptr;
+        anchorindices = nullptr;
+        rs = nullptr;
+        thetas = nullptr;
+        deltas = nullptr;
+        number_of_ghostparticles = 0;
+    }
+
+    GhostParticleBuffer() : number_of_ghostparticles(0), ownindices(0), anchorindices(0), rs(0), thetas(0), deltas(0)
+    {
+    }
+
+    GhostParticleBuffer(size_t number_of_ghostparticles) : GhostParticleBuffer()
+    {
+        initialize(number_of_ghostparticles);
+    }
+
+    void initialize(size_t nGhosts)
+    {
+        clear();
+        number_of_ghostparticles = nGhosts;
+        if (nGhosts > 0)
+        {
+            ownindices = new int[nGhosts]{};
+            anchorindices = new int[nGhosts][3]{};
+            rs = new float[nGhosts]{};
+            thetas = new float[nGhosts]{};
+            deltas = new float[nGhosts]{};
+        }
+    }
+
+    // Copies SpringNetwork ghost-particle bindings (getGhostParticles()) into these buffers.
+    void bufferize(const std::vector<biospring::spn::GhostParticleBinding> & source)
+    {
+        for (size_t i = 0; i < source.size(); ++i)
+        {
+            const biospring::spn::GhostParticleBinding & g = source[i];
+            ownindices[i] = static_cast<int>(g.ownIndex);
+            anchorindices[i][0] = static_cast<int>(g.anchorBIndex);
+            anchorindices[i][1] = static_cast<int>(g.anchorCIndex);
+            anchorindices[i][2] = static_cast<int>(g.anchorRefIndex);
+            rs[i] = g.r;
+            thetas[i] = g.theta_deg;
+            deltas[i] = g.delta_deg;
+        }
+    }
+};
+
 struct ParticleBuffer
 {
     size_t number_of_particles;

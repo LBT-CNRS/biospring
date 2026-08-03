@@ -84,6 +84,7 @@ class Topology
     {
         _copy_particles(other);
         _copy_springs(other);
+        _copy_ghost_particles(other);
     }
 
     // Assignment operator.
@@ -111,6 +112,7 @@ class Topology
 
         _copy_particles(other);
         _copy_springs(other);
+        _copy_ghost_particles(other);
 
         return *this;
     }
@@ -172,6 +174,20 @@ class Topology
     bool is_ghost_particle(pid_t uid) const { return _ghost_particles.find(uid) != _ghost_particles.end(); }
 
     const GhostParticleInfo & get_ghost_particle_info(pid_t uid) const { return _ghost_particles.at(uid); }
+
+    // Registers ghost-particle info for a particle that already exists (by index)
+    // in the collection, without creating a new one. Used by NetCDFReader, which
+    // reads ghost particles as regular particles first (see addParticlesToSpn())
+    // and only learns which ones are ghosts, and their anchors, from a separate
+    // buffer read afterwards.
+    void register_ghost_particle(size_t particle_index, size_t anchor_B_index, size_t anchor_C_index,
+                                  size_t anchor_ref_index, double r, double theta_deg, double delta_deg)
+    {
+        pid_t particle_uid = _particles[particle_index].unique_id();
+        _ghost_particles[particle_uid] = GhostParticleInfo{
+            _particles[anchor_B_index].unique_id(), _particles[anchor_C_index].unique_id(),
+            _particles[anchor_ref_index].unique_id(), r, theta_deg, delta_deg};
+    }
 
     // =============================================================================
     // Spring manipulation.
@@ -496,6 +512,28 @@ class Topology
                                 offset);
         _copy_spring_collection(_dihedral_planarity_springs, other._dihedral_planarity_springs, other._particles,
                                 offset);
+    }
+
+    // Copies `other`'s ghost-particle bindings to this topology. Same uid
+    // problem as _copy_springs above (see its note): `other`'s ghost/anchor
+    // unique ids only resolve to a *position* in `other._particles`, which
+    // must be re-looked-up in `this->_particles` (already copied, same
+    // order, by _copy_particles) to get the corresponding fresh unique id.
+    void _copy_ghost_particles(const Topology & other)
+    {
+        _ghost_particles.clear();
+        for (const auto & [old_ghost_uid, info] : other._ghost_particles)
+        {
+            size_t ghost_index = other._particles.by_uid().at(old_ghost_uid);
+            size_t b_index = other._particles.by_uid().at(info.anchor_B_uid);
+            size_t c_index = other._particles.by_uid().at(info.anchor_C_uid);
+            size_t ref_index = other._particles.by_uid().at(info.anchor_ref_uid);
+
+            pid_t new_ghost_uid = _particles[ghost_index].unique_id();
+            _ghost_particles[new_ghost_uid] =
+                GhostParticleInfo{_particles[b_index].unique_id(), _particles[c_index].unique_id(),
+                                  _particles[ref_index].unique_id(), info.r, info.theta_deg, info.delta_deg};
+        }
     }
 };
 

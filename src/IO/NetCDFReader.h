@@ -22,6 +22,7 @@ class NetCDFReader : public TopologyReaderBase
     DihedralSpringBuffer _dihedralbackbonebuffer;
     DihedralSpringBuffer _dihedralsidechainbuffer;
     DihedralSpringBuffer _dihedralplanaritybuffer;
+    GhostParticleBuffer _ghostparticlebuffer;
 
     std::unique_ptr<netCDF::NcFile> _file;
     int _filec = -1;
@@ -34,6 +35,11 @@ class NetCDFReader : public TopologyReaderBase
     // variables; see readDihedralSpringGroup's own dimension check).
     void readDihedralSpringGroup(const char * prefix, DihedralSpringBuffer & buffer);
 
+    // Reads ghost-particle anchor bindings (optional, same convention as
+    // readDihedralSpringGroup: an old .nc file, or one with no ghost
+    // particles, simply has none of these variables).
+    void readGhostParticles();
+
     void readParticles();
     void readNumberOfParticles();
 
@@ -42,6 +48,7 @@ class NetCDFReader : public TopologyReaderBase
     void addDihedralBackboneSpringsToSpn();
     void addDihedralSidechainSpringsToSpn();
     void addDihedralPlanaritySpringsToSpn();
+    void addGhostParticlesToSpn();
 
     void checkNDims(const netCDF::NcVar & var, int ref);
     void checkDim(const netCDF::NcVar & var, int dimid, size_t size);
