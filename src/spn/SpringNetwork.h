@@ -217,9 +217,12 @@ class SpringNetwork
     // nonbonded forces as a side effect, which is a separate physical
     // modelling decision (matching AMBER's scaled 1-4 nonbonded convention)
     // that this feature does not make. See doc/BondedForceFieldSprings.md.
-    void addDihedralBackboneSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
-    void addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
-    void addDihedralPlanaritySpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
+    void addDihedralBackboneSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                   float dcOffset = 0.0f);
+    void addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                    float dcOffset = 0.0f);
+    void addDihedralPlanaritySpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                    float dcOffset = 0.0f);
 
     void updateSpringState(unsigned id, bool isStatic);
     void addStaticSpring(unsigned id) { _staticsprings.push_back(id); }

@@ -61,9 +61,9 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
     }
     else if (type == "DIHEDRAL")
     {
-        if (tokens.size() != 8)
-            logging::die("BondedForceFieldReader: line %d: DIHEDRAL expects 8 tokens (type name resname family "
-                         "atom_ref atom_rotant d0 k), found %d",
+        if (tokens.size() != 9)
+            logging::die("BondedForceFieldReader: line %d: DIHEDRAL expects 9 tokens (type name resname family "
+                         "atom_ref atom_rotant d0 k dc_offset), found %d",
                          static_cast<int>(line_id), static_cast<int>(tokens.size()));
 
         DihedralEntry entry;
@@ -87,6 +87,9 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         if (!utils::string::from_string(entry.k, tokens[7]))
             logging::die("BondedForceFieldReader: line %d: invalid k '%s'", static_cast<int>(line_id),
                          tokens[7].c_str());
+        if (!utils::string::from_string(entry.dc_offset, tokens[8]))
+            logging::die("BondedForceFieldReader: line %d: invalid dc_offset '%s'", static_cast<int>(line_id),
+                         tokens[8].c_str());
         _dihedral.push_back(entry);
     }
     else if (type == "GHOSTPARTICLE")
@@ -326,7 +329,8 @@ unsigned BondedForceFieldReader::_create_ghost_particles(topology::Topology & to
 
 void BondedForceFieldReader::_add_or_combine_dihedral_spring(topology::SpringCollection & collection,
                                                               topology::Particle & p1, topology::Particle & p2,
-                                                              double equilibrium, double stiffness) const
+                                                              double equilibrium, double stiffness,
+                                                              double dc_offset) const
 {
     // Two different Fourier-term ghost-spring groups for the same axis may
     // legitimately pick the same real substituent pair (see
@@ -338,11 +342,22 @@ void BondedForceFieldReader::_add_or_combine_dihedral_spring(topology::SpringCol
     // 0.5*k1*(x-d1)^2 + 0.5*k2*(x-d2)^2 = 0.5*(k1+k2)*(x-d_combined)^2 + const,
     // with d_combined = (k1*d1 + k2*d2) / (k1+k2) -- so a collision is
     // combined here rather than rejected or silently overwritten.
+    //
+    // NOTE: that "+const" (= k1*k2/(2*(k1+k2)) * (d1-d2)^2, from completing
+    // the square) is a genuine part of the two original springs' combined
+    // energy that the merged single-spring representation cannot reproduce
+    // on its own -- currently NOT folded into dc_offset below (unlike the
+    // ring-construction artifact, which is). Harmless today: no current
+    // DIHEDRAL axis ever produces two groups targeting the same real pair
+    // (verified empirically, zero collisions across all generated data), so
+    // this branch is never actually exercised -- but if a future axis ever
+    // does hit it, the combined spring's reported energy would be short by
+    // exactly that dropped constant.
     topology::Spring * existing = _find_spring(collection, p1, p2);
 
     if (existing == nullptr)
     {
-        collection.add_spring(p1, p2, equilibrium, stiffness);
+        collection.add_spring(p1, p2, equilibrium, stiffness).set_dc_offset(dc_offset);
     }
     else
     {
@@ -351,6 +366,7 @@ void BondedForceFieldReader::_add_or_combine_dihedral_spring(topology::SpringCol
         const double combined_equilibrium = (k1 * existing->equilibrium() + k2 * equilibrium) / (k1 + k2);
         existing->set_equilibrium(combined_equilibrium);
         existing->set_stiffness(k1 + k2);
+        existing->set_dc_offset(existing->dc_offset() + dc_offset);
     }
 }
 
@@ -517,15 +533,15 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             {
             case DihedralFamily::BACKBONE:
                 _add_or_combine_dihedral_spring(topology.dihedral_backbone_springs(), *p_ref, *p_rot, entry.d0,
-                                                entry.k);
+                                                entry.k, entry.dc_offset);
                 break;
             case DihedralFamily::SIDECHAIN:
                 _add_or_combine_dihedral_spring(topology.dihedral_sidechain_springs(), *p_ref, *p_rot, entry.d0,
-                                                entry.k);
+                                                entry.k, entry.dc_offset);
                 break;
             case DihedralFamily::PLANARITY:
                 _add_or_combine_dihedral_spring(topology.dihedral_planarity_springs(), *p_ref, *p_rot, entry.d0,
-                                                entry.k);
+                                                entry.k, entry.dc_offset);
                 break;
             }
             nb_dihedral_applied++;

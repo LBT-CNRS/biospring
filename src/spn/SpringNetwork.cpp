@@ -115,7 +115,12 @@ void SpringNetwork::computeDihedralForces()
             const Vector3f force = spring.computeForce(*_ff, /*ignoreDynamicState=*/true);
             spring.getParticle1().addForce(force);
             spring.getParticle2().addForce(-force);
-            dihedralenergy += spring.getEnergy();
+            // Subtracts this spring's own share of its axis's exact
+            // dihedral-energy correction (see Spring::getDcOffset's own
+            // comment) -- zero for every non-dihedral spring, so this is a
+            // no-op there; never affects the force just computed above, only
+            // the reported total.
+            dihedralenergy += spring.getEnergy() - spring.getDcOffset();
         }
     };
 
@@ -603,7 +608,7 @@ void SpringNetwork::addSpring(unsigned id1, unsigned id2, float equilibrium, flo
 // header comment on addDihedralBackboneSpring for why), and not split into
 // static/dynamic subsets (always fully iterated in computeDihedralForces).
 static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Particle> & particles, unsigned id1,
-                                unsigned id2, float equilibrium, float stiffness)
+                                unsigned id2, float equilibrium, float stiffness, float dcOffset)
 {
     if (id1 >= particles.size() || id2 >= particles.size())
         throw std::out_of_range("SpringNetwork::addDihedral*Spring: particle index out of range");
@@ -612,21 +617,25 @@ static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Pa
 
     collection.emplace_back(particles[id1], particles[id2], equilibrium, stiffness);
     collection.back().setId(static_cast<unsigned>(collection.size() - 1));
+    collection.back().setDcOffset(dcOffset);
 }
 
-void SpringNetwork::addDihedralBackboneSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+void SpringNetwork::addDihedralBackboneSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                              float dcOffset)
 {
-    addDihedralSpringTo(_dihedralbackbonesprings, _particles, id1, id2, equilibrium, stiffness);
+    addDihedralSpringTo(_dihedralbackbonesprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
-void SpringNetwork::addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+void SpringNetwork::addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                               float dcOffset)
 {
-    addDihedralSpringTo(_dihedralsidechainsprings, _particles, id1, id2, equilibrium, stiffness);
+    addDihedralSpringTo(_dihedralsidechainsprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
-void SpringNetwork::addDihedralPlanaritySpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+void SpringNetwork::addDihedralPlanaritySpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                               float dcOffset)
 {
-    addDihedralSpringTo(_dihedralplanaritysprings, _particles, id1, id2, equilibrium, stiffness);
+    addDihedralSpringTo(_dihedralplanaritysprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
 void SpringNetwork::updateSpringState(unsigned id, bool isStatic) {

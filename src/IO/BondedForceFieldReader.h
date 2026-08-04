@@ -64,6 +64,14 @@ struct DihedralEntry
     DihedralFamily family;
     double d0;
     double k;
+    // This spring's share of its axis's exact dihedral-energy correction
+    // (ring construction artifact minus AMBER's own real DC -- see
+    // scripts/generate_bonded_forcefield.py's calibrate_ring/
+    // emit_ghost_ring), in kJ.mol-1. Summed by buildSprings across every
+    // DIHEDRAL entry actually applied and subtracted only when *reporting*
+    // dihedral energy (SpringNetwork::getDihedralEnergy) -- never affects
+    // forces, a constant has no gradient.
+    double dc_offset;
 };
 
 // One massless virtual-site ("GHOSTPARTICLE" line): a ghost particle that
@@ -91,10 +99,12 @@ struct GhostParticleEntry
 // <atom_ref> <r_A> <theta_deg> <delta_deg>" (a massless virtual site, see
 // GhostParticleEntry), or "DIHEDRAL <name> <resname>
 // <BACKBONE|SIDECHAIN|PLANARITY> <atom_ref> <atom_rotant> <d0_A>
-// <k_kJ.mol-1.A-2>" (atom_ref/atom_rotant may each name either a real atom
-// or a GHOSTPARTICLE defined earlier in the same residue). Atom names may
-// carry a "+"/"-" prefix (CHARMM-style: next/previous residue), same
-// convention as .rbody.
+// <k_kJ.mol-1.A-2> <dc_offset_kJ.mol-1>" (atom_ref/atom_rotant may each name
+// either a real atom or a GHOSTPARTICLE defined earlier in the same
+// residue; dc_offset is this spring's share of its axis's exact
+// dihedral-energy correction, see DihedralEntry). Atom names may carry a
+// "+"/"-" prefix (CHARMM-style: next/previous residue), same convention as
+// .rbody.
 //
 // TODO(ring planarity): ring groups in ProteinAtomRigidGroups.rbody
 // (aromatic side chains, guanidinium, proline ring) also carry pairwise
@@ -279,9 +289,13 @@ class BondedForceFieldReader : public ReaderBase
     // combines it with an already-existing one for that exact pair (two
     // different Fourier-term groups on the same axis may legitimately
     // target the same real substituent pair -- see the .cpp for the
-    // combination formula).
+    // combination formula). `dc_offset` is this entry's own share of its
+    // axis's dihedral-energy correction (see DihedralEntry): set directly
+    // on a new spring, summed into an existing one's on combination (energy
+    // contributions are additive, see topology::Spring::_dc_offset).
     void _add_or_combine_dihedral_spring(topology::SpringCollection & collection, topology::Particle & p1,
-                                         topology::Particle & p2, double equilibrium, double stiffness) const;
+                                         topology::Particle & p2, double equilibrium, double stiffness,
+                                         double dc_offset) const;
 };
 
 } // namespace rigidbodygroup

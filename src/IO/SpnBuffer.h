@@ -103,6 +103,11 @@ struct DihedralSpringBuffer
     int (*springs)[2];
     float * springsstiffnesses;
     float * springsequilibriums;
+    // This spring's share of its axis's exact dihedral-energy correction
+    // (see spn::Spring::getDcOffset). Zero for a family that never got this
+    // far in a version of the .bi.ff written before the correction existed
+    // (old .nc files stay readable, see readDihedralSpringGroup).
+    float * springsdcoffsets;
 
     ~DihedralSpringBuffer() { clear(); }
 
@@ -114,13 +119,18 @@ struct DihedralSpringBuffer
         delete[] springs;
         delete[] springsstiffnesses;
         delete[] springsequilibriums;
+        delete[] springsdcoffsets;
         springs = nullptr;
         springsstiffnesses = nullptr;
         springsequilibriums = nullptr;
+        springsdcoffsets = nullptr;
         number_of_springs = 0;
     }
 
-    DihedralSpringBuffer() : number_of_springs(0), springs(0), springsstiffnesses(0), springsequilibriums(0) {}
+    DihedralSpringBuffer()
+        : number_of_springs(0), springs(0), springsstiffnesses(0), springsequilibriums(0), springsdcoffsets(0)
+    {
+    }
 
     DihedralSpringBuffer(size_t number_of_springs) : DihedralSpringBuffer() { initialize(number_of_springs); }
 
@@ -133,6 +143,7 @@ struct DihedralSpringBuffer
             springs = new int[nSprings][2]{};
             springsstiffnesses = new float[nSprings]{};
             springsequilibriums = new float[nSprings]{};
+            springsdcoffsets = new float[nSprings]{};
         }
     }
 
@@ -147,6 +158,7 @@ struct DihedralSpringBuffer
             springs[i][1] = s.getParticle2().getId();
             springsequilibriums[i] = s.getEquilibrium();
             springsstiffnesses[i] = s.getStiffness();
+            springsdcoffsets[i] = s.getDcOffset();
         }
     }
 };

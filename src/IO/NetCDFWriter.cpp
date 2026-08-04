@@ -39,12 +39,16 @@ static void writeDihedralSpringGroupBinary(NcFile * nc, const std::string & pref
     NcVar equilibrium = nc->addVar(prefix + "springsequilibrium", ncFloat, ndim);
     equilibrium.putAtt("long_name", "Dihedral ghost spring distance equilibrium");
 
+    NcVar dcoffset = nc->addVar(prefix + "springsdcoffset", ncFloat, ndim);
+    dcoffset.putAtt("long_name", "Dihedral ghost spring's share of its axis's dihedral-energy correction");
+
     DihedralSpringBuffer buffer(n);
     buffer.bufferize(source);
 
     springs.putVar(buffer.springs);
     stiffness.putVar(buffer.springsstiffnesses);
     equilibrium.putVar(buffer.springsequilibriums);
+    dcoffset.putVar(buffer.springsdcoffsets);
 }
 
 // CDL (text NetCDF) equivalents of the above, split the same way the real
@@ -74,6 +78,11 @@ static void writeDihedralVariablesCDL(std::ostream & os, const std::string & pre
     os << "\t        " << prefix
        << "springsequilibrium:long_name = \"Dihedral ghost spring distance equilibrium\";" << std::endl;
     os << std::endl;
+    os << "\tfloat   " << prefix << "springsdcoffset(" << prefix << "_number); " << std::endl;
+    os << "\t        " << prefix
+       << "springsdcoffset:long_name = \"Dihedral ghost spring's share of its axis's dihedral-energy correction\";"
+       << std::endl;
+    os << std::endl;
 }
 
 static void writeDihedralDataCDL(std::ostream & os, const std::string & prefix,
@@ -99,6 +108,12 @@ static void writeDihedralDataCDL(std::ostream & os, const std::string & prefix,
     for (size_t i = 0; i < n; i++)
     {
         os << static_cast<float>(source[i].getEquilibrium());
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\t" << prefix << "springsdcoffset = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].getDcOffset();
         os << (i == n - 1 ? ";" : ",") << std::endl;
     }
 }

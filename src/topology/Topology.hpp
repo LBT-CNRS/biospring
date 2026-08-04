@@ -444,16 +444,17 @@ class Topology
             {
                 size_t i = _particles.by_uid().at(source.first().unique_id());
                 size_t j = _particles.by_uid().at(source.second().unique_id());
-                add_to_spn(i, j, source.equilibrium(), source.stiffness());
+                add_to_spn(i, j, source.equilibrium(), source.stiffness(), source.dc_offset());
             }
         };
-        copy_dihedral(_dihedral_backbone_springs,
-                      [&spn](size_t i, size_t j, double eq, double k) { spn.addDihedralBackboneSpring(i, j, eq, k); });
-        copy_dihedral(_dihedral_sidechain_springs, [&spn](size_t i, size_t j, double eq, double k) {
-            spn.addDihedralSidechainSpring(i, j, eq, k);
+        copy_dihedral(_dihedral_backbone_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+            spn.addDihedralBackboneSpring(i, j, eq, k, dc);
         });
-        copy_dihedral(_dihedral_planarity_springs, [&spn](size_t i, size_t j, double eq, double k) {
-            spn.addDihedralPlanaritySpring(i, j, eq, k);
+        copy_dihedral(_dihedral_sidechain_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+            spn.addDihedralSidechainSpring(i, j, eq, k, dc);
+        });
+        copy_dihedral(_dihedral_planarity_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+            spn.addDihedralPlanaritySpring(i, j, eq, k, dc);
         });
     }
 
@@ -482,7 +483,8 @@ class Topology
             // before merging), so the same spring can already exist.
             try
             {
-                dst.add_spring(_particles[i], _particles[j], source.equilibrium(), source.stiffness());
+                dst.add_spring(_particles[i], _particles[j], source.equilibrium(), source.stiffness())
+                    .set_dc_offset(source.dc_offset());
             }
             catch (const SpringAlreadyExistsException & e)
             {

@@ -19,28 +19,34 @@ void NetCDFReader::addSpringsToSpn()
 void NetCDFReader::addDihedralBackboneSpringsToSpn()
 {
     for (size_t i = 0; i < _dihedralbackbonebuffer.number_of_springs; ++i)
-        _topology.add_dihedral_backbone_spring(
-            _topology.get_particle(static_cast<size_t>(_dihedralbackbonebuffer.springs[i][0])),
-            _topology.get_particle(static_cast<size_t>(_dihedralbackbonebuffer.springs[i][1])),
-            _dihedralbackbonebuffer.springsequilibriums[i], _dihedralbackbonebuffer.springsstiffnesses[i]);
+        _topology
+            .add_dihedral_backbone_spring(
+                _topology.get_particle(static_cast<size_t>(_dihedralbackbonebuffer.springs[i][0])),
+                _topology.get_particle(static_cast<size_t>(_dihedralbackbonebuffer.springs[i][1])),
+                _dihedralbackbonebuffer.springsequilibriums[i], _dihedralbackbonebuffer.springsstiffnesses[i])
+            .set_dc_offset(_dihedralbackbonebuffer.springsdcoffsets[i]);
 }
 
 void NetCDFReader::addDihedralSidechainSpringsToSpn()
 {
     for (size_t i = 0; i < _dihedralsidechainbuffer.number_of_springs; ++i)
-        _topology.add_dihedral_sidechain_spring(
-            _topology.get_particle(static_cast<size_t>(_dihedralsidechainbuffer.springs[i][0])),
-            _topology.get_particle(static_cast<size_t>(_dihedralsidechainbuffer.springs[i][1])),
-            _dihedralsidechainbuffer.springsequilibriums[i], _dihedralsidechainbuffer.springsstiffnesses[i]);
+        _topology
+            .add_dihedral_sidechain_spring(
+                _topology.get_particle(static_cast<size_t>(_dihedralsidechainbuffer.springs[i][0])),
+                _topology.get_particle(static_cast<size_t>(_dihedralsidechainbuffer.springs[i][1])),
+                _dihedralsidechainbuffer.springsequilibriums[i], _dihedralsidechainbuffer.springsstiffnesses[i])
+            .set_dc_offset(_dihedralsidechainbuffer.springsdcoffsets[i]);
 }
 
 void NetCDFReader::addDihedralPlanaritySpringsToSpn()
 {
     for (size_t i = 0; i < _dihedralplanaritybuffer.number_of_springs; ++i)
-        _topology.add_dihedral_planarity_spring(
-            _topology.get_particle(static_cast<size_t>(_dihedralplanaritybuffer.springs[i][0])),
-            _topology.get_particle(static_cast<size_t>(_dihedralplanaritybuffer.springs[i][1])),
-            _dihedralplanaritybuffer.springsequilibriums[i], _dihedralplanaritybuffer.springsstiffnesses[i]);
+        _topology
+            .add_dihedral_planarity_spring(
+                _topology.get_particle(static_cast<size_t>(_dihedralplanaritybuffer.springs[i][0])),
+                _topology.get_particle(static_cast<size_t>(_dihedralplanaritybuffer.springs[i][1])),
+                _dihedralplanaritybuffer.springsequilibriums[i], _dihedralplanaritybuffer.springsstiffnesses[i])
+            .set_dc_offset(_dihedralplanaritybuffer.springsdcoffsets[i]);
 }
 
 void NetCDFReader::addGhostParticlesToSpn()
@@ -302,6 +308,18 @@ void NetCDFReader::readDihedralSpringGroup(const char * prefix, DihedralSpringBu
     checkNDims(data, 1);
     checkDim(data, 0, n);
     data.getVar(buffer.springsequilibriums);
+
+    // Optional: a .nc file written before this correction existed simply
+    // doesn't have it -- buffer.springsdcoffsets stays zero-initialized
+    // (initialize() already zeroes it), so those springs just report their
+    // raw (uncorrected) energy, same as before this feature existed.
+    data = getNcVar((std::string(prefix) + "springsdcoffset").c_str(), false);
+    if (not data.isNull())
+    {
+        checkNDims(data, 1);
+        checkDim(data, 0, n);
+        data.getVar(buffer.springsdcoffsets);
+    }
 }
 
 void NetCDFReader::readGhostParticles()

@@ -43,6 +43,16 @@ class Spring
 
     float getEnergy() const { return _energy; }
 
+    // Only meaningful for a dihedral ghost-ghost spring: this spring's
+    // share of its axis's exact dihedral-energy correction (ring
+    // construction artifact minus AMBER's own real DC -- see
+    // topology::Spring::_dc_offset and scripts/generate_bonded_forcefield.py's
+    // calibrate_ring). Zero for every other spring. Never affects forces (a
+    // constant has zero gradient) -- SpringNetwork::computeDihedralForces
+    // subtracts it from this spring's own energy when accumulating the total.
+    void setDcOffset(float dcOffset) { _dcOffset = dcOffset; }
+    float getDcOffset() const { return _dcOffset; }
+
     void computeEnergy(const biospring::forcefield::ForceField & ff);
     void computeLength();
 
@@ -69,6 +79,7 @@ class Spring
     float _stiffness;
     float _length;
     float _energy;
+    float _dcOffset = 0.0f;
     unsigned _id;
 };
 

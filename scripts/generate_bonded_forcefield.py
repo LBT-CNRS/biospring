@@ -517,7 +517,17 @@ def calibrate_ring(L_axis, n, r, d0, target_complex):
     # complex target (phi/psi, chi2's 3-term case).
     delta_base_deg = np.degrees(-phase_needed / n)
     k = abs(target_complex) / abs(z0)
-    return k, delta_base_deg
+    # The ring's own n=0 (DC/mean) Fourier component at the CALIBRATED k --
+    # exactly k times its value at k=1 (energy is linear in k, see above).
+    # This is a pure construction artifact (a sum of squares can only ever
+    # ADD a positive baseline, see RING_SHAPES's own header comment): it has
+    # nothing to do with the real AMBER torsion's own physical mean
+    # (target[0] in combined_target_for_axis, handled separately by the
+    # caller) and must be tracked so it can be subtracted back out when
+    # reporting an absolute energy (never affects forces -- a constant has
+    # zero gradient).
+    dc_ring = k * float(np.real(complex_fourier_coeff(e0, 0)))
+    return k, delta_base_deg, dc_ring
 
 n_dihedral_ok = 0
 n_dihedral_skip = 0
@@ -525,7 +535,8 @@ n_ghost_particles = 0
 dihedral_lines = []
 ghostparticle_lines = []
 
-def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom_B, atom_C, atom_ref_b, atom_ref_c):
+def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom_B, atom_C, atom_ref_b, atom_ref_c,
+                    axis_dc_target=0.0):
     """Emits one full ring group (M=N=n ghost-ghost springs) reproducing
     one target Fourier harmonic exactly (up to the small, bounded leakage
     quantified in RING_SHAPES's own derivation). atom_B/atom_C are the
@@ -534,6 +545,20 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
     for that side -- must be the SAME atoms used to measure the target's
     own phase convention, i.e. b_neighbors[0]/c_neighbors[0], see
     combined_target_for_axis).
+
+    axis_dc_target: the real AMBER torsion's own physical mean for this
+    axis (target[0] in the caller, sum of each matched term's own k --
+    AMBER's PeriodicTorsionForce term k*(1+cos(...)) has mean exactly k).
+    Attributed to exactly ONE ring per axis by the caller (every other
+    ring for the same axis passes 0.0) so it's subtracted exactly once
+    per axis, not once per harmonic. Combined with this ring's own
+    (non-physical, construction-artifact) DC into a single per-spring
+    dc_offset column: BondedForceFieldReader accumulates this across
+    every DIHEDRAL entry it actually applies, giving an exact correction
+    (subtracted only when reporting energy, never affecting forces) so
+    BioSpring's absolute dihedral energy is directly comparable to
+    AMBER's, instead of being inflated by the ring construction's own
+    unavoidable positive baseline (see calibrate_ring's own comment).
 
     Placement/sign convention (verified by a full 3D rotating simulation
     against a real axis before being trusted here -- see
@@ -552,7 +577,13 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
     global n_dihedral_ok, n_ghost_particles
 
     r, d0 = ring_shape_to_geometry(L_axis, n)
-    k, delta_base = calibrate_ring(L_axis, n, r, d0, target_complex)
+    k, delta_base, dc_ring = calibrate_ring(L_axis, n, r, d0, target_complex)
+    # Split evenly across this ring's n*n springs -- BondedForceFieldReader
+    # sums dc_offset per spring it actually applies, so this naturally
+    # handles a partially-skipped ring too (e.g. Met's phi ghosts missing
+    # their "-C" anchor at the true N-terminus): the offset for the springs
+    # that never get created is correctly never added either.
+    dc_offset_per_spring = (dc_ring - axis_dc_target) / (n * n)
 
     b_names, c_names = [], []
     for i in range(n):
@@ -577,8 +608,24 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
             rule_name = f"{resname}_{axis_label}_n{n}_{bn[-1]}{cn[-1]}"
             dihedral_lines.append(
                 f"DIHEDRAL {rule_name:28s} {resname:7s} {family:9s} {bn:16s} {cn:17s} "
-                f"{d0:7.4f} {k:10.4f}")
+                f"{d0:7.4f} {k:10.4f} {dc_offset_per_spring:10.5f}")
             n_dihedral_ok += 1
+
+def emit_ghost_rings_for_axis(resname, axis_label, family, L_axis, target, atom_B, atom_C, atom_ref_b, atom_ref_c):
+    """Emits one ring (see emit_ghost_ring) per non-zero harmonic in
+    `target` (n -> complex Fourier coefficient, see combined_target_for_axis),
+    attributing the axis's real AMBER DC (target[0]) to exactly the first
+    one so it gets subtracted exactly once per axis, not once per
+    harmonic -- shared by generate_sidechain_axis, its GKinase variant, and
+    generate_backbone_axis instead of repeating this bookkeeping 3 times."""
+    axis_dc_target = float(np.real(target.get(0, 0j)))
+    first = True
+    for n, zt in target.items():
+        if n == 0 or abs(zt) < 1e-6:
+            continue
+        emit_ghost_ring(resname, axis_label, family, n, L_axis, zt, atom_B, atom_C, atom_ref_b, atom_ref_c,
+                       axis_dc_target if first else 0.0)
+        first = False
 
 def combined_target_for_axis(b_geom, c_geom, b_class, c_class, class_of):
     """b_geom/c_geom: {atom: (r, theta, delta_deg)} for each side's real
@@ -652,10 +699,7 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label):
         n_dihedral_skip += 1
         return
 
-    for n, zt in target.items():
-        if n == 0 or abs(zt) < 1e-6:
-            continue
-        emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, zt, b_name, c_name, b_ref, c_ref)
+    emit_ghost_rings_for_axis(resname, axis_label, "SIDECHAIN", L_axis, target, b_name, c_name, b_ref, c_ref)
 
 # chi1 axis (CA-CB): every one of ubiquitin's 18 residue types that has a
 # real, freely-rotating first side-chain torsion. Excluded: GLY (no CB),
@@ -786,10 +830,7 @@ def generate_sidechain_axis_gkinase(resname, b_name, c_name, axis_label):
         n_dihedral_skip += 1
         return
 
-    for n, zt in target.items():
-        if n == 0 or abs(zt) < 1e-6:
-            continue
-        emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, zt, b_name, c_name, b_ref, c_ref)
+    emit_ghost_rings_for_axis(resname, axis_label, "SIDECHAIN", L_axis, target, b_name, c_name, b_ref, c_ref)
 
 generate_sidechain_axis_gkinase("CYS", "CA", "CB", "chi1")
 generate_sidechain_axis_gkinase("TRP", "CA", "CB", "chi1")
@@ -886,10 +927,7 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
     _, rule_b_ref = rel_name(b_atom, ref_b)
     _, rule_c_ref = rel_name(c_atom, ref_c)
 
-    for n, zt in target.items():
-        if n == 0 or abs(zt) < 1e-6:
-            continue
-        emit_ghost_ring(resname, axis_label, "BACKBONE", n, L_axis, zt, b_name, c_name, rule_b_ref, rule_c_ref)
+    emit_ghost_rings_for_axis(resname, axis_label, "BACKBONE", L_axis, target, b_name, c_name, rule_b_ref, rule_c_ref)
 
 # All 18 residue types found in ubiquitin.pdb, plus Cys/Trp (also generic-
 # sourced from Leu -- ubiquitin has neither at all, not even a terminal
@@ -914,8 +952,14 @@ lines.extend(ghostparticle_lines)
 lines.append("#")
 lines.append("# DIHEDRAL (proper): ghost-ghost springs, one ring group per real AMBER")
 lines.append("# Fourier harmonic of each covered chi1-4 (family SIDECHAIN) and phi/psi")
-lines.append("# (family BACKBONE) axis -- see doc/BondedForceFieldSprings.md.")
-lines.append("#    type     name                       resname family    atom_ref atom_rotant  d0_A       k")
+lines.append("# (family BACKBONE) axis -- see doc/BondedForceFieldSprings.md. dc_offset")
+lines.append("# (kJ.mol-1) is this spring's share of its axis's exact energy correction")
+lines.append("# (ring construction artifact minus AMBER's own real DC, see")
+lines.append("# calibrate_ring/emit_ghost_ring): BondedForceFieldReader sums it across")
+lines.append("# every DIHEDRAL entry actually applied and subtracts the total only when")
+lines.append("# *reporting* dihedral energy -- forces are unaffected (a constant has no")
+lines.append("# gradient).")
+lines.append("#    type     name                       resname family    atom_ref atom_rotant  d0_A       k        dc_offset")
 lines.extend(dihedral_lines)
 
 # ACE/NME capping groups: not present in ubiquitin (free termini), sourced
