@@ -1,6 +1,8 @@
 .DS_Store
 .vscode/
 src/version.h
+__pycache__/
+*.pyc
 
 build
 build-*
