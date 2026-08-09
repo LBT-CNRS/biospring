@@ -1,0 +1,313 @@
+#Rigid-group definitions for the springs-only rotamer/hinge mechanism: all DOF
+#together (backbone phi/psi/omega, side-chain chi1..chi4, hydroxyl/thiol
+#rotation).
+#
+#Same columnar syntax as the coarse-grain reduce rules (name resname atom1
+#atom2 ...), reusing the same reader, but the ".rbody" extension marks that
+#the two are read differently: a .grp line reduces its atoms into one output
+#grain, a .rbody line instead creates every pairwise spring between its atoms
+#and leaves the particles distinct -- nothing is reduced or merged.
+#Adjacent groups overlap on exactly the 2 atoms of a hinge axis -- that overlap
+#alone gives "2 anchors, 1 free rotation", nothing else needed.
+#
+#CHARMM-style +/- prefix: "+X"/"-X" means atom X of the next/previous residue
+#in the chain, instead of the current one. A rule's resname always refers to
+#its own (unprefixed) residue, matched regardless of what +/- neighbour it is.
+#
+#Naming <ResidueCode>_<Part>: _CA = CA tetrahedron.
+#
+#DIFFERENCE FROM ProteinAtomRigidGroups.rbody (the base file this is derived
+#from): there, _PHI = the WHOLE peptide plane behind this residue
+#{-CA, -C, -O, N, H, CA} as one single rigid clique -- besides giving phi its
+#hinge (overlap with _CA on {N, CA}), that clique also directly springs
+#{-CA, -O} (upstream of the -C-N peptide bond) to {H, CA} (downstream of it),
+#which freezes the OMEGA dihedral (rotation around -C-N) as an unwanted side
+#effect, at the uniform --stiffness value -- omega never gets to be governed
+#by --bondedinteraction's real, much softer AMBER torsion term, since the
+#uniform rigid-body spring dominates it completely. Here, _PHI is split into
+#two halves at exactly that -C/N hinge:
+#  _PHIC = {-CA, -C, -O, N}    (upstream half: rigid with the PREVIOUS
+#                               residue's own carbonyl, N is only a shared
+#                               hinge anchor here, not sprung to anything
+#                               downstream of it)
+#  _PHIN = {-C, N, H, CA}      (downstream half: rigid with THIS residue's
+#                               own amide, -C is only a shared hinge anchor)
+#These two overlap on exactly {-C, N} -- the omega(i-1,i) hinge, same "2
+#anchors, 1 free rotation" trick already used for phi/psi/chi. Springing an
+#anchor atom (-C or N) to the OTHER half's own substituents is harmless (it
+#only pins a 1-3 angle through the shared atom, e.g. -C-N-CA, which doesn't
+#depend on the rotation angle around -C-N at all) -- what must never happen,
+#and no longer does, is a DIRECT spring between a non-anchor atom on one side
+#(-CA, -O) and a non-anchor atom on the other (H, CA), which is exactly what
+#depends on omega and must stay free. _PSI is split the same way, at the
+#NEXT residue's omega(i,i+1) hinge {C, +N}:
+#  _PSIC = {CA, C, O, +N}      (upstream half, overlaps _CA on {CA, C}: the
+#                               psi axis, unaffected by this split)
+#  _PSIN = {C, +N, +H, +CA}    (downstream half)
+#_PHIC(i) and _PSIC(i-1) are the same 4 atoms (ditto _PHIN(i)/_PSIN(i-1)),
+#deliberately written twice (once from each residue, exactly like the base
+#file's _PHI(i)/_PSI(i-1) redundancy) so terminus handling (see below) still
+#works per-residue without any special-casing. First/last residue in a chain
+#is missing -CA/-C/-O or +N/+H/+CA respectively: skip rather than fail. Same
+#for +H when the next residue is proline (no amide H). ACE/NME's own
+#ACE_C/NME_N groups already only reach the shared hinge atom itself (never
+#the OTHER residue's own H/CA substituents), so they needed no change here --
+#the over-constraint only ever came from the full, unsplit _PHI/_PSI cliques.
+#
+#Consequence: omega is now exactly as free (uniform --stiffness only, no
+#real physics yet) as phi/psi/chi already are without --bondedinteraction --
+#a real AMBER omega DIHEDRAL/GHOSTPARTICLE family in a .bi.ff can now
+#restrain it realistically instead of it being pre-frozen at whatever value
+#the input structure happened to have. NOT YET VALIDATED for dynamics
+#stability (a new free hinge, softer than before) -- test before relying on
+#this the way --rigidbody alone has already been validated.
+#
+#_CB.._SD = chi1..4 pivots down the side chain. _RING/_GUAN = rigid
+#aromatic/imidazole/guanidinium terminus. _SG/_OG/_OG1/_OH = hydroxyl/thiol
+#pivot, {axis atom1, axis atom2, H} only -- the heavy atom stays in its parent
+#group, only the H rotates.
+#
+#_NTER/_CTER: only needed for the chain's actual first/last residue, where
+#_PHIC/_PHIN/_PSIC/_PSIN don't form (no -/+ neighbour). NTER's N carries
+#NH3+ (H1/H2/H3) instead of the single amide H used everywhere else; CTER's
+#C carries COO- (O, OXT) instead of the single carbonyl O -- both left
+#unconstrained otherwise, so these two groups are not optional for a
+#terminal residue.
+#
+#Assumes all-atom + H (PDB v3 naming). Pro is one rigid ring (side chain
+#closes onto backbone N) plus its own _PHIC/_PHIN/_PSIC/_PSIN/_NTER/_CTER
+#(_PHIN has no H, Pro's N has none in the amide position); as NTER, its ring
+#nitrogen keeps CD and gets only 2 extra H (H2, H3), not 3. Terminal methyls
+#(Ala CB, Ile/Thr/Val branch) included for completeness though not a real
+#chi.
+
+A_CA ALA N CA C CB HA
+A_NTER ALA N CA H1 H2 H3
+A_CTER ALA CA C O OXT
+A_PHIC ALA -CA -C -O N
+A_PHIN ALA -C N H CA
+A_PSIC ALA CA C O +N
+A_PSIN ALA C +N +H +CA
+A_CB ALA CA CB HB1 HB2 HB3
+
+R_CA ARG N CA C CB HA
+R_NTER ARG N CA H1 H2 H3
+R_CTER ARG CA C O OXT
+R_PHIC ARG -CA -C -O N
+R_PHIN ARG -C N H CA
+R_PSIC ARG CA C O +N
+R_PSIN ARG C +N +H +CA
+R_CB ARG CA CB CG HB2 HB3
+R_CG ARG CB CG CD HG2 HG3
+R_CD ARG CG CD NE HD2 HD3
+R_NE ARG CD NE CZ HE
+R_GUAN ARG NE CZ NH1 NH2 HH11 HH12 HH21 HH22
+
+N_CA ASN N CA C CB HA
+N_NTER ASN N CA H1 H2 H3
+N_CTER ASN CA C O OXT
+N_PHIC ASN -CA -C -O N
+N_PHIN ASN -C N H CA
+N_PSIC ASN CA C O +N
+N_PSIN ASN C +N +H +CA
+N_CB ASN CA CB CG HB2 HB3
+N_CG ASN CB CG OD1 ND2 HD21 HD22
+
+D_CA ASP N CA C CB HA
+D_NTER ASP N CA H1 H2 H3
+D_CTER ASP CA C O OXT
+D_PHIC ASP -CA -C -O N
+D_PHIN ASP -C N H CA
+D_PSIC ASP CA C O +N
+D_PSIN ASP C +N +H +CA
+D_CB ASP CA CB CG HB2 HB3
+D_CG ASP CB CG OD1 OD2
+
+C_CA CYS N CA C CB HA
+C_NTER CYS N CA H1 H2 H3
+C_CTER CYS CA C O OXT
+C_PHIC CYS -CA -C -O N
+C_PHIN CYS -C N H CA
+C_PSIC CYS CA C O +N
+C_PSIN CYS C +N +H +CA
+C_CB CYS CA CB SG HB2 HB3
+C_SG CYS CB SG HG
+
+Q_CA GLN N CA C CB HA
+Q_NTER GLN N CA H1 H2 H3
+Q_CTER GLN CA C O OXT
+Q_PHIC GLN -CA -C -O N
+Q_PHIN GLN -C N H CA
+Q_PSIC GLN CA C O +N
+Q_PSIN GLN C +N +H +CA
+Q_CB GLN CA CB CG HB2 HB3
+Q_CG GLN CB CG CD HG2 HG3
+Q_CD GLN CG CD OE1 NE2 HE21 HE22
+
+E_CA GLU N CA C CB HA
+E_NTER GLU N CA H1 H2 H3
+E_CTER GLU CA C O OXT
+E_PHIC GLU -CA -C -O N
+E_PHIN GLU -C N H CA
+E_PSIC GLU CA C O +N
+E_PSIN GLU C +N +H +CA
+E_CB GLU CA CB CG HB2 HB3
+E_CG GLU CB CG CD HG2 HG3
+E_CD GLU CG CD OE1 OE2
+
+G_CA GLY N CA C HA2 HA3
+G_NTER GLY N CA H1 H2 H3
+G_CTER GLY CA C O OXT
+G_PHIC GLY -CA -C -O N
+G_PHIN GLY -C N H CA
+G_PSIC GLY CA C O +N
+G_PSIN GLY C +N +H +CA
+
+H_CA HIS N CA C CB HA
+H_NTER HIS N CA H1 H2 H3
+H_CTER HIS CA C O OXT
+H_PHIC HIS -CA -C -O N
+H_PHIN HIS -C N H CA
+H_PSIC HIS CA C O +N
+H_PSIN HIS C +N +H +CA
+H_CB HIS CA CB CG HB2 HB3
+H_RING HIS CB CG ND1 CD2 CE1 NE2 HD1 HD2 HE1 HE2
+
+I_CA ILE N CA C CB HA
+I_NTER ILE N CA H1 H2 H3
+I_CTER ILE CA C O OXT
+I_PHIC ILE -CA -C -O N
+I_PHIN ILE -C N H CA
+I_PSIC ILE CA C O +N
+I_PSIN ILE C +N +H +CA
+I_CB ILE CA CB CG1 CG2 HB
+I_CG1 ILE CB CG1 CD1 HG12 HG13
+I_CG2 ILE CB CG2 HG21 HG22 HG23
+I_CD1 ILE CG1 CD1 HD11 HD12 HD13
+
+L_CA LEU N CA C CB HA
+L_NTER LEU N CA H1 H2 H3
+L_CTER LEU CA C O OXT
+L_PHIC LEU -CA -C -O N
+L_PHIN LEU -C N H CA
+L_PSIC LEU CA C O +N
+L_PSIN LEU C +N +H +CA
+L_CB LEU CA CB CG HB2 HB3
+L_CG LEU CB CG CD1 CD2 HG
+L_CD1 LEU CG CD1 HD11 HD12 HD13
+L_CD2 LEU CG CD2 HD21 HD22 HD23
+
+K_CA LYS N CA C CB HA
+K_NTER LYS N CA H1 H2 H3
+K_CTER LYS CA C O OXT
+K_PHIC LYS -CA -C -O N
+K_PHIN LYS -C N H CA
+K_PSIC LYS CA C O +N
+K_PSIN LYS C +N +H +CA
+K_CB LYS CA CB CG HB2 HB3
+K_CG LYS CB CG CD HG2 HG3
+K_CD LYS CG CD CE HD2 HD3
+K_CE LYS CD CE NZ HE2 HE3
+K_NZ LYS CE NZ HZ1 HZ2 HZ3
+
+M_CA MET N CA C CB HA
+M_NTER MET N CA H1 H2 H3
+M_CTER MET CA C O OXT
+M_PHIC MET -CA -C -O N
+M_PHIN MET -C N H CA
+M_PSIC MET CA C O +N
+M_PSIN MET C +N +H +CA
+M_CB MET CA CB CG HB2 HB3
+M_CG MET CB CG SD HG2 HG3
+M_SD MET CG SD CE
+M_CE MET SD CE HE1 HE2 HE3
+
+F_CA PHE N CA C CB HA
+F_NTER PHE N CA H1 H2 H3
+F_CTER PHE CA C O OXT
+F_PHIC PHE -CA -C -O N
+F_PHIN PHE -C N H CA
+F_PSIC PHE CA C O +N
+F_PSIN PHE C +N +H +CA
+F_CB PHE CA CB CG HB2 HB3
+F_RING PHE CB CG CD1 CD2 CE1 CE2 CZ HD1 HD2 HE1 HE2 HZ
+
+#Note: P_PHI/P_RING deliberately never connect "-C" to CD (the real
+#(-C)-N-CD angle, from the ring closing onto N instead of an amide H, is
+#the actual physical restriction on Pro's phi). It's added by
+#--bondedinteraction alone (BondedForceFieldReader's fallback spring, with
+#the real AMBER angle constant), not here: a uniform --stiffness spring
+#with no real angle constant would freeze phi completely instead of
+#realistically restricting it -- see IO/BondedForceFieldReader.h.
+P_RING PRO N CA C CB CG CD HA HB2 HB3 HG2 HG3 HD2 HD3
+P_NTER PRO N CA CD H2 H3
+P_CTER PRO CA C O OXT
+P_PHIC PRO -CA -C -O N
+P_PHIN PRO -C N CA
+P_PSIC PRO CA C O +N
+P_PSIN PRO C +N +H +CA
+
+S_CA SER N CA C CB HA
+S_NTER SER N CA H1 H2 H3
+S_CTER SER CA C O OXT
+S_PHIC SER -CA -C -O N
+S_PHIN SER -C N H CA
+S_PSIC SER CA C O +N
+S_PSIN SER C +N +H +CA
+S_CB SER CA CB OG HB2 HB3
+S_OG SER CB OG HG
+
+T_CA THR N CA C CB HA
+T_NTER THR N CA H1 H2 H3
+T_CTER THR CA C O OXT
+T_PHIC THR -CA -C -O N
+T_PHIN THR -C N H CA
+T_PSIC THR CA C O +N
+T_PSIN THR C +N +H +CA
+T_CB THR CA CB OG1 CG2 HB
+T_OG1 THR CB OG1 HG1
+T_CG2 THR CB CG2 HG21 HG22 HG23
+
+W_CA TRP N CA C CB HA
+W_NTER TRP N CA H1 H2 H3
+W_CTER TRP CA C O OXT
+W_PHIC TRP -CA -C -O N
+W_PHIN TRP -C N H CA
+W_PSIC TRP CA C O +N
+W_PSIN TRP C +N +H +CA
+W_CB TRP CA CB CG HB2 HB3
+W_RING TRP CB CG CD1 CD2 NE1 CE2 CE3 CZ2 CZ3 CH2 HD1 HE1 HE3 HZ2 HZ3 HH2
+
+Y_CA TYR N CA C CB HA
+Y_NTER TYR N CA H1 H2 H3
+Y_CTER TYR CA C O OXT
+Y_PHIC TYR -CA -C -O N
+Y_PHIN TYR -C N H CA
+Y_PSIC TYR CA C O +N
+Y_PSIN TYR C +N +H +CA
+Y_CB TYR CA CB CG HB2 HB3
+Y_RING TYR CB CG CD1 CD2 CE1 CE2 CZ OH HD1 HD2 HE1 HE2
+Y_OH TYR CZ OH HH
+
+V_CA VAL N CA C CB HA
+V_NTER VAL N CA H1 H2 H3
+V_CTER VAL CA C O OXT
+V_PHIC VAL -CA -C -O N
+V_PHIN VAL -C N H CA
+V_PSIC VAL CA C O +N
+V_PSIN VAL C +N +H +CA
+V_CB VAL CA CB CG1 CG2 HB
+V_CG1 VAL CB CG1 HG11 HG12 HG13
+V_CG2 VAL CB CG2 HG21 HG22 HG23
+
+#ACE/NME: standard N-/C-terminal capping groups (acetyl / N-methylamide),
+#used instead of NTER/CTER on a capped peptide. Verified against real
+#connectivity (mdtraj on a real ACE/NME-capped peptide): ACE has no CA, so
+#the next residue's own _PHI rule silently drops its "-CA" atom (missing,
+#skipped per convention) -- the real -C/-O peptide-bond pairs it still
+#finds are enough; nothing extra is needed on the ACE side beyond the two
+#groups below. Same idea for NME on the C-terminal side.
+ACE_C ACE CH3 C O +N
+ACE_CH3 ACE C CH3 H1 H2 H3
+NME_N NME -C N H C
+NME_C NME N C H1 H2 H3
