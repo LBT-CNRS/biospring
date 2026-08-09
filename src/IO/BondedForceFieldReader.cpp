@@ -69,15 +69,19 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         DihedralEntry entry;
         entry.resname = tokens[2];
         const std::string & family = tokens[3];
-        if (family == "BACKBONE")
-            entry.family = DihedralFamily::BACKBONE;
+        if (family == "PHI")
+            entry.family = DihedralFamily::PHI;
+        else if (family == "PSI")
+            entry.family = DihedralFamily::PSI;
+        else if (family == "OMEGA")
+            entry.family = DihedralFamily::OMEGA;
         else if (family == "SIDECHAIN")
             entry.family = DihedralFamily::SIDECHAIN;
         else if (family == "PLANARITY")
             entry.family = DihedralFamily::PLANARITY;
         else
-            logging::die("BondedForceFieldReader: line %d: invalid DIHEDRAL family '%s' (expected BACKBONE, "
-                         "SIDECHAIN or PLANARITY)",
+            logging::die("BondedForceFieldReader: line %d: invalid DIHEDRAL family '%s' (expected PHI, PSI, "
+                         "OMEGA, SIDECHAIN or PLANARITY)",
                          static_cast<int>(line_id), family.c_str());
         entry.atom_ref = tokens[4];
         entry.atom_rotant = tokens[5];
@@ -402,6 +406,13 @@ size_t BondedForceFieldReader::countExpectedGhostParticles(const topology::Topol
         for (const GhostParticleEntry & entry : _ghostparticles)
             if (entry.resname == resname)
                 count++;
+        // Every applied BEND entry creates exactly 2 vertex-anchored ghosts
+        // (see buildSprings) -- counted here too (a safe overcount, same as
+        // the dihedral entries above: this doesn't know or care whether
+        // -bending is actually enabled for this run).
+        for (const BendEntry & entry : _bend)
+            if (entry.resname == resname)
+                count += 2;
     }
     return count;
 }
@@ -455,8 +466,35 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                 if (p1 == nullptr || p2 == nullptr)
                     continue;
 
-                _retune_or_add_spring(topology, *p1, *p2, entry.r0, entry.k, "stretching");
-                nb_stretch_applied++;
+                // Zeroes (never removes) the existing --rigidbody spring's
+                // stiffness for this real pair, but keeps its equilibrium
+                // at the real AMBER r0: BEND's own _existing_equilibrium
+                // lookup below still finds it there (only topology.springs()
+                // is ever searched), and the real 1-2 pair stays a
+                // spring-neighbour (nonbonded exclusion unaffected) even
+                // though it no longer contributes any energy on its own.
+                _retune_or_add_spring(topology, *p1, *p2, entry.r0, 0.0, "stretching");
+                // The actual physics: a brand new spring, in its own
+                // collection, between the same two real atoms -- see
+                // _stretch_springs' own comment for why this is no longer a
+                // plain in-place retune.
+                // A real 1-2 bond at a chain boundary can legitimately be
+                // described twice -- once by each flanking residue's own
+                // STRETCH entries (e.g. a residue's own "C +N" rule and the
+                // next residue's/cap's own "N -C" rule for that exact same
+                // peptide bond, see ProteinAtomBonded.bi.ff's NME_N_C entry).
+                // Both describe the same real AMBER bond with the same real
+                // parameters, so the second occurrence is a genuine, expected
+                // duplicate (unlike a plain naming collision) -- skipped here
+                // rather than added again, which would otherwise either
+                // throw (SpringCollection::add_spring forbids a duplicate
+                // pair) or, if that check were bypassed, silently double the
+                // effective stiffness for that one bond.
+                if (_find_spring(topology.stretch_springs(), *p1, *p2) == nullptr)
+                {
+                    topology.add_stretch_spring(*p1, *p2, entry.r0, entry.k);
+                    nb_stretch_applied++;
+                }
             }
 
         if (enableBend)
@@ -499,11 +537,54 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                 // factor of 2 here: that would only apply if entry.k were
                 // instead sourced from a raw AMBER parm*.dat file, whose K
                 // has no 1/2 baked in).
+                //
+                // This formula assumes r12/r23 stay fixed at their AMBER r0
+                // -- true only at the calibration point, not during real
+                // dynamics, where the real 1-2 bonds independently flex via
+                // their own STRETCH springs. Connecting this spring directly
+                // between the two real 1-3 atoms would let that real
+                // bond-stretch leak into the measured r13 (found and
+                // quantified via a real MD-trajectory validation: ~60%
+                // systematic energy excess, ~95% of it from exactly this
+                // leakage, only ~5% genuine linearization error) -- see
+                // _bend_springs' own comment. Anchoring two ghosts at the
+                // FIXED r12/r23 instead, each along the REAL, current bond
+                // *direction*, removes it: this spring's own d0/k13 stay
+                // exactly this formula, only what it connects to changes.
                 const double denom = r12 * r23 * std::sin(theta0);
                 const double k13 = entry.k * r13sq / (denom * denom);
 
-                _retune_or_add_spring(topology, *p1, *p3, r13, k13, "bending");
+                const topology::ParticleProperties & residue_properties =
+                    topology.get_particle(residues[index][0]).properties();
+                topology::ParticleProperties ghost_properties;
+                ghost_properties.set_residue_name(residue_properties.residue_name());
+                ghost_properties.set_chain_name(residue_properties.chain_name());
+                ghost_properties.set_residue_id(residue_properties.residue_id());
+                ghost_properties.set_static(true);
+                ghost_properties.set_mass(0.0f);
+
+                ghost_properties.set_name("GB" + entry.atom1);
+                topology::Particle ghost_a_template(ghost_properties);
+                // theta_deg=0: places the ghost exactly at B + r*normalize(C-B)
+                // (the Ref-dependent azimuthal term is multiplied by
+                // sin(0)=0, so p3 here only needs to be non-degenerate, not
+                // meaningful on its own -- see spn::GhostParticle::computePosition).
+                topology::Particle & ghost_a =
+                    topology.add_ghost_particle(ghost_a_template, *p2, *p1, *p3, r12, 0.0, 0.0);
+
+                ghost_properties.set_name("GB" + entry.atom3);
+                topology::Particle ghost_c_template(ghost_properties);
+                topology::Particle & ghost_c =
+                    topology.add_ghost_particle(ghost_c_template, *p2, *p3, *p1, r23, 0.0, 0.0);
+
+                // Same zero-out-but-keep treatment as STRETCH above, for the
+                // same reason (nonbonded exclusion for the real 1-3 pair
+                // must survive even though the real spring no longer carries
+                // any of the actual restraint).
+                _retune_or_add_spring(topology, *p1, *p3, r13, 0.0, "bending");
+                topology.add_bend_spring(ghost_a, ghost_c, r13, k13);
                 nb_bend_applied++;
+                nb_ghostparticles_created += 2;
             }
 
         for (const DihedralEntry & entry : _dihedral)
@@ -512,8 +593,14 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                 continue;
 
             // PLANARITY has no enabling flag yet (see header comment) --
-            // never applied until that future work adds one.
-            const bool family_enabled = (entry.family == DihedralFamily::BACKBONE && enableDihedralBackbone) ||
+            // never applied until that future work adds one. PHI/PSI/OMEGA
+            // are all still gated by the single enableDihedralBackbone flag
+            // at build time (see buildSprings's own comment) -- they only
+            // gain independent control at runtime, via SpringNetwork's
+            // dihedral.phi/psi/omega .msp settings.
+            const bool is_backbone = entry.family == DihedralFamily::PHI || entry.family == DihedralFamily::PSI ||
+                                     entry.family == DihedralFamily::OMEGA;
+            const bool family_enabled = (is_backbone && enableDihedralBackbone) ||
                                         (entry.family == DihedralFamily::SIDECHAIN && enableDihedralSidechain);
             if (!family_enabled)
                 continue;
@@ -531,9 +618,17 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             // (see _add_or_combine_dihedral_spring).
             switch (entry.family)
             {
-            case DihedralFamily::BACKBONE:
-                _add_or_combine_dihedral_spring(topology.dihedral_backbone_springs(), *p_ref, *p_rot, entry.d0,
-                                                entry.k, entry.dc_offset);
+            case DihedralFamily::PHI:
+                _add_or_combine_dihedral_spring(topology.dihedral_phi_springs(), *p_ref, *p_rot, entry.d0, entry.k,
+                                                entry.dc_offset);
+                break;
+            case DihedralFamily::PSI:
+                _add_or_combine_dihedral_spring(topology.dihedral_psi_springs(), *p_ref, *p_rot, entry.d0, entry.k,
+                                                entry.dc_offset);
+                break;
+            case DihedralFamily::OMEGA:
+                _add_or_combine_dihedral_spring(topology.dihedral_omega_springs(), *p_ref, *p_rot, entry.d0, entry.k,
+                                                entry.dc_offset);
                 break;
             case DihedralFamily::SIDECHAIN:
                 _add_or_combine_dihedral_spring(topology.dihedral_sidechain_springs(), *p_ref, *p_rot, entry.d0,

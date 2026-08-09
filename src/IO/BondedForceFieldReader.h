@@ -38,13 +38,20 @@ struct BendEntry
 };
 
 // Which physical axis a DIHEDRAL entry's ghost spring belongs to -- purely a
-// grouping label (see DihedralEntry), used only so the springs it produces
-// can be routed to the matching Topology collection and, from there,
-// selectively applied at build time (see buildSprings's enableDihedral*
-// parameters and -dihedralbackbone/-dihedralsidechain in pdb2spn-cli.cpp).
+// grouping label (see DihedralEntry), used so the springs it produces can be
+// routed to the matching Topology collection and, from there, selectively
+// applied at build time (see buildSprings's enableDihedral* parameters and
+// -dihedralbackbone/-dihedralsidechain in pdb2spn-cli.cpp) AND selectively
+// enabled at runtime (see SpringNetwork's dihedral.phi/psi/omega/chi .msp
+// settings). PHI/PSI/OMEGA were a single BACKBONE value until each got its
+// own runtime .msp toggle (still built together, under the one
+// -dihedralbackbone flag -- see buildSprings -- only their runtime
+// enable/disable is independent).
 enum class DihedralFamily
 {
-    BACKBONE,  // proper dihedral, phi/psi
+    PHI,       // proper dihedral, backbone phi
+    PSI,       // proper dihedral, backbone psi
+    OMEGA,     // proper dihedral, backbone omega (peptide bond)
     SIDECHAIN, // proper dihedral, chi1-4
     PLANARITY  // improper dihedral, ring/guanidinium planarity
 };
@@ -98,7 +105,7 @@ struct GhostParticleEntry
 // <k_kJ.mol-1.rad-2>", "GHOSTPARTICLE <name> <resname> <atom_B> <atom_C>
 // <atom_ref> <r_A> <theta_deg> <delta_deg>" (a massless virtual site, see
 // GhostParticleEntry), or "DIHEDRAL <name> <resname>
-// <BACKBONE|SIDECHAIN|PLANARITY> <atom_ref> <atom_rotant> <d0_A>
+// <PHI|PSI|OMEGA|SIDECHAIN|PLANARITY> <atom_ref> <atom_rotant> <d0_A>
 // <k_kJ.mol-1.A-2> <dc_offset_kJ.mol-1>" (atom_ref/atom_rotant may each name
 // either a real atom or a GHOSTPARTICLE defined earlier in the same
 // residue; dc_offset is this spring's share of its axis's exact
@@ -122,8 +129,17 @@ struct GhostParticleEntry
 // This is a pdb2spn-time mechanism (see -bondedinteraction/--bondedinteraction
 // in pdb2spn-cli.cpp), always used together with -rigidbody/--rigidbody:
 // RigidBodyBuilder must have already created a spring for every real bond
-// and valence angle (see buildSprings), which this retunes in place with
-// real parameters instead of the uniform "rigid" ones.
+// and valence angle (see buildSprings). STRETCH and BEND each zero that
+// existing --rigidbody spring's stiffness (kept, not removed, so nonbonded
+// exclusion is unaffected) and add the real restraint as a brand new spring
+// in its own dedicated collection instead of retuning in place -- STRETCH's
+// new spring still connects the same two real atoms; BEND's connects two
+// new ghost particles anchored to the vertex (see BendEntry's own comment
+// for why a plain real-atom 1-3 spring is not accurate enough). This keeps
+// each family's energy separately reportable (see
+// spn::SpringNetwork::Energies) instead of folding everything into one
+// generic "spring energy" that only means something for a plain ENM/
+// rigid-body network in the first place.
 class BondedForceFieldReader : public ReaderBase
 {
   public:
@@ -140,30 +156,37 @@ class BondedForceFieldReader : public ReaderBase
     // RigidBodyBuilder already creates a spring for every real bond (pairs
     // involving a single-vertex group's own vertex) and every real valence
     // angle (the group's other pairs) -- that is exactly the topology this
-    // reader needs, already validated to leave the right hinge axes free. So
-    // the normal case is to *retune* the spring RigidBodyBuilder already
-    // created for a given pair in place (topology::SpringCollection::exists
-    // + at_uid), replacing its rigid/as-loaded parameters with the real
-    // ones. Only if a pair named in the file has no existing spring yet
-    // (fallback, not the expected case) is a new one added via
-    // Topology::add_spring.
-    //
-    // A fallback-added spring is "virtual" in that it doesn't correspond to
-    // any real chemical bond (the two atoms aren't directly bonded) -- but
-    // it isn't arbitrary: it's the same 1-3 distance-spring proxy BEND
-    // always uses for a real valence angle, just newly added instead of
-    // retuning an existing --rigidbody one. The one case seen so far
-    // (Proline's "-C"-N-CD angle: its ring closes onto N via CD instead of
-    // an amide H, and P_PHI/P_RING in ProteinAtomRigidGroups.rbody don't
-    // already connect "-C" to CD) carries real physical meaning once BEND
-    // supplies the actual AMBER angle constant -- it's what realistically
-    // restricts Proline's phi (ring pucker allows some variation, unlike a
-    // free hinge). Deliberately NOT added directly to ProteinAtomRigidGroups.rbody
-    // instead: with the uniform --stiffness there and no real angle
-    // constant, it would freeze phi completely rather than restrict it
-    // realistically -- worse than leaving phi free, since it would assert a
-    // single arbitrary value with artificial confidence instead of just not
-    // modelling the restriction.
+    // reader needs, already validated to leave the right hinge axes free.
+    // STRETCH and BEND never retune that existing --rigidbody spring's
+    // parameters to the real ones in place any more: they zero its
+    // stiffness instead (via _retune_or_add_spring, always called with
+    // stiffness=0.0 -- kept, not removed, so the pair stays a
+    // spring-neighbour for nonbonded exclusion) while still setting its
+    // equilibrium to the real AMBER r0/r13, since BEND's own
+    // _existing_equilibrium lookup only ever searches topology.springs()
+    // and would otherwise silently read back whichever value --rigidbody
+    // happened to set. The actual physics is added as a brand new spring in
+    // a dedicated collection (Topology::add_stretch_spring /
+    // add_bend_spring): STRETCH's connects the same two real atoms; BEND's
+    // connects two new ghost particles anchored to the vertex along each
+    // real bond direction, rescaled to the real bond length (see
+    // BendEntry's own comment for why a plain real-atom 1-3 spring leaks
+    // bond-stretch into the angle restraint). If a pair named in the file
+    // has no existing --rigidbody spring at all (not the expected case),
+    // _retune_or_add_spring adds a zero-stiffness placeholder instead of
+    // retuning one, purely so the equilibrium/exclusion bookkeeping above
+    // still has somewhere to live -- the real spring is added the same way
+    // either case. The one instance seen so far (Proline's "-C"-N-CD angle:
+    // its ring closes onto N via CD instead of an amide H, and P_PHI/P_RING
+    // in ProteinAtomRigidGroups.rbody don't already connect "-C" to CD)
+    // carries real physical meaning once BEND supplies the actual AMBER
+    // angle constant -- it's what realistically restricts Proline's phi
+    // (ring pucker allows some variation, unlike a free hinge). Deliberately
+    // NOT added directly to ProteinAtomRigidGroups.rbody instead: with the
+    // uniform --stiffness there and no real angle constant, it would freeze
+    // phi completely rather than restrict it realistically -- worse than
+    // leaving phi free, since it would assert a single arbitrary value with
+    // artificial confidence instead of just not modelling the restriction.
     //
     // `translation` mirrors RigidBodyBuilder's own naming-translation table:
     // when -grp/--grp has renamed particles (e.g. CA -> ACA for Ala), the
@@ -173,10 +196,10 @@ class BondedForceFieldReader : public ReaderBase
     //
     // DIHEDRAL entries are handled differently from STRETCH/BEND: a ghost
     // spring never corresponds to a real chemical bond, so it is always a
-    // new addition (Topology::add_dihedral_backbone_spring /
-    // add_dihedral_sidechain_spring / add_dihedral_planarity_spring,
-    // depending on the entry's family), never a retune of an existing
-    // --rigidbody spring.
+    // new addition (Topology::add_dihedral_phi_spring / _psi_spring /
+    // _omega_spring / add_dihedral_sidechain_spring /
+    // add_dihedral_planarity_spring, depending on the entry's family),
+    // never a retune of an existing --rigidbody spring.
     //
     // `enableStretch`/`enableBend`/`enableDihedralBackbone`/
     // `enableDihedralSidechain` independently select which categories of
@@ -185,9 +208,12 @@ class BondedForceFieldReader : public ReaderBase
     // -dihedral is a pure convenience alias that sets both dihedral flags
     // at once -- this reader only ever sees the two resolved booleans) --
     // none are applied unless explicitly requested. This is a build-time
-    // decision: once written to a .nc topology, springs are just springs,
-    // with no separate per-category runtime switch in the .msp. Combining
-    // either dihedral flag alone (without stretch/bend) gives the
+    // decision: a family not requested here never gets a spring created at
+    // all, so it costs nothing (no particle, no NetCDF entry) -- unrelated
+    // to SpringNetwork's own dihedral.phi/psi/omega/chi/bending .msp
+    // settings, a runtime debug on/off for whichever families WERE built
+    // (see Configuration.hpp's own comment). Combining either dihedral
+    // flag alone (without stretch/bend) gives the
     // "intermediate model" (see doc/BondedForceFieldSprings.md, Section 3.2
     // vs 3.1): bonds/angles stay at --rigidbody's uniform value, real
     // dihedral wells are layered on top anyway.
@@ -280,8 +306,12 @@ class BondedForceFieldReader : public ReaderBase
     bool _existing_equilibrium(topology::Topology & topology, const topology::Particle & p1,
                                 const topology::Particle & p2, double & equilibrium) const;
 
-    // Retunes the existing --rigidbody spring between `p1`/`p2` in place
-    // (the expected case), or adds a new one if none exists yet (fallback).
+    // Sets equilibrium/stiffness on the existing --rigidbody spring between
+    // `p1`/`p2` in place (the expected case), or adds a new one if none
+    // exists yet (fallback) -- generic in `stiffness`, but STRETCH/BEND both
+    // only ever call this with stiffness=0.0 now, purely to zero out the old
+    // spring's contribution while keeping its equilibrium at the real AMBER
+    // value (see buildSprings's own comment for why).
     void _retune_or_add_spring(topology::Topology & topology, topology::Particle & p1, topology::Particle & p2,
                                 double equilibrium, double stiffness, const char * kind) const;
 

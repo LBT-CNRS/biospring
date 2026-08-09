@@ -16,15 +16,53 @@ void NetCDFReader::addSpringsToSpn()
     }
 }
 
-void NetCDFReader::addDihedralBackboneSpringsToSpn()
+void NetCDFReader::addStretchSpringsToSpn()
 {
-    for (size_t i = 0; i < _dihedralbackbonebuffer.number_of_springs; ++i)
+    for (size_t i = 0; i < _stretchbuffer.number_of_springs; ++i)
+        _topology.add_stretch_spring(_topology.get_particle(static_cast<size_t>(_stretchbuffer.springs[i][0])),
+                                     _topology.get_particle(static_cast<size_t>(_stretchbuffer.springs[i][1])),
+                                     _stretchbuffer.springsequilibriums[i], _stretchbuffer.springsstiffnesses[i]);
+}
+
+void NetCDFReader::addBendSpringsToSpn()
+{
+    for (size_t i = 0; i < _bendbuffer.number_of_springs; ++i)
+        _topology.add_bend_spring(_topology.get_particle(static_cast<size_t>(_bendbuffer.springs[i][0])),
+                                  _topology.get_particle(static_cast<size_t>(_bendbuffer.springs[i][1])),
+                                  _bendbuffer.springsequilibriums[i], _bendbuffer.springsstiffnesses[i]);
+}
+
+void NetCDFReader::addDihedralPhiSpringsToSpn()
+{
+    for (size_t i = 0; i < _dihedralphibuffer.number_of_springs; ++i)
         _topology
-            .add_dihedral_backbone_spring(
-                _topology.get_particle(static_cast<size_t>(_dihedralbackbonebuffer.springs[i][0])),
-                _topology.get_particle(static_cast<size_t>(_dihedralbackbonebuffer.springs[i][1])),
-                _dihedralbackbonebuffer.springsequilibriums[i], _dihedralbackbonebuffer.springsstiffnesses[i])
-            .set_dc_offset(_dihedralbackbonebuffer.springsdcoffsets[i]);
+            .add_dihedral_phi_spring(_topology.get_particle(static_cast<size_t>(_dihedralphibuffer.springs[i][0])),
+                                     _topology.get_particle(static_cast<size_t>(_dihedralphibuffer.springs[i][1])),
+                                     _dihedralphibuffer.springsequilibriums[i],
+                                     _dihedralphibuffer.springsstiffnesses[i])
+            .set_dc_offset(_dihedralphibuffer.springsdcoffsets[i]);
+}
+
+void NetCDFReader::addDihedralPsiSpringsToSpn()
+{
+    for (size_t i = 0; i < _dihedralpsibuffer.number_of_springs; ++i)
+        _topology
+            .add_dihedral_psi_spring(_topology.get_particle(static_cast<size_t>(_dihedralpsibuffer.springs[i][0])),
+                                     _topology.get_particle(static_cast<size_t>(_dihedralpsibuffer.springs[i][1])),
+                                     _dihedralpsibuffer.springsequilibriums[i],
+                                     _dihedralpsibuffer.springsstiffnesses[i])
+            .set_dc_offset(_dihedralpsibuffer.springsdcoffsets[i]);
+}
+
+void NetCDFReader::addDihedralOmegaSpringsToSpn()
+{
+    for (size_t i = 0; i < _dihedralomegabuffer.number_of_springs; ++i)
+        _topology
+            .add_dihedral_omega_spring(
+                _topology.get_particle(static_cast<size_t>(_dihedralomegabuffer.springs[i][0])),
+                _topology.get_particle(static_cast<size_t>(_dihedralomegabuffer.springs[i][1])),
+                _dihedralomegabuffer.springsequilibriums[i], _dihedralomegabuffer.springsstiffnesses[i])
+            .set_dc_offset(_dihedralomegabuffer.springsdcoffsets[i]);
 }
 
 void NetCDFReader::addDihedralSidechainSpringsToSpn()
@@ -128,8 +166,17 @@ void NetCDFReader::read()
         readSprings();
         addSpringsToSpn();
 
-        readDihedralSpringGroup("dihedralbackbone", _dihedralbackbonebuffer);
-        addDihedralBackboneSpringsToSpn();
+        readDihedralSpringGroup("stretch", _stretchbuffer);
+        addStretchSpringsToSpn();
+        readDihedralSpringGroup("bend", _bendbuffer);
+        addBendSpringsToSpn();
+
+        readDihedralSpringGroup("dihedralphi", _dihedralphibuffer);
+        addDihedralPhiSpringsToSpn();
+        readDihedralSpringGroup("dihedralpsi", _dihedralpsibuffer);
+        addDihedralPsiSpringsToSpn();
+        readDihedralSpringGroup("dihedralomega", _dihedralomegabuffer);
+        addDihedralOmegaSpringsToSpn();
         readDihedralSpringGroup("dihedralsidechain", _dihedralsidechainbuffer);
         addDihedralSidechainSpringsToSpn();
         readDihedralSpringGroup("dihedralplanarity", _dihedralplanaritybuffer);

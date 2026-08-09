@@ -35,11 +35,34 @@ class Configuration
     ProbeSetting probe;
     RigidBodySetting rigidbody;
 
+    // Runtime (.msp) enable/disable for the bonded-force-field families
+    // that BondedForceFieldReader::buildSprings already decided (at
+    // -stretching/-bending/-dihedral* build time, see pdb2spn-cli.cpp) to
+    // actually create springs for. Unlike every EnergySetting above,
+    // these default to enable=true (see defaultConfiguration()) -- built
+    // springs are meant to be active by default, this is an opt-OUT
+    // debugging knob (e.g. "dihedralomega.enable = 0" to isolate a
+    // family's contribution), not an opt-in feature switch. dihedralchi
+    // gates the same springs as the (SIDECHAIN family/chi1-4) collection;
+    // "chi" is the name exposed here since that's the physically
+    // meaningful term. There is deliberately no per-axis stretching
+    // toggle: a STRETCH spring shares its real atom pair with the
+    // existing (zeroed) --rigidbody spring, so disabling it independently
+    // at runtime would need a live link back to that sibling spring,
+    // which does not exist today (see BondedForceFieldReader.h's
+    // buildSprings comment) -- a real, separate piece of design work.
+    EnergySetting dihedralphi;
+    EnergySetting dihedralpsi;
+    EnergySetting dihedralomega;
+    EnergySetting dihedralchi;
+    EnergySetting bending;
+
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"), hbond("hbond"),
           electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"),
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), potentialgrid("potentialgrid"),
-          densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody")
+          densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody"), dihedralphi("dihedralphi"),
+          dihedralpsi("dihedralpsi"), dihedralomega("dihedralomega"), dihedralchi("dihedralchi"), bending("bending")
     {
         _register(sim);
         _register(steric);
@@ -57,6 +80,11 @@ class Configuration
         _register(densitygrid);
         _register(probe);
         _register(rigidbody);
+        _register(dihedralphi);
+        _register(dihedralpsi);
+        _register(dihedralomega);
+        _register(dihedralchi);
+        _register(bending);
     }
 
     void print(std::ostream & os = std::cout) const
@@ -92,6 +120,16 @@ class Configuration
         probe.print();
         os << "\n";
         rigidbody.print();
+        os << "\n";
+        dihedralphi.print();
+        os << "\n";
+        dihedralpsi.print();
+        os << "\n";
+        dihedralomega.print();
+        os << "\n";
+        dihedralchi.print();
+        os << "\n";
+        bending.print();
     }
 
     bool exists(const std::string & name) { return _allSettingNames.count(name); }
@@ -142,6 +180,16 @@ class Configuration
             probe.setFromString(name, value);
         else if (group == rigidbody.name)
             rigidbody.setFromString(name, value);
+        else if (group == dihedralphi.name)
+            dihedralphi.setFromString(name, value);
+        else if (group == dihedralpsi.name)
+            dihedralpsi.setFromString(name, value);
+        else if (group == dihedralomega.name)
+            dihedralomega.setFromString(name, value);
+        else if (group == dihedralchi.name)
+            dihedralchi.setFromString(name, value);
+        else if (group == bending.name)
+            bending.setFromString(name, value);
     }
 
   protected:
@@ -219,6 +267,17 @@ inline Configuration defaultConfiguration()
 
     config.imp.enable = false;
     config.imp.scale = 1.0;
+
+    // Deliberately true, unlike every setting above: these only gate
+    // springs that -stretching/-bending/-dihedral* already decided to
+    // build (see Configuration.hpp's own comment on these 5 members) --
+    // an opt-OUT debugging knob, not an opt-in feature switch, so an .msp
+    // written before these existed keeps exactly the same behaviour.
+    config.dihedralphi.enable = true;
+    config.dihedralpsi.enable = true;
+    config.dihedralomega.enable = true;
+    config.dihedralchi.enable = true;
+    config.bending.enable = true;
 
     return config;
 }

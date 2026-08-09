@@ -295,7 +295,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
 
     argparse::Argument dihedralbackbone_ = argparse::StoreTrueArgument(
         "-dihedralbackbone", "--dihedralbackbone",
-        "with -bondedinteraction, add backbone (phi/psi) dihedral ghost springs only; has no effect without "
+        "with -bondedinteraction, add backbone (phi/psi/omega) dihedral ghost springs only; has no effect without "
         "-bondedinteraction");
 
     argparse::Argument dihedralsidechain_ = argparse::StoreTrueArgument(

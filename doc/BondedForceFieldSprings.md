@@ -10,14 +10,22 @@ document derives, stage by stage, how a model built purely from such springs
 can reproduce the mechanical behaviour of AMBER's four bonded interaction
 terms — bond stretching, angle bending, proper dihedral torsion, and improper
 dihedral torsion — starting from the simplest possible baseline (a uniform
-rigid-body mesh) and layering real, spring-only parameters and dihedral
-ghost springs on top of it. Every derivation is closed-form or an exact
-algebraic identity, verified either symbolically or numerically (to machine
-precision where applicable); no step is a curve fit. A microbenchmark
-comparing per-evaluation computational cost against conventional
-trigonometric bonded force routines is included, along with the full
-validation strategy used to check the model against independent
-recomputation and real AMBER parameters.
+rigid-body mesh) and layering real, spring-only parameters on top of it.
+Bending and every dihedral family are represented using massless virtual
+sites (`spn::GhostParticle`) rather than springs between real atoms directly
+— both a real 1-3 angle and a real dihedral axis, represented on real atoms
+alone, were found to leak unrelated real motion (bond stretch for bending, a
+few degrees of ordinary thermal noise for backbone dihedrals) that a virtual
+site's free, calibration-time-only geometry avoids by construction. Every
+derivation is closed-form or an exact algebraic identity, verified either
+symbolically or numerically (to machine precision where applicable); no step
+is a curve fit. A microbenchmark comparing per-evaluation computational cost
+against conventional trigonometric bonded force routines is included, along
+with the full validation strategy used to check the model against
+independent recomputation and real AMBER parameters — including, critically,
+comparison against real molecular-dynamics trajectories rather than only
+self-consistency at generation time, which is what actually found the two
+leakage problems above.
 
 1. Introduction
 ----------------
@@ -112,10 +120,16 @@ tables — see the unit-convention note at the end of this section). `r0` and
 `k` are copied directly: a stretching spring does not approximate a bond, it
 *is* the bond, expressed in BioSpring's native representation.
 
-**Term 2 — angle bending (1-3 distance spring, curvature-matched).** For a
-real 1-2-3 valence angle with vertex atom 2, the distance between the two
-*outer* atoms, `r13`, is a monotonic function of `theta` for fixed real bond
-lengths `r12`, `r23` (already correct, from Term 1):
+**Term 2 — angle bending.** The equilibrium/stiffness conversion below (law
+of cosines + curvature matching) is exact at `theta0` regardless of which
+two points the resulting spring connects — the derivation was originally
+applied directly to the two *real* 1-3 atoms, but that specific choice
+turned out to leak an unrelated error into the model, described after the
+derivation.
+
+For a real 1-2-3 valence angle with vertex atom 2, the distance between the
+two *outer* atoms, `r13`, is a monotonic function of `theta` for fixed real
+bond lengths `r12`, `r23` (already correct, from Term 1):
 
     r13(theta)^2 = r12^2 + r23^2 - 2 * r12 * r23 * cos(theta)          (law of cosines)
 
@@ -145,12 +159,60 @@ it, since `r13(theta)` is not linear in `theta`; the deviation grows with
 distance from equilibrium, the same category of approximation used
 throughout the rest of this document.
 
+**Bond-stretch leakage (found and fixed): why the spring connects two
+*ghost* particles, not the real 1-3 atoms.** Connecting this spring
+directly between the two real outer atoms initially seemed like the
+obvious choice — but `r13`, the real 1-3 *distance*, depends on BOTH the
+real angle `theta` AND the two adjacent real bond lengths `r12`/`r23`,
+which independently flex via their own Term-1 springs during real
+dynamics. A distance spring on the real atoms cannot distinguish "the
+angle changed" from "a bond stretched" — both look identical as a change
+in `r13`. Quantified by direct comparison against an independent OpenMM
+(real MD frame) reference: **~60% systematic energy excess**, of which
+~95% (59 of the 60 percentage points) is bond-stretch leakage and only
+~5% is the genuine curvature-matching linearization error derived above.
+The sensitivity `d(r13)/d(r12) = (r12 - r23*cos(theta))/r13` is not small
+for realistic (obtuse, ~110-120deg) protein bond angles — confirmed both
+analytically and by finite difference on two independent real examples
+(0.81 and 0.87) — so bond stretch transmits almost 1:1 into the measured
+`r13`.
+
+Fix: for each real angle (vertex B, neighbours A, C), the spring connects
+two massless virtual sites (`spn::GhostParticle`, Section 3.2 introduces
+the mechanism in full) instead: `ghost_A = B + r0(bond BA) * normalize(A -
+B)`, `ghost_C = B + r0(bond BC) * normalize(C - B)` — each rescaled to the
+AMBER-ideal bond length but pointing along the REAL, current bond
+direction. This reproduces the bonds-fixed synthetic case exactly during
+real dynamics (leaving only the ~5% linearization error above), because
+the two ghosts' distance from B is now pinned to the ideal bond length by
+construction, immune to the real bonds' own independent stretching.
+Force redistribution reuses the ghost-particle mechanism's own transpose-
+Jacobian construction unchanged. **Validated end-to-end**: real AMBER
+reference (Fs-peptide, 20 real trajectory frames), stretch+bend combined,
+**mean relative error 1.03%, max 2.11%** — matching the theoretically
+expected ~1-5% pure-linearization residual once the leakage is removed.
+
+The real 1-2/1-3 pair that Term 1/Term 2 used to connect directly is never
+removed once superseded this way (needed for nonbonded-exclusion
+bookkeeping) — its stiffness is zeroed instead, and the real restraint
+lives entirely in the new ghost-anchored spring, in its own dedicated
+spring collection and energy channel (see the note on energy channels
+below).
+
 *Ring/planar-group caveat.* A rigid-body group with every pairwise distance
 constrained (Section 2) has no internal degrees of freedom left at all —
 this is stiffer than reality even after Stage 1, since bending alone does
 not restore ring pucker or out-of-plane flexibility. Real planarity is a
 distinct AMBER term (Term 4, Section 3.2) — bending is not meant to provide
 it.
+
+**Energy channels.** STRETCH, BEND, and DIHEDRAL each report their own
+separate energy (`Stretch energy`, `Bend energy`, `Dihedral energy`), in
+their own dedicated spring collection, independent of `--rigidbody`'s own
+mesh. `Spring energy` was redefined to mean *only* that untouched
+rigid-body/ENM baseline — it no longer includes the retuned/ghost-anchored
+contributions, since "spring energy" as a single lumped number only ever
+meant something for a plain elastic-network model in the first place.
 
 *Unit convention (applies to every stage below).* All figures in this
 document are sourced from `amber99sb.xml`'s `HarmonicBondForce`,
@@ -164,23 +226,43 @@ here.
 
 ### 3.2 Stage 2 — dihedral torsion (proper and improper), added as an intermediate layer
 
-Stage 1 retunes springs that already exist. Dihedral torsion needs new ones:
-a dihedral angle `phi` is not the distance between any single pair of atoms,
-so no direct geometric substitute exists. Real substituent atoms around the
-rotation axis are instead used to build a set of ordinary distance springs —
-"ghost springs" — added *on top of* the Stage 1 network, whose combined
-energy, as a function of `phi`, reproduces one specific Fourier term of
-AMBER's real torsion energy. Nothing from Stage 1 needs to change: dihedral
-springs are new additions between atoms that Stage 1 never connected (they
-are not directly bonded), so this is strictly an additive refinement.
+Stage 1 retunes/extends springs anchored on real, existing atoms. Dihedral
+torsion needs something categorically different: a dihedral angle `phi` is
+not the distance between any single pair of real atoms, and — as Section
+3.1's bending fix already found the hard way — even a real 1-3 *angle* leaks
+unrelated bond-stretch noise when represented by a spring between the real
+outer atoms. Both problems share the same fix: place the spring between
+massless **virtual sites** (`spn::GhostParticle`) instead of real atoms —
+points whose position is computed algebraically from 3 real anchor atoms
+each simulation step, never integrated themselves, carrying no mass, and
+exerting force back onto their anchors through the placement's own transpose
+Jacobian (the virtual-work principle: verified numerically against finite
+differences before being trusted, and that using `J^T` rather than `J`
+matters — using `J` breaks energy conservation silently). This is the same
+"dummy atom"/virtual-site technique used for e.g. TIP4P's M-site in
+mainstream MD packages, not a BioSpring-specific invention.
+
+`spn::GhostParticle::computePosition(B, C, Ref, r, theta, delta)` places a
+ghost at distance `r`, polar angle `theta` from the B→C axis, azimuth
+`delta` from the `Ref` direction, using a local frame built fresh from B/C/Ref's
+*current* real positions every step — so a ghost always follows its anchors
+correctly as the molecule moves, with `r`/`theta`/`delta` themselves fixed,
+calibration-time constants. Crucially, **`r`, `theta`, and `delta` are free
+choices**, unlike a spring anchored on two real atoms, whose geometry is
+whatever the real chemistry happens to give. This one difference is what
+separates the current mechanism from an earlier, abandoned "ghost-spring on
+real atoms directly" attempt: that method's real substituent geometry
+sometimes had no way to reproduce a real multi-term AMBER target without a
+negative (unphysical) stiffness, or reproduced only 1 of several needed
+harmonics — a ghost particle's free geometry removes that constraint
+entirely (Steps 1-4 below).
 
 This intermediate configuration — rigid-body mesh, Stage 1's real
 stretching/bending, and now real dihedral wells layered on top — is already a
 complete, independently useful, and independently testable model: bond and
 angle vibration have real values, and side-chain/backbone rotation now has
-real energetic preferences and ring/guanidinium groups have real planarity
-restraints, while the underlying topology (which pairs have springs at all)
-still traces back to the rigid-body mesh of Section 2.
+real energetic preferences, while the underlying topology (which pairs have
+springs at all) still traces back to the rigid-body mesh of Section 2.
 
 In practice (`pdb2spn`), Stage 1 and Stage 2 are independent opt-in flags
 on top of `-rigidbody -bondedinteraction <file>`: `-stretching`, `-bending`
@@ -191,26 +273,39 @@ Limitations) plus `-dihedral` as a pure convenience alias for both
 together. None is implied by the others or by `-bondedinteraction` alone —
 combining only a dihedral flag, without `-stretching`/`-bending`, is
 exactly this section's intermediate model. Once built, dihedral ghost
-springs are ordinary springs at simulation time: there is no separate
-`.msp` switch for them, they are gated by the same `spring.enable` as
-everything else in the network.
+springs are ordinary springs at simulation time, gated by the same
+`spring.enable` master switch as everything else in the network (the same
+is true of stretch/bend's own ghost-anchored springs — see the
+energy-channel note in Section 3.1) — on top of that, each proper family
+also has its own independent runtime debug toggle
+(`dihedralphi.enable`/`dihedralpsi.enable`/`dihedralomega.enable`/
+`dihedralchi.enable`, plus `bending.enable`), all defaulting to enabled so
+an `.msp` written before these existed keeps the same behaviour. There is
+deliberately no equivalent toggle for stretching: a STRETCH spring shares
+its real atom pair with the existing (zeroed) `-rigidbody` spring, so an
+independent runtime switch would need a live link back to that sibling
+spring, which does not exist today.
 
-Both dihedral families — **proper** (side-chain chi1-4, backbone phi/psi)
-and **improper** (planarity of aromatic rings, guanidinium) — use exactly
-the same construction below. AMBER itself treats an improper geometrically
-as an ordinary four-atom dihedral (the "axis" is the bond between the 2nd
-and 3rd atom of its atom list, the other two are the substituents); only the
-source table (`PeriodicTorsionForce`'s `<Proper>` vs `<Improper>` entries)
-and the atoms involved differ.
+Both dihedral families — **proper** (side-chain chi1-4, backbone phi/psi,
+the cross-residue peptide-bond torsion omega) and **improper** (planarity
+of aromatic rings, guanidinium — still not implemented, see below) — use
+exactly the same construction below. AMBER itself treats an improper
+geometrically as an ordinary four-atom dihedral (the "axis" is the bond
+between the 2nd and 3rd atom of its atom list, the other two are the
+substituents); only the source table (`PeriodicTorsionForce`'s `<Proper>`
+vs `<Improper>` entries) and the atoms involved differ.
 
 #### Notation
 
-For a dihedral defined by four atoms in a chain **R-B-C-S** (B and C
-connected by a real bond, the axis; R attached to B; S attached to C):
+For a dihedral defined by four points in a chain **R-B-C-S** (B and C
+connected by a real bond, the axis; R attached to B; S attached to C) —
+R and S may each be either a real atom (the improper-planarity case, not
+yet implemented) or a ghost particle placed off B/C plus a third real
+reference atom (every proper axis, as implemented):
 
 * `L` — the B-C bond length.
-* `r1`, `theta1` — the B-R bond length and the R-B-C valence angle.
-* `r2`, `theta2` — the C-S bond length and the B-C-S valence angle.
+* `r1`, `theta1` — R's distance/polar-angle from B (free for a ghost).
+* `r2`, `theta2` — S's distance/polar-angle from C (free for a ghost).
 * `phi` — the dihedral angle R-B-C-S.
 
 #### Step 1 — closed-form distance between R and S as a function of phi
@@ -222,7 +317,9 @@ connected by a real bond, the axis; R attached to B; S attached to C):
     C2 = 2 * r1 * r2 * sin(theta1) * sin(theta2)
 
 where `delta` is a fixed azimuthal offset depending only on how `phi`'s zero
-reference is defined.
+reference is defined. This identity holds regardless of whether R/S are real
+atoms or ghost particles — it is pure geometry, not a statement about
+chemistry.
 
 **Derivation.** Place B at the origin, C at `(0,0,L)`, R in the xz-plane
 (fixing `phi`'s zero at R's azimuth): `R = (r1 sin(theta1), 0, r1 cos(theta1))`.
@@ -237,23 +334,27 @@ vector construction taking the literal distance — for a representative sp3
 carbon-chain geometry (`L=1.526`, `r1=1.526`, `theta1=109.5deg`, `r2=1.09`,
 `theta2=109.5deg`), sampled at 37 values of `phi` across a full turn:
 **maximum absolute difference 3.55e-15 A^2** — floating-point noise, not
-model error. This is a geometric identity.
+model error. Separately verified that this same abstract formula (used only
+to *calibrate* a ring, see Step 3) matches `GhostParticle::computePosition`'s
+own literal 3D placement, driven by real, moving anchor atoms across a real
+trajectory, to the same numerical precision.
 
-A ghost spring's energy is then simply `E(phi) = 0.5 k (d(phi)-d0)^2` — an
-ordinary BioSpring distance spring between the real atoms R and S.
+A ghost-ghost ring member's energy is then simply `E(phi) = 0.5 k
+(d(phi)-d0)^2` — an ordinary BioSpring distance spring, just between two
+virtual points instead of two real atoms.
 
 #### Step 2 — which harmonics survive averaging over several copies (Dirac comb)
 
-A single ghost spring's energy is **not** a pure cosine of `phi` (it is a
+A single spring's energy is **not** a pure cosine of `phi` (it is a
 nonlinear function of `cos(phi)` through the square root and the square), so
 it has content at every harmonic, not just one. Averaging several rotated
 copies cancels the unwanted ones exactly, for *any* periodic function.
 
 **Claim.** Let `g(phi)` have period `2*pi`, Fourier series
-`g(phi)=sum_k ĝ_k exp(ikphi)`. Build `M` real copies of the reference
-substituent evenly spaced around B (`2*pi*i/M` apart) and `N` real copies of
-the rotating substituent evenly spaced around C (`2*pi*j/N` apart). Summing
-every `(i,j)` pair's energy:
+`g(phi)=sum_k ĝ_k exp(ikphi)`. Build `M` copies of the reference point
+evenly spaced around B (`2*pi*i/M` apart) and `N` copies of the rotating
+point evenly spaced around C (`2*pi*j/N` apart). Summing every `(i,j)`
+pair's energy:
 
     E_total(phi) = sum_i sum_j g(phi + 2*pi*i/M - 2*pi*j/N) = M*N * sum over k that are multiples of LCM(M,N) of ĝ_k exp(ikphi)
 
@@ -262,10 +363,11 @@ every `(i,j)` pair's energy:
 Each bracket is a sum of `M` (resp. `N`) evenly spaced roots of unity to the
 k-th power — a standard identity, equal to `M` (resp. `N`) if `M` (resp. `N`)
 divides `k`, else `0`. Only `k` divisible by both — i.e. by `LCM(M,N)` —
-survives, scaled by `M*N`. This holds for any periodic `g`: it is a property
-of averaging evenly-spaced copies, not of a ghost spring's specific shape.
+survives, scaled by `M*N`. This holds for any periodic `g` and for either
+real or virtual points equally: it is a property of averaging evenly-spaced
+copies, not of the spring's specific shape.
 
-**Verification (numerical, FFT of the real nonlinear ghost-spring energy):**
+**Verification (numerical, FFT of the real nonlinear ring energy):**
 
 | M | N | LCM(M,N) | Harmonics surviving above 1% of peak (k=1..19) |
 |---|---|----------|--------------------------------------------------|
@@ -273,124 +375,215 @@ of averaging evenly-spaced copies, not of a ghost spring's specific shape.
 | 1 | 2 | 2        | {2} |
 | 2 | 3 | 6        | {6} |
 
-Exactly as predicted. **Practical use:** to target a real AMBER harmonic
-`n`, choose any `(M,N)` with `LCM(M,N)=n`, `M`/`N` never exceeding the real
-number of substituents actually present.
+Exactly as predicted. **Practical use:** for a ghost-ghost ring targeting a
+real AMBER harmonic `n`, any `(M,N)` with `LCM(M,N)=n` works identically (the
+ring shape is precomputed once per `n`, independent of axis or residue —
+`RING_SHAPES` in `scripts/generate_bonded_forcefield.py` — since a ring's own
+harmonic-to-DC efficiency depends only on its shape, not on which axis it
+calibrates).
 
-#### Step 3 — solving for stiffness exactly (not an iterative fit)
+**Optimization: `M=n, N=1` instead of `M=N=n`.** Since only `LCM(M,N)`
+matters (not `M` and `N` individually), the cheapest `(M,N)` pair for a given
+`n>=2` is `M=n, N=1` (or the symmetric `M=1, N=n`) — one full ring on one
+side, a single reference point on the other, instead of `n` points on both
+sides. `emit_ghost_ring` uses this (`n=1` stays `M=N=1`, already minimal).
+**Verified to give byte-identical results, not just an approximation of the
+same quality:** point-by-point diff of the reconstructed energy curve for
+every real (resname, axis) combination in the `.bi.ff`, `M=N=n` vs `M=n,N=1`,
+max difference 0.000000 kJ/mol across all 90 curves x 91 sampled angles.
+Reduces the deployed `.bi.ff` from 984 to 737 `GHOSTPARTICLE` entries
+(-25.1%) and 1166 to 492 `DIHEDRAL` springs (-57.8%).
 
-For fixed geometry and `d0`, a ghost spring's energy is exactly linear in its
-stiffness: `E(phi)=k*h(phi)` with `h(phi)=0.5(d(phi)-d0)^2` independent of
-`k`. Every Fourier component of `E` is therefore exactly `k` times the
-corresponding component of `h`; one evaluation at `k=1` gives the
-proportionality constant, hence `k_target = k_AMBER_target / component_at_k=1`
-— a direct algebraic solve. Verified: re-measuring the reproduced
-harmonic's amplitude after solving matches the AMBER target exactly (to FFT
-quadrature precision) for every worked example below.
+**`n=1` is a special, exact case.** A single ghost-ghost spring with `d0=0`
+gives a *provably pure* n=1 harmonic with **zero** leakage into any other
+harmonic — algebraically, `d0=0` makes the sqrt nonlinearity in Step 1's
+identity vanish entirely (`E=0.5*k*d(phi)^2`, and `d(phi)^2` is already
+exactly `C1-C2*cos(phi-delta)`, a pure single cosine). No ring/averaging is
+needed for `n=1` at all: `M=N=1`, `d0=0`.
 
-#### Step 4 — residual harmonic content (quantified, not hidden)
+#### Step 3 — solving for stiffness and phase exactly (not an iterative fit)
 
-Only multiples of the target `n` survive Step 2's cancellation *when every
-copy shares identical (r, theta), differing only in azimuth*. On an
-idealized, artificially symmetric test geometry (same r1/theta1 for every
-copy on each side, exactly evenly spaced), the residual is negligible —
-verified numerically to <1% for the cases tried.
+For fixed ring geometry, a ring's energy is exactly linear in its shared
+stiffness `k` (Step 1's identity has no `k`-dependence in `d(phi)` itself).
+One evaluation at `k=1` gives the ring's own harmonic-`n` Fourier
+coefficient, magnitude *and phase*, from which both the real target's
+magnitude (`k = |target| / |achieved_at_k=1|`) and phase (via a free
+azimuthal offset `delta_base`, rotating the whole ring rigidly) solve
+directly — no iteration. This `delta_base` freedom is exactly what a
+ghost-particle ring has that a real-atom-anchored ring does not: real atoms'
+azimuth is whatever the real chemistry gives, with no equivalent free
+parameter to rotate away a phase mismatch (this is precisely why a
+real-atom-only attempt at omega, Section 3.2's later subsection, failed:
+a ~169deg unfixable phase gap between the real geometry's own natural
+harmonic content and AMBER's target).
 
-**Real substituents are not that clean, and the residual is much larger in
-practice.** Around a real vertex (e.g. CA's real neighbours N, C, HA),
-different real substituents have genuinely different bond lengths and
-angles to the axis — not just a different azimuth. This breaks the exact
-cancellation the idealized case enjoys. Measured on Arg's real chi1 and
-chi2 axes (real bond lengths/angles from AMBER's tables, real relative
-azimuths measured from an actual residue's 3D coordinates, see below):
+*A sign pitfall, found and fixed.* Rotating a ring's base azimuth by `D`
+shifts its own harmonic-`n` phase by `-n*D`, not `+n*D` — verified
+numerically; using the naive `+n*D` sign gives the complex *conjugate* of
+the target. Invisible for a purely real target (most single-term axes), but
+~45-60% wrong for any axis with a genuinely complex target (phi/psi/omega,
+or chi2's multi-term case).
 
-| Axis | Target (M=N=3, all real substituents) | Residual at m=1 | Residual at m=2 |
-|------|------------------------------------------|--------------------|--------------------|
-| chi1 (X-CT-CT-X, n=3, k=0.6508) | reproduced exactly at n=3 | 0.66 (102% of target) | 0.21 (32%) |
-| chi2 (X-CT-CT-X, n=3, k=0.6508) | reproduced exactly at n=3 | 0.87 (134% of target) | 0.29 (45%) |
+#### Step 4 — the ring's own DC offset (a construction artefact, corrected exactly)
 
-This is a real, load-bearing limitation, not a cosmetic one: several more
-elaborate attempts to do better were tried and abandoned (splitting the
-axis by each real substituent's own most-specific AMBER torsion entry;
-allowing each real pair its own independently-solved stiffness and
-equilibrium via linear/non-linear least-squares against the full combined
-real target) — all either reduced to the same size of residual or produced
-some pairs needing a negative (unphysical) stiffness to fit. The
-`n=3`-only, full-real-substituent-grid construction above is the version
-actually implemented and validated end-to-end (see the worked example
-below) — a genuine, bounded, first-order approximation of the real
-torsional profile, not an exact reproduction, and not disguised as one.
+A ring made entirely of squared terms (`0.5*k*(d-d0)^2 >= 0`) can only ever
+ADD a positive baseline to its own mean (DC) — it cannot subtract from it.
+This mean has nothing to do with AMBER's own real torsion mean (`target[0]`,
+exactly the sum of each matched real term's own `k`, since
+`k*(1+cos(...))` has mean `k`): it is a pure side effect of using a
+sum-of-squares construction to isolate one harmonic. Since it's an exact,
+closed-form-computable constant (`dc_ring`, see `calibrate_ring`), it can be
+subtracted back out *exactly* when reporting energy, with zero effect on
+forces (a constant has no gradient): stored as a per-spring `dc_offset`
+column in the `.bi.ff` `DIHEDRAL` line, summed by `BondedForceFieldReader`
+across every entry actually applied and subtracted only in
+`SpringNetwork::getDihedralEnergy()`. Multiple rings/harmonics on the same
+axis attribute the real target's own DC to exactly the first ring emitted,
+so it is subtracted exactly once per axis, not once per ring.
+
+#### Residual harmonic content (quantified, small, and now a solved-once precomputation)
+
+A ring's own leakage into unwanted harmonics (mostly `2n`, `3n`, ...) is
+controlled by its shape (a 2-parameter family `(rho, mu)` — how far the
+ring's own points sit from the axis, and the ring's own `d0`) — found once,
+per `n`, by a small grid search on the *abstract* shape function alone
+(independent of any specific axis or residue, reused identically across
+every axis), targeting <=0.5-1% leakage into the first unwanted multiple.
+Measured shape-only RMS error against the full target curve, for every axis
+family currently implemented (chi1-4, phi/psi, omega): **0.07-0.2%** of the
+axis's own peak-to-peak amplitude — two to three orders of magnitude
+smaller than the abandoned real-atom method's 30-45% (Section 3.2's
+historical note below).
+
+#### Per-owning-pair anchoring: which real atoms a ring's `Ref` points use
+
+A ring's calibrated `(r, theta, d0, k, delta_base)` only fixes its *shape*;
+which 3 real atoms actually drive its placement at runtime (`B`, `C`, and
+each side's own `Ref`) is a separate, free choice, and it matters: a
+deployed ghost's real 3D motion depends **only** on its own 3 anchors, never
+on any other real atom used solely to build the abstract calibration
+target. If an axis's real AMBER target is built by combining several real
+substituent pairs (e.g. psi's target mixes an `(N, +N)` pair and an `(HA,
+O)` pair), but only ONE generic reference atom is picked per side for
+*every* ring regardless of which pairs actually contributed, the deployed
+ghost implicitly assumes every other real substituent sits at a FIXED
+offset from that one reference — which is only as good as that assumption.
+
+For ordinary same-residue substituents (e.g. chi1's CB-side neighbours, all
+directly bonded to the same vertex, no intervening independent torsion)
+this assumption holds fine, matching the small residual already quoted.
+Found and fixed (2026-08-04/05) for two real cases where it didn't:
+
+* **Omega's n=1 harmonic** is owned entirely by one real pair, `(O, +H)` —
+  anchoring that ring directly on O and +H (instead of a generic `CA/+CA`
+  reference shared with n=2) lets the deployed ghost track that pair's
+  actual real motion instead of assuming it sits at a fixed offset from CA
+  — reduces this ring's own reconstruction error, measured against a real
+  trajectory, from a small-but-nonzero residual to **exactly zero**.
+* **Phi's b-side `{-C, H}` and psi's c-side `{O, +N}`**: one atom on each of
+  these sides belongs to the *adjacent* residue's own peptide plane. Using
+  a single shared reference for that side (as the original implementation
+  did) showed up as a real, large energy residual on psi specifically (ALA
+  psi: up to ~90% error on some real conformations) — root-caused NOT to
+  some hidden extra rotational freedom (both O and +N are directly,
+  rigidly bonded to C, a trigonal-planar centre with no torsional freedom
+  of its own substituents), but to ordinary bond-angle-scale thermal noise
+  (a few degrees, present on every axis, always has been) becoming visible
+  specifically here because backbone torsion `k`'s are large (psi's own
+  n=2 term alone: k=6.61, an order of magnitude above a typical side-chain
+  k). Fixed generically: `generate_backbone_axis` detects whichever side
+  has a cross-residue neighbour and splits *that side only* into one group
+  per atom, each independently anchored and independently emitted — the
+  non-risky side keeps one shared reference, unaffected. This generalizes
+  automatically and safely: applied to phi, it found phi's own `H` group
+  contributes nothing (only the null wildcard matches `-C`'s partner atoms
+  other than the canonical pair) and produced byte-identical output to
+  before — the mechanism, not a per-axis decision, determined phi needed
+  no change.
+
+**Validated end-to-end** (Fs-peptide, real trajectory, 20 frames): isolating
+ALA's psi axis specifically, mean/max error fell from +49.5/+88 kJ/mol
+(worst-case 38% relative) to **+8.7/+18.1 kJ/mol (3.9% average, 7.3% max)**
+after this fix — roughly a 5-6x reduction. Full-system validation (all
+proper torsions including omega, fair comparison against an independent
+OpenMM/`amber99sb.xml` reference) improved from 3.87%/10.25% (mean/max
+relative error, corr=-0.27, i.e. barely tracking real conformational
+change at all) to **3.53%/5.74% (corr=+0.67)** — the clearest evidence that
+the fix addresses the actual mechanism rather than cosmetically shrinking
+an aggregate number: the model went from mostly noise to a real signal
+that meaningfully tracks the true energy across frames.
+
+*A related sign bug, found and fixed at the same time.* The per-substituent
+azimuthal offset (`delta_of` in the generator) had its b-side sign
+backwards in every function that computed it (`generate_backbone_axis`,
+`generate_sidechain_axis`, `generate_sidechain_axis_gkinase`) — confirmed
+by direct algebraic derivation and by a real-trajectory reconstruction
+test. Fixed in all three places; harmless for a purely-real single-term
+axis (chi1) but materially wrong for any axis with a genuinely complex,
+multi-pair target (backbone axes) — folded into the numbers above, since
+both fixes were needed together to reach them.
 
 #### Applying this to real AMBER data
 
-**Side-chain chi (as implemented).** Both chi1 (CA-CB axis) and chi2
-(CB-CG axis) use the one generic wildcard term available for any C-C
-single-bond rotation, `X-CT-CT-X` (n=3, k=0.6508, phase 0), applied via one
-ghost-spring group per axis built from *all* real substituents on each side
-(M=N=3: e.g. for chi1, {N, C, HA} on the CA side and {CG, HB2, HB3} on the
-CB side) — not split by each pair's own more specific AMBER entry. This is
-a deliberate simplification: `amber99sb.xml` also has more specific real
-entries for some of chi2's substituent combinations (`CT-CT-CT-CT`,
-`HC-CT-CT-CT`, `HC-CT-CT-HC`, each its own multi-term torsion) which a
-fully faithful reproduction would need to represent separately — attempted
-and abandoned (see Step 4): several of the resulting subgroups have too
-few real substituents to be evenly spaced, which breaks the cancellation
-Step 2 relies on far worse than the residual above (measured up to ~30x
-the target itself for some subgroups, not a small effect). Using the one
-broad wildcard term across the full, genuinely ~120-degree-spaced real
-substituent set avoids that failure mode, at the cost of not capturing
-chi2's finer real multi-term structure for now — an explicitly open item,
-not a silently dropped one.
+**Side-chain chi1-4 — implemented, all 20 residue types (30 valid axes).**
+Unlike the abandoned real-atom method (one shared generic term per axis,
+Section 3.2's historical note below), the current generator matches each
+axis's real AMBER-specific substituent pairs directly (specific-entry-first,
+generic-wildcard fallback, exactly mirroring AMBER's own matching order),
+decomposing multi-term axes (e.g. `CT-CT-CT-CT`'s real 3-term chi2/chi3
+structure) into one ring per real harmonic rather than approximating with a
+single shared term. 6 axes (Asp/His/Phe/Tyr chi2, Glu chi3, Arg chi4) are
+confirmed, not assumed, genuinely flat in `amber99sb.xml` (k=0 for every
+periodicity on the relevant wildcard) — correctly emit no ghost springs at
+all, not a coverage gap.
 
-**Worked example, validated end-to-end.** For each axis, real geometry
-(bond length/angle from AMBER's tables, real relative azimuth from
-ubiquitin's ARG42 3D coordinates) gives 9 real (B-substituent,
-C-substituent) pairs; Step 3's exact linear solve (via a signed projection
-onto `cos(3*phi)`, not a magnitude, so a sign mismatch would be caught
-rather than silently producing a negative stiffness) gives one shared
-stiffness per axis (chi1: k=10.98 kJ.mol-1.A-2; chi2: k=12.67
-kJ.mol-1.A-2). Summed over all 4 real Arg residues in ubiquitin.pdb, an
-independent Python recomputation of `0.5*k*(d-d0)^2` over the resulting 72
-ghost springs matches BioSpring's own reported dihedral energy exactly:
-136.8747 kJ/mol (Python) vs 136.87 kJ/mol (BioSpring).
+**Backbone phi/psi — implemented, all 18 residue types (36 axes).** Checked
+explicitly for a CMAP correction (a 2D phi-psi coupling table used in some
+force fields) before generating anything: `amber99sb.xml` contains no
+`CMAPTorsionForce` element — ff99SB describes phi/psi with independent 1D
+terms only, so the per-axis construction above is complete for this force
+field (would need rechecking for a revision that does have CMAP).
 
-**Backbone phi/psi — implemented.** Same table, backbone atom classes.
-Checked explicitly for a CMAP correction (a 2D phi-psi coupling table used
-in some force fields, e.g. CHARMM and later AMBER revisions) before
-generating anything: `amber99sb.xml` contains no `CMAPTorsionForce` element
-and no mention of CMAP anywhere — ff99SB describes phi/psi with independent
-1D terms only.
+**Omega — implemented, the first cross-residue AXIS.** Every other axis has
+both its axis atoms (`B`, `C`) inside the same residue; omega's own axis is
+the peptide bond itself, `C(i)-+N(i+1)` — `BondedForceFieldReader`'s atom
+resolution needed no change at all to support this (it already resolved
+`+`/`-` prefixes independently per atom slot for every other purpose), but
+the *generator* needed two real, cross-residue-specific bugs fixed while
+wiring it in: (1) naming a ring's `Ref` atom relative to the wrong
+residue (`c_atom`'s own residue, correct for every other axis since
+`c_atom` is always inside the owning residue — wrong for omega, where it
+isn't) silently resolved to the wrong, same-named real atom instead of
+failing, caught only via a real unresolved-anchor warning on Gly; (2) two
+ring groups sharing the same non-risky-side reference (see per-owning-pair
+anchoring above) reused identical ghost/rule names, silently colliding —
+fixed by a `group_tag` disambiguating ghost names whenever an axis emits
+more than one group. Before choosing ghost particles for omega, a plain
+real-atom-anchored attempt (the historical method, one ring using the 4
+real substituents `CA(i)/O(i)` x `CA(i+1)/H(i+1)` directly) was tried first
+and confirmed insufficient: a ~169deg phase mismatch between the real
+geometry's own natural n=2 content and AMBER's target, with no free
+parameter to fix it (see Step 3) — even a full grid search over (k,d0)
+only reached 138% mean relative error. Ghost particles (n=2 generic
+`CA/+CA` anchor, n=1 exact `O/+H` anchor per the rule above) validated at
+mean relative error 3.87%/10.25% in isolation, improving to 3.53%/5.74%
+system-wide after the phi/psi fixes above (omega itself unaffected by
+those, already using per-owning-pair anchoring from the start).
 
-Unlike chi1's single generic `X-CT-CT-X` wildcard shared across the whole
-real substituent grid, phi/psi turned out *not* to be a generic-wildcard
-axis at all: `amber99sb.xml`'s own generic entries for both axes
-(`X-CT-N-X`, `X-C-CT-X`) carry `k=0` for every periodicity — a real,
-deliberate null placeholder, not a missing table. The real energy instead
-comes from a handful of *pair-specific* entries, each naming one exact real
-substituent pair: phi's axis (N-CA) has `(C_prev, C_own)` [the canonical
-backbone pair, terms n=3/n=2] and `(C_prev, CB)` [terms n=3/n=2/n=1]; psi's
-axis (CA-C) has `(N, N_next)` [canonical, terms n=3/n=2/n=1] and `(CB,
-N_next)`/`(HA, O)` [terms n=1/n=3 and n=1/n=3 respectively]. Every other
-real pair (the amide H, most H-CB/H-N combinations) matches only the null
-wildcard and correctly contributes nothing — confirmed directly against
-the XML, not assumed. Generation therefore matches each real substituent
-pair to its own specific entry (or drops it if only the null wildcard
-applies), rather than averaging one shared term over the whole grid.
-
-Generated for all 17 residue types with a real non-terminal ubiquitin
-instance (Met is skipped: its only occurrence is the true N-terminus, with
-no real previous residue to source phi's `C_prev` from). The two canonical
-terms (`(C_prev,C_own)` for phi, `(N,N_next)` for psi — together the
-dominant real contribction to the Ramachandran landscape) solve cleanly for
-every one of them. Three secondary/auxiliary single-pair terms do not:
-`phi (C_prev,CB) n=2`, `psi (CB,N_next) n=3`, `psi (HA,O) n=3` all give a
-negative projection under both `d0` conventions and are skipped (reported,
-not silently dropped) — the same single-pair harmonic-representability
-limit already documented above for chi2's finer breakdown: a lone real pair
-has an intrinsically single-cosine (n=1) `d(phi)` shape, and forcing a
-higher-harmonic fit onto it can flip sign. The two dominant canonical terms
-and the other secondary harmonics (phi/psi's own n=1/n=3 or n=1/n=2
-companions) are unaffected.
+Making omega flexible at all required a companion `--rigidbody` change:
+the base `ProteinAtomRigidGroups.rbody`'s `_PHI`/`_PSI` groups treat the
+*entire* peptide plane (6 atoms spanning both sides of the omega bond) as
+one rigid clique, freezing omega completely regardless of any dihedral
+term layered on top. A new file, `ProteinAtomRigidGroupsOmegaFree.rbody`
+(the original left untouched, kept as the "no cis/trans freedom" model),
+splits each group into two halves hinged at exactly the omega bond — the
+same "2 shared atoms = 1 free hinge" trick already used for every other
+rotatable axis. Verified two ways: an exact spring-pair diff against the
+original file (294 pairs removed, 0 added, every removed pair of exactly
+the 4 predicted "upstream-non-axis to downstream-non-axis" types, none
+touching the hinge atoms themselves) and a perturbed-structure dynamics
+run (clean relaxation, no divergence, comparable behaviour to the
+original file).
 
 **Improper (planarity) — deprioritized, not implemented.** Worth stating
 precisely what this term would and would not fix: `--rigidbody`'s
@@ -420,16 +613,26 @@ ring genuinely puckers in real AMBER (no improper restrains it) — unlike its
 current `--rigidbody` treatment (full pairwise rigidity), which is *less*
 physically accurate on this specific point.
 
-*Choosing substituents when fewer are needed than exist.* The LCM rule says
-which `(M,N)` are valid, not which real atoms to use when an axis has more
-substituents than a given term needs. For chi1/chi2 this doesn't arise (the
-single wildcard term uses all real substituents on both sides, see above).
-It would arise for any future multi-term axis (e.g. a genuine attempt at
-chi2's finer `CT-CT-CT-CT`/`HC-CT-CT-*` breakdown, or improper/backbone
-terms with more than one significant harmonic) — this choice would need to
-be explicit, per case, in the generator, and Step 4's finding that small
-subgroups can fail far worse than the residual above should be checked
-before assuming it works.
+#### Historical note: the abandoned real-atom-only method
+
+Before ghost particles, dihedral rings were built directly between real
+substituent atoms (Steps 1-2 above still apply verbatim — they are generic
+geometric/Fourier identities — but `r`/`theta`/`delta` were then fixed by
+real chemistry, and `M`/`N` capped by how many real substituents actually
+exist on each side). This worked for single-term, evenly-spaced axes
+(chi1's generic `X-CT-CT-X` term, real substituents close enough to 120deg
+apart) but failed for anything more demanding: chi2's real 3-term structure
+needed more independently-tunable degrees of freedom than 3 fixed real
+hydrogens provide (residual 30-45% of target, and splitting further to
+chase individual terms made small subgroups fail far worse, up to ~30x
+target, from being too few/unevenly-spaced to cancel unwanted harmonics);
+omega's real geometry turned out to have its own natural harmonic phase
+~169deg away from AMBER's target with no free parameter to correct it.
+Ghost particles remove the constraint that geometry must equal real
+chemistry, at the cost of an extra virtual site per ring point — this is
+why every axis implemented today uses ghost particles, not real atoms
+directly (bending's own real-atom-to-real-atom leakage problem, Section
+3.1, is the same lesson applied to Term 2).
 
 Stages 1–2 retune and extend the rigid-body mesh, but always keep it as the
 permanent substrate: the mesh's real 1-2/1-3 pairs are what Stage 1 retunes,
@@ -502,68 +705,98 @@ heterogeneous term types, cache behaviour, thread scheduling) could shift
 the picture further — plausibly in the spring-only network's favour, since
 every term becomes the *same* uniform kernel rather than several
 structurally different ones, but this has not been measured and is not
-claimed here.
+claimed here. It also predates the move from ghost springs on real atoms to
+ghost *particles* (Section 3.2): a ghost particle's own placement
+(`computePosition`) and force redistribution (the transpose-Jacobian
+`redistributeForce`) add real per-ghost overhead this benchmark does not
+account for, on top of the per-spring cost measured here — not remeasured
+since, and worth doing before citing this table as still current for the
+present mechanism.
 
 5. Validation strategy
 -------------------------
 
-1. **Self-consistency at generation time.** For stretching/bending, the
-   generator already asserts real bond/angle connectivity (mdtraj-inferred,
-   never hand-typed) before emitting anything. For every dihedral
-   ghost-spring group, it additionally re-derives the group's own reproduced
-   harmonic amplitude (the FFT quadrature used above) and checks it against
-   the AMBER target before writing anything, logging the residual-harmonic
-   table for traceability.
-2. **Full build + `ctest`** (273 tests, no regression).
-3. **Independent energy cross-check (Python vs BioSpring).** Isolate one
-   term's contribution by subtraction (with vs without, or via the `.msp`
-   per-family toggle for dihedral) and compare against an independent Python
-   recomputation of the same AMBER-derived formula on the same coordinates.
-   Already done this way for stretching and bending (exact match, ubiquitin
-   and a 20-frame real Fs-peptide trajectory); the same method extends
-   directly to dihedral.
-4. **Full phi-scan comparison**, not just the target harmonic's amplitude:
-   sample the entire 0-360deg energy curve of a ghost-spring group and
-   compare point-by-point against the real AMBER curve for that term (and
-   its real sum, where several terms share an axis) — this is what shows the
-   residual-harmonic wiggle visually, as a max-deviation figure.
+1. **Self-consistency at generation time.** The generator already asserts
+   real bond/angle connectivity (mdtraj-inferred, never hand-typed) before
+   emitting anything. For every dihedral ghost-particle ring, it
+   additionally re-derives the ring's own reproduced harmonic amplitude
+   (the FFT quadrature used above) and checks it against the AMBER target
+   before writing anything.
+2. **Full build + `ctest`** (278 tests, no regression) — every dihedral
+   axis change so far (BEND's ghost-particle fix, omega, the sign-bug and
+   per-owning-pair-anchoring fixes) needed no C++ changes at all, since the
+   ghost-particle/`.bi.ff` mechanism is already fully generic; this step
+   still catches anything unrelated it might disturb.
+3. **Independent energy cross-check against real AMBER (OpenMM,
+   `amber99sb.xml`), not just self-consistency.** Extract real frames from
+   a real MD trajectory (Fs-peptide), build a matching BioSpring `.nc` per
+   frame, and compare BioSpring's own reported energy (`Stretch energy`,
+   `Bend energy`, `Dihedral energy` — see Section 3.1's energy-channel
+   note) against an independent per-frame OpenMM computation. This is what
+   actually found bending's bond-stretch leakage (Section 3.1) and psi's
+   per-owning-pair-anchoring gap (Section 3.2) — self-consistency checks
+   alone (point 1) had missed both, since they only confirm a ring
+   reproduces its OWN calibration target, not that the target itself
+   tracks real dynamics correctly.
+4. **Per-axis, per-residue isolation** when an aggregate comparison shows
+   an unexplained residual: filter the `.bi.ff` down to one axis (or one
+   real substituent pair) at a time, rebuild, and compare against a
+   matching real-AMBER decomposition for exactly that axis. This is how
+   ALA's psi was isolated as the dominant contributor to an aggregate
+   ~14-19% dihedral error that other axes' own small residuals didn't
+   explain.
 5. **Dynamical, qualitative validation on real data.** For Arg chi1/chi2:
    run BioSpring dynamics long enough to observe rotamer-well transitions,
    compare occupancy/dwell-time statistics qualitatively against the real
    measured Fs-peptide trajectory (`rotamer_hinge_vs_md_report.html`).
-6. **Planarity check**, for a ring/guanidinium improper group: verify the
-   real dihedral stays near-planar with realistic fluctuation amplitude
-   (not perfectly rigid as with `--rigidbody` alone, not unrestrained
-   either).
+6. **Planarity check**, for a ring/guanidinium improper group (not yet
+   implemented): verify the real dihedral stays near-planar with realistic
+   fluctuation amplitude (not perfectly rigid as with `--rigidbody` alone,
+   not unrestrained either).
 7. **Intermediate-model check**, with `--dihedral` alone (Stage 2 without
    Stage 1, i.e. `-bondedinteraction` without `-stretching`/`-bending`):
    bonds/angles stay at the rigid-body uniform value, dihedral
    energy/behaviour is identical to the fully-refined model — the two
    concerns are independent by construction, confirmed experimentally.
+8. **Structural diff for a `--rigidbody` change** (omega's
+   `ProteinAtomRigidGroupsOmegaFree.rbody`): an exact before/after diff of
+   every spring `--rigidbody` creates, checking that only the intended
+   pairs disappear (and none appear) — a more rigorous check than a
+   dynamics run alone, which can't easily isolate one specific hinge's
+   freedom from whole-molecule relaxation noise.
 
 6. Known limitations
 ------------------------
 
 * **Stretching:** none — a direct, exact representation.
-* **Bending:** second-order (curvature) match at equilibrium only; deviates
-  further from `theta0`. A fully rigid-body group loses genuine flexibility
-  (e.g. pucker) that planarity (Term 4) is meant to restore, not bending.
-* **Dihedral (both families):** residual harmonic content is small only for
-  an idealized, artificially symmetric geometry; on Arg's real chi1/chi2
-  axes (real, non-identical bond lengths/angles per substituent) the
-  measured residual at the next harmonic is 30-45% of the target itself —
-  large, bounded, and honestly reported, not a small correction. Chi2's
-  finer real multi-term structure (`CT-CT-CT-CT` vs `HC-CT-CT-*`) is not
-  currently represented at all: attempts to split it out made the fit far
-  worse (up to ~30x the target for some subgroups), not better — see
-  Section 3.2, Step 4. Compounds with bending's own curvature-matching
-  limitation where a dihedral's reference geometry depends on a bent angle.
-* **Backbone phi/psi:** no CMAP gap for ff99SB specifically, verified; a
-  different AMBER/CHARMM revision with a real CMAP term would need this
-  re-checked.
-* **Improper (planarity):** matching convention needs per-case verification
-  against `amber99sb.xml`, not assumed to mirror the proper table. Proline
-  intentionally excluded (real ring pucker, no AMBER improper term there).
+* **Bending:** ghost-anchored (Section 3.1) to remove real bond-stretch
+  leakage; the remaining residual is the curvature-matching
+  linearization error alone, validated at mean 1.03%/max 2.11% against
+  real AMBER (Fs-peptide, 20 frames, stretch+bend combined).
+* **Dihedral, all proper families (chi1-4, phi/psi, omega):** each ring's
+  own shape-only residual is small (0.07-0.2% of peak-to-peak, Section
+  3.2) — the dominant remaining error source is real thermal noise on
+  whichever real atom a ring is anchored to, not yet correctable further
+  without tracking additional real atoms per ring. Full real-AMBER
+  validation (Fs-peptide, 20 frames, all proper torsions): mean relative
+  error 3.53%, max 5.74%, corr=+0.67 (a real, meaningfully-tracking
+  signal, not just noise around the right average). 6 side-chain axes
+  (Asp/His/Phe/Tyr chi2, Glu chi3, Arg chi4) are confirmed genuinely flat
+  in AMBER (k=0), not a gap.
+* **Backbone phi/psi/omega:** no CMAP gap for ff99SB specifically,
+  verified; a different AMBER/CHARMM revision with a real CMAP term would
+  need this re-checked. Per-owning-pair anchoring (Section 3.2) covers the
+  two known cross-residue-neighbour cases (phi's `-C`, psi's `+N`,
+  omega's `+H`) found so far by direct real-trajectory validation, not by
+  an exhaustive audit of every axis — a future axis with a similar
+  cross-residue neighbour should be checked the same way, not assumed
+  fixed by the same generic mechanism without verification.
+* **Improper (planarity):** not implemented, deprioritized (Section 3.2) —
+  `--rigidbody`'s mesh already geometrically guarantees planarity as long
+  as it remains the permanent substrate; matching convention would need
+  per-case verification against `amber99sb.xml` if picked back up, and
+  Proline intentionally excluded (real ring pucker, no AMBER improper term
+  there).
 * **Scope:** `--rigidbody` remains a permanent, required substrate for this
   model — dropping it entirely is out of scope, not merely deferred.
 
@@ -571,13 +804,21 @@ claimed here.
 ----------------
 
 All four of AMBER's bonded interaction terms can be expressed as ordinary
-distance springs between real atoms, with every conversion either exact
-(stretching), a provable second-order match (bending), or an exact
-closed-form/Fourier construction with quantified residual error (both
-dihedral families). Layering these onto BioSpring's existing rigid-body
-mesh — which remains the permanent substrate, not a step to be eventually
-removed — gives a practical, incrementally-testable path from a purely
-topological approximation to a physically-parameterised, spring-only
-model of the four bonded terms — and, measured directly, the resulting
-force evaluations are not merely equivalent but consistently faster than
-the conventional trigonometric formulas they replace.
+distance springs, with every conversion either exact (stretching), a
+provable second-order match free of bond-stretch leakage (bending, via
+ghost particles anchored along the real, current bond directions), or an
+exact closed-form/Fourier ghost-particle-ring construction (every proper
+dihedral family implemented: chi1-4, phi/psi, and omega, the first axis
+whose own two axis atoms span a residue boundary) with quantified,
+now-small residual error — validated end-to-end against real,
+independent AMBER (OpenMM) computations on real MD trajectory frames, not
+merely self-consistent with its own calibration target. Layering these
+onto BioSpring's existing rigid-body mesh — which remains the permanent
+substrate, not a step to be eventually removed — gives a practical,
+incrementally-testable path from a purely topological approximation to a
+physically-parameterised, spring-only model of the four bonded terms —
+and, measured directly, the resulting force evaluations are not merely
+equivalent but consistently faster than the conventional trigonometric
+formulas they replace. Improper (planarity) remains the one term not yet
+implemented, deliberately deprioritized once it was clear `--rigidbody`'s
+own mesh already guarantees planarity geometrically in its absence.

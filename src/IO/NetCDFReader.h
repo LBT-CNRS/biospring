@@ -19,7 +19,14 @@ class NetCDFReader : public TopologyReaderBase
   protected:
     SpringBuffer _sbuffer;
     ParticleBuffer _pbuffer;
-    DihedralSpringBuffer _dihedralbackbonebuffer;
+    // Reuses DihedralSpringBuffer's layout (see NetCDFWriter's stretch/bend
+    // call sites): structurally identical to a dihedral ghost-spring group,
+    // just with springsdcoffsets always zero.
+    DihedralSpringBuffer _stretchbuffer;
+    DihedralSpringBuffer _bendbuffer;
+    DihedralSpringBuffer _dihedralphibuffer;
+    DihedralSpringBuffer _dihedralpsibuffer;
+    DihedralSpringBuffer _dihedralomegabuffer;
     DihedralSpringBuffer _dihedralsidechainbuffer;
     DihedralSpringBuffer _dihedralplanaritybuffer;
     GhostParticleBuffer _ghostparticlebuffer;
@@ -45,7 +52,11 @@ class NetCDFReader : public TopologyReaderBase
 
     void addParticlesToSpn();
     void addSpringsToSpn();
-    void addDihedralBackboneSpringsToSpn();
+    void addStretchSpringsToSpn();
+    void addBendSpringsToSpn();
+    void addDihedralPhiSpringsToSpn();
+    void addDihedralPsiSpringsToSpn();
+    void addDihedralOmegaSpringsToSpn();
     void addDihedralSidechainSpringsToSpn();
     void addDihedralPlanaritySpringsToSpn();
     void addGhostParticlesToSpn();

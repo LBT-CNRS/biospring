@@ -33,15 +33,52 @@ class Topology
     // family stays identifiable through serialization (.nc I/O) without
     // touching Spring/SpringCollection at all -- see
     // doc/BondedForceFieldSprings.md, Section 3.2. Which families are
-    // actually populated is decided once, at build time, by
+    // actually built is decided once, at build time, by
     // BondedForceFieldReader::buildSprings's enableDihedral* parameters
-    // (see -dihedralbackbone/-dihedralsidechain in pdb2spn-cli.cpp) --
-    // there is no runtime switch. A dihedral ghost spring is always a new
+    // (see -dihedralbackbone/-dihedralsidechain in pdb2spn-cli.cpp) -- PHI/
+    // PSI/OMEGA are always built together under -dihedralbackbone (kept as
+    // three separate collections here purely so SpringNetwork can enable/
+    // disable each independently at runtime, see its dihedral.phi/psi/
+    // omega .msp settings). A dihedral ghost spring is always a new
     // addition (never a retune of a real 1-2/1-3 spring), so unlike
     // _springs these are never populated by RigidBodyBuilder.
-    SpringCollection _dihedral_backbone_springs;
+    SpringCollection _dihedral_phi_springs;
+    SpringCollection _dihedral_psi_springs;
+    SpringCollection _dihedral_omega_springs;
     SpringCollection _dihedral_sidechain_springs;
     SpringCollection _dihedral_planarity_springs;
+
+    // A real 1-2 bond, retuned to real AMBER r0/k -- kept separate from
+    // _springs (rather than retuned in place there) so it has its own
+    // energy channel (see spn::SpringNetwork::Energies), symmetric with
+    // BEND/DIHEDRAL below: "spring energy" is only a meaningful,
+    // self-contained quantity for the plain ENM/rigid-body mesh, not once
+    // inflated by the real force-field corrections layered on top of it.
+    // The pre-existing --rigidbody spring for the same real 1-2 pair is
+    // kept (not removed) but its stiffness is zeroed, so nonbonded
+    // exclusion (driven by spring-neighbour membership in _springs, not by
+    // this collection) is unaffected.
+    SpringCollection _stretch_springs;
+
+    // Ghost-ghost springs standing in for a real valence-angle (BEND)
+    // restraint, kept separate from _springs for the same reason the
+    // dihedral families are (identifiable through .nc I/O without tagging
+    // Spring itself). Unlike the dihedral families, these connect two
+    // GHOST particles anchored to the vertex atom (see
+    // BondedForceFieldReader's BEND handling) rather than two real atoms:
+    // a plain distance spring directly between the two real 1-3 atoms
+    // conflates real angle-bending with real bond-stretching (their
+    // adjacent bonds are independently flexible via their own STRETCH
+    // springs), since the measured 1-3 distance depends on both -- found
+    // and quantified via a real MD-trajectory validation (~60% systematic
+    // energy excess, ~95% of it from bond-stretch leaking into the 1-3
+    // distance, only ~5% genuine linearization error). Anchoring each
+    // ghost at a FIXED (AMBER r0) distance from the vertex, along the
+    // REAL, current bond *direction*, removes that leakage: the ghost-ghost
+    // distance then depends on the real angle only, matching the existing
+    // d0/k13 curvature-matched calibration formula's own assumption
+    // (bonds fixed at r0) exactly, instead of violating it every step.
+    SpringCollection _bend_springs;
 
   public:
     // Binds a ghost (massless virtual-site) Particle -- created by
@@ -72,15 +109,17 @@ class Topology
     // =============================================================================
 
     Topology()
-        : _springs(_particles), _dihedral_backbone_springs(_particles), _dihedral_sidechain_springs(_particles),
-          _dihedral_planarity_springs(_particles)
+        : _springs(_particles), _dihedral_phi_springs(_particles), _dihedral_psi_springs(_particles),
+          _dihedral_omega_springs(_particles), _dihedral_sidechain_springs(_particles),
+          _dihedral_planarity_springs(_particles), _stretch_springs(_particles), _bend_springs(_particles)
     {
     }
 
     // Copy constructor.
     Topology(const Topology & other)
-        : _springs(_particles), _dihedral_backbone_springs(_particles), _dihedral_sidechain_springs(_particles),
-          _dihedral_planarity_springs(_particles)
+        : _springs(_particles), _dihedral_phi_springs(_particles), _dihedral_psi_springs(_particles),
+          _dihedral_omega_springs(_particles), _dihedral_sidechain_springs(_particles),
+          _dihedral_planarity_springs(_particles), _stretch_springs(_particles), _bend_springs(_particles)
     {
         _copy_particles(other);
         _copy_springs(other);
@@ -105,9 +144,13 @@ class Topology
         if (_particles.size() != other._particles.size())
         {
             _springs.clear();
-            _dihedral_backbone_springs.clear();
+            _dihedral_phi_springs.clear();
+            _dihedral_psi_springs.clear();
+            _dihedral_omega_springs.clear();
             _dihedral_sidechain_springs.clear();
             _dihedral_planarity_springs.clear();
+            _stretch_springs.clear();
+            _bend_springs.clear();
         }
 
         _copy_particles(other);
@@ -161,9 +204,9 @@ class Topology
     // _particles grow again once anything actually references it.
     void reserve_particles(size_t n)
     {
-        if (_springs.size() == 0 && _dihedral_backbone_springs.size() == 0 &&
-            _dihedral_sidechain_springs.size() == 0 && _dihedral_planarity_springs.size() == 0 &&
-            _ghost_particles.empty())
+        if (_springs.size() == 0 && _dihedral_phi_springs.size() == 0 && _dihedral_psi_springs.size() == 0 &&
+            _dihedral_omega_springs.size() == 0 && _dihedral_sidechain_springs.size() == 0 &&
+            _dihedral_planarity_springs.size() == 0 && _ghost_particles.empty())
         {
             _particles.data().reserve(n);
             return;
@@ -172,7 +215,9 @@ class Topology
         Topology snapshot(*this);
         _particles.clear();
         _springs.clear();
-        _dihedral_backbone_springs.clear();
+        _dihedral_phi_springs.clear();
+        _dihedral_psi_springs.clear();
+        _dihedral_omega_springs.clear();
         _dihedral_sidechain_springs.clear();
         _dihedral_planarity_springs.clear();
         _ghost_particles.clear();
@@ -241,10 +286,19 @@ class Topology
     // (never a real 1-2 bond) -- one per DIHEDRAL entry, routed to the
     // matching family by BondedForceFieldReader::buildSprings. See the
     // _dihedral_*_springs member comment above.
-    auto & add_dihedral_backbone_spring(Particle & p1, Particle & p2, double equilibrium = -1.0,
-                                        double stiffness = 1.0)
+    auto & add_dihedral_phi_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
     {
-        return _dihedral_backbone_springs.add_spring(p1, p2, equilibrium, stiffness);
+        return _dihedral_phi_springs.add_spring(p1, p2, equilibrium, stiffness);
+    }
+
+    auto & add_dihedral_psi_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
+    {
+        return _dihedral_psi_springs.add_spring(p1, p2, equilibrium, stiffness);
+    }
+
+    auto & add_dihedral_omega_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
+    {
+        return _dihedral_omega_springs.add_spring(p1, p2, equilibrium, stiffness);
     }
 
     auto & add_dihedral_sidechain_spring(Particle & p1, Particle & p2, double equilibrium = -1.0,
@@ -257,6 +311,23 @@ class Topology
                                          double stiffness = 1.0)
     {
         return _dihedral_planarity_springs.add_spring(p1, p2, equilibrium, stiffness);
+    }
+
+    // Creates a STRETCH spring between two real atoms (see _stretch_springs'
+    // own comment) -- always a new addition (never retuned in place, unlike
+    // the old --rigidbody spring for the same pair, which the caller zeroes
+    // out separately instead).
+    auto & add_stretch_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
+    {
+        return _stretch_springs.add_spring(p1, p2, equilibrium, stiffness);
+    }
+
+    // Creates a BEND ghost-ghost spring between two vertex-anchored ghost
+    // particles (see _bend_springs' own comment) -- always a new addition,
+    // like the dihedral families, never a retune of a real spring.
+    auto & add_bend_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
+    {
+        return _bend_springs.add_spring(p1, p2, equilibrium, stiffness);
     }
 
     // Adds springs between all particles within a cutoff distance.
@@ -358,14 +429,26 @@ class Topology
     auto & springs() { return _springs; }
     const auto & springs() const { return _springs; }
 
-    auto & dihedral_backbone_springs() { return _dihedral_backbone_springs; }
-    const auto & dihedral_backbone_springs() const { return _dihedral_backbone_springs; }
+    auto & dihedral_phi_springs() { return _dihedral_phi_springs; }
+    const auto & dihedral_phi_springs() const { return _dihedral_phi_springs; }
+
+    auto & dihedral_psi_springs() { return _dihedral_psi_springs; }
+    const auto & dihedral_psi_springs() const { return _dihedral_psi_springs; }
+
+    auto & dihedral_omega_springs() { return _dihedral_omega_springs; }
+    const auto & dihedral_omega_springs() const { return _dihedral_omega_springs; }
 
     auto & dihedral_sidechain_springs() { return _dihedral_sidechain_springs; }
     const auto & dihedral_sidechain_springs() const { return _dihedral_sidechain_springs; }
 
     auto & dihedral_planarity_springs() { return _dihedral_planarity_springs; }
     const auto & dihedral_planarity_springs() const { return _dihedral_planarity_springs; }
+
+    auto & stretch_springs() { return _stretch_springs; }
+    const auto & stretch_springs() const { return _stretch_springs; }
+
+    auto & bend_springs() { return _bend_springs; }
+    const auto & bend_springs() const { return _bend_springs; }
 
     auto & get_spring(size_t position) { return _springs[position]; }
     const auto & get_spring(size_t position) const { return _springs[position]; }
@@ -479,8 +562,14 @@ class Topology
                 add_to_spn(i, j, source.equilibrium(), source.stiffness(), source.dc_offset());
             }
         };
-        copy_dihedral(_dihedral_backbone_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
-            spn.addDihedralBackboneSpring(i, j, eq, k, dc);
+        copy_dihedral(_dihedral_phi_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+            spn.addDihedralPhiSpring(i, j, eq, k, dc);
+        });
+        copy_dihedral(_dihedral_psi_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+            spn.addDihedralPsiSpring(i, j, eq, k, dc);
+        });
+        copy_dihedral(_dihedral_omega_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+            spn.addDihedralOmegaSpring(i, j, eq, k, dc);
         });
         copy_dihedral(_dihedral_sidechain_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
             spn.addDihedralSidechainSpring(i, j, eq, k, dc);
@@ -488,6 +577,25 @@ class Topology
         copy_dihedral(_dihedral_planarity_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
             spn.addDihedralPlanaritySpring(i, j, eq, k, dc);
         });
+
+        // STRETCH springs (see _stretch_springs' own comment) -- plain
+        // copy, no dc_offset concept here either.
+        for (const topology::Spring & source : _stretch_springs)
+        {
+            size_t i = _particles.by_uid().at(source.first().unique_id());
+            size_t j = _particles.by_uid().at(source.second().unique_id());
+            spn.addStretchSpring(i, j, source.equilibrium(), source.stiffness());
+        }
+
+        // BEND ghost-ghost springs (see _bend_springs' own comment) -- no
+        // dc_offset concept here (that is specific to the dihedral ring
+        // construction's DC artifact), so a plain copy like _springs above.
+        for (const topology::Spring & source : _bend_springs)
+        {
+            size_t i = _particles.by_uid().at(source.first().unique_id());
+            size_t j = _particles.by_uid().at(source.second().unique_id());
+            spn.addBendSpring(i, j, source.equilibrium(), source.stiffness());
+        }
     }
 
   protected:
@@ -540,12 +648,15 @@ class Topology
     void _copy_springs(const Topology & other, size_t offset = 0)
     {
         _copy_spring_collection(_springs, other._springs, other._particles, offset);
-        _copy_spring_collection(_dihedral_backbone_springs, other._dihedral_backbone_springs, other._particles,
-                                offset);
+        _copy_spring_collection(_dihedral_phi_springs, other._dihedral_phi_springs, other._particles, offset);
+        _copy_spring_collection(_dihedral_psi_springs, other._dihedral_psi_springs, other._particles, offset);
+        _copy_spring_collection(_dihedral_omega_springs, other._dihedral_omega_springs, other._particles, offset);
         _copy_spring_collection(_dihedral_sidechain_springs, other._dihedral_sidechain_springs, other._particles,
                                 offset);
         _copy_spring_collection(_dihedral_planarity_springs, other._dihedral_planarity_springs, other._particles,
                                 offset);
+        _copy_spring_collection(_stretch_springs, other._stretch_springs, other._particles, offset);
+        _copy_spring_collection(_bend_springs, other._bend_springs, other._particles, offset);
     }
 
     // Copies `other`'s ghost-particle bindings to this topology. Same uid

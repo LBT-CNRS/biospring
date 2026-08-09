@@ -375,7 +375,18 @@ void NetCDFWriter::writeBinary()
         nbofsprings.putVar(sbuffer.nbofspringsperparticle);
     }
 
-    writeDihedralSpringGroupBinary(nc, "dihedralbackbone", _spn->getDihedralBackboneSprings());
+    // Reuses the exact same buffer/variable layout as the dihedral ghost
+    // spring families (including the unused springsdcoffset column, always
+    // zero for these -- see SpringNetwork::addStretchSpring/addBendSpring):
+    // STRETCH/BEND springs are structurally identical (particle pair +
+    // equilibrium + stiffness), just living in their own vectors/energy
+    // channel (see Topology's _stretch_springs/_bend_springs comments).
+    writeDihedralSpringGroupBinary(nc, "stretch", _spn->getStretchSprings());
+    writeDihedralSpringGroupBinary(nc, "bend", _spn->getBendSprings());
+
+    writeDihedralSpringGroupBinary(nc, "dihedralphi", _spn->getDihedralPhiSprings());
+    writeDihedralSpringGroupBinary(nc, "dihedralpsi", _spn->getDihedralPsiSprings());
+    writeDihedralSpringGroupBinary(nc, "dihedralomega", _spn->getDihedralOmegaSprings());
     writeDihedralSpringGroupBinary(nc, "dihedralsidechain", _spn->getDihedralSidechainSprings());
     writeDihedralSpringGroupBinary(nc, "dihedralplanarity", _spn->getDihedralPlanaritySprings());
 
@@ -413,7 +424,12 @@ void NetCDFWriter::_writeHeaderCDL()
         _ostream << std::endl;
     }
 
-    writeDihedralHeaderCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings().size());
+    writeDihedralHeaderCDL(_ostream, "stretch", _spn->getStretchSprings().size());
+    writeDihedralHeaderCDL(_ostream, "bend", _spn->getBendSprings().size());
+
+    writeDihedralHeaderCDL(_ostream, "dihedralphi", _spn->getDihedralPhiSprings().size());
+    writeDihedralHeaderCDL(_ostream, "dihedralpsi", _spn->getDihedralPsiSprings().size());
+    writeDihedralHeaderCDL(_ostream, "dihedralomega", _spn->getDihedralOmegaSprings().size());
     writeDihedralHeaderCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings().size());
     writeDihedralHeaderCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings().size());
 
@@ -495,7 +511,12 @@ void NetCDFWriter::_writeHeaderCDL()
         _ostream << std::endl;
     }
 
-    writeDihedralVariablesCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings().size());
+    writeDihedralVariablesCDL(_ostream, "stretch", _spn->getStretchSprings().size());
+    writeDihedralVariablesCDL(_ostream, "bend", _spn->getBendSprings().size());
+
+    writeDihedralVariablesCDL(_ostream, "dihedralphi", _spn->getDihedralPhiSprings().size());
+    writeDihedralVariablesCDL(_ostream, "dihedralpsi", _spn->getDihedralPsiSprings().size());
+    writeDihedralVariablesCDL(_ostream, "dihedralomega", _spn->getDihedralOmegaSprings().size());
     writeDihedralVariablesCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings().size());
     writeDihedralVariablesCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings().size());
 
@@ -713,7 +734,12 @@ void NetCDFWriter::_writeSpringDataCDL()
         }
     }
 
-    writeDihedralDataCDL(_ostream, "dihedralbackbone", _spn->getDihedralBackboneSprings());
+    writeDihedralDataCDL(_ostream, "stretch", _spn->getStretchSprings());
+    writeDihedralDataCDL(_ostream, "bend", _spn->getBendSprings());
+
+    writeDihedralDataCDL(_ostream, "dihedralphi", _spn->getDihedralPhiSprings());
+    writeDihedralDataCDL(_ostream, "dihedralpsi", _spn->getDihedralPsiSprings());
+    writeDihedralDataCDL(_ostream, "dihedralomega", _spn->getDihedralOmegaSprings());
     writeDihedralDataCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings());
     writeDihedralDataCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings());
 

@@ -90,6 +90,19 @@ i.e. ~2.5 kJ.mol-1.A-2).
 time, by pdb2spn/editspn/mergespn's own `--cutoff` option (see there), not rebuilt at runtime from
 this value.
 ---
+* **bending.enable = 1** *(boolean)* Runtime debug on/off for BEND ghost springs (see
+`-bending`/`--bending` in pdb2spn). Only meaningful if the topology was actually built with
+`-bending` in the first place -- a family not built has no springs to enable/disable either way.
+Defaults to enabled so an `.msp` written before this setting existed keeps the same behaviour.
+* **dihedralphi.enable = 1** *(boolean)* Runtime debug on/off for phi (backbone) dihedral ghost
+springs, independently of psi/omega/chi. See `bending.enable` above for the same
+built-vs-enabled distinction and default rationale.
+* **dihedralpsi.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the psi axis.
+* **dihedralomega.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the omega
+(peptide-bond) axis.
+* **dihedralchi.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for every side-chain
+chi1-4 dihedral (the SIDECHAIN family in the `.bi.ff`).
+---
 * **viscosity.enable = 0** *(boolean)* Enables a damping factor on the particles.
 * **viscosity.value = 1.0** *(Da.fs-1, float)* Damping factor.
 

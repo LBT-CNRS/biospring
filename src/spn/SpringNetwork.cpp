@@ -91,16 +91,63 @@ void SpringNetwork::computeSpringForces()
     _energies.spring = springenergy;
 }
 
+// Calculates STRETCH spring forces and applies them to the particles.
+// Updates global `_energies.stretch`. A plain real-atom spring (no ghosts,
+// unlike BEND/DIHEDRAL: a 1-2 bond length has no 3-body conflation to
+// avoid), so no ignoreDynamicState override -- a stretch spring between two
+// particles the user froze with --static correctly contributes nothing,
+// same as it did before this spring lived in its own collection. Not
+// parallelised, like computeDihedralForces: kept simple until profiling
+// ever shows a need otherwise.
+void SpringNetwork::computeStretchForces()
+{
+    float stretchenergy = 0.0f;
+    for (Spring & spring : _stretchsprings)
+    {
+        const Vector3f force = spring.computeForce(*_ff);
+        spring.getParticle1().addForce(force);
+        spring.getParticle2().addForce(-force);
+        stretchenergy += spring.getEnergy();
+    }
+    _energies.stretch = stretchenergy;
+}
+
+// Calculates BEND ghost-ghost spring forces and applies them to the
+// particles. Updates global `_energies.bend`. ignoreDynamicState=true for
+// the same reason as computeDihedralForces: both ghosts are always static.
+// Gated by isBendingEnabled() (a runtime debug on/off for a family that
+// -bending already decided, at build time, to actually create springs
+// for -- see Configuration.hpp's own comment) on top of the isSpringEnabled()
+// master switch the caller (computeForces) already applies: when disabled,
+// BOTH force and energy are skipped (a pure reporting-only toggle would
+// leave the dynamics unchanged, defeating the point of isolating this
+// family's contribution).
+void SpringNetwork::computeBendForces()
+{
+    float bendenergy = 0.0f;
+    if (isBendingEnabled())
+        for (Spring & spring : _bendsprings)
+        {
+            const Vector3f force = spring.computeForce(*_ff, /*ignoreDynamicState=*/true);
+            spring.getParticle1().addForce(force);
+            spring.getParticle2().addForce(-force);
+            bendenergy += spring.getEnergy();
+        }
+    _energies.bend = bendenergy;
+}
+
 // Calculates dihedral ghost-spring forces and applies them to the
-// particles. Updates global `_energies.dihedral`. There is no per-family
-// (or even per-dihedral) .msp switch -- whichever families were actually
-// built (see -dihedral/--dihedral in pdb2spn-cli.cpp) are always computed
-// here unconditionally; the caller (computeForces) gates the whole call on
-// isSpringEnabled(), the same flag used for regular springs (a dihedral
-// ghost spring is still just a spring). Not parallelised (unlike
-// computeSpringForces): ghost-spring counts are expected to be small
-// relative to the real bonded network, so a serial loop is simplest here
-// unless profiling ever shows otherwise.
+// particles. Updates global `_energies.dihedral`. Which families were
+// actually BUILT is a build-time decision (see -dihedral/--dihedral in
+// pdb2spn-cli.cpp); which of the built ones are actually APPLIED here is
+// independently gated per-family (isDihedralPhi/Psi/Omega/ChiEnabled(),
+// see Configuration.hpp's own comment) on top of the isSpringEnabled()
+// master switch the caller (computeForces) already applies -- same
+// both-force-and-energy-skipped reasoning as computeBendForces above (a
+// disabled family must not silently keep influencing the dynamics). Not
+// parallelised (unlike computeSpringForces): ghost-spring counts are
+// expected to be small relative to the real bonded network, so a serial
+// loop is simplest here unless profiling ever shows otherwise.
 void SpringNetwork::computeDihedralForces()
 {
     float dihedralenergy = 0.0f;
@@ -124,8 +171,14 @@ void SpringNetwork::computeDihedralForces()
         }
     };
 
-    accumulate(_dihedralbackbonesprings);
-    accumulate(_dihedralsidechainsprings);
+    if (isDihedralPhiEnabled())
+        accumulate(_dihedralphisprings);
+    if (isDihedralPsiEnabled())
+        accumulate(_dihedralpsisprings);
+    if (isDihedralOmegaEnabled())
+        accumulate(_dihedralomegasprings);
+    if (isDihedralChiEnabled())
+        accumulate(_dihedralsidechainsprings);
     accumulate(_dihedralplanaritysprings);
 
     _energies.dihedral = dihedralenergy;
@@ -348,6 +401,8 @@ void SpringNetwork::computeForces()
     if (isSpringEnabled())
     {
         computeSpringForces();
+        computeStretchForces();
+        computeBendForces();
         computeDihedralForces();
     }
     if (isHydrogenBondEnabled())
@@ -490,6 +545,8 @@ void SpringNetwork::_displayFrameData()
     if (isSpringEnabled())
     {
         logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
+        logging::info("Stretch energy: %5.2f kJ.mol-1", _energies.stretch);
+        logging::info("Bend energy: %5.2f kJ.mol-1", _energies.bend);
         logging::info("Dihedral energy: %5.2f kJ.mol-1", _energies.dihedral);
     }
     if (isElectrostaticEnabled())
@@ -602,10 +659,10 @@ void SpringNetwork::addSpring(unsigned id1, unsigned id2, float equilibrium, flo
     }
 }
 
-// Shared implementation for the three addDihedral*Spring methods: unlike
+// Shared implementation for the addDihedral*Spring methods: unlike
 // addSpring, a ghost spring is always a new addition (no spring-neighbour
 // check), never registered in the particles' spring-neighbour map (see the
-// header comment on addDihedralBackboneSpring for why), and not split into
+// header comment on addDihedralPhiSpring for why), and not split into
 // static/dynamic subsets (always fully iterated in computeDihedralForces).
 static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Particle> & particles, unsigned id1,
                                 unsigned id2, float equilibrium, float stiffness, float dcOffset)
@@ -620,10 +677,22 @@ static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Pa
     collection.back().setDcOffset(dcOffset);
 }
 
-void SpringNetwork::addDihedralBackboneSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                              float dcOffset)
+void SpringNetwork::addDihedralPhiSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                         float dcOffset)
 {
-    addDihedralSpringTo(_dihedralbackbonesprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+    addDihedralSpringTo(_dihedralphisprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+}
+
+void SpringNetwork::addDihedralPsiSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                         float dcOffset)
+{
+    addDihedralSpringTo(_dihedralpsisprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+}
+
+void SpringNetwork::addDihedralOmegaSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                           float dcOffset)
+{
+    addDihedralSpringTo(_dihedralomegasprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
 void SpringNetwork::addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
@@ -636,6 +705,16 @@ void SpringNetwork::addDihedralPlanaritySpring(unsigned id1, unsigned id2, float
                                                float dcOffset)
 {
     addDihedralSpringTo(_dihedralplanaritysprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+}
+
+void SpringNetwork::addStretchSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+{
+    addDihedralSpringTo(_stretchsprings, _particles, id1, id2, equilibrium, stiffness, /*dcOffset=*/0.0f);
+}
+
+void SpringNetwork::addBendSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+{
+    addDihedralSpringTo(_bendsprings, _particles, id1, id2, equilibrium, stiffness, /*dcOffset=*/0.0f);
 }
 
 void SpringNetwork::updateSpringState(unsigned id, bool isStatic) {
@@ -751,9 +830,13 @@ void SpringNetwork::clear()
     _springs.clear();
     _staticsprings.clear();
     _dynamicsprings.clear();
-    _dihedralbackbonesprings.clear();
+    _dihedralphisprings.clear();
+    _dihedralpsisprings.clear();
+    _dihedralomegasprings.clear();
     _dihedralsidechainsprings.clear();
     _dihedralplanaritysprings.clear();
+    _stretchsprings.clear();
+    _bendsprings.clear();
     _ghostparticles.clear();
     _springForceScratch.clear();
     _nsearch.steric.reset();
