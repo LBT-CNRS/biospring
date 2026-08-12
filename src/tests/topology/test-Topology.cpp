@@ -5,6 +5,7 @@
 #include "IO/io.h"
 #include "SpringNetwork.h"
 #include "configuration/Configuration.hpp"
+#include "forcefield/constants.hpp"
 #include "measure.hpp"
 #include "topology/Spring.hpp"
 #include "topology/Topology.hpp"
@@ -404,6 +405,128 @@ TEST(Topology, dihedral_ghost_spring_applies_force)
     for (size_t i = 0; i < 6; ++i)
         total_anchor_force += spn.getParticle(i).getForce().norm();
     EXPECT_GT(total_anchor_force, 0.0f);
+}
+
+// Global gradient/energy consistency check by central finite differences,
+// over a synthetic system exercising every spring type at once: a regular
+// spring, a STRETCH spring, a BEND ghost-ghost spring, and a DIHEDRAL
+// ghost-ghost spring with a nonzero dc_offset. For every dynamic particle
+// and every coordinate, the force the network applies (after ghost-force
+// redistribution) must equal -dE/dx of the energy it reports, with the
+// ghosts treated as implicit functions of their anchors (repositioned from
+// the displaced anchors before each energy evaluation, exactly as
+// computeStep's update order produces on the next step). This is the test
+// that catches the deep-consistency bug classes hit before: a wrong
+// Jacobian-transpose in GhostParticle::redistributeForce (would break
+// anchors' FD match), a dc_offset leaking into forces (dc shifts E by a
+// constant, so FD is blind to it ONLY if forces ignore it too), or a
+// spring type silently skipped on one side but not the other.
+TEST(Topology, forces_match_energy_gradient_by_finite_differences)
+{
+    topology::Topology top;
+
+    // Two anchor triplets, deliberately asymmetric positions (no axis
+    // aligned with a coordinate plane, so every FD component is nonzero).
+    const std::array<std::array<double, 3>, 6> pos = {{{0.1, -0.2, 0.05},
+                                                       {0.4, 0.3, 2.1},
+                                                       {1.2, 0.15, 0.3},
+                                                       {5.6, 0.4, 0.2},
+                                                       {5.2, -0.3, 2.3},
+                                                       {6.5, 0.25, 0.6}}};
+    for (size_t i = 0; i < pos.size(); ++i)
+    {
+        topology::ParticleProperties p;
+        p.set_position(Vector3f(static_cast<float>(pos[i][0]), static_cast<float>(pos[i][1]),
+                                static_cast<float>(pos[i][2])));
+        top.add_particle(topology::Particle(p));
+    }
+
+    topology::ParticleProperties ghost_props;
+    ghost_props.set_static(true);
+    ghost_props.set_mass(0.0f);
+
+    // Non-trivial placement (theta != 90, delta != 0) so the placement
+    // Jacobian has every term active.
+    topology::Particle & ghost1 = top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0),
+                                                          top.get_particle(1), top.get_particle(2), 1.3f, 110.0f, 35.0f);
+    topology::Particle & ghost2 = top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(3),
+                                                          top.get_particle(4), top.get_particle(5), 1.1f, 75.0f, -20.0f);
+
+    top.add_spring(top.get_particle(2), top.get_particle(5), 2.0, 4.0);
+    top.add_stretch_spring(top.get_particle(0), top.get_particle(1), 1.5, 6.0);
+    top.add_bend_spring(ghost1, ghost2, 3.0, 2.5);
+    // d0 far from the actual ghost-ghost distance so the dihedral force is
+    // large; dc_offset nonzero to prove it shifts reported energy only.
+    top.add_dihedral_sidechain_spring(ghost1, ghost2, 0.5, 7.0).set_dc_offset(3.21);
+
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+    ASSERT_EQ(spn.getGhostParticles().size(), 2);
+    // Default config has spring.enable = false; computeForces() honours that
+    // master switch (unlike the direct computeDihedralForces() call the
+    // other ghost test uses), so it must be on for anything to happen.
+    configuration::Configuration conf = configuration::defaultConfiguration();
+    conf.spring.enable = true;
+    spn.setup(conf);
+
+    auto reset_forces = [&]() {
+        for (size_t i = 0; i < spn.getNumberOfParticles(); ++i)
+            spn.getParticle(i).resetForce();
+    };
+    auto total_energy = [&]() {
+        reset_forces();
+        spn.updateGhostPositions();   // ghosts are functions of the anchors
+        spn.computeForces();
+        return spn.getSpringEnergy() + spn.getStretchEnergy() + spn.getBendEnergy() + spn.getDihedralEnergy();
+    };
+
+    // Analytic forces at the base configuration.
+    const float e0 = total_energy();
+    spn.redistributeGhostForces();
+    std::array<Vector3f, 6> analytic;
+    for (size_t i = 0; i < 6; ++i)
+        analytic[i] = spn.getParticle(i).getForce();
+    // Sanity: the dihedral spring is doing real work, and its reported
+    // energy carries the dc correction (energy would differ by exactly
+    // 3.21 without it -- checked implicitly by the FD match below, since a
+    // constant shift cannot change any gradient).
+    EXPECT_GT(std::abs(e0), 1.0f);
+
+    const float h = 1e-2f;   // A; large enough to beat float32 noise on E
+    for (size_t i = 0; i < 6; ++i)
+    {
+        for (int dim = 0; dim < 3; ++dim)
+        {
+            const Vector3f saved = spn.getParticle(i).getPosition();
+            Vector3f displaced = saved;
+            auto set_dim = [&](Vector3f & v, float value) {
+                if (dim == 0) v.setX(value);
+                else if (dim == 1) v.setY(value);
+                else v.setZ(value);
+            };
+            auto get_dim = [&](const Vector3f & v) { return dim == 0 ? v.getX() : (dim == 1 ? v.getY() : v.getZ()); };
+
+            set_dim(displaced, get_dim(saved) + h);
+            spn.getParticle(i).setPosition(displaced);
+            const float e_plus = total_energy();
+
+            set_dim(displaced, get_dim(saved) - h);
+            spn.getParticle(i).setPosition(displaced);
+            const float e_minus = total_energy();
+
+            spn.getParticle(i).setPosition(saved);
+
+            // Forces on particles are stored in integrator units
+            // (Da.A.fs-2, see GLOBAL_SPRING_FORCE_CONVERT); energies are
+            // reported in kJ/mol. Convert the analytic force back to
+            // kJ/mol/A to compare against -dE/dx.
+            const float fd = -(e_plus - e_minus) / (2.0f * h);
+            const float an = get_dim(analytic[i]) /
+                             static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+            EXPECT_NEAR(fd, an, 2e-2f * std::max(1.0f, std::abs(an)))
+                << "particle " << i << " dim " << dim << " FD " << fd << " vs analytic " << an;
+        }
+    }
 }
 
 // -- Main function  ----------------------------------------------------------
