@@ -420,7 +420,7 @@ size_t BondedForceFieldReader::countExpectedGhostParticles(const topology::Topol
 void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                                           const reduce::ReduceRuleContainer * translation, bool enableStretch,
                                           bool enableBend, bool enableDihedralBackbone,
-                                          bool enableDihedralSidechain) const
+                                          bool enableDihedralSidechain, bool enableDihedralPlanarity) const
 {
     if (translation != nullptr)
         _check_translation_is_one_atom_per_rule(*translation);
@@ -592,16 +592,15 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             if (entry.resname != resname)
                 continue;
 
-            // PLANARITY has no enabling flag yet (see header comment) --
-            // never applied until that future work adds one. PHI/PSI/OMEGA
-            // are all still gated by the single enableDihedralBackbone flag
-            // at build time (see buildSprings's own comment) -- they only
-            // gain independent control at runtime, via SpringNetwork's
-            // dihedral.phi/psi/omega .msp settings.
+            // PHI/PSI/OMEGA are all still gated by the single
+            // enableDihedralBackbone flag at build time (see buildSprings's
+            // own comment) -- they only gain independent control at runtime,
+            // via SpringNetwork's dihedral.phi/psi/omega .msp settings.
             const bool is_backbone = entry.family == DihedralFamily::PHI || entry.family == DihedralFamily::PSI ||
                                      entry.family == DihedralFamily::OMEGA;
             const bool family_enabled = (is_backbone && enableDihedralBackbone) ||
-                                        (entry.family == DihedralFamily::SIDECHAIN && enableDihedralSidechain);
+                                        (entry.family == DihedralFamily::SIDECHAIN && enableDihedralSidechain) ||
+                                        (entry.family == DihedralFamily::PLANARITY && enableDihedralPlanarity);
             if (!family_enabled)
                 continue;
 

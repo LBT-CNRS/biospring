@@ -441,6 +441,55 @@ across every entry actually applied and subtracted only in
 axis attribute the real target's own DC to exactly the first ring emitted,
 so it is subtracted exactly once per axis, not once per ring.
 
+#### Step 5 — decoupling the ring from the axis bond length (`RING_SCALE`)
+
+A ghost ring's energy is **not** a pure function of the torsion angle, unlike
+the AMBER term it reproduces. With ghost planes separated by `Lam` and ring
+radius `rho_r`, `d^2 = Lam^2 + 2*rho_r^2*(1-cos psi)`, so `d(d^2)/dL = 2*Lam`:
+it also depends on the real distance `L` between the two axis atoms. Expanding
+`E = sum_i 0.5k(d_i-d0)^2` over a ring of `M>=2` springs, the `sum_i cos(psi_i)`
+term vanishes and at the torsion minimum everything collapses to
+
+    E_min = 0.5 * k * M * (sqrt(2*rho_r^2 + Lam^2) - d0)^2
+
+a positive-definite quadratic in `L`. Since `mu=1.0` sets `d0` to exactly that
+square root evaluated at AMBER's *ideal* bond length, `E_min` vanishes only when
+the real bond is ideal — any real deviation adds spurious energy.
+
+**Measured on real MD frames before the fix:** replaying every deployed ring on
+a real Fs-peptide frame and recomputing each with its axis rescaled to the ideal
+length gave a total artifact of **+35.46 kJ/mol against an observed dihedral gap
+of +38.06** — ~93% of the discrepancy. Per family: guanidinium +32.40, omega
++18.88, phi -11.09, methyl -2.94, chi1 -1.79. Note these largely *cancel*
+(net +3.06 before the guanidinium axes existed), which is exactly why the defect
+stayed invisible through every earlier validation. Arg's guanidinium is the
+pathological case because `E_min >= 0` always, and resonance pins every real Arg
+at its planar torsion minimum — so all 3 axes contribute a strictly one-signed
+artifact that never cancels.
+
+**The fix is free.** The harmonic content depends only on
+`eps = 2*rho_r^2/(Lam^2 + 2*rho_r^2)`, which is exactly `RING_SHAPES`' own
+`rho`. Scaling `rho_r` and `Lam` *together* leaves `eps` — hence the entire
+torsion curve — untouched while multiplying the artifact by `1/scale^2`. `Lam`
+is decoupled from the real bond by tilting the ghosts off their anchor's
+perpendicular plane (`theta != 90 deg`, already supported by the file format and
+by `GhostParticle::computePosition`, and already used by `n=1`), so **no format
+change and no C++ change**. `n=1` needs no scaling: its exact `d0=0`/`theta=60`
+construction already gives `Lam = L - 2*r*cos(60 deg) = 0` at the ideal length.
+
+| scale | r (A) | theta | k | amplitude | artifact @ dL=-0.06 A |
+|-------|-------|-------|-----|-----------|----------------------|
+| 1 | 0.540 | 90.0 | 2208 | 80.33 | 14.87 |
+| 2 | 1.271 | 121.8 | 552 | 80.33 | 5.81 |
+| 4 | 2.950 | 133.0 | 138 | 80.33 | 2.50 |
+| 6 | 4.660 | 136.0 | 61 | 80.33 | 1.58 |
+
+Verified: the torsion curve is identical across all scales to `1.7e-13 kJ/mol`,
+and a full regeneration at `RING_SCALE = 4.0` reproduces all 90 per-axis
+validation curves to **0.000000 kJ/mol**. `ctest` 278/278, and a 5000-step
+ubiquitin run at the usual 1.5 fs still relaxes monotonically (kinetic
+38.01 -> 0.46 kJ/mol) despite the longer force-redistribution lever arms.
+
 #### Residual harmonic content (quantified, small, and now a solved-once precomputation)
 
 A ring's own leakage into unwanted harmonics (mostly `2n`, `3n`, ...) is
@@ -819,6 +868,26 @@ incrementally-testable path from a purely topological approximation to a
 physically-parameterised, spring-only model of the four bonded terms —
 and, measured directly, the resulting force evaluations are not merely
 equivalent but consistently faster than the conventional trigonometric
-formulas they replace. Improper (planarity) remains the one term not yet
-implemented, deliberately deprioritized once it was clear `--rigidbody`'s
-own mesh already guarantees planarity geometrically in its absence.
+formulas they replace. The improper (PLANARITY) family is implemented
+too, where it is physically load-bearing: an AMBER improper IS a 4-atom
+dihedral about a real central bond (hub listed third), so
+`emit_ghost_ring` models it as-is — one single-pair n=2 ring per
+improper, axis = the central bond, refs = the two peripheral atoms,
+parameters read from a real built OpenMM System (AMBER's own assignment
+engine — no reimplementation of the improper matching rules). It gates
+behind pdb2spn's `-dihedralplanarity` flag, folded into `-dihedral`.
+Deployed for the aromatic rings (Phe/Tyr/His/Trp), whose rigid cliques
+were split into per-vertex hinge groups at the same time: unlike Pro's
+5-ring (freed earlier — bonds+angles hold every 5-ring distance, the
+pucker survives as the real soft mode, and the real molecule has no
+improper there), a 6-ring can fold (its para pairs are 1-4) and an sp2
+substituent can leave the plane at first order, so freeing those rings is
+only correct together with BOTH the ring proper torsions (X-CA-CA-X n=2
+k=15.167, per-pair rings — measured exact, 0.00 torque error over 1140
+instances) and these impropers (measured exact, 0.00 over 990 instances;
+in real dynamics the freed rings stay planar to 0.15-0.66 deg mean
+out-of-plane with stable para distances). Impropers on centres still held
+rigid by cliques (the backbone peptide C/N inside `_PHI`/`_PSI`, the
+split amide and guanidinium groups) are deliberately NOT emitted: their
+planarity is enforced geometrically, and adding springs there would only
+double-book energy.

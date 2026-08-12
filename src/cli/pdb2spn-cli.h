@@ -37,6 +37,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     bool dihedral;
     bool dihedralBackbone;
     bool dihedralSidechain;
+    bool dihedralPlanarity;
 
     // Constructor (inherited from argparse::CommandLineArgumentsBase).
     CommandLineArguments(const std::string & name, const argparse::description_t & description,

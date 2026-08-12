@@ -504,9 +504,12 @@ def formula_derived_deltas(vertex_class, axis_class, atoms_with_classes, ref_ato
     vertex) purely from AMBER's own angle tables, relative to ref_atom
     (matching whatever the caller's own ref_b/ref_c convention already
     is -- no PDB structure of any kind. Returns None if this vertex isn't
-    one of the two solvable cases:
+    one of the solvable cases:
     - exactly 2 substituents (trigonal/planar vertex): idealized_azimuth_deg,
       forced unambiguous by planarity (see that function).
+    - exactly 3 substituents, all 3 sharing one class (a methyl's 3 H's,
+      no branch atom at all -- see the "all-same-class" block below):
+      pure 3-fold symmetry, no chirality question, no frame to build.
     - exactly 3 substituents with >=2 sharing a class (tetrahedral, one
       real branch + 2 chemically-identical substituents):
       _build_symmetric_tetrahedral_frame, sign-independent (see its own
@@ -523,6 +526,28 @@ def formula_derived_deltas(vertex_class, axis_class, atoms_with_classes, ref_ato
         return {a: d - shift for a, d in deltas.items()}
     if len(atoms_with_classes) == 3:
         classes = [c for _, c in atoms_with_classes]
+        if len(set(classes)) == 1:
+            # A methyl's 3 H's (or any vertex with 3 non-axis substituents
+            # that all share one class): an even MORE symmetric case than
+            # the 1-branch+2-identical one below, with no branch atom to
+            # build a frame from at all. combined_target_for_axis sums
+            # this vertex's contribution over all 3 real substituents, and
+            # every one of them looks up the identical (n,k,phase) AMBER
+            # term when paired with any given other-side atom (same
+            # class) -- so the sum only depends on the SET of 3 azimuths,
+            # never on which specific atom gets which value. Placing them
+            # at {0, +120, -120} (any assignment) is therefore exact, not
+            # an approximation: algebraically, summing
+            # exp(i*n*{0,+120,-120}) gives 1+2*cos(n*120deg), which is
+            # exactly 3 when n is a multiple of 3 and exactly 0 otherwise
+            # -- the vertex's own 3-fold symmetry forces every non-3x
+            # harmonic to cancel on its own, matching amber99sb.xml's own
+            # choice to parametrize this term as pure n=3 with no n=1/n=2
+            # companion (confirmed by direct XML inspection, not assumed).
+            a0, a1, a2 = (a for a, _ in atoms_with_classes)
+            deltas = {a0: 0.0, a1: 120.0, a2: -120.0}
+            shift = deltas[ref_atom]
+            return {a: d - shift for a, d in deltas.items()}
         if set(classes) == {"OH", "CT", "H1"}:
             # Threonine's C-beta -- the one genuine 3-distinct-class
             # tetrahedral stereocenter among every chi vertex in this file
@@ -726,6 +751,42 @@ def complex_fourier_coeff(energy_over_phi_deg, n):
 # residue (verified: reused identically across all 70 axes below).
 RING_SHAPES = {1: (0.5, 0.0), 2: (0.245, 1.0), 3: (0.465, 1.0)}
 
+# Overall size of an n>=2 ring, as a multiple of the axis bond length.
+#
+# A ghost ring's energy is NOT a pure function of the torsion angle: with
+# ghost planes separated by Lam and ring radius rho_r, the ghost-ghost
+# distance is d^2 = Lam^2 + 2*rho_r^2*(1-cos psi) (exactly what
+# closed_form_d2 computes), so d(d^2)/dL = 2*Lam -- the energy also depends
+# on the REAL distance L between the two axis atoms. Expanding
+# E = sum_i 0.5k(d_i-d0)^2 over a ring of M>=2 springs, the sum_i cos(psi_i)
+# term vanishes and at the torsion minimum everything collapses to
+#     E_min = 0.5 * k * M * (sqrt(2*rho_r^2 + Lam^2) - d0)^2
+# a positive-definite quadratic in L. Since mu=1.0 sets d0 to exactly that
+# square root evaluated at AMBER's IDEAL bond length, E_min is zero only when
+# the real bond happens to be ideal; any real deviation adds spurious energy
+# (found 2026-08-09 on real Fs-peptide MD frames, where guanidinium C-N bonds
+# deviate by up to 0.06 A: +32 kJ/mol of pure artifact, see
+# doc/BondedForceFieldSprings.md).
+#
+# The fix, and why it is free: the harmonic content depends only on
+# eps = 2*rho_r^2/(Lam^2 + 2*rho_r^2), which is exactly RING_SHAPES' own rho.
+# Scaling rho_r and Lam TOGETHER leaves eps -- hence the whole torsion curve --
+# untouched while multiplying the artifact by 1/scale^2 (verified numerically:
+# scale 1..6 leaves the curve identical to 1.7e-13 kJ/mol while the artifact
+# falls 14.87 -> 1.58 kJ/mol). Lam is decoupled from the real bond length by
+# tilting the ghosts off their anchor's perpendicular plane (theta != 90 deg,
+# already supported by the .bi.ff format and by GhostParticle::computePosition,
+# and already used by the n=1 case) -- no format or C++ change needed.
+#
+# n=1 needs no scaling: its exact d0=0/theta=60 construction already puts
+# Lam = L - 2*r*cos(60deg) = L - L_axis = 0 at the ideal bond length, so it is
+# already at the optimum this constant exists to reach for n>=2.
+#
+# 4.0 buys a 16x artifact reduction while keeping ghosts within ~3 A of their
+# anchors; going further has diminishing returns (1/scale^2) against steadily
+# longer force-redistribution lever arms on the real anchor atoms.
+RING_SCALE = 4.0
+
 def ring_shape_to_geometry(L_axis, n):
     """n=1 is special-cased to an EXACT closed-form solution (found
     2026-08-05, see combined_target_for_axis/emit_ghost_ring's own
@@ -750,10 +811,23 @@ def ring_shape_to_geometry(L_axis, n):
         theta = np.degrees(np.arccos(L_axis / (2.0 * r)))
         return r, theta, 0.0
     rho, mu = RING_SHAPES[n]
-    r = np.sqrt(rho / (2.0 * (1.0 - rho))) * L_axis
-    R = np.sqrt(2.0 * r * r + L_axis * L_axis)
-    d0 = mu * R
-    return r, 90.0, d0
+    # Unscaled shape: ghost planes Lam=L_axis apart (theta=90 deg), ring
+    # radius rho_r chosen so that 2*rho_r^2/(Lam^2+2*rho_r^2) == rho.
+    rho_r = np.sqrt(rho / (2.0 * (1.0 - rho))) * L_axis
+    # Scale radius and plane separation together: eps -- hence the harmonic
+    # content and the whole torsion curve -- is invariant, only the spurious
+    # bond-length sensitivity shrinks (as 1/RING_SCALE^2). See RING_SCALE.
+    rho_r *= RING_SCALE
+    lam = RING_SCALE * L_axis
+    # Realize that plane separation from anchors that are only L_axis apart by
+    # tilting each ghost off the perpendicular: closed_form_d2's own axial term
+    # is (r1*cos(t1) - L + r2*cos(t2)), so with both sides equal the separation
+    # is Lam = L_axis - 2*r*cos(theta) -- solve for the axial offset.
+    axial = (L_axis - lam) / 2.0                     # negative: tilted outward
+    r = float(np.hypot(rho_r, axial))
+    theta = float(np.degrees(np.arctan2(rho_r, axial)))
+    d0 = mu * np.sqrt(2.0 * rho_r * rho_r + lam * lam)
+    return r, theta, d0
 
 def ring_curve_abstract(L_axis, n, r, theta_deg, d0, k, delta_base, phi_grid_deg, M=None, N=None):
     # The 1D Fourier-space model used to CALIBRATE k/delta_base (see
@@ -835,6 +909,11 @@ ghostparticle_lines = []
 # used, with zero risk of drifting from the real numbers (see
 # doc/BondedForceFieldSprings.md's energy-curve validation section).
 AXIS_RING_LOG = []
+
+# (resname, anchors, r, theta, azimuth) -> already-emitted ghost name. Lets
+# per-pair ring groups share the ghosts they have in common instead of
+# emitting duplicates -- see emit_ghost_ring's own dedup comment.
+_ghost_registry = {}
 
 def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom_B, atom_C, atom_ref_b, atom_ref_c,
                     axis_dc_target=0.0, group_tag=""):
@@ -922,23 +1001,37 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
     # later (ghosts are always resolved within their own creating residue).
     tag = re.sub(r"[+-]", "", group_tag)
 
+    # Deduplication: a per-pair axis (see generate_sidechain_axis's per_pair)
+    # emits one ring group per real substituent pair, and two groups sharing a
+    # side's substituent ask for the SAME ghost -- same anchors, same
+    # (r, theta, delta). Omega's n=2 is the clearest case: its 4 groups
+    # (CA/CA, CA/H, O/CA, O/H) want only 6 distinct ghosts between them, not
+    # 12, because groups CA/CA and CA/H share both their CA-anchored b-side
+    # ghosts, and groups CA/CA and O/CA share their +CA-anchored c-side one.
+    # A ghost is a massless virtual site fully determined by those 7 fields,
+    # so two identical ones would sit at the same point and behave
+    # identically -- reusing the first is a pure saving, with the springs
+    # simply naming the shared ghost. Measured: 22% of all GHOSTPARTICLE
+    # lines were exact duplicates before this.
+    def ghost(name, res, a1, a2, ref, azim):
+        global n_ghost_particles
+        key = (res, a1, a2, ref, round(r, 4), round(theta_deg, 2), round(azim, 3))
+        if key in _ghost_registry:
+            return _ghost_registry[key]
+        ghostparticle_lines.append(
+            f"GHOSTPARTICLE {name:16s} {res:7s} {a1:5s} {a2:6s} {ref:6s} "
+            f"{r:7.4f} {theta_deg:7.2f} {azim:9.3f}")
+        _ghost_registry[key] = name
+        n_ghost_particles += 1
+        return name
+
     b_names, c_names = [], []
     for i in range(M):
-        name = f"GH{axis_label}{tag}n{n}B{i}"
         beta = i * 360.0 / M
-        ghostparticle_lines.append(
-            f"GHOSTPARTICLE {name:16s} {resname:7s} {atom_B:5s} {atom_C:6s} {atom_ref_b:6s} "
-            f"{r:7.4f} {theta_deg:7.2f} {beta:9.3f}")
-        b_names.append(name)
-        n_ghost_particles += 1
+        b_names.append(ghost(f"GH{axis_label}{tag}n{n}B{i}", resname, atom_B, atom_C, atom_ref_b, beta))
     for j in range(N):
-        name = f"GH{axis_label}{tag}n{n}C{j}"
         gamma = delta_base - j * 360.0 / N
-        ghostparticle_lines.append(
-            f"GHOSTPARTICLE {name:16s} {resname:7s} {atom_C:5s} {atom_B:6s} {atom_ref_c:6s} "
-            f"{r:7.4f} {theta_deg:7.2f} {gamma:9.3f}")
-        c_names.append(name)
-        n_ghost_particles += 1
+        c_names.append(ghost(f"GH{axis_label}{tag}n{n}C{j}", resname, atom_C, atom_B, atom_ref_c, gamma))
 
     for bn in b_names:
         for cn in c_names:
@@ -1009,7 +1102,27 @@ def combined_target_for_axis(b_geom, c_geom, b_class, c_class, class_of):
                 dc_by_harmonic[n] = dc_by_harmonic.get(n, 0.0) + k
     return (target, dc_by_harmonic) if any_term else (None, None)
 
-def generate_sidechain_axis(resname, b_name, c_name, axis_label):
+def generate_sidechain_axis(resname, b_name, c_name, axis_label, per_pair=False):
+    """per_pair: emit ONE ring per real (b-substituent, c-substituent) pair,
+    each anchored on that pair's own two real atoms, instead of one combined
+    ring per harmonic on a shared generic anchor.
+
+    Use it only for an axis whose pairs all reinforce IN PHASE under the ideal
+    geometry (|target[n]| == sum of every pair's |k|, i.e. maximal coherence).
+    There, a combined ring bakes that maximal coherence in and comes out
+    systematically too stiff on real structures, whose substituents are never
+    exactly at their ideal azimuths -- measured on omega: torque ratio
+    |ring|/|AMBER| 1.51 median, ~14 kJ/mol/rad error. Per-pair removes the
+    assumption instead of correcting for it: each ring reproduces one real
+    AMBER term on ITS OWN real dihedral, so the sum is AMBER's sum by
+    construction, whatever the real geometry is (verified on omega: energy
+    error exactly 0.000 kJ/mol over 120 real instances, torque 14.25 -> 0.29).
+
+    Do NOT use it where the pairs partly cancel -- there the combined ring is
+    already unbiased (measured: psi 1.00, phi 0.85) and splitting only
+    multiplies topology, which is exactly why it was reverted in 2026-08-07
+    before the coherence criterion was understood. See
+    doc/BondedForceFieldSprings.md."""
     global n_dihedral_ok, n_dihedral_skip
 
     b_class = resolved_class(resname, b_name, False, False)
@@ -1085,6 +1198,27 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label):
         n_dihedral_skip += 1
         return
 
+    if per_pair:
+        emitted = 0
+        for bn in b_neighbors:
+            for cn in c_neighbors:
+                t_pair, dc_pair = combined_target_for_axis({bn: (0, 0, 0.0)}, {cn: (0, 0, 0.0)},
+                                                           b_class, c_class, class_of)
+                if t_pair is None:
+                    continue
+                for n, tn in sorted(t_pair.items()):
+                    if n == 0 or abs(tn) <= 1e-6:
+                        continue
+                    emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, tn, b_name, c_name,
+                                    bn, cn, axis_dc_target=dc_pair.get(n, 0.0),
+                                    group_tag=f"{bn}{cn}")
+                    emitted += 1
+        if emitted:
+            n_dihedral_ok += 1
+            return
+        # Nothing resolved per pair: fall through to the combined construction
+        # rather than silently emitting nothing for this axis.
+
     emit_ghost_rings_for_axis(resname, axis_label, "SIDECHAIN", L_axis, target, dc_by_harmonic, b_name, c_name,
                               b_ref, c_ref)
 
@@ -1128,6 +1262,220 @@ for _resname, (_b_name, _c_name) in CHI3_AXIS.items():
 CHI4_AXIS = {"ARG": ("CD", "NE"), "LYS": ("CD", "CE")}
 for _resname, (_b_name, _c_name) in CHI4_AXIS.items():
     generate_sidechain_axis(_resname, _b_name, _c_name, "chi4")
+
+# Arg's guanidinium C-N rotations, past chi4's CD-NE: NOT chi axes (the
+# textbook side-chain torsions stop at chi4) and not free rotamers either
+# -- resonance keeps the group near-planar, the same spirit as omega
+# keeping the peptide bond planar. But amber99sb.xml still parametrizes
+# each of the three C-N bonds with a real generic X-CA-N2-X term (n=2,
+# phase=180deg, k=10.0416 kJ/mol -- 12 real quadruplets per Arg once every
+# substituent pair is counted), contributing energy that was entirely
+# missed before (found 2026-08-09, same independent-OpenMM validation that
+# surfaced the methyl rotors above). Every vertex involved is trigonal with
+# exactly 2 non-axis substituents (NE: CD/HE; CZ: the 2 other N's; NH1/NH2:
+# their own 2 H's), so all three axes route through the long-standing
+# idealized_azimuth_deg path unchanged -- no new geometry needed, unlike
+# the methyl case above. Requires the matching _CZ/_NH1/_NH2 split in
+# ProteinAtomRigidGroups.rbody (see that file's own comment): with the old
+# single rigid _GUAN clique, CZ-NH1/CZ-NH2 were frozen and these rings
+# would have had nothing to act on.
+# DELIBERATELY NOT GENERATED (decision 2026-08-10, after implementing and
+# then measuring them). The three C-N bonds are chemically equivalent -- the
+# protonated guanidinium is a fully delocalized resonance hybrid, and
+# amber99sb.xml confirms it by giving all three identical parameters -- so
+# there is no principled way to model two and skip one: it is all three or
+# none. None was chosen, for two reasons.
+#
+# (1) What actually holds this group planar is AMBER's IMPROPER terms (hubs
+#     NE/CZ/NH1/NH2, k=4.184/43.932/4.184/4.184 kJ/mol), and we model no
+#     impropers at all -- that is the deprioritized PLANARITY work. The
+#     single rigid _GUAN clique in ProteinAtomRigidGroups.rbody already
+#     enforces the same planarity geometrically, exactly the argument that
+#     deprioritized aromatic-ring planarity.
+# (2) Measured against an independent OpenMM reference, these three axes were
+#     the worst in the whole file -- CZ-NH1 off by x3.4 and CZ-NH2 outright
+#     sign-flipped -- because a single ring per axis assumes the substituents
+#     sit at their ideal relative azimuths and a real guanidinium is twisted
+#     ~18 deg out of that. Freeing a rotation whose planarity is enforced by
+#     terms we do not reproduce was the actual mistake.
+#
+# An earlier attempt split _GUAN into per-sp2-centre groups (_CZ/_NH1/_NH2)
+# to free these rotations; that split was reverted with this. Note its own
+# planarity argument was sound (each of AMBER's 4 impropers is fully
+# contained in one of those groups, so every centre stayed planar) -- what it
+# freed was the relative twist BETWEEN the three centres, which for a
+# conjugated group is better left frozen than modelled badly.
+
+# chi5 (NE-CZ) IS generated, and is a different case from the two CZ-NH bonds
+# above -- checked directly in ProteinAtomRigidGroups.rbody rather than
+# assumed: R_NE {CD,NE,CZ,HE} and R_GUAN {NE,CZ,NH1,NH2,HH*} overlap on
+# exactly {NE,CZ}, which is this file's own "2 anchors, 1 free rotation"
+# hinge pattern. So NE-CZ is ALREADY a free rotation under the unmodified
+# rigid mesh -- unlike CZ-NH1/CZ-NH2, which sit wholly inside R_GUAN and are
+# frozen, which is why rings there would have had nothing to act on. It
+# carries a real 40.17 kJ/mol of AMBER torsion (4 pairs x k=10.0416, n=2,
+# phase=180deg) that was governed only by --rigidbody's uniform stiffness
+# until now. This is what classical nomenclature calls arginine's chi5; chi4
+# (CD-NE) is a separate, also-free hinge whose AMBER k is a genuine zero.
+#
+# per_pair=True because all 4 of its substituent pairs reinforce in phase
+# under ideal geometry -- exactly omega's signature, the condition under
+# which a single combined ring assumes maximal coherence and comes out
+# systematically too stiff (see generate_sidechain_axis's own docstring).
+CHI5_AXIS = {"ARG": ("NE", "CZ")}
+for _resname, (_b_name, _c_name) in CHI5_AXIS.items():
+    generate_sidechain_axis(_resname, _b_name, _c_name, "chi5", per_pair=True)
+
+# CZ-NH1 / CZ-NH2: the guanidinium's own two terminal-amine rotations. These
+# are NOT free under the unmodified rigid mesh -- they sit wholly inside the
+# single R_GUAN clique -- so they are only meaningful together with the
+# _CZ/_NH1/_NH2 split in ProteinAtomRigidGroups.rbody (see that file's own
+# comment). Kept in step with it deliberately: generating rings here without
+# the split would put a soft torsion in competition with much stiffer rigid
+# springs on an already over-constrained degree of freedom.
+#
+# per_pair=True is not optional here, it is the whole reason these are back:
+# with a single combined ring per axis they were the worst axes in the file
+# (x3.4 on CZ-NH1, outright sign flip on CZ-NH2), because all 4 substituent
+# pairs reinforce in phase and the combined ring therefore bakes in maximal
+# coherence while a real guanidinium is ~18 deg out of plane.
+#
+# Modelling choice, worth stating: a real guanidinium NH2 is neither a free
+# rotor nor infinitely rigid -- it has a high but finite barrier. Governing it
+# with AMBER's own 40.17 kJ/mol torsion is more faithful than freezing it into
+# a uniform --stiffness clique, which is why the split is preferred now that
+# per-pair anchoring makes the torsion accurate.
+GUANIDINIUM_NH_AXIS = {"ARG": [("CZ", "NH1"), ("CZ", "NH2")]}
+for _resname, _axes in GUANIDINIUM_NH_AXIS.items():
+    for _b_name, _c_name in _axes:
+        generate_sidechain_axis(_resname, _b_name, _c_name, f"guan_{_c_name}", per_pair=True)
+
+# Asn/Gln side-chain amide rotation (CG-ND2 / CD-NE2): structurally the SAME
+# torsion as the backbone peptide bond itself -- verified on a real built
+# system: 4 substituent pairs at n=2, k=10.46, phase=180 deg, plus n=1 k=8.37
+# carried by the (O, H) pairs, i.e. omega's exact parameter set. Frozen until
+# now inside the single N_CG/Q_CD rigid cliques; requires the matching
+# N_ND2/Q_NE2 split in ProteinAtomRigidGroups.rbody (see that file's own
+# comment -- both AMBER impropers stay wholly inside one split group each, so
+# sp2 planarity is untouched, only the C-N twist is freed). per_pair=True for
+# the same reason as omega/guanidinium: all pairs reinforce in phase (the
+# planar amide), so a single combined ring would bake in maximal coherence
+# and come out systematically too stiff. Found via the all-20-AA GKinase
+# validation: ~19 kJ/mol/instance of real AMBER torsion energy, the largest
+# non-ring uncovered family (Gln 154.5 + Asn 39.0 kJ/mol/frame there).
+AMIDE_AXIS = {"GLN": ("CD", "NE2"), "ASN": ("CG", "ND2")}
+for _resname, (_b_name, _c_name) in AMIDE_AXIS.items():
+    generate_sidechain_axis(_resname, _b_name, _c_name, f"amide_{_c_name}", per_pair=True)
+
+# Hydroxyl/thiol/ammonium rotors (Ser OG, Thr OG1, Tyr OH, Cys SG, Lys NZ):
+# the polar-hydrogen analogs of the terminal-methyl rotors above. Their
+# hinges are ALREADY free in ProteinAtomRigidGroups.rbody (the S_OG/T_OG1/
+# Y_OH/C_SG/K_NZ pivot groups, present from the start) -- only the energy was
+# never generated, so these rotations were governed by nothing at all.
+# amber99sb.xml gives each a real term (X-CT-OH-X k=0.70 n=3, X-CT-SH-X
+# k=1.05 n=3, X-CT-N3-X n=3 for the ammonium; Tyr's aromatic C-OH matches
+# its own specific entry, n=2 -- whatever matches, combined_target_for_axis
+# resolves it). Small barriers (about kT or below), so the default combined
+# ring is used, same policy as the methyls -- per_pair is reserved for the
+# high-k in-phase families (omega, guanidinium, amides). Vertex geometry all
+# routes through existing cases: 1-branch+2-identical (Ser/Cys/Thr/Lys CB or
+# CE), all-same-class (Lys's 3 HZ), trigonal (Tyr CZ), single substituent
+# (the hydroxyl H itself: it IS the side's reference atom, delta=0 by
+# definition, nothing to derive).
+ROTOR_AXIS = {"SER": ("CB", "OG"), "THR": ("CB", "OG1"), "TYR": ("CZ", "OH"),
+              "LYS": ("CE", "NZ")}
+for _resname, (_b_name, _c_name) in ROTOR_AXIS.items():
+    generate_sidechain_axis(_resname, _b_name, _c_name, f"rotor_{_c_name}")
+# Cys is absent from ubiquitin.pdb entirely -- sourced from the GKinase
+# structure, same as its chi1 (see generate_sidechain_axis_gkinase above).
+
+# Proline pyrrolidine ring torsions. The ring is deliberately NOT one rigid
+# clique anymore (see ProteinAtomRigidGroups.rbody's own comment): real
+# prolines pucker (Cgamma-endo/exo, few-kJ/mol barriers, coupled to phi),
+# the real molecule has no improper there, and freezing it suppressed real
+# conformational dynamics -- the largest single uncovered energy family on
+# the all-20-AA validation (342 kJ/mol/frame on GKinase, 10 Pro). With the
+# ring split into per-vertex hinge groups, its 4 side torsions become free
+# and need their real AMBER terms (the 5th ring bond, N-CA, is phi's own
+# axis and was already covered by PRO's phi rings). That the 4 dihedrals
+# are coupled by ring closure is not a problem: AMBER itself treats each
+# ring dihedral as an ordinary independent term, and so do these springs --
+# closure and the bond/angle mesh do the rest, exactly as in a standard MD.
+# CA-CB and CG-CD are pure generic n=3 aliphatic axes; CB-CG carries the
+# usual 3-term CT-CT-CT-CT structure (same as any chi2) -- all verified by
+# direct inspection of a real built system, and all standard combined-ring
+# cases.
+PRO_RING_AXIS = [("CA", "CB", "ring_CB"), ("CB", "CG", "ring_CG"), ("CG", "CD", "ring_CD")]
+for _b_name, _c_name, _label in PRO_RING_AXIS:
+    generate_sidechain_axis("PRO", _b_name, _c_name, _label)
+
+def generate_pro_ring_ncd():
+    """Pro's N-CD ring-closure torsion: owned by the SINGLE real pair
+    (-C, CG) -- the proline-specific C-N-CT-CT AMBER entries (n=1 k=8.368,
+    n=2 k=8.368, n=3 k=1.674, verified on a real built system); every
+    other substituent pair around this bond is a genuine AMBER zero. So
+    one ring per harmonic, anchored directly on the owning atoms, exactly
+    like omega's own n=1 (O, +H) ring -- the original sole-owner rule, no
+    per-pair machinery needed. Needs this dedicated emitter only because
+    the -C anchor is cross-residue, which generate_sidechain_axis's
+    intra-residue neighbor scan cannot see."""
+    global n_dihedral_ok, n_dihedral_skip
+    res = _residue_instance("PRO")
+    if res.index == 0:
+        print("SKIP DIHEDRAL (PRO ring_NCD): source instance is the chain start, no real -C")
+        n_dihedral_skip += 1
+        return
+    n_atom = next(a for a in res.atoms if a.name == "N")
+    cd_atom = next(a for a in res.atoms if a.name == "CD")
+    cg_atom = next(a for a in res.atoms if a.name == "CG")
+    prev_c = next(a for a in residues[res.index - 1].atoms if a.name == "C")
+    b_class, c_class = bb_atom_class(n_atom), bb_atom_class(cd_atom)
+    L_axis = bond_len_A(b_class, c_class)
+    target, dc_by_harmonic = combined_target_for_axis({prev_c: (0, 0, 0.0)}, {cg_atom: (0, 0, 0.0)},
+                                                      b_class, c_class, bb_atom_class)
+    if target is None:
+        print("SKIP DIHEDRAL (PRO ring_NCD): no AMBER entry for the (-C, CG) pair")
+        n_dihedral_skip += 1
+        return
+    for n in sorted(target):
+        if n == 0 or abs(target[n]) <= 1e-6:
+            continue
+        emit_ghost_ring("PRO", "ring_NCD", "SIDECHAIN", n, L_axis, target[n], "N", "CD", "-C", "CG",
+                        axis_dc_target=dc_by_harmonic.get(n, 0.0))
+    n_dihedral_ok += 1
+# (called after the backbone section below -- bb_atom_class is defined there)
+
+# "Methyl rotor" axes: NOT a chi (no rotamer identity -- see
+# formula_derived_deltas' all-same-class case, and the CHI1_RESIDUES
+# comment above excluding ALA for exactly this reason), but AMBER's own
+# generic X-CT-CT-X wildcard (pure n=3, k=0.6508 kJ/mol, confirmed by
+# direct XML inspection to have no n=1/n=2 companion term) still applies
+# to every terminal methyl's own internal rotation, and contributes real,
+# always-missed energy if ungenerated. Found 2026-08-09 via independent
+# OpenMM/amber99sb.xml validation on real Fs-peptide trajectories (see
+# doc/BondedForceFieldSprings.md and the fs-peptide validation report) --
+# every one of these axes was simply never on any residue's list before,
+# not a bug in an existing one. One entry per terminal CH3 in the
+# standard 20 residues: Ala's only side-chain bond (CA-CB itself, unlike
+# every other residue here where it's one step past an existing chi
+# axis); Val's two CB branches; Thr's CG2 (alongside its already-covered
+# genuine OG1 stereocenter); Ile's CG2 and its CD1 (one step past chi2);
+# Leu's CD1/CD2 (one step past chi2); Met's CE (one step past chi3,
+# through the CG-SD-CE thioether). Deliberately NOT extended to ACE/NME
+# cap methyls (a different code path, smaller aggregate contribution,
+# deferred). Each axis's "trunk" side reuses either the CA stereocenter
+# or the already-solved 1-branch+2-identical case unchanged -- only the
+# methyl's own 3 H's need the new all-same-class geometry, so no other
+# function needed changing.
+METHYL_AXIS = {"ALA": [("CA", "CB")],
+               "VAL": [("CB", "CG1"), ("CB", "CG2")],
+               "THR": [("CB", "CG2")],
+               "ILE": [("CB", "CG2"), ("CG1", "CD1")],
+               "LEU": [("CG", "CD1"), ("CG", "CD2")],
+               "MET": [("SD", "CE")]}
+for _resname, _axes in METHYL_AXIS.items():
+    for _b_name, _c_name in _axes:
+        generate_sidechain_axis(_resname, _b_name, _c_name, f"methyl_{_c_name}")
 
 # Cys/Trp chi1 (and Trp chi2): ubiquitin.pdb has neither residue at all
 # (not even a terminal instance, unlike Met) -- sourced from a second real
@@ -1173,7 +1521,10 @@ def _gk_real_dihedral_deg(resname, n1, n2, n3, n4):
     idx = [[atoms_by_name[n].index for n in (n1, n2, n3, n4)]]
     return float(np.degrees(md.compute_dihedrals(_gk_traj, idx)[0, 0]))
 
-def generate_sidechain_axis_gkinase(resname, b_name, c_name, axis_label):
+def generate_sidechain_axis_gkinase(resname, b_name, c_name, axis_label, per_pair=False):
+    """per_pair: same semantics as generate_sidechain_axis's own flag (one
+    ring per real substituent pair, for axes whose pairs all reinforce in
+    phase) -- see that function's docstring."""
     global n_dihedral_ok, n_dihedral_skip
 
     b_class = resolved_class(resname, b_name, False, False)
@@ -1236,14 +1587,158 @@ def generate_sidechain_axis_gkinase(resname, b_name, c_name, axis_label):
         n_dihedral_skip += 1
         return
 
+    if per_pair:
+        emitted = 0
+        for bn in b_neighbors:
+            for cn in c_neighbors:
+                t_pair, dc_pair = combined_target_for_axis({bn: (0, 0, 0.0)}, {cn: (0, 0, 0.0)},
+                                                           b_class, c_class, class_of)
+                if t_pair is None:
+                    continue
+                for n, tn in sorted(t_pair.items()):
+                    if n == 0 or abs(tn) <= 1e-6:
+                        continue
+                    emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, tn, b_name, c_name,
+                                    bn, cn, axis_dc_target=dc_pair.get(n, 0.0),
+                                    group_tag=f"{bn}{cn}")
+                    emitted += 1
+        if emitted:
+            n_dihedral_ok += 1
+            return
+
     emit_ghost_rings_for_axis(resname, axis_label, "SIDECHAIN", L_axis, target, dc_by_harmonic, b_name, c_name,
                               b_ref, c_ref)
 
 generate_sidechain_axis_gkinase("CYS", "CA", "CB", "chi1")
+generate_sidechain_axis_gkinase("CYS", "CB", "SG", "rotor_SG")  # thiol rotor, see ROTOR_AXIS above.
+# Expected to SKIP on this source structure: GKinase's two CYS are 10 atoms
+# each (no HG) -- disulfide-bonded cystines, no free thiol to rotate. A
+# reduced-Cys rotor rule would need a source structure with a real HG;
+# accepted residual (~2-3 kJ/mol per reduced Cys, X-CT-SH-X k=1.046 n=3).
 generate_sidechain_axis_gkinase("TRP", "CA", "CB", "chi1")
 generate_sidechain_axis_gkinase("TRP", "CB", "CG", "chi2")  # expected to correctly SKIP (aromatic
                                                             # ring, same zero-barrier family as
                                                             # Phe/Tyr/His chi2)
+
+# ===========================================================================
+# Aromatic ring torsions + PLANARITY impropers (Phe/Tyr/His/Trp). The rigid
+# *_RING cliques were split into per-vertex groups (see
+# ProteinAtomRigidGroups.rbody's own comment): unlike Pro's 5-ring, a 6-ring
+# can fold ("boat" -- its para pairs are 1-4, invisible to bonds+angles) and
+# an sp2 substituent can leave the plane at first order, so freeing these
+# rings is only valid together with BOTH the ring proper torsions AND the
+# improper family -- exactly the terms AMBER itself holds them with.
+#
+# Ring propers: every aromatic ring bond carries 4 substituent pairs, all on
+# the same X-CA-CA-X-style entry (n=2, k=15.167 -- the largest k in this
+# file), all reinforcing in phase in the planar ring: per_pair=True by the
+# established criterion (see generate_sidechain_axis). Every ring vertex is
+# trigonal with 2 non-axis substituents, so all deltas route through
+# idealized_azimuth_deg unchanged. His is sourced from its real instance
+# (whichever protonation it has); rings anchored on the absent protonation's
+# H simply skip at deployment, same as every other missing-atom case.
+AROMATIC_RING_AXIS = {
+    "PHE": [("CG", "CD1"), ("CG", "CD2"), ("CD1", "CE1"), ("CD2", "CE2"), ("CE1", "CZ"), ("CE2", "CZ")],
+    "TYR": [("CG", "CD1"), ("CG", "CD2"), ("CD1", "CE1"), ("CD2", "CE2"), ("CE1", "CZ"), ("CE2", "CZ")],
+    "HIS": [("CG", "ND1"), ("CG", "CD2"), ("ND1", "CE1"), ("CD2", "NE2"), ("CE1", "NE2")],
+}
+for _resname, _axes in AROMATIC_RING_AXIS.items():
+    for _b_name, _c_name in _axes:
+        generate_sidechain_axis(_resname, _b_name, _c_name, f"aring_{_b_name}_{_c_name}", per_pair=True)
+TRP_RING_AXIS = [("CG", "CD1"), ("CG", "CD2"), ("CD1", "NE1"), ("NE1", "CE2"), ("CD2", "CE2"),
+                 ("CD2", "CE3"), ("CE2", "CZ2"), ("CE3", "CZ3"), ("CZ3", "CH2"), ("CH2", "CZ2")]
+for _b_name, _c_name in TRP_RING_AXIS:
+    generate_sidechain_axis_gkinase("TRP", _b_name, _c_name, f"aring_{_b_name}_{_c_name}", per_pair=True)
+
+# PLANARITY impropers. An AMBER improper IS a 4-atom dihedral (i,j,k,l) with
+# the hub listed THIRD (k bonded to i, j, l), measured about the real j-k
+# bond -- so emit_ghost_ring models it as-is: axis=(j,k), refs=(i,l), one
+# single-pair ring per improper (n=2, phase=180 deg). No reimplementation of
+# amber99sb.xml's improper MATCHING rules (wildcards, trefoil ordering --
+# the risky part task #36 flagged): the exact matched quadruplets and
+# parameters are read from a real built OpenMM System per source structure,
+# which uses AMBER's own assignment engine. This is a PARAMETER lookup, not
+# a geometry calibration, so the formula-only rule for deltas is untouched
+# (a single-pair ring has no free delta at all -- its refs ARE the anchors).
+# Only side-chain hubs are emitted: the backbone C/N impropers of every
+# residue stay geometrically enforced inside the _PHI/_PSI cliques, exactly
+# like before. Trp's junction carbons CD2/CE2 genuinely carry no improper
+# in AMBER (verified) -- nothing is fabricated for them.
+def generate_planarity_impropers(resname, md_top, md_bonds):
+    global n_dihedral_ok, n_dihedral_skip
+    import openmm as _mm
+    import openmm.app as _app
+    import openmm.unit as _unit
+    key = id(md_top)
+    if key not in _improper_system_cache:
+        omm_top = md_top.to_openmm()
+        # Same free-N-terminus patch as every validation script: mdtraj's
+        # standard-bond guesser misses MET1's N-H1 bond in ubiquitin.pdb.
+        # Applied to the OPENMM copy only -- the generator's own md-level
+        # bond graph (module-level `bonds`) must not gain a bond mid-run.
+        res0 = next(iter(omm_top.residues()))
+        r0_atoms = {a.name: a for a in res0.atoms()}
+        if "H1" in r0_atoms and "N" in r0_atoms:
+            r0_bonds = [(b[0], b[1]) for b in omm_top.bonds()
+                        if b[0].residue is res0 and b[1].residue is res0]
+            if not any({b[0].name, b[1].name} == {"N", "H1"} for b in r0_bonds):
+                omm_top.addBond(r0_atoms["N"], r0_atoms["H1"])
+        system = _app.ForceField("amber99sb.xml").createSystem(omm_top, nonbondedMethod=_app.NoCutoff,
+                                                               constraints=None)
+        tors = next(system.getForce(i) for i in range(system.getNumForces())
+                    if system.getForce(i).__class__.__name__ == "PeriodicTorsionForce")
+        bonded = set()
+        for a1, a2 in md_bonds:
+            bonded.add((a1.index, a2.index)); bonded.add((a2.index, a1.index))
+        atoms = list(md_top.atoms)
+        quads = []
+        for t in range(tors.getNumTorsions()):
+            i, j, k, l, per, ph, kv = tors.getTorsionParameters(t)
+            a4 = [i, j, k, l]
+            if not any(all((c, o) in bonded for o in a4 if o != c) for c in a4):
+                continue
+            quads.append((tuple(atoms[x] for x in a4), per,
+                          ph.value_in_unit(_unit.radian), kv.value_in_unit(_unit.kilojoule_per_mole)))
+        _improper_system_cache[key] = quads
+
+    emitted = 0
+    for (ai, aj, ak, al), per, phase, kv in _improper_system_cache[key]:
+        if ak.residue.name != resname or ak.name in ("N", "C"):
+            continue                       # side-chain hubs only, see above
+        if any(x.residue.index != ak.residue.index for x in (ai, aj, ak, al)):
+            continue                       # cross-residue = backbone territory
+        # Dedup is GLOBAL (module-level, shared across calls) and keyed on the
+        # HUB, not the exact quad: this function is deliberately called twice
+        # for HIS (both source structures, hoping to union both protonations),
+        # and a per-call set re-emitted the same 4 quads a second time --
+        # duplicate DIHEDRAL rules under identical names, i.e. silently
+        # DOUBLED improper energy (the identical ghosts deduplicated away,
+        # which is what made it easy to miss). Hub-keyed also guards against
+        # the same improper appearing with reordered peripherals in the other
+        # source (same physics, different quad tuple): one hub = one improper.
+        if (resname, ak.name) in _improper_emitted or kv <= 1e-6:
+            continue
+        _improper_emitted.add((resname, ak.name))
+        names = (ai.name, aj.name, ak.name, al.name)
+        L_axis = bond_len_A(resolved_class(resname, aj.name, False, False),
+                            resolved_class(resname, ak.name, False, False))
+        target = kv * np.exp(-1j * phase)
+        emit_ghost_ring(resname, f"imp_{ak.name}", "PLANARITY", per, L_axis, target,
+                        names[1], names[2], names[0], names[3], axis_dc_target=kv)
+        emitted += 1
+    if emitted:
+        n_dihedral_ok += 1
+    return emitted
+
+_improper_system_cache = {}
+_improper_emitted = set()
+for _resname in ("PHE", "TYR", "HIS"):
+    generate_planarity_impropers(_resname, top, bonds)
+generate_planarity_impropers("TRP", _gk_top, _gk_bonds)
+# His's OTHER protonation (its H sits on the other ring nitrogen): union the
+# GKinase instances in too, so both HD1- and HE2-side impropers exist in the
+# rule; whichever H is absent on a given deployed instance just skips.
+generate_planarity_impropers("HIS", _gk_top, _gk_bonds)
 
 # ===========================================================================
 # DIHEDRAL BACKBONE: phi (N-CA axis) and psi (CA-C axis). CMAP checked and
@@ -1598,12 +2093,54 @@ def generate_omega_axis(resname, source_resname=None):
     # unlike AMBER's universal 1:1 ratio for every real torsion term, so
     # subtracting the wrong constant left a systematic -amplitude bias).
 
-    # n=2: ONE ring, anchored on the generic CA/+CA reference (the textbook
-    # definition of omega itself), targeting the coherent combined_target_
-    # for_axis result across all 4 real substituent pairs -- see this
-    # function's own docstring for why a per-pair split was tried and
-    # reverted here.
-    if abs(target.get(2, 0j)) > 1e-6:
+    # n=2: ONE RING PER REAL SUBSTITUENT PAIR, each anchored on the two real
+    # atoms its own AMBER term is written on (re-adopted 2026-08-10 after
+    # being measured -- see this function's own docstring for the full
+    # history, including why the same split was reverted in 2026-08-07).
+    #
+    # A single combined ring reproduces one function of ONE angle, which
+    # equals AMBER's sum over the 4 pairs only if those pairs sit at their
+    # ideal relative azimuths. Measured on real MD frames, they do not: the
+    # amide nitrogen's own substituents (H vs CA) sit at 171.1 deg apart on
+    # average instead of 180, which destroys part of the coherence AMBER
+    # actually has. Since omega's 4 pairs all reinforce IN PHASE under the
+    # ideal assumption (|target[2]| = 4k, the maximum possible), the
+    # combined ring assumes maximal coherence and comes out systematically
+    # too stiff: measured |ring|/|AMBER| torque ratio 1.51 median, ring
+    # stiffer in 69% of instances, ~14 kJ/mol/rad mean error -- about kT
+    # over a 10 deg rotation. No other axis shows this bias (psi 1.00, phi
+    # 0.85), because no other axis has all its pairs reinforcing.
+    #
+    # Anchoring one ring per pair removes the assumption entirely rather
+    # than correcting for it: each ring reproduces exactly one real AMBER
+    # term evaluated on ITS OWN real dihedral, so the sum is AMBER's sum by
+    # construction (to each ring's own ~0.5% leakage), whatever the real
+    # geometry happens to be. This is why it is preferred over measuring the
+    # real azimuths at build time and rescaling k/delta_base per instance:
+    # same result, no per-instance calibration ported into C++, and it stays
+    # correct if the geometry moves instead of being frozen at input.
+    #
+    # The 2026-08-07 revert was right on the evidence then: under IDEAL
+    # geometry the two constructions are exactly equivalent by linearity, so
+    # the split looked like pure added topology. What was missing was any
+    # measurement of how far real geometry departs from ideal.
+    n2_pairs = 0
+    for b_sub in b_neighbors:
+        for c_sub in c_neighbors:
+            t_pair, dc_pair = combined_target_for_axis({b_sub: (0, 0, 0.0)}, {c_sub: (0, 0, 0.0)},
+                                                       b_class, c_class, bb_atom_class)
+            if t_pair is None or abs(t_pair.get(2, 0j)) <= 1e-6:
+                continue
+            _, rule_b_sub = rel_name(b_atom, b_sub)
+            _, rule_c_sub = rel_name(b_atom, c_sub)
+            emit_ghost_ring(resname, "omega", "OMEGA", 2, L_axis, t_pair[2], "C", "+N",
+                            rule_b_sub, rule_c_sub, axis_dc_target=dc_pair.get(2, 0.0),
+                            group_tag=f"{b_sub.name}{c_sub.name}")
+            n2_pairs += 1
+    if n2_pairs == 0 and abs(target.get(2, 0j)) > 1e-6:
+        # No pair resolved on its own (should not happen for a real peptide
+        # bond) -- fall back to the old single combined ring rather than
+        # silently emitting nothing for this harmonic.
         emit_ghost_ring(resname, "omega", "OMEGA", 2, L_axis, target[2], "C", "+N", rule_ca_b, rule_ca_c,
                        axis_dc_target=dc_by_harmonic.get(2, 0.0))
 
@@ -1636,6 +2173,11 @@ for _resname in BACKBONE_RESIDUES + ["CYS", "TRP"]:
     generate_backbone_axis(_resname, "N", "CA", "phi", source_resname=_source)
     generate_backbone_axis(_resname, "CA", "C", "psi", source_resname=_source)
     generate_omega_axis(_resname, source_resname=_source)
+
+# Pro's N-CD ring-closure torsion (see generate_pro_ring_ncd's own docstring
+# for why it lives with the sidechain axes but is called here: its -C anchor
+# needs bb_atom_class, defined just above for the backbone section).
+generate_pro_ring_ncd()
 
 lines.append("#")
 lines.append("# GHOSTPARTICLE: massless virtual sites (see spn::GhostParticle), placed")

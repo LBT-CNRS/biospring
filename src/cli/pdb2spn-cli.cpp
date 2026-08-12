@@ -152,10 +152,10 @@ int main(int argc, char ** argv)
     if (!args.pathBondedInteraction.empty())
     {
         logging::status("Applying bonded interaction parameters from %s (stretching=%s, bending=%s, "
-                        "dihedralbackbone=%s, dihedralsidechain=%s).",
+                        "dihedralbackbone=%s, dihedralsidechain=%s, dihedralplanarity=%s).",
                          args.pathBondedInteraction.c_str(), args.stretching ? "on" : "off",
                          args.bending ? "on" : "off", args.dihedralBackbone ? "on" : "off",
-                         args.dihedralSidechain ? "on" : "off");
+                         args.dihedralSidechain ? "on" : "off", args.dihedralPlanarity ? "on" : "off");
         // Already constructed and read() above (before any spring existed,
         // see that call site) -- reused here, not re-read.
 
@@ -172,7 +172,8 @@ int main(int argc, char ** argv)
         }
 
         bondedReader->buildSprings(topology, naming_reader_ptr != nullptr ? &naming_reader_ptr->rules() : nullptr,
-                                  args.stretching, args.bending, args.dihedralBackbone, args.dihedralSidechain);
+                                  args.stretching, args.bending, args.dihedralBackbone, args.dihedralSidechain,
+                                  args.dihedralPlanarity);
     }
 
     // Sets the particle charge to user-defined value.
@@ -200,7 +201,8 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
       pathRigidBody(""), pathBondedInteraction(""), pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0),
       isStatic(false), ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false), stretching(false),
-      bending(false), dihedral(false), dihedralBackbone(false), dihedralSidechain(false)
+      bending(false), dihedral(false), dihedralBackbone(false), dihedralSidechain(false),
+      dihedralPlanarity(false)
 {
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
@@ -289,7 +291,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument dihedral_ = argparse::StoreTrueArgument(
         "-dihedral", "--dihedral",
         "with -bondedinteraction, add all dihedral ghost springs on top of -rigidbody's mesh -- shorthand for "
-        "-dihedralbackbone and -dihedralsidechain together; independent of -stretching/-bending -- can be combined "
+        "-dihedralbackbone, -dihedralsidechain and -dihedralplanarity together; independent of -stretching/-bending -- can be combined "
         "alone for the intermediate model (bonds/angles stay at -rigidbody's uniform value, only dihedral wells "
         "become real); has no effect without -bondedinteraction");
 
@@ -302,6 +304,11 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
         "-dihedralsidechain", "--dihedralsidechain",
         "with -bondedinteraction, add side-chain (chi1-4) dihedral ghost springs only; has no effect without "
         "-bondedinteraction");
+
+    argparse::Argument dihedralplanarity_ = argparse::StoreTrueArgument(
+        "-dihedralplanarity", "--dihedralplanarity",
+        "with -bondedinteraction, add PLANARITY improper ghost springs (aromatic-ring/His hub planarity) only; "
+        "has no effect without -bondedinteraction");
 
     argparse::Argument stiffness = argparse::Argument()
                                        .name_short("-stiffness")
@@ -343,6 +350,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(dihedral_);
     _parser.add_argument(dihedralbackbone_);
     _parser.add_argument(dihedralsidechain_);
+    _parser.add_argument(dihedralplanarity_);
     _parser.add_argument(stiffness);
     _parser.add_argument(charge);
     _parser.add_argument(static_);
@@ -419,6 +427,7 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     dihedral = _parser.get_option("--dihedral").is_set();
     dihedralBackbone = _parser.get_option("--dihedralbackbone").is_set();
     dihedralSidechain = _parser.get_option("--dihedralsidechain").is_set();
+    dihedralPlanarity = _parser.get_option("--dihedralplanarity").is_set();
 
     // --rigidbody and --cutoff are two incompatible strategies for building
     // the spring network: dies if both are given.
@@ -444,14 +453,15 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     // sees the two resolved per-family booleans.
     dihedralBackbone = dihedralBackbone || dihedral;
     dihedralSidechain = dihedralSidechain || dihedral;
+    dihedralPlanarity = dihedralPlanarity || dihedral;
 
-    if ((stretching || bending || dihedralBackbone || dihedralSidechain) && pathBondedInteraction.empty())
+    if ((stretching || bending || dihedralBackbone || dihedralSidechain || dihedralPlanarity) && pathBondedInteraction.empty())
     {
         _parser.print_help();
         _parser.die("-stretching/-bending/-dihedral/-dihedralbackbone/-dihedralsidechain require "
                     "-bondedinteraction/--bondedinteraction");
     }
-    if (!pathBondedInteraction.empty() && !stretching && !bending && !dihedralBackbone && !dihedralSidechain)
+    if (!pathBondedInteraction.empty() && !stretching && !bending && !dihedralBackbone && !dihedralSidechain && !dihedralPlanarity)
         logging::warning("-bondedinteraction/--bondedinteraction given without -stretching/-bending/-dihedral* -- "
                          "nothing from the .bi.ff file will actually be applied.");
 
@@ -525,6 +535,7 @@ void biospring::pdb2spn::CommandLineArguments::printArgumentValues() const
             logging::info("        bending: %s", bending ? "enabled" : "disabled");
             logging::info("        dihedral backbone: %s", dihedralBackbone ? "enabled" : "disabled");
             logging::info("        dihedral sidechain: %s", dihedralSidechain ? "enabled" : "disabled");
+            logging::info("        dihedral planarity: %s", dihedralPlanarity ? "enabled" : "disabled");
         }
     }
     else if (cutoff < 0)
