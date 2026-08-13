@@ -619,19 +619,27 @@ mean relative error 3.87%/10.25% in isolation, improving to 3.53%/5.74%
 system-wide after the phi/psi fixes above (omega itself unaffected by
 those, already using per-owning-pair anchoring from the start).
 
-Making omega flexible at all required a companion `--rigidbody` change:
-the base `ProteinAtomRigidGroups.rbody`'s `_PHI`/`_PSI` groups treat the
-*entire* peptide plane (6 atoms spanning both sides of the omega bond) as
-one rigid clique, freezing omega completely regardless of any dihedral
-term layered on top. A new file, `ProteinAtomRigidGroupsOmegaFree.rbody`
-(the original left untouched, kept as the "no cis/trans freedom" model),
-splits each group into two halves hinged at exactly the omega bond — the
-same "2 shared atoms = 1 free hinge" trick already used for every other
-rotatable axis. Verified two ways: an exact spring-pair diff against the
-original file (294 pairs removed, 0 added, every removed pair of exactly
-the 4 predicted "upstream-non-axis to downstream-non-axis" types, none
-touching the hinge atoms themselves) and a perturbed-structure dynamics
-run (clean relaxation, no divergence, comparable behaviour to the
+Note what these omega rings can and cannot be used for. The base (and now
+only) `ProteinAtomRigidGroups.rbody` keeps each `_PHI`/`_PSI` group as one
+rigid clique spanning the *entire* peptide plane, which freezes omega
+regardless of any dihedral term layered on top: the deployed model has a
+rigid omega, fixed at whatever value the input structure carries (spring
+equilibria are the distances measured at load time, so a cis input stays
+cis and a trans input stays trans, exactly and indefinitely). An
+exploratory `...OmegaFree.rbody` variant that hinged those groups at the
+omega bond was written and then removed: freeing omega is only useful if
+something restores the real double well, and the ghost rings below are the
+only construction that can. **Real-atom springs provably cannot**: every
+substituent across a peptide bond is coplanar with it, so each real pair's
+azimuthal offset is exactly 0 or 180 deg, every spring's energy is a
+convex function of cos(omega), and a convex function has one valley — one
+minimum, never cis *and* trans (verified by brute force over 20000
+random combinations of the 4 real pairs with free k/d0: not one double
+well). The bistability lives entirely in the n=2 harmonic, which needs an
+anchor ~90 deg *out of the peptide plane* — precisely where chemistry put
+no atom, and precisely where these rings put their ghosts (delta = -90 deg
+in the emitted `.bi.ff`). The rings were verified by a perturbed-structure
+dynamics run (clean relaxation, no divergence, comparable behaviour to the
 original file).
 
 **Improper (planarity) — deprioritized, not implemented.** Worth stating
@@ -807,12 +815,13 @@ present mechanism.
    bonds/angles stay at the rigid-body uniform value, dihedral
    energy/behaviour is identical to the fully-refined model — the two
    concerns are independent by construction, confirmed experimentally.
-8. **Structural diff for a `--rigidbody` change** (omega's
-   `ProteinAtomRigidGroupsOmegaFree.rbody`): an exact before/after diff of
-   every spring `--rigidbody` creates, checking that only the intended
-   pairs disappear (and none appear) — a more rigorous check than a
-   dynamics run alone, which can't easily isolate one specific hinge's
-   freedom from whole-molecule relaxation noise.
+8. **Structural diff for any `--rigidbody` change**: an exact before/after
+   diff of every spring `--rigidbody` creates, checking that only the
+   intended pairs disappear (and none appear) — a more rigorous check than
+   a dynamics run alone, which can't easily isolate one specific hinge's
+   freedom from whole-molecule relaxation noise. Used for each clique split
+   in this work (guanidinium, Asn/Gln amides, Pro ring, aromatic rings),
+   and originally for the since-removed omega-free variant.
 
 6. Known limitations
 ------------------------

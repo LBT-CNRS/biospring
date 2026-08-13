@@ -1,0 +1,58 @@
+#!/usr/local/bin/vmd
+# 072.AmberFullModel - visualization
+#
+# model.nc.pdb carries CONECT records for every spring in the network (see
+# pdb2spn --pdbconect in the Makefile). Loaded with filebonds 1, autobonds 0
+# so every bond drawn is exactly one of those springs -- nothing guessed
+# from interatomic distances, nothing missing. NOTE this includes the ghost
+# particles' own dihedral/bending springs, so the picture is denser than a
+# chemical bond diagram: that IS the model.
+#
+# Atom names here are amber.grp's renamed types (e.g. glutamate's backbone N
+# is "EN", not "N" -- see the Makefile's GRP/FF). VMD's built-in secondary
+# structure calculation (STRIDE) only recognizes the standard backbone names
+# N/CA/C/O, so the block below renames just those four atoms back, residue
+# type by residue type (side chains keep their renamed names). This runs
+# once at load time; renaming survives the whole interactive session since
+# IMD only ever updates coordinates, never atom names.
+
+mol new model.nc.pdb type pdb first 0 last -1 step 1 filebonds 1 autobonds 0 waitfor all
+mol delrep 0 top
+
+# All 20 standard amino acids -- this structure contains every one of them.
+foreach {resname prefix} {ALA A ARG R ASN N ASP D CYS C GLN Q GLU E GLY G HIS H ILE I LEU L LYS K MET M PHE F PRO P SER S THR T TRP W TYR Y VAL V} {
+    foreach atomtype {N CA C O} {
+        set sel [atomselect top "resname $resname and name ${prefix}${atomtype}"]
+        $sel set name $atomtype
+        $sel delete
+    }
+}
+
+# Backbone cartoon, coloured by secondary structure.
+mol representation NewCartoon 0.300000 10.000000 4.100000 0
+mol selection {name N CA C O}
+mol color Structure
+mol addrep top
+
+# Side chains as thin licorice, coloured by residue name -- this is where
+# the newly-modelled families live (rotors, amides, guanidinium, Pro and
+# aromatic rings).
+mol representation Licorice 0.100000 12.000000 12.000000
+mol selection {not name N CA C O and not name "GH.*"}
+mol color ResName
+mol addrep top
+
+# Ghost particles (massless virtual sites carrying the bending and dihedral
+# springs). Hidden by default -- enable this representation in the GUI to
+# see the machinery, but expect a lot of points: ~18000 on this structure.
+mol representation Points 4.000000
+mol selection {name "GH.*"}
+mol color ColorID 6
+mol addrep top
+mol showrep top 2 off
+
+mol rename top {072 - full AMBER model}
+display projection Orthographic
+display depthcue off
+axes location Off
+color Display Background white
