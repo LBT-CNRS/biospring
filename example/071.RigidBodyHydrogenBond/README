@@ -60,6 +60,24 @@ then every residue's phi/psi was overridden to a single extended value
 helix, no turn, no sheet register anywhere, residues that belong together
 in the fold starting tens of Angstroms apart.
 
+Two properties of this construction are worth knowing before you read
+anything into a run:
+
+* Until 2026-08-13 the shipped file carried phi=+120 psi=-140, the mirror
+  image of the extended value documented above. The alpha carbons were
+  correctly L all along (improper N-C-CA-CB = +122.3 deg, matching
+  GKinase's +122.0), so it was a genuine L-peptide parked in the corner of
+  the Ramachandran plot that L-amino acids forbid -- ff99SB penalises
+  phi>0 by ~6 kJ/mol per residue. The torsions have been dialled back to
+  the documented (-120, 140) by rotating about the phi/psi bonds, which
+  leaves every bond length, valence angle and stereocentre untouched.
+* The NeRF construction uses *ideal* valence angles, which are not AMBER's
+  equilibrium angles. Built with `--bending`, this structure therefore
+  starts with ~960 kJ/mol per residue of bending strain, against ~3 for a
+  real crystal structure. The first few thousand steps of any run relieve
+  that strain, and it dwarfs everything the fold itself is worth -- so do
+  not read the early trajectory as folding behaviour.
+
 ### What to actually expect when you pull on this
 
 This was tested end to end before shipping, at each stage, and the result
