@@ -8,3 +8,10 @@ build
 build-*
 html
 CMakeFiles
+
+# example/ build artifacts: every example ships its source structure and its
+# .msp/.vmd/Makefile, and generates the rest with `make prep` (`make clean`
+# removes them again).
+example/*/*.nc
+example/*/*.nc.pdb
+example/*/mddriver.log
