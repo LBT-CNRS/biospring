@@ -178,6 +178,10 @@ struct GhostParticleBuffer
     float * rs;
     float * thetas;
     float * deltas;
+    // spn::GhostPlacement: which construction places the ghost. Explicit
+    // rather than inferred from the geometry -- the two modes read disjoint
+    // parameters, so no value combination identifies them on its own.
+    int * placements;
 
     ~GhostParticleBuffer() { clear(); }
 
@@ -191,6 +195,8 @@ struct GhostParticleBuffer
         delete[] rs;
         delete[] thetas;
         delete[] deltas;
+        delete[] placements;
+        placements = nullptr;
         ownindices = nullptr;
         anchorindices = nullptr;
         rs = nullptr;
@@ -199,7 +205,8 @@ struct GhostParticleBuffer
         number_of_ghostparticles = 0;
     }
 
-    GhostParticleBuffer() : number_of_ghostparticles(0), ownindices(0), anchorindices(0), rs(0), thetas(0), deltas(0)
+    GhostParticleBuffer()
+        : number_of_ghostparticles(0), ownindices(0), anchorindices(0), rs(0), thetas(0), deltas(0), placements(0)
     {
     }
 
@@ -219,6 +226,7 @@ struct GhostParticleBuffer
             rs = new float[nGhosts]{};
             thetas = new float[nGhosts]{};
             deltas = new float[nGhosts]{};
+            placements = new int[nGhosts]{};
         }
     }
 
@@ -235,6 +243,7 @@ struct GhostParticleBuffer
             rs[i] = g.r;
             thetas[i] = g.theta_deg;
             deltas[i] = g.delta_deg;
+            placements[i] = static_cast<int>(g.placement);
         }
     }
 };

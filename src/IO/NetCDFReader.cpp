@@ -95,7 +95,8 @@ void NetCDFReader::addGhostParticlesToSpn()
             static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][0]),
             static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][1]),
             static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][2]), _ghostparticlebuffer.rs[i],
-            _ghostparticlebuffer.thetas[i], _ghostparticlebuffer.deltas[i]);
+            _ghostparticlebuffer.thetas[i], _ghostparticlebuffer.deltas[i],
+            static_cast<unsigned>(_ghostparticlebuffer.placements[i]));
 }
 
 void NetCDFReader::addParticlesToSpn()
@@ -413,6 +414,11 @@ void NetCDFReader::readGhostParticles()
     checkNDims(data, 1);
     checkDim(data, 0, n);
     data.getVar(_ghostparticlebuffer.deltas);
+
+    data = getNcVar("ghostparticleplacement");
+    checkNDims(data, 1);
+    checkDim(data, 0, n);
+    data.getVar(_ghostparticlebuffer.placements);
 }
 
 void NetCDFReader::readNumberOfParticles()

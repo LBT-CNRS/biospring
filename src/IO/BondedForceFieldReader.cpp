@@ -322,8 +322,12 @@ unsigned BondedForceFieldReader::_create_ghost_particles(topology::Topology & to
         properties.set_mass(0.0f);
 
         topology::Particle ghost_template(properties);
+        // Every GHOSTPARTICLE line in a .bi.ff is a dihedral-ring ghost:
+        // the rotated image of its reference atom. BEND's axial ghosts are
+        // never written to file, they are built below.
         topology.add_ghost_particle(ghost_template, *anchor_b, *anchor_c, *anchor_ref, entry.r, entry.theta_deg,
-                                    entry.delta_deg);
+                                    entry.delta_deg,
+                                    static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
 
         residues[index].push_back(topology.number_of_particles() - 1);
         nb_created++;
@@ -570,12 +574,14 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                 // sin(0)=0, so p3 here only needs to be non-degenerate, not
                 // meaningful on its own -- see spn::GhostParticle::computePosition).
                 topology::Particle & ghost_a =
-                    topology.add_ghost_particle(ghost_a_template, *p2, *p1, *p3, r12, 0.0, 0.0);
+                    topology.add_ghost_particle(ghost_a_template, *p2, *p1, *p3, r12, 0.0, 0.0,
+                                                static_cast<unsigned>(spn::GhostPlacement::AxialOffset));
 
                 ghost_properties.set_name("GB" + entry.atom3);
                 topology::Particle ghost_c_template(ghost_properties);
                 topology::Particle & ghost_c =
-                    topology.add_ghost_particle(ghost_c_template, *p2, *p3, *p1, r23, 0.0, 0.0);
+                    topology.add_ghost_particle(ghost_c_template, *p2, *p3, *p1, r23, 0.0, 0.0,
+                                                static_cast<unsigned>(spn::GhostPlacement::AxialOffset));
 
                 // Same zero-out-but-keep treatment as STRETCH above, for the
                 // same reason (nonbonded exclusion for the real 1-3 pair

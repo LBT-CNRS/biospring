@@ -98,6 +98,12 @@ class Topology
         double r;
         double theta_deg;
         double delta_deg;
+        // Which construction places this ghost -- see spn::GhostPlacement.
+        // The two use disjoint parameters (axial reads r and ignores the
+        // reference atom; rotation reads the reference atom and delta and
+        // ignores r/theta), so this cannot be inferred from the values and
+        // is carried explicitly, including through the .nc.
+        unsigned placement;
     };
 
   protected:
@@ -238,13 +244,14 @@ class Topology
     // newly-added particle (with its own freshly-minted unique id, see
     // Particle::copy()/ParticleCollection::push_back).
     Particle & add_ghost_particle(const Particle & particle, const Particle & anchor_B, const Particle & anchor_C,
-                                  const Particle & anchor_ref, double r, double theta_deg, double delta_deg)
+                                  const Particle & anchor_ref, double r, double theta_deg, double delta_deg,
+                                  unsigned placement)
     {
         _particles.push_back(particle);
         Particle & added = _particles[_particles.size() - 1];
         _ghost_particles[added.unique_id()] =
             GhostParticleInfo{anchor_B.unique_id(), anchor_C.unique_id(), anchor_ref.unique_id(), r, theta_deg,
-                              delta_deg};
+                              delta_deg, placement};
         return added;
     }
 
@@ -258,12 +265,13 @@ class Topology
     // and only learns which ones are ghosts, and their anchors, from a separate
     // buffer read afterwards.
     void register_ghost_particle(size_t particle_index, size_t anchor_B_index, size_t anchor_C_index,
-                                  size_t anchor_ref_index, double r, double theta_deg, double delta_deg)
+                                  size_t anchor_ref_index, double r, double theta_deg, double delta_deg,
+                                  unsigned placement)
     {
         pid_t particle_uid = _particles[particle_index].unique_id();
         _ghost_particles[particle_uid] = GhostParticleInfo{
             _particles[anchor_B_index].unique_id(), _particles[anchor_C_index].unique_id(),
-            _particles[anchor_ref_index].unique_id(), r, theta_deg, delta_deg};
+            _particles[anchor_ref_index].unique_id(), r, theta_deg, delta_deg, placement};
     }
 
     // =============================================================================
@@ -513,7 +521,8 @@ class Topology
                 const unsigned anchor_b_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_B_uid));
                 const unsigned anchor_c_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_C_uid));
                 const unsigned anchor_ref_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_ref_uid));
-                spn.addGhostParticle(anchor_b_index, anchor_c_index, anchor_ref_index, static_cast<float>(info.r),
+                spn.addGhostParticle(info.placement, anchor_b_index, anchor_c_index, anchor_ref_index,
+                                     static_cast<float>(info.r),
                                     static_cast<float>(info.theta_deg), static_cast<float>(info.delta_deg));
                 continue;
             }
@@ -688,7 +697,8 @@ class Topology
             pid_t new_ghost_uid = _particles[ghost_index].unique_id();
             _ghost_particles[new_ghost_uid] =
                 GhostParticleInfo{_particles[b_index].unique_id(), _particles[c_index].unique_id(),
-                                  _particles[ref_index].unique_id(), info.r, info.theta_deg, info.delta_deg};
+                                  _particles[ref_index].unique_id(), info.r, info.theta_deg, info.delta_deg,
+                                  info.placement};
         }
     }
 };

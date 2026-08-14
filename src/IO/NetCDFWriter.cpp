@@ -153,6 +153,11 @@ static void writeGhostParticleGroupBinary(NcFile * nc,
     deltas.putAtt("units", "degree");
     deltas.putAtt("long_name", "Ghost particle azimuthal angle from the reference direction");
 
+    NcVar placements = nc->addVar("ghostparticleplacement", ncInt, gndim);
+    placements.putAtt("long_name", "Ghost particle placement mode (see spn::GhostPlacement): "
+                                    "0 = rotated image of the reference atom about the axis (DIHEDRAL rings), "
+                                    "1 = on the axis at distance r from B (BEND)");
+
     GhostParticleBuffer buffer(n);
     buffer.bufferize(source);
 
@@ -161,6 +166,7 @@ static void writeGhostParticleGroupBinary(NcFile * nc,
     rs.putVar(buffer.rs);
     thetas.putVar(buffer.thetas);
     deltas.putVar(buffer.deltas);
+    placements.putVar(buffer.placements);
 }
 
 // CDL equivalents of the above, split the same way the dihedral families are.
@@ -193,6 +199,9 @@ static void writeGhostParticleVariablesCDL(std::ostream & os, size_t n)
     os << "\tfloat   ghostparticledelta(ghostparticle_number); " << std::endl;
     os << "\t        ghostparticledelta:units = \"degree\" ;" << std::endl;
     os << "\t        ghostparticledelta:long_name = \"Ghost particle azimuthal angle from the reference direction\";"
+       << std::endl;
+    os << "\tint     ghostparticleplacement(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticleplacement:long_name = \"Ghost particle placement mode: 0 = rotation, 1 = axial\";"
        << std::endl;
     os << std::endl;
 }
@@ -232,6 +241,12 @@ static void writeGhostParticleDataCDL(std::ostream & os,
     for (size_t i = 0; i < n; i++)
     {
         os << source[i].delta_deg;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticleplacement = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << static_cast<int>(source[i].placement);
         os << (i == n - 1 ? ";" : ",") << std::endl;
     }
 }
