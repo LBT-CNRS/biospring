@@ -120,10 +120,19 @@ use.
   it interactively instead (MDDriver is wired in the Makefile, same as
   examples 070/071).
 * The per-family `.msp` switches (`bending.enable`, `dihedralphi.enable`,
-  `dihedralpsi.enable`, `dihedralomega.enable`, `dihedralchi.enable`) gate
-  at runtime whichever families were built, which is handy for isolating
-  one term's contribution to the reported energy channels without
-  rebuilding.
+  `dihedralpsi.enable`, `dihedralomega.enable`, `dihedralchi.enable`,
+  `dihedralplanarity.enable`) gate at runtime whichever families were built,
+  which is handy for isolating one term's contribution to the reported energy
+  channels without rebuilding.
+
+  **They isolate, they do not undo.** Turning all of them off does not give
+  you a topology built without the corresponding `pdb2spn` flags: there is no
+  `stretching.enable`, and more fundamentally `--stretching`/`--bending`
+  *retune `--rigidbody`'s springs in place* rather than adding new ones, so
+  the uniform-stiffness model is overwritten at build time. On this structure
+  532 kJ/mol of stretch energy survives every runtime switch. To compare a
+  rigid-body model against progressively more realistic bonded ones, build
+  one `.nc` per stage -- see `example/073.BondedStages`.
 
 
 ## Files

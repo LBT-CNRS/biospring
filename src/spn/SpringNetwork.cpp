@@ -189,7 +189,8 @@ void SpringNetwork::computeDihedralForces()
         accumulate(_dihedralomegasprings);
     if (isDihedralChiEnabled())
         accumulate(_dihedralsidechainsprings);
-    accumulate(_dihedralplanaritysprings);
+    if (isDihedralPlanarityEnabled())
+        accumulate(_dihedralplanaritysprings);
 
     _energies.dihedral = dihedralenergy;
 }

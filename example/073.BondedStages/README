@@ -1,0 +1,85 @@
+# 073.BondedStages - the three bonded models, side by side
+
+The normal way to work up a BioSpring model: start from an articulated rigid
+body, add real torsion wells when you want realism, add real bonds and angles
+when you want to compare against a force field. This example builds all three
+so you can look at them together.
+
+```bash
+make prep       # builds stage1.nc, stage2.nc, stage3.nc
+make compare    # point energies of the three, side by side
+make run-stage2 # interactive session on any one of them
+```
+
+| stage | `pdb2spn` options added | what becomes real |
+|-------|------------------------|-------------------|
+| 1 | `--rigidbody` | nothing -- every spring is the uniform `--stiffness` |
+| 2 | `--bondedinteraction --dihedral` | torsions (phi/psi/omega, chi1-5, rotors, impropers) |
+| 3 | `--stretching --bending` | bond lengths and valence angles |
+
+`make compare` on ubiquitin, all three at the same input conformation:
+
+```
+stage            spring      stretch         bend     dihedral
+1                  0.00         0.00         0.00         0.00
+2                  0.00         0.00         0.00      3426.75
+3                  0.00       443.36       291.59      3426.75
+```
+
+Stage 1 reads zero everywhere because a rigid-body spring's equilibrium *is*
+the distance measured when the structure was loaded -- the input conformation
+is the model's own minimum, by construction. Each later stage adds one
+channel and leaves the earlier ones untouched, which is the point: the
+difference between two rows is exactly what that family contributes.
+
+
+## The one thing worth knowing: stages are a BUILD-time choice
+
+Three `.nc` files, not one `.nc` and three `.msp` files. That is not
+laziness, and it is worth being explicit about because the `.msp` has
+`bending.enable` / `dihedralphi.enable` / … switches that suggest otherwise.
+
+Those switches **isolate a family's contribution inside a given build; they
+do not undo the model.** Turning every one of them off on `stage3.nc` still
+leaves 443 kJ/mol of stretch energy, and it will never give you `stage1.nc`,
+for two reasons:
+
+* `--stretching` and `--bending` **retune `--rigidbody`'s springs in place**
+  rather than adding new ones. The uniform-stiffness value is overwritten
+  when the `.nc` is written; nothing at runtime can recover it. (This is also
+  why there is deliberately no `stretching.enable` -- see
+  `Configuration.hpp`'s own comment for the design work one would need.)
+* `--bending` additionally *requires* `--stretching`: its 1-3 distance
+  conversion needs STRETCH's real bond lengths. `pdb2spn` refuses `--bending`
+  alone with an explicit error rather than ignoring it, so stages 3a/3b do
+  not exist -- bonds and angles arrive together.
+
+Use the `.msp` switches for what they are good at instead: measuring what one
+family costs inside one model, e.g. `dihedralchi.enable = 0` on stage 2 to
+see the side chains' share of the 3426.75 above.
+
+
+## What stage 2 is actually for
+
+Stage 2 is a genuinely useful working model, not just a step on the way to
+stage 3. Bonds and angles stay stiff and uniform -- so the geometry cannot
+drift and the timestep stays comfortable -- while the torsions carry real
+AMBER wells, which is where the conformational energy actually lives: on a
+folded protein the torsion term is ~80% of the bonded energy above the
+minimum, against ~14% for angles and ~6% for bonds. Stage 2 buys most of the
+realism for none of the softening.
+
+Stage 3 is what you want when the comparison against a real force field has
+to hold in absolute kJ/mol.
+
+
+## Files
+
+* `ubiquitin.pdb` -- the structure (1D3Z, NMR, all-atom with hydrogens; 18 of
+  the 20 standard residues, Cys and Trp missing).
+* `model.msp` -- shared by all three stages, deliberately: any difference in
+  the reported energies then comes from the model and never from the run
+  settings.
+* `point.msp` -- same, with `timestep = 0` and one step, so `make compare`
+  reads a point energy on the input conformation rather than a relaxed one.
+* `model.vmd` -- visualization of stage 3's spring network.

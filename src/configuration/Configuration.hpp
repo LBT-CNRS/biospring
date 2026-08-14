@@ -55,6 +55,11 @@ class Configuration
     EnergySetting dihedralpsi;
     EnergySetting dihedralomega;
     EnergySetting dihedralchi;
+    // The improper (aromatic-ring/His hub planarity) family. Gated like
+    // the four proper ones above -- it was the only built dihedral family
+    // with no toggle, which made "turn every dihedral off" quietly leave
+    // ~40 kJ/mol of improper energy behind on GKinase.
+    EnergySetting dihedralplanarity;
     EnergySetting bending;
 
     Configuration()
@@ -62,7 +67,8 @@ class Configuration
           electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"),
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), potentialgrid("potentialgrid"),
           densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody"), dihedralphi("dihedralphi"),
-          dihedralpsi("dihedralpsi"), dihedralomega("dihedralomega"), dihedralchi("dihedralchi"), bending("bending")
+          dihedralpsi("dihedralpsi"), dihedralomega("dihedralomega"), dihedralchi("dihedralchi"),
+          dihedralplanarity("dihedralplanarity"), bending("bending")
     {
         _register(sim);
         _register(steric);
@@ -84,6 +90,7 @@ class Configuration
         _register(dihedralpsi);
         _register(dihedralomega);
         _register(dihedralchi);
+        _register(dihedralplanarity);
         _register(bending);
     }
 
@@ -128,6 +135,7 @@ class Configuration
         dihedralomega.print();
         os << "\n";
         dihedralchi.print();
+        dihedralplanarity.print();
         os << "\n";
         bending.print();
     }
@@ -188,6 +196,8 @@ class Configuration
             dihedralomega.setFromString(name, value);
         else if (group == dihedralchi.name)
             dihedralchi.setFromString(name, value);
+        else if (group == dihedralplanarity.name)
+            dihedralplanarity.setFromString(name, value);
         else if (group == bending.name)
             bending.setFromString(name, value);
     }
@@ -277,6 +287,7 @@ inline Configuration defaultConfiguration()
     config.dihedralpsi.enable = true;
     config.dihedralomega.enable = true;
     config.dihedralchi.enable = true;
+    config.dihedralplanarity.enable = true;
     config.bending.enable = true;
 
     return config;

@@ -378,6 +378,7 @@ class SpringNetwork
     bool isDihedralPsiEnabled() const { return _config.dihedralpsi.enable; }
     bool isDihedralOmegaEnabled() const { return _config.dihedralomega.enable; }
     bool isDihedralChiEnabled() const { return _config.dihedralchi.enable; }
+    bool isDihedralPlanarityEnabled() const { return _config.dihedralplanarity.enable; }
     bool isViscosityEnabled() const { return _config.viscosity.enable; }
     bool isStericEnabled() const { return _config.steric.enable; }
     bool isElectrostaticEnabled() const { return _config.electrostatic.enable; }
