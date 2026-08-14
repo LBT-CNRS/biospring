@@ -829,7 +829,13 @@ def ring_shape_to_geometry(L_axis, n):
     d0 = mu * np.sqrt(2.0 * rho_r * rho_r + lam * lam)
     return r, theta, d0
 
-def ring_curve_abstract(L_axis, n, r, theta_deg, d0, k, delta_base, phi_grid_deg, M=None, N=None):
+def ring_curve_abstract(L_axis, n, r, theta_deg, d0, k, delta_base, phi_grid_deg, M=None, N=None,
+                        r2=None, theta2_deg=None):
+    # r2/theta2_deg default to r/theta_deg (the symmetric shape the old
+    # free-placement construction used). They are given explicitly since
+    # 2026-08-14: a ghost is now the rotated image of a REAL reference
+    # atom, so each side's radius/axial offset is that atom's own and the
+    # two sides generally differ. See emit_ghost_ring.
     # The 1D Fourier-space model used to CALIBRATE k/delta_base (see
     # calibrate_ring) -- the comb-filter sum over an MxN grid (defaults to
     # M=N=n when not given, the original construction), evaluated over an
@@ -852,18 +858,71 @@ def ring_curve_abstract(L_axis, n, r, theta_deg, d0, k, delta_base, phi_grid_deg
         M = n
     if N is None:
         N = n
+    if r2 is None:
+        r2 = r
+    if theta2_deg is None:
+        theta2_deg = theta_deg
     e = np.zeros_like(phi_grid_deg)
     for i in range(M):
         beta = i * 360.0 / M
         for j in range(N):
             gamma = j * 360.0 / N
             delta_ij = delta_base + beta - gamma
-            d2v = closed_form_d2(L_axis, r, theta_deg, r, theta_deg, delta_ij, phi_grid_deg)
+            d2v = closed_form_d2(L_axis, r, theta_deg, r2, theta2_deg, delta_ij, phi_grid_deg)
             d = np.sqrt(np.maximum(d2v, 0.0))
             e += 0.5 * k * (d - d0) ** 2
     return e
 
-def calibrate_ring(L_axis, n, r, theta_deg, d0, target_complex, M=None, N=None):
+def geom_via_far_anchor(L_axis, bond_to_other, angle_at_other_deg):
+    """(r, theta) of a reference atom relative to anchor B, when that atom is
+    bonded to the OTHER anchor C instead of to B.
+
+    Needed by the PLANARITY impropers: AMBER lists the hub third and bonds
+    all three peripherals to it, so the quad's first atom hangs off C, not
+    off B, and its distance/angle to B are 1-3 quantities. Plain triangle
+    B-C-R with |BC|=L_axis, |CR|=bond_to_other and the angle at C between
+    them: the law of cosines gives |BR|, then the angle at B. Both are still
+    pure AMBER table values -- no structure is measured.
+
+    (Proper torsions never take this path: their reference atom really is
+    bonded to its own anchor.)"""
+    g = np.radians(angle_at_other_deg)
+    r = float(np.sqrt(L_axis ** 2 + bond_to_other ** 2 - 2.0 * L_axis * bond_to_other * np.cos(g)))
+    if r < 1e-9:
+        return 0.0, 0.0
+    cos_theta = (L_axis ** 2 + r ** 2 - bond_to_other ** 2) / (2.0 * L_axis * r)
+    return r, float(np.degrees(np.arccos(np.clip(cos_theta, -1.0, 1.0))))
+
+def choose_d0(L_axis, n, r1, theta1_deg, r2, theta2_deg, M, N):
+    """Ghost-ghost equilibrium length: the RMS ghost separation sqrt(C1),
+    which is the middle of the range the pair can actually reach.
+
+    d0 does NOT trade off against harmonic purity, and a search over it is
+    degenerate -- provably so. On an M=n,N=1 ring the sum of d^2 over the
+    comb is exactly n*C1 (the comb kills the fundamental for n>=2), so it
+    contributes only a constant; every harmonic comes from the -2*d0*sum(d)
+    term alone and is therefore proportional to d0. All harmonic RATIOS are
+    d0-independent -- verified numerically too: leakage stays at 0.1108% for
+    every mu from 0.05 to 1.6 on a real chi1 geometry. d0 sets amplitude
+    (hence k) and DC, nothing else.
+
+    An earlier version of this function minimised leakage over d0 and, with
+    nothing to discriminate, wandered to d0=4.29 A for a pair that never
+    gets past 3.05 A -- a permanently stretched spring, which showed up as
+    a NEGATIVE total dihedral energy and a 10x kinetic-energy blow-up on
+    GKinase. sqrt(C1) is what the old RING_SHAPES table used as well (mu=1.0
+    for n=2,3), for the same reason.
+
+    n=1 keeps d0=0 exactly -- an algebraic identity, not a compromise: with
+    d0=0 the energy is 0.5*k*d^2 = 0.5*k*(C1 - C2*cos(phi-delta)), a pure
+    first harmonic with EXACTLY zero power anywhere else."""
+    if n == 1:
+        return 0.0
+    c1 = (r1 * np.sin(np.radians(theta1_deg))) ** 2 + (r2 * np.sin(np.radians(theta2_deg))) ** 2 + (
+        r1 * np.cos(np.radians(theta1_deg)) - L_axis + r2 * np.cos(np.radians(theta2_deg))) ** 2
+    return float(np.sqrt(c1))
+
+def calibrate_ring(L_axis, n, r, theta_deg, d0, target_complex, M=None, N=None, r2=None, theta2_deg=None):
     # Energy is exactly linear in k at fixed geometry (see
     # doc/BondedForceFieldSprings.md, step 3 of the closed-form derivation)
     # -- one evaluation at k=1 gives the ring's own harmonic-n Fourier
@@ -874,7 +933,7 @@ def calibrate_ring(L_axis, n, r, theta_deg, d0, target_complex, M=None, N=None):
     # rotating delta_base by D shifts the ring's n-th harmonic phase by
     # -nD regardless of M,N individually, so nothing below needs to change
     # when M != N, only the curve construction they're evaluated against.
-    e0 = ring_curve_abstract(L_axis, n, r, theta_deg, d0, 1.0, 0.0, PHI_GRID_DEG, M, N)
+    e0 = ring_curve_abstract(L_axis, n, r, theta_deg, d0, 1.0, 0.0, PHI_GRID_DEG, M, N, r2, theta2_deg)
     z0 = complex_fourier_coeff(e0, n)
     phase_needed = np.angle(target_complex) - np.angle(z0)
     # Rotating delta_base by D shifts the ring's own harmonic-n phase by
@@ -916,7 +975,7 @@ AXIS_RING_LOG = []
 _ghost_registry = {}
 
 def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom_B, atom_C, atom_ref_b, atom_ref_c,
-                    axis_dc_target=0.0, group_tag=""):
+                    axis_dc_target=0.0, group_tag="", ref_geom_b=None, ref_geom_c=None):
     """Emits one full ring group (M+N ghost particles, M*N ghost-ghost
     springs -- M=n,N=1 for n>=2, the ghost/spring-minimal construction,
     see the M,N note below) reproducing one target Fourier harmonic
@@ -977,9 +1036,17 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
                           "L_axis": L_axis, "target": target_complex, "axis_dc_target": axis_dc_target,
                           "group_tag": group_tag})
 
-    r, theta_deg, d0 = ring_shape_to_geometry(L_axis, n)
+    # Since 2026-08-14 a ghost is the rotated image of its side's real
+    # reference atom (spn::GhostParticle::computePositionByRotation), so
+    # its radius and axial offset are that atom's own, taken from the AMBER
+    # bond/angle tables like everything else here -- never chosen. Only d0
+    # and k are still calibrated. ref_geom_b/ref_geom_c are (r, theta) in
+    # the same convention as combined_target_for_axis's b_geom/c_geom.
+    r, theta_deg = ref_geom_b
+    r_c, theta_c_deg = ref_geom_c
     M, N = (n, 1) if n >= 2 else (1, 1)
-    k, delta_base, dc_ring = calibrate_ring(L_axis, n, r, theta_deg, d0, target_complex, M, N)
+    d0 = choose_d0(L_axis, n, r, theta_deg, r_c, theta_c_deg, M, N)
+    k, delta_base, dc_ring = calibrate_ring(L_axis, n, r, theta_deg, d0, target_complex, M, N, r_c, theta_c_deg)
     # Split evenly across this ring's M*N springs -- BondedForceFieldReader
     # sums dc_offset per spring it actually applies, so this naturally
     # handles a partially-skipped ring too (e.g. Met's phi ghosts missing
@@ -1013,14 +1080,17 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
     # identically -- reusing the first is a pure saving, with the springs
     # simply naming the shared ghost. Measured: 22% of all GHOSTPARTICLE
     # lines were exact duplicates before this.
-    def ghost(name, res, a1, a2, ref, azim):
+    # gr/gtheta are the reference ATOM's own radius/angle for THAT side --
+    # the two sides generally differ now that a ghost is that atom's rotated
+    # image, so they are passed in rather than closed over.
+    def ghost(name, res, a1, a2, ref, azim, gr, gtheta):
         global n_ghost_particles
-        key = (res, a1, a2, ref, round(r, 4), round(theta_deg, 2), round(azim, 3))
+        key = (res, a1, a2, ref, round(gr, 4), round(gtheta, 2), round(azim, 3))
         if key in _ghost_registry:
             return _ghost_registry[key]
         ghostparticle_lines.append(
             f"GHOSTPARTICLE {name:16s} {res:7s} {a1:5s} {a2:6s} {ref:6s} "
-            f"{r:7.4f} {theta_deg:7.2f} {azim:9.3f}")
+            f"{gr:7.4f} {gtheta:7.2f} {azim:9.3f}")
         _ghost_registry[key] = name
         n_ghost_particles += 1
         return name
@@ -1028,10 +1098,12 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
     b_names, c_names = [], []
     for i in range(M):
         beta = i * 360.0 / M
-        b_names.append(ghost(f"GH{axis_label}{tag}n{n}B{i}", resname, atom_B, atom_C, atom_ref_b, beta))
+        b_names.append(ghost(f"GH{axis_label}{tag}n{n}B{i}", resname, atom_B, atom_C, atom_ref_b, beta,
+                             r, theta_deg))
     for j in range(N):
         gamma = delta_base - j * 360.0 / N
-        c_names.append(ghost(f"GH{axis_label}{tag}n{n}C{j}", resname, atom_C, atom_B, atom_ref_c, gamma))
+        c_names.append(ghost(f"GH{axis_label}{tag}n{n}C{j}", resname, atom_C, atom_B, atom_ref_c, gamma,
+                             r_c, theta_c_deg))
 
     for bn in b_names:
         for cn in c_names:
@@ -1042,7 +1114,7 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
             n_dihedral_ok += 1
 
 def emit_ghost_rings_for_axis(resname, axis_label, family, L_axis, target, dc_by_harmonic, atom_B, atom_C,
-                              atom_ref_b, atom_ref_c):
+                              atom_ref_b, atom_ref_c, ref_geom_b, ref_geom_c):
     """Emits one ring (see emit_ghost_ring) per non-zero harmonic in
     `target` (n -> complex Fourier coefficient, see combined_target_for_axis),
     each calibrated against ITS OWN physical DC share (dc_by_harmonic[n] --
@@ -1056,7 +1128,7 @@ def emit_ghost_rings_for_axis(resname, axis_label, family, L_axis, target, dc_by
         if n == 0 or abs(zt) < 1e-6:
             continue
         emit_ghost_ring(resname, axis_label, family, n, L_axis, zt, atom_B, atom_C, atom_ref_b, atom_ref_c,
-                       dc_by_harmonic.get(n, 0.0))
+                       dc_by_harmonic.get(n, 0.0), ref_geom_b=ref_geom_b, ref_geom_c=ref_geom_c)
 
 def combined_target_for_axis(b_geom, c_geom, b_class, c_class, class_of):
     """b_geom/c_geom: {atom: (r, theta, delta_deg)} for each side's real
@@ -1211,7 +1283,8 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label, per_pair=False)
                         continue
                     emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, tn, b_name, c_name,
                                     bn, cn, axis_dc_target=dc_pair.get(n, 0.0),
-                                    group_tag=f"{bn}{cn}")
+                                    group_tag=f"{bn}{cn}",
+                                    ref_geom_b=b_geom[bn][:2], ref_geom_c=c_geom[cn][:2])
                     emitted += 1
         if emitted:
             n_dihedral_ok += 1
@@ -1220,7 +1293,7 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label, per_pair=False)
         # rather than silently emitting nothing for this axis.
 
     emit_ghost_rings_for_axis(resname, axis_label, "SIDECHAIN", L_axis, target, dc_by_harmonic, b_name, c_name,
-                              b_ref, c_ref)
+                              b_ref, c_ref, b_geom[b_ref][:2], c_geom[c_ref][:2])
 
 # chi1 axis (CA-CB): every one of ubiquitin's 18 residue types that has a
 # real, freely-rotating first side-chain torsion. Excluded: GLY (no CB),
@@ -1441,7 +1514,11 @@ def generate_pro_ring_ncd():
         if n == 0 or abs(target[n]) <= 1e-6:
             continue
         emit_ghost_ring("PRO", "ring_NCD", "SIDECHAIN", n, L_axis, target[n], "N", "CD", "-C", "CG",
-                        axis_dc_target=dc_by_harmonic.get(n, 0.0))
+                        axis_dc_target=dc_by_harmonic.get(n, 0.0),
+                        ref_geom_b=(bond_len_A(bb_atom_class(prev_c), b_class),
+                                    valence_deg(b_class, bb_atom_class(prev_c), c_class)),
+                        ref_geom_c=(bond_len_A(bb_atom_class(cg_atom), c_class),
+                                    valence_deg(c_class, bb_atom_class(cg_atom), b_class)))
     n_dihedral_ok += 1
 # (called after the backbone section below -- bb_atom_class is defined there)
 
@@ -1600,14 +1677,15 @@ def generate_sidechain_axis_gkinase(resname, b_name, c_name, axis_label, per_pai
                         continue
                     emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, tn, b_name, c_name,
                                     bn, cn, axis_dc_target=dc_pair.get(n, 0.0),
-                                    group_tag=f"{bn}{cn}")
+                                    group_tag=f"{bn}{cn}",
+                                    ref_geom_b=b_geom[bn][:2], ref_geom_c=c_geom[cn][:2])
                     emitted += 1
         if emitted:
             n_dihedral_ok += 1
             return
 
     emit_ghost_rings_for_axis(resname, axis_label, "SIDECHAIN", L_axis, target, dc_by_harmonic, b_name, c_name,
-                              b_ref, c_ref)
+                              b_ref, c_ref, b_geom[b_ref][:2], c_geom[c_ref][:2])
 
 generate_sidechain_axis_gkinase("CYS", "CA", "CB", "chi1")
 generate_sidechain_axis_gkinase("CYS", "CB", "SG", "rotor_SG")  # thiol rotor, see ROTOR_AXIS above.
@@ -1723,8 +1801,16 @@ def generate_planarity_impropers(resname, md_top, md_bonds):
         L_axis = bond_len_A(resolved_class(resname, aj.name, False, False),
                             resolved_class(resname, ak.name, False, False))
         target = kv * np.exp(-1j * phase)
+        cls = lambda nm: resolved_class(resname, nm, False, False)
+        # names[0] (the quad's first peripheral) hangs off the HUB names[2],
+        # not off the b-side anchor names[1] -- see geom_via_far_anchor.
         emit_ghost_ring(resname, f"imp_{ak.name}", "PLANARITY", per, L_axis, target,
-                        names[1], names[2], names[0], names[3], axis_dc_target=kv)
+                        names[1], names[2], names[0], names[3], axis_dc_target=kv,
+                        ref_geom_b=geom_via_far_anchor(
+                            L_axis, bond_len_A(cls(names[0]), cls(names[2])),
+                            valence_deg(cls(names[2]), cls(names[0]), cls(names[1]))),
+                        ref_geom_c=(bond_len_A(cls(names[3]), cls(names[2])),
+                                    valence_deg(cls(names[2]), cls(names[3]), cls(names[1]))))
         emitted += 1
     if emitted:
         n_dihedral_ok += 1
@@ -1876,7 +1962,9 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
         c_geom = {a: (bond_len_A(bb_atom_class(a), c_class), valence_deg(c_class, bb_atom_class(a), b_class),
                      delta_of(a, False)) for a in c_atoms}
         target, dc_by_harmonic = combined_target_for_axis(b_geom, c_geom, b_class, c_class, bb_atom_class)
-        return target, dc_by_harmonic, ref_b, ref_c
+        # A ghost is the rotated image of its side's reference ATOM, so the
+        # ring's radius/axial offset are that atom's own (see emit_ghost_ring).
+        return target, dc_by_harmonic, ref_b, ref_c, b_geom[ref_b][:2], c_geom[ref_c][:2]
 
     b_is_cross = any(a.residue.index != res.index for a in b_neighbors)
     c_is_cross = any(a.residue.index != res.index for a in c_neighbors)
@@ -1889,10 +1977,10 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
 
     results = []
     for b_atoms, c_atoms in groups:
-        target, dc_by_harmonic, ref_b, ref_c = group_target(b_atoms, c_atoms)
+        target, dc_by_harmonic, ref_b, ref_c, rg_b, rg_c = group_target(b_atoms, c_atoms)
         if target is None:
             continue
-        results.append((target, dc_by_harmonic, ref_b, ref_c))
+        results.append((target, dc_by_harmonic, ref_b, ref_c, rg_b, rg_c))
 
     if not results:
         print(f"SKIP DIHEDRAL BACKBONE ({resname} {axis_label}): no real substituent pair matches "
@@ -1901,7 +1989,7 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
         return
 
     multi_group = len(results) > 1
-    for target, dc_by_harmonic, ref_b, ref_c in results:
+    for target, dc_by_harmonic, ref_b, ref_c, rg_b, rg_c in results:
         _, rule_b_ref = rel_name(b_atom, ref_b)
         _, rule_c_ref = rel_name(b_atom, ref_c)
         # One atom is shared across every group (the non-risky side); the
@@ -1919,7 +2007,8 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
             # harmonic n (see combined_target_for_axis's own comment) --
             # not the whole axis's combined DC dumped onto a single ring.
             emit_ghost_ring(resname, axis_label, axis_label.upper(), n, L_axis, zt, b_name, c_name, rule_b_ref,
-                           rule_c_ref, axis_dc_target=dc_by_harmonic.get(n, 0.0), group_tag=group_tag)
+                           rule_c_ref, axis_dc_target=dc_by_harmonic.get(n, 0.0), group_tag=group_tag,
+                           ref_geom_b=rg_b, ref_geom_c=rg_c)
 
 def generate_omega_axis(resname, source_resname=None):
     """omega: the peptide-bond torsion around C(i)-+N(i+1) -- unlike every
@@ -2124,6 +2213,11 @@ def generate_omega_axis(resname, source_resname=None):
     # geometry the two constructions are exactly equivalent by linearity, so
     # the split looked like pure added topology. What was missing was any
     # measurement of how far real geometry departs from ideal.
+    # A ghost is the rotated image of its side's reference atom, so its
+    # radius/axial offset are that atom's own (see emit_ghost_ring).
+    rg_b = lambda a: (bond_len_A(bb_atom_class(a), b_class), valence_deg(b_class, bb_atom_class(a), c_class))
+    rg_c = lambda a: (bond_len_A(bb_atom_class(a), c_class), valence_deg(c_class, bb_atom_class(a), b_class))
+
     n2_pairs = 0
     for b_sub in b_neighbors:
         for c_sub in c_neighbors:
@@ -2135,14 +2229,16 @@ def generate_omega_axis(resname, source_resname=None):
             _, rule_c_sub = rel_name(b_atom, c_sub)
             emit_ghost_ring(resname, "omega", "OMEGA", 2, L_axis, t_pair[2], "C", "+N",
                             rule_b_sub, rule_c_sub, axis_dc_target=dc_pair.get(2, 0.0),
-                            group_tag=f"{b_sub.name}{c_sub.name}")
+                            group_tag=f"{b_sub.name}{c_sub.name}",
+                            ref_geom_b=rg_b(b_sub), ref_geom_c=rg_c(c_sub))
             n2_pairs += 1
     if n2_pairs == 0 and abs(target.get(2, 0j)) > 1e-6:
         # No pair resolved on its own (should not happen for a real peptide
         # bond) -- fall back to the old single combined ring rather than
         # silently emitting nothing for this harmonic.
         emit_ghost_ring(resname, "omega", "OMEGA", 2, L_axis, target[2], "C", "+N", rule_ca_b, rule_ca_c,
-                       axis_dc_target=dc_by_harmonic.get(2, 0.0))
+                       axis_dc_target=dc_by_harmonic.get(2, 0.0),
+                       ref_geom_b=rg_b(ca_b), ref_geom_c=rg_c(ca_c))
 
     emitted_n1 = False
     if o_b is not None and h_c is not None:
@@ -2152,13 +2248,15 @@ def generate_omega_axis(resname, source_resname=None):
             _, rule_o_b = rel_name(b_atom, o_b)
             _, rule_h_c = rel_name(b_atom, h_c)
             emit_ghost_ring(resname, "omega", "OMEGA", 1, L_axis, target_oh[1], "C", "+N", rule_o_b, rule_h_c,
-                           axis_dc_target=dc_by_harmonic_oh.get(1, 0.0))
+                           axis_dc_target=dc_by_harmonic_oh.get(1, 0.0),
+                           ref_geom_b=rg_b(o_b), ref_geom_c=rg_c(h_c))
             emitted_n1 = True
     if not emitted_n1 and abs(target.get(1, 0j)) > 1e-6:
         # Fallback (generic CA/+CA anchor) for the rare case with no real
         # (O, +H) pair -- e.g. next residue is Pro (no amide H).
         emit_ghost_ring(resname, "omega", "OMEGA", 1, L_axis, target[1], "C", "+N", rule_ca_b, rule_ca_c,
-                       axis_dc_target=dc_by_harmonic.get(1, 0.0))
+                       axis_dc_target=dc_by_harmonic.get(1, 0.0),
+                       ref_geom_b=rg_b(ca_b), ref_geom_c=rg_c(ca_c))
 
 # All 18 residue types found in ubiquitin.pdb, plus Cys/Trp (also generic-
 # sourced from Leu -- ubiquitin has neither at all, not even a terminal

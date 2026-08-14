@@ -37,11 +37,33 @@ struct GhostLocalOffset
     float c;
 };
 
+// How a ghost's position is derived from its anchors. The two bonded
+// families need genuinely different constructions -- they are not sharing
+// ghosts, they share this placement machinery -- so each ghost carries its
+// own mode.
+enum class GhostPlacement : unsigned
+{
+    // DIHEDRAL rings: the ghost is the image of a real reference atom under
+    // a rotation of delta about the B->C axis, at that atom's own distance
+    // from the axis and its own position along it.
+    AxisRotation = 0,
+    // BEND: the ghost sits ON the axis, at distance r from B along B->C.
+    // No azimuth, no reference atom (r/theta/delta's azimuthal term is
+    // multiplied by sin(theta=0)). Models a 1-3 distance without letting
+    // the real 1-2 bond stretch leak into it -- see
+    // BondedForceFieldReader's own comment.
+    AxialOffset = 1,
+};
+
 struct GhostParticleBinding
 {
     unsigned ownIndex;
     unsigned anchorBIndex;
     unsigned anchorCIndex;
+    // The real atom this ghost is the rotated image of. It also remains
+    // the azimuthal origin it always was, so delta_deg keeps its meaning:
+    // a ring is simply this atom replicated at M equispaced azimuths
+    // about the B->C axis.
     unsigned anchorRefIndex;
     float r;
     float theta_deg;
@@ -50,6 +72,16 @@ struct GhostParticleBinding
     // them because r/theta/delta are what the .nc stores and what
     // NetCDFWriter reads back out of the binding.
     GhostLocalOffset offset;
+    // Cached cos/sin of delta_deg, for the rotation placement.
+    float cos_delta;
+    float sin_delta;
+    // Index into SpringNetwork's per-axis accumulators: every ghost of a
+    // ring shares one axis, and the closed-form axis reaction is computed
+    // once per axis rather than once per ghost (it is only valid over
+    // complete spring pairs -- see redistributeAxisReaction). Unused for
+    // AxialOffset ghosts, whose redistribution balances on its own.
+    unsigned axisIndex;
+    GhostPlacement placement;
 };
 
 // The pure geometry/algebra behind a ghost particle: a 3-point ("NeRF"
@@ -94,6 +126,79 @@ class GhostParticle
     static void redistributeForce(const Vector3f & B, const Vector3f & C, const Vector3f & Ref,
                                    const GhostLocalOffset & offset, const Vector3f & f, Vector3f & F_B,
                                    Vector3f & F_C, Vector3f & F_Ref);
+
+    // ---- Rotation placement: same physics, no Jacobian ---------------
+    //
+    // Places the ghost as the image of a REAL atom under a rotation of
+    // delta about the B->C axis. The ghost then sits at exactly that
+    // atom's distance from the axis and at its axial position, differing
+    // only in azimuth -- which is what makes the whole construction
+    // collapse (see doc/BondedForceFieldSprings.md):
+    //
+    //  * dX_ghost/dX_atom is EXACTLY the rotation matrix R(axis, delta),
+    //    so the force owed to the real atom is just R(axis, -delta) . f
+    //    -- one Rodrigues application instead of building the placement
+    //    Jacobian's ~9 3x3 matrix products;
+    //  * the forces owed to the two axis atoms carry no torque about the
+    //    axis at all (they do zero virtual work under the only motion
+    //    --rigidbody leaves free), and are fully determined by global
+    //    force/torque balance -- so they are reconstructed in closed form
+    //    rather than differentiated. Verified over 200 random geometries
+    //    and ring sizes: matches the true Jacobian to 3e-7, i.e. to the
+    //    finite-difference noise floor of the check itself.
+    //
+    // cos_delta/sin_delta are passed precomputed: delta is fixed for the
+    // lifetime of a ghost.
+    static Vector3f computePositionByRotation(const Vector3f & B, const Vector3f & C, const Vector3f & atom,
+                                              float cos_delta, float sin_delta);
+
+    // Redistributes a force acting on a ghost placed by
+    // computePositionByRotation onto the real atom it images and onto the
+    // two axis atoms. `f_atom_total`/`torque_total` accumulate the pair's
+    // two ends before the axis reconstruction, which is why the axis part
+    // is computed by redistributeAxisReaction below rather than here: the
+    // reconstruction is only valid once BOTH ends of a spring have been
+    // accounted for (it enforces the balance of the whole interaction).
+    static Vector3f rotateForceToAtom(const Vector3f & B, const Vector3f & C, const Vector3f & f, float cos_delta,
+                                      float sin_delta);
+
+    // Closed-form reaction on the two axis atoms. Redistribution must
+    // TRANSFER what acted on the ghosts, not cancel it, so it solves
+    //     F_B + F_C     = (sum of ghost forces)  - (sum of real-atom forces)
+    //     (C-B) x F_C   = (sum of ghost torques) - (sum of real-atom torques)
+    // both taken about B, whose minimum-norm solution is
+    // F_C = (T x a)/|a|^2 with a = C-B.
+    //
+    // Always solvable: rotating about the axis preserves the axial
+    // component of a torque, so ghost and real-atom axial torques cancel
+    // ghost by ghost and T never has a component along a. And exact, not
+    // approximate: the true Jacobian's answer has no axial component
+    // either (measured over 200 random geometries: 1e-7), because a ghost
+    // built by rotation is rigidly carried by its atom's group and adds no
+    // freedom of its own.
+    //
+    // Note the sums are over a whole axis. On a complete ring the ghost
+    // sums vanish (every spring is internal to it) and this reduces to a
+    // pure reaction -- but the ghost terms must be carried anyway, or an
+    // unpaired force would be annihilated instead of transferred.
+    static void redistributeAxisReaction(const Vector3f & B, const Vector3f & C, const Vector3f & sum_ghost_forces,
+                                          const Vector3f & sum_ghost_torques_about_B, const Vector3f & sum_atom_forces,
+                                          const Vector3f & sum_atom_torques_about_B, Vector3f & F_B, Vector3f & F_C);
+
+    // ---- Axial placement (BEND) --------------------------------------
+    //
+    // X = B + r * u, u = (C-B)/|C-B|. Its Jacobian is closed form and
+    // needs no frame either: with P = I - u u^T the projector across the
+    // axis, dX/dC = (r/L) P and dX/dB = I - (r/L) P, so
+    //     F_C = (r/L) * (f - u (u.f)),   F_B = f - F_C
+    // which transfers the force exactly and conserves the torque about B
+    // by construction ((C-B) x F_C = r u x f, the ghost's own torque).
+    // Nothing accumulates across ghosts here: each is already balanced on
+    // its own, unlike the rotation placement.
+    static Vector3f computePositionAxial(const Vector3f & B, const Vector3f & C, float r);
+
+    static void redistributeForceAxial(const Vector3f & B, const Vector3f & C, float r, const Vector3f & f,
+                                        Vector3f & F_B, Vector3f & F_C);
 };
 
 } // namespace spn

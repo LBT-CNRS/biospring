@@ -768,12 +768,19 @@ void SpringNetwork::addParticle(const Particle & source)
     _markNeighborSearchesDirty();
 }
 
-unsigned SpringNetwork::addGhostParticle(unsigned anchorBIndex, unsigned anchorCIndex, unsigned anchorRefIndex,
-                                         float r, float theta_deg, float delta_deg)
+unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned anchorBIndex, unsigned anchorCIndex,
+                                         unsigned anchorRefIndex, float r, float theta_deg, float delta_deg)
 {
+    const GhostPlacement placement = static_cast<GhostPlacement>(placementValue);
+
+    const float delta_rad_init = delta_deg * static_cast<float>(M_PI) / 180.0f;
     const Vector3f position =
-        GhostParticle::computePosition(getParticle(anchorBIndex).getPosition(), getParticle(anchorCIndex).getPosition(),
-                                       getParticle(anchorRefIndex).getPosition(), r, theta_deg, delta_deg);
+        (placement == GhostPlacement::AxialOffset)
+            ? GhostParticle::computePositionAxial(getParticle(anchorBIndex).getPosition(),
+                                                  getParticle(anchorCIndex).getPosition(), r)
+            : GhostParticle::computePositionByRotation(
+                  getParticle(anchorBIndex).getPosition(), getParticle(anchorCIndex).getPosition(),
+                  getParticle(anchorRefIndex).getPosition(), std::cos(delta_rad_init), std::sin(delta_rad_init));
 
     Particle p;
     p.setPosition(position);
@@ -782,8 +789,22 @@ unsigned SpringNetwork::addGhostParticle(unsigned anchorBIndex, unsigned anchorC
     addParticle(p);
 
     const unsigned ownIndex = static_cast<unsigned>(_particles.size() - 1);
+
+    // Every ghost of one ring hangs off the same axis; find or create that
+    // axis's accumulator (see GhostAxis). Linear search is fine: this runs
+    // once at build time, and the number of distinct axes is small next to
+    // the number of ghosts (example/072: 13964 ghosts, a few hundred axes).
+    unsigned axisIndex = 0;
+    for (; axisIndex < _ghostaxes.size(); ++axisIndex)
+        if (_ghostaxes[axisIndex].anchorBIndex == anchorBIndex && _ghostaxes[axisIndex].anchorCIndex == anchorCIndex)
+            break;
+    if (axisIndex == _ghostaxes.size())
+        _ghostaxes.push_back(GhostAxis{anchorBIndex, anchorCIndex, Vector3f(), Vector3f(), Vector3f(), Vector3f()});
+
+    const float delta_rad = delta_deg * static_cast<float>(M_PI) / 180.0f;
     _ghostparticles.push_back(GhostParticleBinding{ownIndex, anchorBIndex, anchorCIndex, anchorRefIndex, r, theta_deg,
-                                                   delta_deg, GhostParticle::localOffset(r, theta_deg, delta_deg)});
+                                                   delta_deg, GhostParticle::localOffset(r, theta_deg, delta_deg),
+                                                   std::cos(delta_rad), std::sin(delta_rad), axisIndex, placement});
     return ownIndex;
 }
 
@@ -797,27 +818,83 @@ void SpringNetwork::redistributeGhostForces()
 {
     _ghostForceScratch.resize(_ghostparticles.size());
 
+    // Pass 1, parallel: rotate each ghost's force back onto the real atom
+    // it images. That single Rodrigues application IS the exact Jacobian
+    // transpose for this placement (see GhostParticle.h), so nothing is
+    // approximated and no frame is built.
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
 #endif
     for (size_t i = 0; i < _ghostparticles.size(); ++i)
     {
         const GhostParticleBinding & binding = _ghostparticles[i];
+        const Vector3f & B = getParticle(binding.anchorBIndex).getPosition();
+        const Vector3f & C = getParticle(binding.anchorCIndex).getPosition();
         GhostForceContribution & out = _ghostForceScratch[i];
-        GhostParticle::redistributeForce(getParticle(binding.anchorBIndex).getPosition(),
-                                         getParticle(binding.anchorCIndex).getPosition(),
-                                         getParticle(binding.anchorRefIndex).getPosition(), binding.offset,
-                                         getParticle(binding.ownIndex).getForce(), out.F_B, out.F_C, out.F_Ref);
+        if (binding.placement == GhostPlacement::AxialOffset)
+        {
+            // Self-balancing, no reference atom involved, no accumulation.
+            GhostParticle::redistributeForceAxial(B, C, binding.r, getParticle(binding.ownIndex).getForce(), out.F_B,
+                                                  out.F_C);
+            out.F_Ref = Vector3f();
+        }
+        else
+        {
+            out.F_Ref = GhostParticle::rotateForceToAtom(B, C, getParticle(binding.ownIndex).getForce(),
+                                                         binding.cos_delta, binding.sin_delta);
+        }
     }
 
+    // Pass 2, serial: apply to the real atoms (heavily shared, so not
+    // concurrently writable) while accumulating each axis's force and
+    // torque totals.
+    for (GhostAxis & axis : _ghostaxes)
+    {
+        axis.sumGhostForces = Vector3f();
+        axis.sumGhostTorquesAboutB = Vector3f();
+        axis.sumAtomForces = Vector3f();
+        axis.sumAtomTorquesAboutB = Vector3f();
+    }
     for (size_t i = 0; i < _ghostparticles.size(); ++i)
     {
         const GhostParticleBinding & binding = _ghostparticles[i];
         const GhostForceContribution & in = _ghostForceScratch[i];
-        getParticle(binding.anchorBIndex).addForce(in.F_B);
-        getParticle(binding.anchorCIndex).addForce(in.F_C);
-        getParticle(binding.anchorRefIndex).addForce(in.F_Ref);
-        getParticle(binding.ownIndex).setForce(Vector3f(0.0f, 0.0f, 0.0f));
+        Particle & ghost = getParticle(binding.ownIndex);
+
+        if (binding.placement == GhostPlacement::AxialOffset)
+        {
+            getParticle(binding.anchorBIndex).addForce(in.F_B);
+            getParticle(binding.anchorCIndex).addForce(in.F_C);
+            ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
+            continue;
+        }
+
+        Particle & ref = getParticle(binding.anchorRefIndex);
+        GhostAxis & axis = _ghostaxes[binding.axisIndex];
+        const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
+
+        // What acted on the ghost has to be transferred, not cancelled, so
+        // both sides of the balance are accumulated.
+        axis.sumGhostForces += ghost.getForce();
+        axis.sumGhostTorquesAboutB += (ghost.getPosition() - B) ^ ghost.getForce();
+
+        ref.addForce(in.F_Ref);
+        axis.sumAtomForces += in.F_Ref;
+        axis.sumAtomTorquesAboutB += (ref.getPosition() - B) ^ in.F_Ref;
+
+        ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
+    }
+
+    // Pass 3: one closed-form reaction per axis, restoring global force and
+    // torque balance without ever differentiating the placement.
+    for (const GhostAxis & axis : _ghostaxes)
+    {
+        Vector3f F_B, F_C;
+        GhostParticle::redistributeAxisReaction(
+            getParticle(axis.anchorBIndex).getPosition(), getParticle(axis.anchorCIndex).getPosition(),
+            axis.sumGhostForces, axis.sumGhostTorquesAboutB, axis.sumAtomForces, axis.sumAtomTorquesAboutB, F_B, F_C);
+        getParticle(axis.anchorBIndex).addForce(F_B);
+        getParticle(axis.anchorCIndex).addForce(F_C);
     }
 }
 
@@ -833,11 +910,14 @@ void SpringNetwork::updateGhostPositions()
     for (size_t i = 0; i < _ghostparticles.size(); ++i)
     {
         const GhostParticleBinding & binding = _ghostparticles[i];
+        const Vector3f & B = getParticle(binding.anchorBIndex).getPosition();
+        const Vector3f & C = getParticle(binding.anchorCIndex).getPosition();
         getParticle(binding.ownIndex)
-            .setPosition(GhostParticle::computePosition(getParticle(binding.anchorBIndex).getPosition(),
-                                                        getParticle(binding.anchorCIndex).getPosition(),
-                                                        getParticle(binding.anchorRefIndex).getPosition(),
-                                                        binding.offset));
+            .setPosition(binding.placement == GhostPlacement::AxialOffset
+                             ? GhostParticle::computePositionAxial(B, C, binding.r)
+                             : GhostParticle::computePositionByRotation(
+                                   B, C, getParticle(binding.anchorRefIndex).getPosition(), binding.cos_delta,
+                                   binding.sin_delta));
     }
 }
 

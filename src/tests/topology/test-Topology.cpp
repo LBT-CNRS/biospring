@@ -207,9 +207,14 @@ TEST(Topology, to_spring_network_with_ghost_particle)
     ghost_props.set_static(true);
     ghost_props.set_mass(0.0f);
 
-    const float r = 1.5f, theta_deg = 90.0f, delta_deg = 0.0f;
+    // A ghost is the image of its reference ATOM under a rotation of delta
+    // about the B->C axis (see spn::GhostParticle): r/theta are no longer
+    // read, the radius and axial position come from that atom itself.
+    // Axis is +z here and REF sits at (1,0,0), so delta=90deg must land the
+    // ghost on (0,1,0).
+    const float r = 1.5f, theta_deg = 90.0f, delta_deg = 90.0f;
     top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0), top.get_particle(1),
-                           top.get_particle(2), r, theta_deg, delta_deg);
+                           top.get_particle(2), r, theta_deg, delta_deg, static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
 
     ASSERT_EQ(top.number_of_particles(), 4);
     EXPECT_TRUE(top.is_ghost_particle(top.get_particle(3).unique_id()));
@@ -230,17 +235,19 @@ TEST(Topology, to_spring_network_with_ghost_particle)
     const spn::Particle & ghost = spn.getParticle(3);
     EXPECT_TRUE(ghost.isStatic());
     EXPECT_FLOAT_EQ(ghost.getMass(), 0.0f);
-    // theta=90deg, delta=0 -> r straight along +x from B (same geometry as
-    // GhostParticle's own unit test), placed here through the full
-    // Topology -> SpringNetwork conversion instead of calling the
-    // placement formula directly.
-    EXPECT_NEAR(ghost.getPosition().getX(), r, 1e-4);
-    EXPECT_NEAR(ghost.getPosition().getY(), 0.0f, 1e-4);
+    // REF=(1,0,0) rotated 90deg about the +z axis lands on (0,1,0), at the
+    // same distance from the axis and the same height along it. Placed here
+    // through the full Topology -> SpringNetwork conversion instead of
+    // calling the placement formula directly.
+    EXPECT_NEAR(ghost.getPosition().getX(), 0.0f, 1e-4);
+    EXPECT_NEAR(ghost.getPosition().getY(), 1.0f, 1e-4);
     EXPECT_NEAR(ghost.getPosition().getZ(), 0.0f, 1e-4);
 
-    // Force redistribution: push on the ghost, redistribute, check it
-    // landed on the 3 anchors and the ghost's own force was reset.
-    spn.getParticle(3).addForce(Vector3f(1.0f, 2.0f, 3.0f));
+    // Force redistribution TRANSFERS what acted on the ghost: the three
+    // anchors must end up carrying exactly it, and the ghost's own force
+    // must be cleared.
+    const Vector3f applied(1.0f, 2.0f, 3.0f);
+    spn.getParticle(3).addForce(applied);
     spn.redistributeGhostForces();
 
     EXPECT_FLOAT_EQ(spn.getParticle(3).getForce().getX(), 0.0f);
@@ -249,15 +256,24 @@ TEST(Topology, to_spring_network_with_ghost_particle)
 
     Vector3f total_redistributed =
         spn.getParticle(0).getForce() + spn.getParticle(1).getForce() + spn.getParticle(2).getForce();
-    EXPECT_NEAR(total_redistributed.getX(), 1.0f, 1e-3);
-    EXPECT_NEAR(total_redistributed.getY(), 2.0f, 1e-3);
-    EXPECT_NEAR(total_redistributed.getZ(), 3.0f, 1e-3);
+    EXPECT_NEAR(total_redistributed.getX(), applied.getX(), 1e-3);
+    EXPECT_NEAR(total_redistributed.getY(), applied.getY(), 1e-3);
+    EXPECT_NEAR(total_redistributed.getZ(), applied.getZ(), 1e-3);
 
-    // Position tracking: move anchor C, update, check the ghost followed.
-    spn.getParticle(1).setPosition(Vector3f(0.0f, 0.0f, 5.0f));
+    // ... and the torque about B too, which is the part a naive split gets
+    // wrong (see doc/BondedForceFieldSprings.md).
+    const Vector3f B = spn.getParticle(0).getPosition();
+    Vector3f torque_out = ((spn.getParticle(1).getPosition() - B) ^ spn.getParticle(1).getForce()) +
+                          ((spn.getParticle(2).getPosition() - B) ^ spn.getParticle(2).getForce());
+    Vector3f torque_in = (ghost.getPosition() - B) ^ applied;
+    EXPECT_NEAR((torque_out - torque_in).norm(), 0.0f, 1e-3);
+
+    // Position tracking: the ghost follows its reference ATOM, not a fixed
+    // offset -- move REF out to twice its radius and the ghost doubles too.
+    spn.getParticle(2).setPosition(Vector3f(2.0f, 0.0f, 0.0f));
     spn.updateGhostPositions();
-    EXPECT_NEAR(spn.getParticle(3).getPosition().getX(), r, 1e-4);
-    EXPECT_NEAR(spn.getParticle(3).getPosition().getY(), 0.0f, 1e-4);
+    EXPECT_NEAR(spn.getParticle(3).getPosition().getX(), 0.0f, 1e-4);
+    EXPECT_NEAR(spn.getParticle(3).getPosition().getY(), 2.0f, 1e-4);
     EXPECT_NEAR(spn.getParticle(3).getPosition().getZ(), 0.0f, 1e-4);
 }
 
@@ -292,7 +308,7 @@ TEST(Topology, copy_preserves_ghost_particle)
 
     const float r = 1.5f, theta_deg = 90.0f, delta_deg = 0.0f;
     top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0), top.get_particle(1),
-                           top.get_particle(2), r, theta_deg, delta_deg);
+                           top.get_particle(2), r, theta_deg, delta_deg, static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
 
     // Copy constructor.
     topology::Topology copy(top);
@@ -365,9 +381,9 @@ TEST(Topology, dihedral_ghost_spring_applies_force)
     ghost_props.set_mass(0.0f);
 
     topology::Particle & ghost1 = top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0),
-                                                          top.get_particle(1), top.get_particle(2), 1.0f, 90.0f, 0.0f);
+                                                          top.get_particle(1), top.get_particle(2), 1.0f, 90.0f, 0.0f, static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
     topology::Particle & ghost2 = top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(3),
-                                                          top.get_particle(4), top.get_particle(5), 1.0f, 90.0f, 0.0f);
+                                                          top.get_particle(4), top.get_particle(5), 1.0f, 90.0f, 0.0f, static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
 
     // d0 = 0.1: guaranteed far from the ~20 A actual distance between the
     // two ghosts, so (d - d0)^2 is unambiguously large.
@@ -448,9 +464,9 @@ TEST(Topology, forces_match_energy_gradient_by_finite_differences)
     // Non-trivial placement (theta != 90, delta != 0) so the placement
     // Jacobian has every term active.
     topology::Particle & ghost1 = top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0),
-                                                          top.get_particle(1), top.get_particle(2), 1.3f, 110.0f, 35.0f);
+                                                          top.get_particle(1), top.get_particle(2), 1.3f, 110.0f, 35.0f, static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
     topology::Particle & ghost2 = top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(3),
-                                                          top.get_particle(4), top.get_particle(5), 1.1f, 75.0f, -20.0f);
+                                                          top.get_particle(4), top.get_particle(5), 1.1f, 75.0f, -20.0f, static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
 
     top.add_spring(top.get_particle(2), top.get_particle(5), 2.0, 4.0);
     top.add_stretch_spring(top.get_particle(0), top.get_particle(1), 1.5, 6.0);

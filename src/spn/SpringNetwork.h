@@ -275,7 +275,8 @@ class SpringNetwork
     // initial position placed from the anchors' current positions) and
     // returns its index. See redistributeGhostForces/updateGhostPositions
     // for the two per-step operations this binding drives.
-    unsigned addGhostParticle(unsigned anchorBIndex, unsigned anchorCIndex, unsigned anchorRefIndex, float r,
+    unsigned addGhostParticle(unsigned placement, unsigned anchorBIndex, unsigned anchorCIndex,
+                              unsigned anchorRefIndex, float r,
                               float theta_deg, float delta_deg);
 
     // Redistributes every ghost particle's currently accumulated force
@@ -620,6 +621,22 @@ class SpringNetwork
         Vector3f F_Ref;
     };
     std::vector<GhostForceContribution> _ghostForceScratch;
+
+    // One entry per distinct (B, C) ghost axis. The reaction owed to the
+    // two axis atoms is reconstructed once per axis from the running
+    // force/torque totals of every ghost hanging off it -- see
+    // GhostParticle::redistributeAxisReaction, which is only valid over
+    // complete spring pairs, hence per axis rather than per ghost.
+    struct GhostAxis
+    {
+        unsigned anchorBIndex;
+        unsigned anchorCIndex;
+        Vector3f sumGhostForces;
+        Vector3f sumGhostTorquesAboutB;
+        Vector3f sumAtomForces;
+        Vector3f sumAtomTorquesAboutB;
+    };
+    std::vector<GhostAxis> _ghostaxes;
 
     // One bucket per dynamic-particle-loop index, filled while computing
     // nonbonded pair interactions in parallel: each pair is evaluated once,
