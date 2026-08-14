@@ -101,15 +101,41 @@ void SpringNetwork::computeSpringForces()
 // ever shows a need otherwise.
 void SpringNetwork::computeStretchForces()
 {
-    float stretchenergy = 0.0f;
-    for (Spring & spring : _stretchsprings)
+    _energies.stretch = _computeSpringCollectionForces(_stretchsprings, /*ignoreDynamicState=*/false,
+                                                       /*subtractDcOffset=*/false);
+}
+
+// Shared parallel-compute/serial-accumulate loop for the STRETCH, BEND and
+// DIHEDRAL spring collections -- the exact pattern computeSpringForces
+// established: the spring evaluation (the expensive part) runs in parallel
+// into _springForceScratch, then a deterministic serial pass applies the
+// forces (particles are shared between springs, so they must not be
+// written concurrently) and accumulates the energy in a fixed order,
+// keeping the result independent of the thread count. Returns the summed
+// energy. The scratch buffer is shared with computeSpringForces: the four
+// loops run sequentially within one step, and resize never shrinks
+// capacity, so no per-step allocation happens either way.
+float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
+                                                    bool subtractDcOffset)
+{
+    _springForceScratch.resize(springs.size());
+
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t i = 0; i < springs.size(); ++i)
+        _springForceScratch[i] = springs[i].computeForce(*_ff, ignoreDynamicState);
+
+    float energy = 0.0f;
+    for (size_t i = 0; i < springs.size(); ++i)
     {
-        const Vector3f force = spring.computeForce(*_ff);
+        Spring & spring = springs[i];
+        const Vector3f & force = _springForceScratch[i];
         spring.getParticle1().addForce(force);
         spring.getParticle2().addForce(-force);
-        stretchenergy += spring.getEnergy();
+        energy += subtractDcOffset ? spring.getEnergy() - spring.getDcOffset() : spring.getEnergy();
     }
-    _energies.stretch = stretchenergy;
+    return energy;
 }
 
 // Calculates BEND ghost-ghost spring forces and applies them to the
@@ -124,16 +150,9 @@ void SpringNetwork::computeStretchForces()
 // family's contribution).
 void SpringNetwork::computeBendForces()
 {
-    float bendenergy = 0.0f;
-    if (isBendingEnabled())
-        for (Spring & spring : _bendsprings)
-        {
-            const Vector3f force = spring.computeForce(*_ff, /*ignoreDynamicState=*/true);
-            spring.getParticle1().addForce(force);
-            spring.getParticle2().addForce(-force);
-            bendenergy += spring.getEnergy();
-        }
-    _energies.bend = bendenergy;
+    _energies.bend = isBendingEnabled() ? _computeSpringCollectionForces(_bendsprings, /*ignoreDynamicState=*/true,
+                                                                         /*subtractDcOffset=*/false)
+                                        : 0.0f;
 }
 
 // Calculates dihedral ghost-spring forces and applies them to the
@@ -144,31 +163,22 @@ void SpringNetwork::computeBendForces()
 // see Configuration.hpp's own comment) on top of the isSpringEnabled()
 // master switch the caller (computeForces) already applies -- same
 // both-force-and-energy-skipped reasoning as computeBendForces above (a
-// disabled family must not silently keep influencing the dynamics). Not
-// parallelised (unlike computeSpringForces): ghost-spring counts are
-// expected to be small relative to the real bonded network, so a serial
-// loop is simplest here unless profiling ever shows otherwise.
+// disabled family must not silently keep influencing the dynamics).
+//
+// ignoreDynamicState=true: both endpoints of a dihedral ghost spring are
+// always static virtual sites (see Spring::computeForce's own doc) --
+// without this, the force/energy here would silently stay zero for every
+// single one of these springs. subtractDcOffset=true: each spring's own
+// share of its axis's exact dihedral-energy correction (see
+// Spring::getDcOffset's own comment) is subtracted from the reported
+// total; it never affects the forces.
 void SpringNetwork::computeDihedralForces()
 {
     float dihedralenergy = 0.0f;
 
     auto accumulate = [&](std::vector<Spring> & springs) {
-        for (Spring & spring : springs)
-        {
-            // ignoreDynamicState=true: both endpoints of a dihedral ghost
-            // spring are always static virtual sites (see Spring::computeForce's
-            // own doc) -- without this, the force/energy here would silently
-            // stay zero for every single one of these springs.
-            const Vector3f force = spring.computeForce(*_ff, /*ignoreDynamicState=*/true);
-            spring.getParticle1().addForce(force);
-            spring.getParticle2().addForce(-force);
-            // Subtracts this spring's own share of its axis's exact
-            // dihedral-energy correction (see Spring::getDcOffset's own
-            // comment) -- zero for every non-dihedral spring, so this is a
-            // no-op there; never affects the force just computed above, only
-            // the reported total.
-            dihedralenergy += spring.getEnergy() - spring.getDcOffset();
-        }
+        dihedralenergy += _computeSpringCollectionForces(springs, /*ignoreDynamicState=*/true,
+                                                         /*subtractDcOffset=*/true);
     };
 
     if (isDihedralPhiEnabled())
@@ -773,38 +783,61 @@ unsigned SpringNetwork::addGhostParticle(unsigned anchorBIndex, unsigned anchorC
 
     const unsigned ownIndex = static_cast<unsigned>(_particles.size() - 1);
     _ghostparticles.push_back(GhostParticleBinding{ownIndex, anchorBIndex, anchorCIndex, anchorRefIndex, r, theta_deg,
-                                                   delta_deg});
+                                                   delta_deg, GhostParticle::localOffset(r, theta_deg, delta_deg)});
     return ownIndex;
 }
 
+// Anchors are heavily shared -- on example/072, 13964 ghosts hang off only
+// 1875 distinct anchors, up to 62 ghosts on a single one -- so the anchors
+// cannot be written concurrently. Same split as computeSpringForces: the
+// expensive part (the placement Jacobian, one per ghost) runs in parallel
+// into a scratch buffer, then a deterministic serial pass accumulates,
+// which also keeps the result independent of the thread count.
 void SpringNetwork::redistributeGhostForces()
 {
-    for (const GhostParticleBinding & binding : _ghostparticles)
-    {
-        Particle & ghost = getParticle(binding.ownIndex);
-        Particle & anchorB = getParticle(binding.anchorBIndex);
-        Particle & anchorC = getParticle(binding.anchorCIndex);
-        Particle & anchorRef = getParticle(binding.anchorRefIndex);
+    _ghostForceScratch.resize(_ghostparticles.size());
 
-        Vector3f F_B, F_C, F_Ref;
-        GhostParticle::redistributeForce(anchorB.getPosition(), anchorC.getPosition(), anchorRef.getPosition(),
-                                         binding.r, binding.theta_deg, binding.delta_deg, ghost.getForce(), F_B, F_C,
-                                         F_Ref);
-        anchorB.addForce(F_B);
-        anchorC.addForce(F_C);
-        anchorRef.addForce(F_Ref);
-        ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t i = 0; i < _ghostparticles.size(); ++i)
+    {
+        const GhostParticleBinding & binding = _ghostparticles[i];
+        GhostForceContribution & out = _ghostForceScratch[i];
+        GhostParticle::redistributeForce(getParticle(binding.anchorBIndex).getPosition(),
+                                         getParticle(binding.anchorCIndex).getPosition(),
+                                         getParticle(binding.anchorRefIndex).getPosition(), binding.offset,
+                                         getParticle(binding.ownIndex).getForce(), out.F_B, out.F_C, out.F_Ref);
+    }
+
+    for (size_t i = 0; i < _ghostparticles.size(); ++i)
+    {
+        const GhostParticleBinding & binding = _ghostparticles[i];
+        const GhostForceContribution & in = _ghostForceScratch[i];
+        getParticle(binding.anchorBIndex).addForce(in.F_B);
+        getParticle(binding.anchorCIndex).addForce(in.F_C);
+        getParticle(binding.anchorRefIndex).addForce(in.F_Ref);
+        getParticle(binding.ownIndex).setForce(Vector3f(0.0f, 0.0f, 0.0f));
     }
 }
 
+// Embarrassingly parallel, unlike redistributeGhostForces: each iteration
+// writes only its own ghost, and a ghost is never itself an anchor (checked
+// on example/072: 0 of 41892 anchor slots point at a ghost), so no
+// iteration can depend on another's result and no write is shared.
 void SpringNetwork::updateGhostPositions()
 {
-    for (const GhostParticleBinding & binding : _ghostparticles)
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t i = 0; i < _ghostparticles.size(); ++i)
     {
-        const Vector3f position = GhostParticle::computePosition(
-            getParticle(binding.anchorBIndex).getPosition(), getParticle(binding.anchorCIndex).getPosition(),
-            getParticle(binding.anchorRefIndex).getPosition(), binding.r, binding.theta_deg, binding.delta_deg);
-        getParticle(binding.ownIndex).setPosition(position);
+        const GhostParticleBinding & binding = _ghostparticles[i];
+        getParticle(binding.ownIndex)
+            .setPosition(GhostParticle::computePosition(getParticle(binding.anchorBIndex).getPosition(),
+                                                        getParticle(binding.anchorCIndex).getPosition(),
+                                                        getParticle(binding.anchorRefIndex).getPosition(),
+                                                        binding.offset));
     }
 }
 

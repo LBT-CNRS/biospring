@@ -128,6 +128,26 @@ struct LocalFrame
     Mat3 Jv_B, Jv_C, Jv_R;
 };
 
+// Just the orthonormal frame (u, v, w), without any of the derivative
+// machinery below. Placing a ghost needs nothing else: X = B + a*u + b*v
+// + c*w. Splitting this out of computeLocalFrame is what keeps the
+// placement pass from building -- and immediately discarding -- the ~9
+// 3x3 matrix products of the Jacobian. Profiling example/072's
+// bonded-only model put computeLocalFrame at ~59% of the step, called
+// once per ghost from each of the two passes.
+void computeFrameBasis(const Vector3f & B, const Vector3f & C, const Vector3f & Ref, Vector3f & u, Vector3f & v,
+                       Vector3f & w)
+{
+    Vector3f d = C - B;
+    u = d / d.norm();
+
+    Vector3f t = Ref - B;
+    Vector3f tperp = t - u * u.dot(t);
+    v = tperp / tperp.norm();
+
+    w = u ^ v;
+}
+
 LocalFrame computeLocalFrame(const Vector3f & B, const Vector3f & C, const Vector3f & Ref)
 {
     LocalFrame f;
@@ -167,31 +187,49 @@ LocalFrame computeLocalFrame(const Vector3f & B, const Vector3f & C, const Vecto
 
 } // namespace
 
+GhostLocalOffset GhostParticle::localOffset(float r, float theta_deg, float delta_deg)
+{
+    const float theta = theta_deg * (static_cast<float>(M_PI) / 180.0f);
+    const float delta = delta_deg * (static_cast<float>(M_PI) / 180.0f);
+    GhostLocalOffset o;
+    o.a = r * std::cos(theta);
+    o.b = r * std::sin(theta) * std::cos(delta);
+    o.c = r * std::sin(theta) * std::sin(delta);
+    return o;
+}
+
+Vector3f GhostParticle::computePosition(const Vector3f & B, const Vector3f & C, const Vector3f & Ref,
+                                        const GhostLocalOffset & offset)
+{
+    Vector3f u, v, w;
+    computeFrameBasis(B, C, Ref, u, v, w);
+    return B + u * offset.a + v * offset.b + w * offset.c;
+}
+
 Vector3f GhostParticle::computePosition(const Vector3f & B, const Vector3f & C, const Vector3f & Ref, float r,
                                         float theta_deg, float delta_deg)
 {
-    LocalFrame f = computeLocalFrame(B, C, Ref);
-
-    float theta = theta_deg * (static_cast<float>(M_PI) / 180.0f);
-    float delta = delta_deg * (static_cast<float>(M_PI) / 180.0f);
-    float a = r * std::cos(theta);
-    float b = r * std::sin(theta) * std::cos(delta);
-    float c = r * std::sin(theta) * std::sin(delta);
-
-    return B + f.u * a + f.v * b + f.w * c;
+    return computePosition(B, C, Ref, localOffset(r, theta_deg, delta_deg));
 }
 
 void GhostParticle::redistributeForce(const Vector3f & B, const Vector3f & C, const Vector3f & Ref, float r,
                                       float theta_deg, float delta_deg, const Vector3f & force, Vector3f & F_B,
                                       Vector3f & F_C, Vector3f & F_Ref)
 {
+    redistributeForce(B, C, Ref, localOffset(r, theta_deg, delta_deg), force, F_B, F_C, F_Ref);
+}
+
+void GhostParticle::redistributeForce(const Vector3f & B, const Vector3f & C, const Vector3f & Ref,
+                                      const GhostLocalOffset & offset, const Vector3f & force, Vector3f & F_B,
+                                      Vector3f & F_C, Vector3f & F_Ref)
+{
+    // Unlike placement, this genuinely needs the derivatives: the force on
+    // each anchor is J_anchor^T . F_ghost (see the class comment).
     LocalFrame f = computeLocalFrame(B, C, Ref);
 
-    float theta = theta_deg * (static_cast<float>(M_PI) / 180.0f);
-    float delta = delta_deg * (static_cast<float>(M_PI) / 180.0f);
-    float a = r * std::cos(theta);
-    float b = r * std::sin(theta) * std::cos(delta);
-    float c = r * std::sin(theta) * std::sin(delta);
+    const float a = offset.a;
+    const float b = offset.b;
+    const float c = offset.c;
 
     Mat3 Sv = Mat3::skew(f.v);
     Mat3 Su = Mat3::skew(f.u);

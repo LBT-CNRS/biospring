@@ -433,6 +433,16 @@ class SpringNetwork
     virtual void computeParticleForces();
     virtual void updateParticlePositions();
 
+  private:
+    // Shared parallel-compute/serial-accumulate loop behind
+    // computeStretch/Bend/DihedralForces -- see its definition for the
+    // pattern and why the accumulation stays serial. Returns the summed
+    // energy of the collection.
+    float _computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
+                                         bool subtractDcOffset);
+
+  public:
+
     unsigned getNumberOfSprings() const { return _springs.size(); }
     unsigned getNumberOfParticles() const { return _particles.size(); }
 
@@ -597,6 +607,19 @@ class SpringNetwork
     // One force contribution per dynamic spring. Reused between steps to avoid
     // allocations in the simulation loop and to keep OpenMP writes disjoint.
     std::vector<Vector3f> _springForceScratch;
+
+    // One anchor-force triple per ghost, filled in parallel by
+    // redistributeGhostForces' Jacobian pass, then accumulated serially
+    // (anchors are heavily shared -- up to 62 ghosts per anchor on
+    // example/072 -- so they must not be written concurrently). Same
+    // parallel-compute/serial-accumulate split as _springForceScratch.
+    struct GhostForceContribution
+    {
+        Vector3f F_B;
+        Vector3f F_C;
+        Vector3f F_Ref;
+    };
+    std::vector<GhostForceContribution> _ghostForceScratch;
 
     // One bucket per dynamic-particle-loop index, filled while computing
     // nonbonded pair interactions in parallel: each pair is evaluated once,
