@@ -41,6 +41,9 @@ import openmm.app as openmm_app
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# The ghost-ring construction, shared verbatim with the protein generator.
+import bonded_axes as axes
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(os.path.dirname(openmm_app.__file__), "data")
 
@@ -90,6 +93,26 @@ class ForceFieldTables:
         for a in root.find("HarmonicAngleForce").findall("Angle"):
             key = (n(a, 2), frozenset((n(a, 1), n(a, 3))))
             self.angle_params[key] = (float(a.get("angle")) * 180.0 / np.pi, float(a.get("k")))
+
+        # (id1, id2, id3, id4) -> [(periodicity, k, phase_rad)], "" = wildcard.
+        # A k of exactly 0 is AMBER stating a deliberate zero barrier, not a
+        # gap, and is dropped here so it can never be mistaken for one.
+        self.torsion_params = {}
+        for t in root.find("PeriodicTorsionForce").findall("Proper"):
+            key = tuple(n(t, i) or "" for i in (1, 2, 3, 4))
+            terms, i = [], 1
+            while t.get("periodicity%d" % i) is not None:
+                k = float(t.get("k%d" % i))
+                if k != 0.0:
+                    terms.append((int(t.get("periodicity%d" % i)), k,
+                                  float(t.get("phase%d" % i))))
+                i += 1
+            if terms:
+                self.torsion_params.setdefault(key, []).extend(terms)
+
+    def use(self):
+        """Point the shared core at this force field's tables."""
+        axes.configure(self.bond_params, self.angle_params, self.torsion_params)
 
     def atoms_of(self, resname):
         """{atom name: the identifier this file's parameters are keyed on}."""
@@ -229,6 +252,114 @@ def generate_residue(ff, resname, emit_as):
                     emit_bend(name, a1, vertex, a3, theta0, k)
 
 
+
+# ---------------------------------------------------------------------------
+# Dihedrals: the same ghost-ring construction as the protein generator, from
+# the same shared core (bonded_axes.py). Nothing here re-derives anything --
+# only the chemistry differs.
+# ---------------------------------------------------------------------------
+
+# Standard nucleic torsions, named as the literature names them, each written
+# as the BOND it turns about (the ghost-ring construction is per-axis, not
+# per-4-atom-tuple):
+#     alpha   O3'(i-1)-P-O5'-C5'        axis P-O5'
+#     beta    P-O5'-C5'-C4'             axis O5'-C5'
+#     gamma   O5'-C5'-C4'-C3'           axis C5'-C4'
+#     delta   C5'-C4'-C3'-O3'           axis C4'-C3'   (a RING bond: this is
+#                                       the pucker's readout, not a free hinge)
+#     epsilon C4'-C3'-O3'-P(i+1)        axis C3'-O3'
+#     zeta    C3'-O3'-P(i+1)-O5'(i+1)   axis O3'-P(i+1) -- the only one whose
+#                                       axis crosses a residue boundary
+BACKBONE_AXES = [("P", "O5'", "alpha"), ("O5'", "C5'", "beta"),
+                 ("C5'", "C4'", "gamma"), ("C4'", "C3'", "delta"),
+                 ("C3'", "O3'", "epsilon"), ("O3'", NEXT_P, "zeta")]
+
+# The furanose's other four bonds. They matter for the same reason the
+# protein's aromatic rings needed theirs: with the ring's angles fixed and
+# nothing else, the pucker cannot move. These are what --bending acts on.
+SUGAR_RING_AXES = [("C1'", "C2'", "ring_C1_C2"), ("C2'", "C3'", "ring_C2_C3"),
+                   ("C4'", "O4'", "ring_C4_O4"), ("O4'", "C1'", "ring_O4_C1")]
+
+# chi, the glycosidic torsion: O4'-C1'-N9-C4 on a purine, O4'-C1'-N1-C2 on a
+# pyrimidine. Plus RNA's 2'-OH rotor.
+GLYCOSIDIC_N = {"DA": "N9", "DG": "N9", "DC": "N1", "DT": "N1",
+                "A": "N9", "G": "N9", "C": "N1", "U": "N1"}
+
+
+def neighbours(ff, resname, vertex, exclude):
+    """Real bonded substituents of `vertex` other than `exclude`, in template
+    order -- the same stable, structure-free ordering the protein generator
+    gets from its synthetic chain."""
+    adj = ff.neighbours_of(resname)
+    order = list(ff.atoms_of(resname))
+    out = [n for n in adj.get(vertex, ()) if n != exclude.lstrip("+-")]
+    return sorted(out, key=order.index)
+
+
+def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as):
+    """One axis, one call -- mirrors generate_sidechain_axis exactly."""
+    atoms = ff.atoms_of(resname)
+    b_bare, c_bare = b_name.lstrip("+-"), c_name.lstrip("+-")
+    if b_bare not in atoms or c_bare not in atoms:
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}): axis atom missing")
+        axes.bump_axis_skip()
+        return
+    b_class, c_class = atoms[b_bare], atoms[c_bare]
+    L_axis = axes.bond_len_A(b_class, c_class)
+    if L_axis is None:
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}): no bond length for the axis")
+        axes.bump_axis_skip()
+        return
+
+    b_neighbors = neighbours(ff, resname, b_bare, c_bare)
+    c_neighbors = neighbours(ff, resname, c_bare, b_bare)
+    if not b_neighbors or not c_neighbors:
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}): no real substituent on one side")
+        axes.bump_axis_skip()
+        return
+    b_ref, c_ref = b_neighbors[0], c_neighbors[0]
+
+    def side_geom(nbrs, vertex_class, other_class, ref_name):
+        with_classes = [(n, atoms[n]) for n in nbrs]
+        deltas = axes.formula_derived_deltas(vertex_class, other_class, with_classes, ref_name)
+        geom = {}
+        for n in nbrs:
+            nc = atoms[n]
+            r = axes.bond_len_A(nc, vertex_class)
+            theta = axes.valence_deg(vertex_class, nc, other_class)
+            if r is None or theta is None:
+                return None
+            if deltas is not None:
+                delta = deltas[n]
+            elif n == ref_name:
+                delta = 0.0
+            else:
+                print(f"SKIP DIHEDRAL ({resname} {axis_label}): vertex has no "
+                      f"formula-derived azimuth (4 distinct substituent types)")
+                return None
+            geom[n] = (r, theta, delta)
+        return geom
+
+    b_geom = side_geom(b_neighbors, b_class, c_class, b_ref)
+    c_geom = side_geom(c_neighbors, c_class, b_class, c_ref)
+    if b_geom is None or c_geom is None:
+        axes.bump_axis_skip()
+        return
+
+    target, dc_by_harmonic = axes.combined_target_for_axis(
+        b_geom, c_geom, b_class, c_class, lambda n: atoms[n])
+    if target is None:
+        print(f"SKIP DIHEDRAL ({resname} {axis_label}): AMBER gives this axis a "
+              f"zero barrier (a real, deliberate null -- not a gap)")
+        axes.bump_axis_skip()
+        return
+
+    for name in emit_as:
+        axes.emit_ghost_rings_for_axis(name, axis_label, family, L_axis, target,
+                                       dc_by_harmonic, b_name, c_name, b_ref, c_ref,
+                                       b_geom[b_ref][:2], c_geom[c_ref][:2])
+
+
 def main():
     dna = ForceFieldTables(os.path.join(DATA, "amber14", "DNA.OL15.xml"))
     rna = ForceFieldTables(os.path.join(DATA, "amber14", "RNA.OL3.xml"))
@@ -252,6 +383,17 @@ def main():
         "#one spelling matches NOTHING on a file written in another, with no",
         "#error at all -- measured, 0 springs out of 963 particles.",
         "#",
+        "#DIHEDRAL COVERAGE IS PARTIAL, and the gap is one single cause. Emitted:",
+        "#alpha, beta, zeta (the phosphate torsions) and RNA's 2'-OH rotor.",
+        "#Missing: gamma, delta, epsilon, chi and the four sugar-ring bonds --",
+        "#every axis with a sugar carbon (C1'..C4') at one end. Each of those is",
+        "#a tetrahedral vertex whose three non-axis substituents have three",
+        "#DISTINCT parameter types, so its azimuths are a real chirality that no",
+        "#angle table can resolve: it needs the ribose's own (beta-D) reference",
+        "#frame, the exact counterpart of the L-amino-acid frame the protein",
+        "#generator uses for C-alpha. Those axes are SKIPPED and reported, never",
+        "#emitted from a guessed sign.",
+        "#",
         "#Companion rigid-body files: DNAAtomRigidGroups.rbody and",
         "#RNAAtomRigidGroups.rbody. Those keep the sugar RIGID, so no",
         "#dihedral is emitted here yet for delta or the ring interior: with a",
@@ -266,11 +408,43 @@ def main():
     for base in ("A", "C", "G", "U"):
         generate_residue(rna, base, [base, "R" + base])
 
+    # Dihedrals. The .bi.ff family column is what BioSpring gates at runtime,
+    # and its five values (PHI/PSI/OMEGA/SIDECHAIN/PLANARITY) are named for
+    # protein chemistry -- there is no alpha..zeta. Every nucleic proper
+    # torsion therefore goes under SIDECHAIN, i.e. one gate
+    # (dihedralchi.enable) for all of them, rather than borrowing
+    # protein-backbone labels that would misdescribe them in the file.
+    # Splitting them into their own families is the same C++ chain PHI/PSI/
+    # OMEGA already went through (enum, parser, Topology collection, NetCDF,
+    # .msp key, SpringNetwork gate) and is deliberately left as its own change.
+    for ff, bases, spellings in ((dna, ("DA", "DC", "DG", "DT"), lambda b: [b]),
+                                 (rna, ("A", "C", "G", "U"), lambda b: [b, "R" + b])):
+        ff.use()
+        for base in bases:
+            emit_as = spellings(base)
+            for b_name, c_name, label in BACKBONE_AXES:
+                generate_axis(ff, base, b_name, c_name, label, "SIDECHAIN", emit_as)
+            for b_name, c_name, label in SUGAR_RING_AXES:
+                generate_axis(ff, base, b_name, c_name, label, "SIDECHAIN", emit_as)
+            generate_axis(ff, base, "C1'", GLYCOSIDIC_N[base], "chi", "SIDECHAIN", emit_as)
+            if "O2'" in ff.atoms_of(base):
+                generate_axis(ff, base, "C2'", "O2'", "rotor_O2", "SIDECHAIN", emit_as)
+
     out = os.path.join(REPO_ROOT, "data/reducerules/NucleicAtomBonded.bi.ff")
+    body = lines + [
+        "#",
+        "#GHOSTPARTICLE <name> <resname> <atom_B> <atom_C> <atom_ref> <r_A> <theta_deg> <delta_deg>",
+        "#Massless virtual sites, placed algebraically from 3 real anchors.",
+    ] + axes.ghostparticle_lines + [
+        "#",
+        "#DIHEDRAL <name> <resname> <family> <atom_ref> <atom_rotant> <d0_A> <k> <dc_offset>",
+        "#One ring group per real AMBER Fourier harmonic of each covered axis.",
+    ] + axes.dihedral_lines
     with open(out, "w") as f:
-        f.write("\n".join(header + lines) + "\n")
-    print(f"\nWrote {counters['stretch']} STRETCH and {counters['bend']} BEND entries "
-          f"({counters['skip']} skipped) to {out}")
+        f.write("\n".join(header + body) + "\n")
+    print(f"\nWrote {counters['stretch']} STRETCH, {counters['bend']} BEND "
+          f"({counters['skip']} skipped), {axes.n_ghost_particles} GHOSTPARTICLE and "
+          f"{axes.n_dihedral_ok} DIHEDRAL entries ({axes.n_dihedral_skip} axes skipped) to {out}")
 
 
 if __name__ == "__main__":
