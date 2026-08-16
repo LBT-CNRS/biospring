@@ -1,6 +1,7 @@
 #ifndef _SPRINGNETWORK_H_
 #define _SPRINGNETWORK_H_
 
+#include <array>
 #include "configuration/Configuration.hpp"
 
 #include "forcefield/ForceField.h"
@@ -124,8 +125,7 @@ class SpringNetwork
     SpringNetwork()
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
-          _dynamicsprings(), _dihedralphisprings(), _dihedralpsisprings(), _dihedralomegasprings(),
-          _dihedralsidechainsprings(), _dihedralplanaritysprings(), _stretchsprings(), _bendsprings(),
+          _dynamicsprings(), _dihedralsprings(), _stretchsprings(), _bendsprings(),
           _ghostparticles(),
           _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
           _hydrophobicPairScratch(), _hydrogenBondCoreRepulsionPairScratch(), _hydrogenBondPartner(),
@@ -185,6 +185,19 @@ class SpringNetwork
     float getSpringEnergy() const { return _energies.spring; }
     float getStretchEnergy() const { return _energies.stretch; }
     float getBendEnergy() const { return _energies.bend; }
+    // The dihedral families, used as the index of _dihedralsprings and of
+    // anything that has to walk them in a fixed order (NetCDF I/O, the
+    // per-family runtime gates). Keep DIHEDRAL_FAMILY_COUNT last.
+    enum DihedralFamilyIndex
+    {
+        DIHEDRAL_PHI = 0,
+        DIHEDRAL_PSI,
+        DIHEDRAL_OMEGA,
+        DIHEDRAL_SIDECHAIN,
+        DIHEDRAL_PLANARITY,
+        DIHEDRAL_FAMILY_COUNT
+    };
+
     float getDihedralEnergy() const { return _energies.dihedral; }
     float getStericEnergy() const { return _energies.steric; }
     float getElectrostaticEnergy() const { return _energies.electrostatic; }
@@ -314,11 +327,11 @@ class SpringNetwork
     const std::vector<Spring> & getSprings() const { return _springs; }
 
     // Returns each dihedral ghost-spring family's list, for NetCDF I/O.
-    const std::vector<Spring> & getDihedralPhiSprings() const { return _dihedralphisprings; }
-    const std::vector<Spring> & getDihedralPsiSprings() const { return _dihedralpsisprings; }
-    const std::vector<Spring> & getDihedralOmegaSprings() const { return _dihedralomegasprings; }
-    const std::vector<Spring> & getDihedralSidechainSprings() const { return _dihedralsidechainsprings; }
-    const std::vector<Spring> & getDihedralPlanaritySprings() const { return _dihedralplanaritysprings; }
+    const std::vector<Spring> & getDihedralPhiSprings() const { return _dihedralsprings[DIHEDRAL_PHI]; }
+    const std::vector<Spring> & getDihedralPsiSprings() const { return _dihedralsprings[DIHEDRAL_PSI]; }
+    const std::vector<Spring> & getDihedralOmegaSprings() const { return _dihedralsprings[DIHEDRAL_OMEGA]; }
+    const std::vector<Spring> & getDihedralSidechainSprings() const { return _dihedralsprings[DIHEDRAL_SIDECHAIN]; }
+    const std::vector<Spring> & getDihedralPlanaritySprings() const { return _dihedralsprings[DIHEDRAL_PLANARITY]; }
     const std::vector<Spring> & getStretchSprings() const { return _stretchsprings; }
     const std::vector<Spring> & getBendSprings() const { return _bendsprings; }
 
@@ -579,11 +592,10 @@ class SpringNetwork
     // fully iterated when enabled (no static/dynamic split): a ghost
     // spring connecting two fully static particles is an unusual, not a
     // performance-critical, case.
-    std::vector<Spring> _dihedralphisprings;
-    std::vector<Spring> _dihedralpsisprings;
-    std::vector<Spring> _dihedralomegasprings;
-    std::vector<Spring> _dihedralsidechainsprings;
-    std::vector<Spring> _dihedralplanaritysprings;
+    // Indexed by family rather than held as parallel members, for the same
+    // reason topology::Topology is: a new family used to mean repeating the
+    // same declaration, clear, accumulate, add and clear-all lines here too.
+    std::array<std::vector<Spring>, DIHEDRAL_FAMILY_COUNT> _dihedralsprings;
 
     // STRETCH springs: a real 1-2 bond, retuned to real AMBER r0/k -- a new
     // spring between the SAME two real atoms as the (now-zeroed, kept only

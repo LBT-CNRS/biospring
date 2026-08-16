@@ -181,16 +181,12 @@ void SpringNetwork::computeDihedralForces()
                                                          /*subtractDcOffset=*/true);
     };
 
-    if (isDihedralPhiEnabled())
-        accumulate(_dihedralphisprings);
-    if (isDihedralPsiEnabled())
-        accumulate(_dihedralpsisprings);
-    if (isDihedralOmegaEnabled())
-        accumulate(_dihedralomegasprings);
-    if (isDihedralChiEnabled())
-        accumulate(_dihedralsidechainsprings);
-    if (isDihedralPlanarityEnabled())
-        accumulate(_dihedralplanaritysprings);
+    const bool enabled[DIHEDRAL_FAMILY_COUNT] = {isDihedralPhiEnabled(), isDihedralPsiEnabled(),
+                                                 isDihedralOmegaEnabled(), isDihedralChiEnabled(),
+                                                 isDihedralPlanarityEnabled()};
+    for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
+        if (enabled[family])
+            accumulate(_dihedralsprings[family]);
 
     _energies.dihedral = dihedralenergy;
 }
@@ -691,31 +687,31 @@ static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Pa
 void SpringNetwork::addDihedralPhiSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
                                          float dcOffset)
 {
-    addDihedralSpringTo(_dihedralphisprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_PHI], _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
 void SpringNetwork::addDihedralPsiSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
                                          float dcOffset)
 {
-    addDihedralSpringTo(_dihedralpsisprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_PSI], _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
 void SpringNetwork::addDihedralOmegaSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
                                            float dcOffset)
 {
-    addDihedralSpringTo(_dihedralomegasprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_OMEGA], _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
 void SpringNetwork::addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
                                                float dcOffset)
 {
-    addDihedralSpringTo(_dihedralsidechainsprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_SIDECHAIN], _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
 void SpringNetwork::addDihedralPlanaritySpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
                                                float dcOffset)
 {
-    addDihedralSpringTo(_dihedralplanaritysprings, _particles, id1, id2, equilibrium, stiffness, dcOffset);
+    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_PLANARITY], _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
 void SpringNetwork::addStretchSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
@@ -944,11 +940,8 @@ void SpringNetwork::clear()
     _springs.clear();
     _staticsprings.clear();
     _dynamicsprings.clear();
-    _dihedralphisprings.clear();
-    _dihedralpsisprings.clear();
-    _dihedralomegasprings.clear();
-    _dihedralsidechainsprings.clear();
-    _dihedralplanaritysprings.clear();
+    for (auto & family : _dihedralsprings)
+        family.clear();
     _stretchsprings.clear();
     _bendsprings.clear();
     _ghostparticles.clear();
