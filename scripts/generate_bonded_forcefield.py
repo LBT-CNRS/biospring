@@ -1207,7 +1207,8 @@ def generate_planarity_impropers(resname, md_top, md_bonds):
                             L_axis, bond_len_A(cls(names[0]), cls(names[2])),
                             valence_deg(cls(names[2]), cls(names[0]), cls(names[1]))),
                         ref_geom_c=(bond_len_A(cls(names[3]), cls(names[2])),
-                                    valence_deg(cls(names[2]), cls(names[3]), cls(names[1]))))
+                                    valence_deg(cls(names[2]), cls(names[3]), cls(names[1]))),
+                        dc_align="minimum")
         emitted += 1
     if emitted:
         axes.bump_axis_ok()

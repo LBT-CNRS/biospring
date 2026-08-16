@@ -299,7 +299,7 @@ AXIS_RING_LOG = []
 _ghost_registry = {}
 
 def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom_B, atom_C, atom_ref_b, atom_ref_c,
-                    axis_dc_target=0.0, group_tag="", ref_geom_b=None, ref_geom_c=None):
+                    axis_dc_target=0.0, group_tag="", ref_geom_b=None, ref_geom_c=None, dc_align="mean"):
     """Emits one full ring group (M+N ghost particles, M*N ghost-ghost
     springs -- M=n,N=1 for n>=2, the ghost/spring-minimal construction,
     see the M,N note below) reproducing one target Fourier harmonic
@@ -324,6 +324,16 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
     BioSpring's absolute dihedral energy is directly comparable to
     AMBER's, instead of being inflated by the ring construction's own
     unavoidable positive baseline (see calibrate_ring's own comment).
+
+    dc_align="minimum" subtracts the ring's own minimum instead of that
+    difference. Only for a SINGLE-term target (one ring, one harmonic,
+    AMBER's own k*(1+cos) touching zero), where the two are the same thing
+    if the ring is a clean cosine -- and are not otherwise. The base
+    impropers are the case that is not: |z_n| = k exactly, but m=2n leakage
+    at ~13-17% of k pulls the ring's mean to ~0.86k, BELOW AMBER's mean
+    rather than above it, so "mean" over-corrects by (k - ring mean) right
+    where planarity puts every real structure. Forces are unaffected either
+    way -- dc_offset is a constant.
 
     group_tag: disambiguates ghost/rule names when the caller emits more
     than one ring group for the SAME axis anchored on different real atoms
@@ -370,13 +380,15 @@ def emit_ghost_ring(resname, axis_label, family, n, L_axis, target_complex, atom
     r_c, theta_c_deg = ref_geom_c
     M, N = (n, 1) if n >= 2 else (1, 1)
     d0 = choose_d0(L_axis, n, r, theta_deg, r_c, theta_c_deg, M, N)
-    k, delta_base, dc_ring = calibrate_ring(L_axis, n, r, theta_deg, d0, target_complex, M, N, r_c, theta_c_deg)
+    k, delta_base, dc_ring, dc_min = calibrate_ring(L_axis, n, r, theta_deg, d0, target_complex, M, N, r_c,
+                                                    theta_c_deg)
     # Split evenly across this ring's M*N springs -- BondedForceFieldReader
     # sums dc_offset per spring it actually applies, so this naturally
     # handles a partially-skipped ring too (e.g. Met's phi ghosts missing
     # their "-C" anchor at the true N-terminus): the offset for the springs
     # that never get created is correctly never added either.
-    dc_offset_per_spring = (dc_ring - axis_dc_target) / (M * N)
+    dc_total = (dc_ring - axis_dc_target) if dc_align == "mean" else dc_min
+    dc_offset_per_spring = dc_total / (M * N)
 
     # group_tag disambiguates ghost/rule names when the SAME axis emits
     # more than one ring group anchored on different real atoms (see

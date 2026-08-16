@@ -418,7 +418,7 @@ def generate_base_impropers(ff, resname, emit_as, quads):
             axes.emit_ghost_ring(name, f"imp_{names[2]}", "PLANARITY", n, L_axis, target,
                                  names[1], names[2], names[0], names[3],
                                  axis_dc_target=kv, ref_geom_b=ref_geom_b,
-                                 ref_geom_c=ref_geom_c)
+                                 ref_geom_c=ref_geom_c, dc_align="minimum")
         emitted += 1
     if emitted:
         axes.bump_axis_ok()

@@ -168,5 +168,11 @@ def calibrate_ring(L_axis, n, r, theta_deg, d0, target_complex, M=None, N=None, 
     # reporting an absolute energy (never affects forces -- a constant has
     # zero gradient).
     dc_ring = k * float(np.real(complex_fourier_coeff(e0, 0)))
-    return k, delta_base_deg, dc_ring
+    # The ring's own MINIMUM at the calibrated k, same linearity. The caller
+    # needs it whenever "the artifact is a positive baseline added on top of
+    # AMBER's mean" stops holding -- see emit_ghost_ring's dc_align. delta_base
+    # only rotates the curve, so the set of values (hence the minimum) is the
+    # same as at delta_base=0.
+    dc_min = k * float(np.min(e0))
+    return k, delta_base_deg, dc_ring, dc_min
 
