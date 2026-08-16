@@ -257,14 +257,8 @@ class SpringNetwork
     // nonbonded forces as a side effect, which is a separate physical
     // modelling decision (matching AMBER's scaled 1-4 nonbonded convention)
     // that this feature does not make. See doc/BondedForceFieldSprings.md.
-    void addDihedralPhiSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness, float dcOffset = 0.0f);
-    void addDihedralPsiSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness, float dcOffset = 0.0f);
-    void addDihedralOmegaSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                float dcOffset = 0.0f);
-    void addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                    float dcOffset = 0.0f);
-    void addDihedralPlanaritySpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                    float dcOffset = 0.0f);
+    void addDihedralSpring(unsigned family, unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                           float dcOffset = 0.0f);
 
     // Adds a STRETCH spring (see _stretchsprings' own comment) -- a new
     // spring between the same 2 real atoms as the existing (now-zeroed)
@@ -339,12 +333,8 @@ class SpringNetwork
     // Returns the list of springs.
     const std::vector<Spring> & getSprings() const { return _springs; }
 
-    // Returns each dihedral ghost-spring family's list, for NetCDF I/O.
-    const std::vector<Spring> & getDihedralPhiSprings() const { return _dihedralsprings[DIHEDRAL_PHI]; }
-    const std::vector<Spring> & getDihedralPsiSprings() const { return _dihedralsprings[DIHEDRAL_PSI]; }
-    const std::vector<Spring> & getDihedralOmegaSprings() const { return _dihedralsprings[DIHEDRAL_OMEGA]; }
-    const std::vector<Spring> & getDihedralSidechainSprings() const { return _dihedralsprings[DIHEDRAL_SIDECHAIN]; }
-    const std::vector<Spring> & getDihedralPlanaritySprings() const { return _dihedralsprings[DIHEDRAL_PLANARITY]; }
+    // One dihedral ghost-spring family's list is reached by index only, via
+    // getDihedralSprings(family) above.
     const std::vector<Spring> & getStretchSprings() const { return _stretchsprings; }
     const std::vector<Spring> & getBendSprings() const { return _bendsprings; }
 

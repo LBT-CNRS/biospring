@@ -11,6 +11,39 @@ namespace biospring
 namespace rigidbodygroup
 {
 
+// The .bi.ff keyword naming each dihedral family, in DihedralFamily (i.e.
+// spn::SpringNetwork::DihedralFamilyIndex) order. This is the file format's
+// own spelling of the family list, so it lives with the reader rather than
+// with the enum -- SpringNetwork's DIHEDRAL_FAMILY_NAMES are a third
+// spelling of the same list, the .nc variable prefixes.
+static constexpr const char * DIHEDRAL_FAMILY_KEYWORDS[spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT] = {
+    "PHI",       // proper dihedral, backbone phi
+    "PSI",       // proper dihedral, backbone psi
+    "OMEGA",     // proper dihedral, backbone omega (peptide bond)
+    "SIDECHAIN", // proper dihedral, chi1-4
+    "PLANARITY"  // improper dihedral, ring/guanidinium planarity
+};
+
+// The build-time flag each family answers to (see buildSprings's
+// enableDihedral* parameters and -dihedralbackbone/-dihedralsidechain/
+// -dihedralplanarity in pdb2spn-cli.cpp). Not one flag per family: PHI/PSI/
+// OMEGA are built together under -dihedralbackbone and only become
+// independent at runtime, via their own .msp toggles.
+enum DihedralBuildGate
+{
+    GATE_BACKBONE = 0,
+    GATE_SIDECHAIN,
+    GATE_PLANARITY,
+    GATE_COUNT
+};
+static constexpr DihedralBuildGate DIHEDRAL_FAMILY_GATES[spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT] = {
+    GATE_BACKBONE,  // PHI
+    GATE_BACKBONE,  // PSI
+    GATE_BACKBONE,  // OMEGA
+    GATE_SIDECHAIN, // SIDECHAIN
+    GATE_PLANARITY  // PLANARITY
+};
+
 void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_id)
 {
     const auto tokens = utils::string::split(line);
@@ -69,20 +102,22 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         DihedralEntry entry;
         entry.resname = tokens[2];
         const std::string & family = tokens[3];
-        if (family == "PHI")
-            entry.family = DihedralFamily::PHI;
-        else if (family == "PSI")
-            entry.family = DihedralFamily::PSI;
-        else if (family == "OMEGA")
-            entry.family = DihedralFamily::OMEGA;
-        else if (family == "SIDECHAIN")
-            entry.family = DihedralFamily::SIDECHAIN;
-        else if (family == "PLANARITY")
-            entry.family = DihedralFamily::PLANARITY;
-        else
-            logging::die("BondedForceFieldReader: line %d: invalid DIHEDRAL family '%s' (expected PHI, PSI, "
-                         "OMEGA, SIDECHAIN or PLANARITY)",
-                         static_cast<int>(line_id), family.c_str());
+        unsigned family_id = spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT;
+        for (unsigned f = 0; f < spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++f)
+            if (family == DIHEDRAL_FAMILY_KEYWORDS[f])
+            {
+                family_id = f;
+                break;
+            }
+        if (family_id == spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT)
+        {
+            std::string expected;
+            for (unsigned f = 0; f < spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++f)
+                expected += (f == 0 ? "" : ", ") + std::string(DIHEDRAL_FAMILY_KEYWORDS[f]);
+            logging::die("BondedForceFieldReader: line %d: invalid DIHEDRAL family '%s' (expected one of %s)",
+                         static_cast<int>(line_id), family.c_str(), expected.c_str());
+        }
+        entry.family = static_cast<DihedralFamily>(family_id);
         entry.atom_ref = tokens[4];
         entry.atom_rotant = tokens[5];
         if (!utils::string::from_string(entry.d0, tokens[6]))
@@ -602,12 +637,12 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             // enableDihedralBackbone flag at build time (see buildSprings's
             // own comment) -- they only gain independent control at runtime,
             // via SpringNetwork's dihedral.phi/psi/omega .msp settings.
-            const bool is_backbone = entry.family == DihedralFamily::PHI || entry.family == DihedralFamily::PSI ||
-                                     entry.family == DihedralFamily::OMEGA;
-            const bool family_enabled = (is_backbone && enableDihedralBackbone) ||
-                                        (entry.family == DihedralFamily::SIDECHAIN && enableDihedralSidechain) ||
-                                        (entry.family == DihedralFamily::PLANARITY && enableDihedralPlanarity);
-            if (!family_enabled)
+            // Hence the indirection: several families share one build flag,
+            // so the mapping is a table (DIHEDRAL_FAMILY_GATES) rather than
+            // one flag per family.
+            const bool build_gates[GATE_COUNT] = {enableDihedralBackbone, enableDihedralSidechain,
+                                                  enableDihedralPlanarity};
+            if (!build_gates[DIHEDRAL_FAMILY_GATES[entry.family]])
                 continue;
 
             topology::Particle * p_ref = _resolve_atom(entry.atom_ref, residues, index, topology, translation);
@@ -621,29 +656,8 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             // _retune_or_add_spring -- combining in place if another
             // Fourier-term group already added a spring for this exact pair
             // (see _add_or_combine_dihedral_spring).
-            switch (entry.family)
-            {
-            case DihedralFamily::PHI:
-                _add_or_combine_dihedral_spring(topology.dihedral_phi_springs(), *p_ref, *p_rot, entry.d0, entry.k,
-                                                entry.dc_offset);
-                break;
-            case DihedralFamily::PSI:
-                _add_or_combine_dihedral_spring(topology.dihedral_psi_springs(), *p_ref, *p_rot, entry.d0, entry.k,
-                                                entry.dc_offset);
-                break;
-            case DihedralFamily::OMEGA:
-                _add_or_combine_dihedral_spring(topology.dihedral_omega_springs(), *p_ref, *p_rot, entry.d0, entry.k,
-                                                entry.dc_offset);
-                break;
-            case DihedralFamily::SIDECHAIN:
-                _add_or_combine_dihedral_spring(topology.dihedral_sidechain_springs(), *p_ref, *p_rot, entry.d0,
-                                                entry.k, entry.dc_offset);
-                break;
-            case DihedralFamily::PLANARITY:
-                _add_or_combine_dihedral_spring(topology.dihedral_planarity_springs(), *p_ref, *p_rot, entry.d0,
-                                                entry.k, entry.dc_offset);
-                break;
-            }
+            _add_or_combine_dihedral_spring(topology.dihedral_springs(entry.family), *p_ref, *p_rot, entry.d0, entry.k,
+                                            entry.dc_offset);
             nb_dihedral_applied++;
         }
     }

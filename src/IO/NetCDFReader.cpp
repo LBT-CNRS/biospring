@@ -32,59 +32,15 @@ void NetCDFReader::addBendSpringsToSpn()
                                   _bendbuffer.springsequilibriums[i], _bendbuffer.springsstiffnesses[i]);
 }
 
-void NetCDFReader::addDihedralPhiSpringsToSpn()
+void NetCDFReader::addDihedralSpringsToSpn(unsigned family)
 {
-    for (size_t i = 0; i < _dihedralphibuffer.number_of_springs; ++i)
+    const DihedralSpringBuffer & buffer = _dihedralbuffers[family];
+    for (size_t i = 0; i < buffer.number_of_springs; ++i)
         _topology
-            .add_dihedral_phi_spring(_topology.get_particle(static_cast<size_t>(_dihedralphibuffer.springs[i][0])),
-                                     _topology.get_particle(static_cast<size_t>(_dihedralphibuffer.springs[i][1])),
-                                     _dihedralphibuffer.springsequilibriums[i],
-                                     _dihedralphibuffer.springsstiffnesses[i])
-            .set_dc_offset(_dihedralphibuffer.springsdcoffsets[i]);
-}
-
-void NetCDFReader::addDihedralPsiSpringsToSpn()
-{
-    for (size_t i = 0; i < _dihedralpsibuffer.number_of_springs; ++i)
-        _topology
-            .add_dihedral_psi_spring(_topology.get_particle(static_cast<size_t>(_dihedralpsibuffer.springs[i][0])),
-                                     _topology.get_particle(static_cast<size_t>(_dihedralpsibuffer.springs[i][1])),
-                                     _dihedralpsibuffer.springsequilibriums[i],
-                                     _dihedralpsibuffer.springsstiffnesses[i])
-            .set_dc_offset(_dihedralpsibuffer.springsdcoffsets[i]);
-}
-
-void NetCDFReader::addDihedralOmegaSpringsToSpn()
-{
-    for (size_t i = 0; i < _dihedralomegabuffer.number_of_springs; ++i)
-        _topology
-            .add_dihedral_omega_spring(
-                _topology.get_particle(static_cast<size_t>(_dihedralomegabuffer.springs[i][0])),
-                _topology.get_particle(static_cast<size_t>(_dihedralomegabuffer.springs[i][1])),
-                _dihedralomegabuffer.springsequilibriums[i], _dihedralomegabuffer.springsstiffnesses[i])
-            .set_dc_offset(_dihedralomegabuffer.springsdcoffsets[i]);
-}
-
-void NetCDFReader::addDihedralSidechainSpringsToSpn()
-{
-    for (size_t i = 0; i < _dihedralsidechainbuffer.number_of_springs; ++i)
-        _topology
-            .add_dihedral_sidechain_spring(
-                _topology.get_particle(static_cast<size_t>(_dihedralsidechainbuffer.springs[i][0])),
-                _topology.get_particle(static_cast<size_t>(_dihedralsidechainbuffer.springs[i][1])),
-                _dihedralsidechainbuffer.springsequilibriums[i], _dihedralsidechainbuffer.springsstiffnesses[i])
-            .set_dc_offset(_dihedralsidechainbuffer.springsdcoffsets[i]);
-}
-
-void NetCDFReader::addDihedralPlanaritySpringsToSpn()
-{
-    for (size_t i = 0; i < _dihedralplanaritybuffer.number_of_springs; ++i)
-        _topology
-            .add_dihedral_planarity_spring(
-                _topology.get_particle(static_cast<size_t>(_dihedralplanaritybuffer.springs[i][0])),
-                _topology.get_particle(static_cast<size_t>(_dihedralplanaritybuffer.springs[i][1])),
-                _dihedralplanaritybuffer.springsequilibriums[i], _dihedralplanaritybuffer.springsstiffnesses[i])
-            .set_dc_offset(_dihedralplanaritybuffer.springsdcoffsets[i]);
+            .add_dihedral_spring(family, _topology.get_particle(static_cast<size_t>(buffer.springs[i][0])),
+                                 _topology.get_particle(static_cast<size_t>(buffer.springs[i][1])),
+                                 buffer.springsequilibriums[i], buffer.springsstiffnesses[i])
+            .set_dc_offset(buffer.springsdcoffsets[i]);
 }
 
 void NetCDFReader::addGhostParticlesToSpn()
@@ -172,16 +128,12 @@ void NetCDFReader::read()
         readDihedralSpringGroup("bend", _bendbuffer);
         addBendSpringsToSpn();
 
-        readDihedralSpringGroup("dihedralphi", _dihedralphibuffer);
-        addDihedralPhiSpringsToSpn();
-        readDihedralSpringGroup("dihedralpsi", _dihedralpsibuffer);
-        addDihedralPsiSpringsToSpn();
-        readDihedralSpringGroup("dihedralomega", _dihedralomegabuffer);
-        addDihedralOmegaSpringsToSpn();
-        readDihedralSpringGroup("dihedralsidechain", _dihedralsidechainbuffer);
-        addDihedralSidechainSpringsToSpn();
-        readDihedralSpringGroup("dihedralplanarity", _dihedralplanaritybuffer);
-        addDihedralPlanaritySpringsToSpn();
+        for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        {
+            readDihedralSpringGroup(biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+                                    _dihedralbuffers[family]);
+            addDihedralSpringsToSpn(family);
+        }
 
         // Ghost particles already exist as regular particles at this point
         // (added by addParticlesToSpn() above, in file order) -- this only

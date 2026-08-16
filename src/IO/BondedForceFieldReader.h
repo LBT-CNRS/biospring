@@ -47,14 +47,12 @@ struct BendEntry
 // own runtime .msp toggle (still built together, under the one
 // -dihedralbackbone flag -- see buildSprings -- only their runtime
 // enable/disable is independent).
-enum class DihedralFamily
-{
-    PHI,       // proper dihedral, backbone phi
-    PSI,       // proper dihedral, backbone psi
-    OMEGA,     // proper dihedral, backbone omega (peptide bond)
-    SIDECHAIN, // proper dihedral, chi1-4
-    PLANARITY  // improper dihedral, ring/guanidinium planarity
-};
+// The list of families is spn::SpringNetwork's own DihedralFamilyIndex --
+// the index the springs are stored under, all the way from the collection
+// this reader fills to the .nc variable they are written to -- so a family
+// is declared once and this reader only adds its .bi.ff spelling (see
+// DIHEDRAL_FAMILY_KEYWORDS in the .cpp).
+using DihedralFamily = spn::SpringNetwork::DihedralFamilyIndex;
 
 // One ghost spring ("DIHEDRAL" line) contributing to one Fourier term of one
 // real AMBER proper or improper torsion. `atom_ref`/`atom_rotant` are a real
@@ -196,10 +194,8 @@ class BondedForceFieldReader : public ReaderBase
     //
     // DIHEDRAL entries are handled differently from STRETCH/BEND: a ghost
     // spring never corresponds to a real chemical bond, so it is always a
-    // new addition (Topology::add_dihedral_phi_spring / _psi_spring /
-    // _omega_spring / add_dihedral_sidechain_spring /
-    // add_dihedral_planarity_spring, depending on the entry's family),
-    // never a retune of an existing --rigidbody spring.
+    // new addition (into Topology::dihedral_springs(entry.family)), never a
+    // retune of an existing --rigidbody spring.
     //
     // `enableStretch`/`enableBend`/`enableDihedralBackbone`/
     // `enableDihedralSidechain` independently select which categories of

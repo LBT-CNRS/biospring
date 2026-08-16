@@ -95,7 +95,7 @@ struct SpringBuffer
 // -- see SpringNetwork's _dihedral*springs) for NetCDF I/O. Deliberately
 // simpler than SpringBuffer: no `nbofspringsperparticle` companion array,
 // since ghost springs are never registered as spring-neighbours (see
-// SpringNetwork::addDihedralPhiSpring's comment) and nothing reads
+// SpringNetwork::addDihedralSpring's comment) and nothing reads
 // that field back on the SpringBuffer side either (write-only, informational).
 struct DihedralSpringBuffer
 {
@@ -148,7 +148,7 @@ struct DihedralSpringBuffer
     }
 
     // Copies one dihedral spring family's data (from SpringNetwork's own
-    // vector, e.g. getDihedralPhiSprings()) into these buffers.
+    // vector, i.e. getDihedralSprings(family)) into these buffers.
     void bufferize(const std::vector<biospring::spn::Spring> & source)
     {
         for (size_t i = 0; i < source.size(); ++i)

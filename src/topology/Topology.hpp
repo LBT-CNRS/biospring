@@ -3,6 +3,7 @@
 
 #include <array>
 #include <unordered_map>
+#include <utility>
 
 #include "Particle.hpp"
 #include "ParticleCollection.hpp"
@@ -48,16 +49,33 @@ class Topology
     // same declaration/clear/copy/convert lines here and in four other
     // layers; indexed, everything below loops instead, and a new family is
     // one enum value.
-    enum DihedralFamilyIndex
-    {
-        DIHEDRAL_PHI = 0,
-        DIHEDRAL_PSI,
-        DIHEDRAL_OMEGA,
-        DIHEDRAL_SIDECHAIN,
-        DIHEDRAL_PLANARITY,
-        DIHEDRAL_FAMILY_COUNT
-    };
+    //
+    // The family list itself is spn::SpringNetwork's -- these collections
+    // are copied straight into it, family by family, by to_spring_network
+    // below -- and is aliased here rather than restated: two independent
+    // enums that have to agree in *order* behind a bare `unsigned family`
+    // argument is exactly the kind of drift indexing them was meant to
+    // remove.
+    using DihedralFamilyIndex = spn::SpringNetwork::DihedralFamilyIndex;
+    static constexpr unsigned DIHEDRAL_FAMILY_COUNT = spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT;
     std::array<SpringCollection, DIHEDRAL_FAMILY_COUNT> _dihedral_springs;
+
+    // std::array has no "fill with N copies of this value" constructor, and
+    // SpringCollection isn't default-constructible (it holds the particle
+    // collection its springs index into), so the array can't just be
+    // default-initialized in the member-init list. Built element by element
+    // from the family count instead of restating one SpringCollection
+    // (_particles) per family in each constructor.
+    template <std::size_t... Is>
+    static std::array<SpringCollection, DIHEDRAL_FAMILY_COUNT>
+    _make_dihedral_springs(ParticleCollection & particles, std::index_sequence<Is...>)
+    {
+        return {(static_cast<void>(Is), SpringCollection(particles))...};
+    }
+    static std::array<SpringCollection, DIHEDRAL_FAMILY_COUNT> _make_dihedral_springs(ParticleCollection & particles)
+    {
+        return _make_dihedral_springs(particles, std::make_index_sequence<DIHEDRAL_FAMILY_COUNT>{});
+    }
 
     // A real 1-2 bond, retuned to real AMBER r0/k -- kept separate from
     // _springs (rather than retuned in place there) so it has its own
@@ -126,21 +144,15 @@ class Topology
     // =============================================================================
 
     Topology()
-        : _springs(_particles),
-          _dihedral_springs{SpringCollection(_particles), SpringCollection(_particles),
-                            SpringCollection(_particles), SpringCollection(_particles),
-                            SpringCollection(_particles)},
-          _stretch_springs(_particles), _bend_springs(_particles)
+        : _springs(_particles), _dihedral_springs(_make_dihedral_springs(_particles)), _stretch_springs(_particles),
+          _bend_springs(_particles)
     {
     }
 
     // Copy constructor.
     Topology(const Topology & other)
-        : _springs(_particles),
-          _dihedral_springs{SpringCollection(_particles), SpringCollection(_particles),
-                            SpringCollection(_particles), SpringCollection(_particles),
-                            SpringCollection(_particles)},
-          _stretch_springs(_particles), _bend_springs(_particles)
+        : _springs(_particles), _dihedral_springs(_make_dihedral_springs(_particles)), _stretch_springs(_particles),
+          _bend_springs(_particles)
     {
         _copy_particles(other);
         _copy_springs(other);
@@ -301,34 +313,16 @@ class Topology
     }
 
     // Creates a dihedral ghost spring between two real substituent atoms
-    // (never a real 1-2 bond) -- one per DIHEDRAL entry, routed to the
-    // matching family by BondedForceFieldReader::buildSprings. See the
-    // _dihedral_*_springs member comment above.
-    auto & add_dihedral_phi_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
+    // (never a real 1-2 bond) -- one per DIHEDRAL entry, in the family the
+    // entry names (a spn::SpringNetwork::DihedralFamilyIndex, resolved by
+    // BondedForceFieldReader::buildSprings). See the _dihedral_springs
+    // member comment above.
+    auto & add_dihedral_spring(unsigned family, Particle & p1, Particle & p2, double equilibrium = -1.0,
+                               double stiffness = 1.0)
     {
-        return _dihedral_springs[DIHEDRAL_PHI].add_spring(p1, p2, equilibrium, stiffness);
-    }
-
-    auto & add_dihedral_psi_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
-    {
-        return _dihedral_springs[DIHEDRAL_PSI].add_spring(p1, p2, equilibrium, stiffness);
-    }
-
-    auto & add_dihedral_omega_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
-    {
-        return _dihedral_springs[DIHEDRAL_OMEGA].add_spring(p1, p2, equilibrium, stiffness);
-    }
-
-    auto & add_dihedral_sidechain_spring(Particle & p1, Particle & p2, double equilibrium = -1.0,
-                                         double stiffness = 1.0)
-    {
-        return _dihedral_springs[DIHEDRAL_SIDECHAIN].add_spring(p1, p2, equilibrium, stiffness);
-    }
-
-    auto & add_dihedral_planarity_spring(Particle & p1, Particle & p2, double equilibrium = -1.0,
-                                         double stiffness = 1.0)
-    {
-        return _dihedral_springs[DIHEDRAL_PLANARITY].add_spring(p1, p2, equilibrium, stiffness);
+        // .at(), not [] -- see dihedral_springs() below for why the index is
+        // range-checked.
+        return _dihedral_springs.at(family).add_spring(p1, p2, equilibrium, stiffness);
     }
 
     // Creates a STRETCH spring between two real atoms (see _stretch_springs'
@@ -447,20 +441,13 @@ class Topology
     auto & springs() { return _springs; }
     const auto & springs() const { return _springs; }
 
-    auto & dihedral_phi_springs() { return _dihedral_springs[DIHEDRAL_PHI]; }
-    const auto & dihedral_phi_springs() const { return _dihedral_springs[DIHEDRAL_PHI]; }
-
-    auto & dihedral_psi_springs() { return _dihedral_springs[DIHEDRAL_PSI]; }
-    const auto & dihedral_psi_springs() const { return _dihedral_springs[DIHEDRAL_PSI]; }
-
-    auto & dihedral_omega_springs() { return _dihedral_springs[DIHEDRAL_OMEGA]; }
-    const auto & dihedral_omega_springs() const { return _dihedral_springs[DIHEDRAL_OMEGA]; }
-
-    auto & dihedral_sidechain_springs() { return _dihedral_springs[DIHEDRAL_SIDECHAIN]; }
-    const auto & dihedral_sidechain_springs() const { return _dihedral_springs[DIHEDRAL_SIDECHAIN]; }
-
-    auto & dihedral_planarity_springs() { return _dihedral_springs[DIHEDRAL_PLANARITY]; }
-    const auto & dihedral_planarity_springs() const { return _dihedral_springs[DIHEDRAL_PLANARITY]; }
+    // One dihedral family's collection, by
+    // spn::SpringNetwork::DihedralFamilyIndex. Range-checked: a family
+    // index is routinely computed (parsed from a .bi.ff, walked over in a
+    // loop) rather than written out literally, so an out-of-range one is a
+    // real possibility and reads as garbage rather than failing.
+    auto & dihedral_springs(unsigned family) { return _dihedral_springs.at(family); }
+    const auto & dihedral_springs(unsigned family) const { return _dihedral_springs.at(family); }
 
     auto & stretch_springs() { return _stretch_springs; }
     const auto & stretch_springs() const { return _stretch_springs; }
@@ -582,31 +569,18 @@ class Topology
         }
 
         // Copies dihedral ghost springs, one family at a time (see the
-        // _dihedral_*_springs member comment above for why these stay
-        // separate from _springs).
-        auto copy_dihedral = [this](const SpringCollection & source_collection, auto add_to_spn) {
-            for (const topology::Spring & source : source_collection)
+        // _dihedral_springs member comment above for why these stay
+        // separate from _springs) -- into the same family index on the
+        // network side, which is the very index these are stored under.
+        for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
+        {
+            for (const topology::Spring & source : _dihedral_springs[family])
             {
                 size_t i = _particles.by_uid().at(source.first().unique_id());
                 size_t j = _particles.by_uid().at(source.second().unique_id());
-                add_to_spn(i, j, source.equilibrium(), source.stiffness(), source.dc_offset());
+                spn.addDihedralSpring(family, i, j, source.equilibrium(), source.stiffness(), source.dc_offset());
             }
-        };
-        copy_dihedral(_dihedral_springs[DIHEDRAL_PHI], [&spn](size_t i, size_t j, double eq, double k, double dc) {
-            spn.addDihedralPhiSpring(i, j, eq, k, dc);
-        });
-        copy_dihedral(_dihedral_springs[DIHEDRAL_PSI], [&spn](size_t i, size_t j, double eq, double k, double dc) {
-            spn.addDihedralPsiSpring(i, j, eq, k, dc);
-        });
-        copy_dihedral(_dihedral_springs[DIHEDRAL_OMEGA], [&spn](size_t i, size_t j, double eq, double k, double dc) {
-            spn.addDihedralOmegaSpring(i, j, eq, k, dc);
-        });
-        copy_dihedral(_dihedral_springs[DIHEDRAL_SIDECHAIN], [&spn](size_t i, size_t j, double eq, double k, double dc) {
-            spn.addDihedralSidechainSpring(i, j, eq, k, dc);
-        });
-        copy_dihedral(_dihedral_springs[DIHEDRAL_PLANARITY], [&spn](size_t i, size_t j, double eq, double k, double dc) {
-            spn.addDihedralPlanaritySpring(i, j, eq, k, dc);
-        });
+        }
 
         // STRETCH springs (see _stretch_springs' own comment) -- plain
         // copy, no dc_offset concept here either.
@@ -638,8 +612,8 @@ class Topology
 
     // Copies one spring collection (`src`, belonging to `src_particles`)
     // into `dst` (belonging to `this->_particles`), shifting particle
-    // positions by `offset`. Shared by _copy_springs below for each of the
-    // four spring collections a Topology carries.
+    // positions by `offset`. Shared by _copy_springs below for every spring
+    // collection a Topology carries.
     void _copy_spring_collection(SpringCollection & dst, const SpringCollection & src,
                                   const ParticleCollection & src_particles, size_t offset)
     {
@@ -678,13 +652,9 @@ class Topology
     void _copy_springs(const Topology & other, size_t offset = 0)
     {
         _copy_spring_collection(_springs, other._springs, other._particles, offset);
-        _copy_spring_collection(_dihedral_springs[DIHEDRAL_PHI], other._dihedral_springs[DIHEDRAL_PHI], other._particles, offset);
-        _copy_spring_collection(_dihedral_springs[DIHEDRAL_PSI], other._dihedral_springs[DIHEDRAL_PSI], other._particles, offset);
-        _copy_spring_collection(_dihedral_springs[DIHEDRAL_OMEGA], other._dihedral_springs[DIHEDRAL_OMEGA], other._particles, offset);
-        _copy_spring_collection(_dihedral_springs[DIHEDRAL_SIDECHAIN], other._dihedral_springs[DIHEDRAL_SIDECHAIN], other._particles,
-                                offset);
-        _copy_spring_collection(_dihedral_springs[DIHEDRAL_PLANARITY], other._dihedral_springs[DIHEDRAL_PLANARITY], other._particles,
-                                offset);
+        for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
+            _copy_spring_collection(_dihedral_springs[family], other._dihedral_springs[family], other._particles,
+                                    offset);
         _copy_spring_collection(_stretch_springs, other._stretch_springs, other._particles, offset);
         _copy_spring_collection(_bend_springs, other._bend_springs, other._particles, offset);
     }

@@ -387,7 +387,7 @@ TEST(Topology, dihedral_ghost_spring_applies_force)
 
     // d0 = 0.1: guaranteed far from the ~20 A actual distance between the
     // two ghosts, so (d - d0)^2 is unambiguously large.
-    top.add_dihedral_sidechain_spring(ghost1, ghost2, 0.1, 10.0);
+    top.add_dihedral_spring(spn::SpringNetwork::DIHEDRAL_SIDECHAIN, ghost1, ghost2, 0.1, 10.0);
 
     spn::SpringNetwork spn;
     top.to_spring_network(spn);
@@ -473,7 +473,7 @@ TEST(Topology, forces_match_energy_gradient_by_finite_differences)
     top.add_bend_spring(ghost1, ghost2, 3.0, 2.5);
     // d0 far from the actual ghost-ghost distance so the dihedral force is
     // large; dc_offset nonzero to prove it shifts reported energy only.
-    top.add_dihedral_sidechain_spring(ghost1, ghost2, 0.5, 7.0).set_dc_offset(3.21);
+    top.add_dihedral_spring(spn::SpringNetwork::DIHEDRAL_SIDECHAIN, ghost1, ghost2, 0.5, 7.0).set_dc_offset(3.21);
 
     spn::SpringNetwork spn;
     top.to_spring_network(spn);

@@ -666,11 +666,12 @@ void SpringNetwork::addSpring(unsigned id1, unsigned id2, float equilibrium, flo
     }
 }
 
-// Shared implementation for the addDihedral*Spring methods: unlike
-// addSpring, a ghost spring is always a new addition (no spring-neighbour
-// check), never registered in the particles' spring-neighbour map (see the
-// header comment on addDihedralPhiSpring for why), and not split into
-// static/dynamic subsets (always fully iterated in computeDihedralForces).
+// Shared implementation for addDihedralSpring and the STRETCH/BEND adds:
+// unlike addSpring, a ghost spring is always a new addition (no
+// spring-neighbour check), never registered in the particles'
+// spring-neighbour map (see the header comment on addDihedralSpring for
+// why), and not split into static/dynamic subsets (always fully iterated in
+// computeDihedralForces).
 static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Particle> & particles, unsigned id1,
                                 unsigned id2, float equilibrium, float stiffness, float dcOffset)
 {
@@ -684,34 +685,12 @@ static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Pa
     collection.back().setDcOffset(dcOffset);
 }
 
-void SpringNetwork::addDihedralPhiSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                         float dcOffset)
+void SpringNetwork::addDihedralSpring(unsigned family, unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                      float dcOffset)
 {
-    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_PHI], _particles, id1, id2, equilibrium, stiffness, dcOffset);
-}
-
-void SpringNetwork::addDihedralPsiSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                         float dcOffset)
-{
-    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_PSI], _particles, id1, id2, equilibrium, stiffness, dcOffset);
-}
-
-void SpringNetwork::addDihedralOmegaSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                           float dcOffset)
-{
-    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_OMEGA], _particles, id1, id2, equilibrium, stiffness, dcOffset);
-}
-
-void SpringNetwork::addDihedralSidechainSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                               float dcOffset)
-{
-    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_SIDECHAIN], _particles, id1, id2, equilibrium, stiffness, dcOffset);
-}
-
-void SpringNetwork::addDihedralPlanaritySpring(unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                               float dcOffset)
-{
-    addDihedralSpringTo(_dihedralsprings[DIHEDRAL_PLANARITY], _particles, id1, id2, equilibrium, stiffness, dcOffset);
+    if (family >= DIHEDRAL_FAMILY_COUNT)
+        throw std::out_of_range("SpringNetwork::addDihedralSpring: dihedral family index out of range");
+    addDihedralSpringTo(_dihedralsprings[family], _particles, id1, id2, equilibrium, stiffness, dcOffset);
 }
 
 void SpringNetwork::addStretchSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
