@@ -399,11 +399,9 @@ void NetCDFWriter::writeBinary()
     writeDihedralSpringGroupBinary(nc, "stretch", _spn->getStretchSprings());
     writeDihedralSpringGroupBinary(nc, "bend", _spn->getBendSprings());
 
-    writeDihedralSpringGroupBinary(nc, "dihedralphi", _spn->getDihedralPhiSprings());
-    writeDihedralSpringGroupBinary(nc, "dihedralpsi", _spn->getDihedralPsiSprings());
-    writeDihedralSpringGroupBinary(nc, "dihedralomega", _spn->getDihedralOmegaSprings());
-    writeDihedralSpringGroupBinary(nc, "dihedralsidechain", _spn->getDihedralSidechainSprings());
-    writeDihedralSpringGroupBinary(nc, "dihedralplanarity", _spn->getDihedralPlanaritySprings());
+    for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        writeDihedralSpringGroupBinary(nc, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+            _spn->getDihedralSprings(family));
 
     writeGhostParticleGroupBinary(nc, _spn->getGhostParticles());
 
@@ -442,11 +440,9 @@ void NetCDFWriter::_writeHeaderCDL()
     writeDihedralHeaderCDL(_ostream, "stretch", _spn->getStretchSprings().size());
     writeDihedralHeaderCDL(_ostream, "bend", _spn->getBendSprings().size());
 
-    writeDihedralHeaderCDL(_ostream, "dihedralphi", _spn->getDihedralPhiSprings().size());
-    writeDihedralHeaderCDL(_ostream, "dihedralpsi", _spn->getDihedralPsiSprings().size());
-    writeDihedralHeaderCDL(_ostream, "dihedralomega", _spn->getDihedralOmegaSprings().size());
-    writeDihedralHeaderCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings().size());
-    writeDihedralHeaderCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings().size());
+    for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        writeDihedralHeaderCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+            _spn->getDihedralSprings(family).size());
 
     writeGhostParticleHeaderCDL(_ostream, _spn->getGhostParticles().size());
 
@@ -529,11 +525,9 @@ void NetCDFWriter::_writeHeaderCDL()
     writeDihedralVariablesCDL(_ostream, "stretch", _spn->getStretchSprings().size());
     writeDihedralVariablesCDL(_ostream, "bend", _spn->getBendSprings().size());
 
-    writeDihedralVariablesCDL(_ostream, "dihedralphi", _spn->getDihedralPhiSprings().size());
-    writeDihedralVariablesCDL(_ostream, "dihedralpsi", _spn->getDihedralPsiSprings().size());
-    writeDihedralVariablesCDL(_ostream, "dihedralomega", _spn->getDihedralOmegaSprings().size());
-    writeDihedralVariablesCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings().size());
-    writeDihedralVariablesCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings().size());
+    for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        writeDihedralVariablesCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+            _spn->getDihedralSprings(family).size());
 
     writeGhostParticleVariablesCDL(_ostream, _spn->getGhostParticles().size());
 }
@@ -752,11 +746,9 @@ void NetCDFWriter::_writeSpringDataCDL()
     writeDihedralDataCDL(_ostream, "stretch", _spn->getStretchSprings());
     writeDihedralDataCDL(_ostream, "bend", _spn->getBendSprings());
 
-    writeDihedralDataCDL(_ostream, "dihedralphi", _spn->getDihedralPhiSprings());
-    writeDihedralDataCDL(_ostream, "dihedralpsi", _spn->getDihedralPsiSprings());
-    writeDihedralDataCDL(_ostream, "dihedralomega", _spn->getDihedralOmegaSprings());
-    writeDihedralDataCDL(_ostream, "dihedralsidechain", _spn->getDihedralSidechainSprings());
-    writeDihedralDataCDL(_ostream, "dihedralplanarity", _spn->getDihedralPlanaritySprings());
+    for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        writeDihedralDataCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+            _spn->getDihedralSprings(family));
 
     writeGhostParticleDataCDL(_ostream, _spn->getGhostParticles());
 
