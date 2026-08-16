@@ -286,14 +286,129 @@ GLYCOSIDIC_N = {"DA": "N9", "DG": "N9", "DC": "N1", "DT": "N1",
                 "A": "N9", "G": "N9", "C": "N1", "U": "N1"}
 
 
+
+# ---------------------------------------------------------------------------
+# The sugar's four stereocenters
+# ---------------------------------------------------------------------------
+# AMBER's angle tables fix a tetrahedral vertex only up to a mirror
+# reflection. For a vertex whose substituents are all different that
+# reflection is a real chirality, and no table can supply it -- exactly the
+# situation the protein generator meets at the backbone C-alpha, and it
+# resolves it there with the L-amino-acid convention rather than by measuring
+# anything.
+#
+# The nucleotide sugar is the same kind of fact: it is ALWAYS
+# beta-D-ribofuranose (beta-D-2'-deoxyribofuranose in DNA), never anything
+# else. Written as CIP descriptors, that convention is:
+#
+#     C1'  R      C2'  R  (ribose only -- DNA's C2' carries two hydrogens
+#     C3'  S             and is not a stereocenter at all)
+#     C4'  R
+#
+# So the sign is not searched for, guessed, or measured: the target
+# descriptor is the input, and the frame builder below picks whichever of the
+# two mirror images realizes it.
+
+# CIP priority order at each centre (highest first), then the target
+# descriptor. C1' takes N9 on purines and N1 on pyrimidines -- resolved by
+# GLYCOSIDIC_N at build time.
+STEREOCENTERS = {"C1'": (["O4'", None, "C2'", "H1'"], "R"),
+                 "C2'": (["O2'", "C1'", "C3'", "H2'"], "R"),
+                 "C3'": (["O3'", "C4'", "C2'", "H3'"], "S"),
+                 "C4'": (["O4'", "C3'", "C5'", "H4'"], "R")}
+
+
+def cip_descriptor(a, b, c, d):
+    """'R' or 'S' from the four unit substituent vectors, given in CIP
+    priority order. Viewed with the lowest priority (d) pointing away, R is
+    a clockwise 1->2->3."""
+    s = np.dot(d, np.cross(a, b) + np.cross(b, c) + np.cross(c, a))
+    return "R" if s > 0 else "S"
+
+
+def _check_cip_convention():
+    """Pins the sign of cip_descriptor to the textbook definition, on a
+    tetrahedron built here -- no molecule involved. Wrong-way-round is
+    invisible in any energy (a mirrored model has the mirrored energy curve,
+    which matches AMBER wherever the torsion phase is 0 or 180 deg -- and
+    most of them are), so it is asserted at import instead of being trusted."""
+    d = np.array([0.0, 0.0, -1.0])
+    t = np.radians(70.5)
+
+    def sub(az_deg):
+        az = np.radians(az_deg)
+        return np.array([np.sin(t) * np.cos(az), np.sin(t) * np.sin(az), np.cos(t)])
+
+    assert cip_descriptor(sub(90), sub(-30), sub(-150), d) == "R"
+    assert cip_descriptor(sub(90), sub(210), sub(330), d) == "S"
+
+
+_check_cip_convention()
+
+_sugar_frames = {}
+
+
+def sugar_frame(ff, resname, vertex):
+    """Unit vectors from `vertex` to each of its four substituents, built
+    from AMBER's own angles and oriented by the beta-D convention above."""
+    key = (id(ff), resname, vertex)
+    if key in _sugar_frames:
+        return _sugar_frames[key]
+    atoms = ff.atoms_of(resname)
+    order, target = STEREOCENTERS[vertex]
+    order = [GLYCOSIDIC_N[resname.lstrip("R")] if n is None else n for n in order]
+    if any(n not in atoms for n in order) or vertex not in atoms:
+        _sugar_frames[key] = None
+        return None
+    v = atoms[vertex]
+
+    def ang(x, y):
+        return axes.valence_deg(v, atoms[x], atoms[y])
+
+    s1, s2, s3, s4 = order
+    if any(ang(x, y) is None for x, y in ((s1, s2), (s1, s3), (s2, s3),
+                                          (s1, s4), (s2, s4), (s3, s4))):
+        _sugar_frames[key] = None
+        return None
+    for sign in (+1.0, -1.0):
+        V1, V2, V3 = axes._build_two_vectors(ang(s1, s2), ang(s1, s3), ang(s2, s3), sign)
+        V4 = np.linalg.solve(np.array([V1, V2, V3]),
+                             np.cos(np.radians([ang(s1, s4), ang(s2, s4), ang(s3, s4)])))
+        V4 = V4 / np.linalg.norm(V4)
+        if cip_descriptor(V1, V2, V3, V4) == target:
+            frame = {s1: V1, s2: V2, s3: V3, s4: V4, vertex: np.zeros(3)}
+            _sugar_frames[key] = frame
+            return frame
+    _sugar_frames[key] = None
+    return None
+
+
+def sugar_delta(ff, resname, vertex, ref_name, axis_partner, other_name):
+    """dihedral(ref, vertex, axis_partner, other) read off the resolved
+    frame -- the same quantity ca_tetrahedral_delta returns for the protein
+    backbone, and used the same way by both sides of an axis."""
+    f = sugar_frame(ff, resname, vertex)
+    if f is None or ref_name not in f or axis_partner not in f or other_name not in f:
+        return None
+    # The axis partner defines the axis; ref and other are read around it.
+    return axes._dihedral_from_points(f[ref_name], f[vertex], f[axis_partner], f[other_name])
+
+
 def neighbours(ff, resname, vertex, exclude):
     """Real bonded substituents of `vertex` other than `exclude`, in template
     order -- the same stable, structure-free ordering the protein generator
     gets from its synthetic chain."""
     adj = ff.neighbours_of(resname)
     order = list(ff.atoms_of(resname))
-    out = [n for n in adj.get(vertex, ()) if n != exclude.lstrip("+-")]
-    return sorted(out, key=order.index)
+    out = sorted((n for n in adj.get(vertex, ()) if n != exclude.lstrip("+-")),
+                 key=order.index)
+    # O3' is bonded across the residue boundary to the next P. That bond is
+    # the phosphodiester link itself, so leaving it out does not merely lose
+    # a substituent -- it makes epsilon (C4'-C3'-O3'-P(i+1)) look like an axis
+    # with a bare end and skips it entirely.
+    if vertex == "O3'" and exclude.lstrip("+-") != "P":
+        out.append(NEXT_P)
+    return out
 
 
 def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as):
@@ -320,11 +435,11 @@ def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as):
     b_ref, c_ref = b_neighbors[0], c_neighbors[0]
 
     def side_geom(nbrs, vertex_class, other_class, ref_name):
-        with_classes = [(n, atoms[n]) for n in nbrs]
+        with_classes = [(n, atoms[n.lstrip('+-')]) for n in nbrs]
         deltas = axes.formula_derived_deltas(vertex_class, other_class, with_classes, ref_name)
         geom = {}
         for n in nbrs:
-            nc = atoms[n]
+            nc = atoms[n.lstrip('+-')]
             r = axes.bond_len_A(nc, vertex_class)
             theta = axes.valence_deg(vertex_class, nc, other_class)
             if r is None or theta is None:
@@ -334,9 +449,18 @@ def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as):
             elif n == ref_name:
                 delta = 0.0
             else:
-                print(f"SKIP DIHEDRAL ({resname} {axis_label}): vertex has no "
-                      f"formula-derived azimuth (4 distinct substituent types)")
-                return None
+                # All-different substituents: a real chirality. The sugar's
+                # four centres are covered by the beta-D frame above; nothing
+                # else in a nucleotide is a stereocenter.
+                vertex_name = b_bare if nbrs is b_neighbors else c_bare
+                partner = c_bare if nbrs is b_neighbors else b_bare
+                delta = sugar_delta(ff, resname, vertex_name, ref_name, partner, n) \
+                    if vertex_name in STEREOCENTERS else None
+                if delta is None:
+                    print(f"SKIP DIHEDRAL ({resname} {axis_label}): vertex "
+                          f"{vertex_name} has all-different substituents and is "
+                          f"not one of the sugar stereocenters")
+                    return None
             geom[n] = (r, theta, delta)
         return geom
 
@@ -347,7 +471,7 @@ def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as):
         return
 
     target, dc_by_harmonic = axes.combined_target_for_axis(
-        b_geom, c_geom, b_class, c_class, lambda n: atoms[n])
+        b_geom, c_geom, b_class, c_class, lambda n: atoms[n.lstrip('+-')])
     if target is None:
         print(f"SKIP DIHEDRAL ({resname} {axis_label}): AMBER gives this axis a "
               f"zero barrier (a real, deliberate null -- not a gap)")
@@ -408,27 +532,25 @@ def main():
     for base in ("A", "C", "G", "U"):
         generate_residue(rna, base, [base, "R" + base])
 
-    # Dihedrals. The .bi.ff family column is what BioSpring gates at runtime,
-    # and its five values (PHI/PSI/OMEGA/SIDECHAIN/PLANARITY) are named for
-    # protein chemistry -- there is no alpha..zeta. Every nucleic proper
-    # torsion therefore goes under SIDECHAIN, i.e. one gate
-    # (dihedralchi.enable) for all of them, rather than borrowing
-    # protein-backbone labels that would misdescribe them in the file.
-    # Splitting them into their own families is the same C++ chain PHI/PSI/
-    # OMEGA already went through (enum, parser, Topology collection, NetCDF,
-    # .msp key, SpringNetwork gate) and is deliberately left as its own change.
+    # Dihedrals, in three nucleic-specific families so nothing borrows a
+    # protein-backbone label that would misdescribe it:
+    #   NUCLEIC_BACKBONE  alpha beta gamma delta epsilon zeta
+    #   NUCLEIC_CHI       the glycosidic torsion + RNA's 2'-OH rotor
+    #   NUCLEIC_SUGAR     the four furanose ring bonds -- kept apart because
+    #                     the pucker is what they govern, and isolating it is
+    #                     the whole point of validating a nucleic model.
     for ff, bases, spellings in ((dna, ("DA", "DC", "DG", "DT"), lambda b: [b]),
                                  (rna, ("A", "C", "G", "U"), lambda b: [b, "R" + b])):
         ff.use()
         for base in bases:
             emit_as = spellings(base)
             for b_name, c_name, label in BACKBONE_AXES:
-                generate_axis(ff, base, b_name, c_name, label, "SIDECHAIN", emit_as)
+                generate_axis(ff, base, b_name, c_name, label, "NUCLEIC_BACKBONE", emit_as)
             for b_name, c_name, label in SUGAR_RING_AXES:
-                generate_axis(ff, base, b_name, c_name, label, "SIDECHAIN", emit_as)
-            generate_axis(ff, base, "C1'", GLYCOSIDIC_N[base], "chi", "SIDECHAIN", emit_as)
+                generate_axis(ff, base, b_name, c_name, label, "NUCLEIC_SUGAR", emit_as)
+            generate_axis(ff, base, "C1'", GLYCOSIDIC_N[base], "chi", "NUCLEIC_CHI", emit_as)
             if "O2'" in ff.atoms_of(base):
-                generate_axis(ff, base, "C2'", "O2'", "rotor_O2", "SIDECHAIN", emit_as)
+                generate_axis(ff, base, "C2'", "O2'", "rotor_O2", "NUCLEIC_CHI", emit_as)
 
     out = os.path.join(REPO_ROOT, "data/reducerules/NucleicAtomBonded.bi.ff")
     body = lines + [
