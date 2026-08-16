@@ -1,7 +1,9 @@
-#Rigid-group definitions for RNA, springs-only articulated model: the whole
-#backbone (alpha..zeta), the glycosidic chi, the 2'-OH rotor, and the sugar
-#pucker, all as free hinges in an otherwise rigid mesh. No bonded energy of
-#any kind -- every spring here carries pdb2spn's uniform --stiffness.
+#Rigid-group definitions for RNA, springs-only articulated model: the
+#backbone torsions alpha, beta, gamma, epsilon and zeta, the glycosidic chi
+#and the 2'-OH rotor, as free hinges in an otherwise rigid mesh. The sugar
+#pucker is NOT free -- and delta, which turns about a ring bond, is frozen
+#with it; see the DNA file for the derivation. No bonded energy of any kind
+#-- every spring here carries pdb2spn's uniform --stiffness.
 #Companion file for DNA: DNAAtomRigidGroups.rbody, whose header carries the
 #full derivation of the group/hinge layout. Only what differs for RNA is
 #repeated here.

@@ -397,16 +397,26 @@ def sugar_delta(ff, resname, vertex, ref_name, axis_partner, other_name):
 def neighbours(ff, resname, vertex, exclude):
     """Real bonded substituents of `vertex` other than `exclude`, in template
     order -- the same stable, structure-free ordering the protein generator
-    gets from its synthetic chain."""
+    gets from its synthetic chain.
+
+    `vertex` keeps its +/- prefix, and the substituents inherit it: a
+    template is one residue, so walking the adjacency of "+P" returns P's
+    neighbours by NAME but they belong to the residue the prefix points at.
+    Dropping the prefix there names the wrong residue's atom -- silently, and
+    only the ghost's placement shows it (an anchor 7 A away instead of 1.5).
+    """
+    prefix = vertex[0] if vertex[:1] in ("+", "-") else ""
+    bare = vertex.lstrip("+-")
     adj = ff.neighbours_of(resname)
     order = list(ff.atoms_of(resname))
-    out = sorted((n for n in adj.get(vertex, ()) if n != exclude.lstrip("+-")),
-                 key=order.index)
+    out = [prefix + n
+           for n in sorted((n for n in adj.get(bare, ()) if n != exclude.lstrip("+-")),
+                           key=order.index)]
     # O3' is bonded across the residue boundary to the next P. That bond is
     # the phosphodiester link itself, so leaving it out does not merely lose
     # a substituent -- it makes epsilon (C4'-C3'-O3'-P(i+1)) look like an axis
     # with a bare end and skips it entirely.
-    if vertex == "O3'" and exclude.lstrip("+-") != "P":
+    if bare == "O3'" and not prefix and exclude.lstrip("+-") != "P":
         out.append(NEXT_P)
     return out
 
@@ -426,8 +436,10 @@ def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as):
         axes.bump_axis_skip()
         return
 
-    b_neighbors = neighbours(ff, resname, b_bare, c_bare)
-    c_neighbors = neighbours(ff, resname, c_bare, b_bare)
+    # Prefixed, not bare: an axis atom on the next residue (zeta's "+P")
+    # carries its whole substituent set over with it.
+    b_neighbors = neighbours(ff, resname, b_name, c_bare)
+    c_neighbors = neighbours(ff, resname, c_name, b_bare)
     if not b_neighbors or not c_neighbors:
         print(f"SKIP DIHEDRAL ({resname} {axis_label}): no real substituent on one side")
         axes.bump_axis_skip()
@@ -507,22 +519,28 @@ def main():
         "#one spelling matches NOTHING on a file written in another, with no",
         "#error at all -- measured, 0 springs out of 963 particles.",
         "#",
-        "#DIHEDRAL COVERAGE IS PARTIAL, and the gap is one single cause. Emitted:",
-        "#alpha, beta, zeta (the phosphate torsions) and RNA's 2'-OH rotor.",
-        "#Missing: gamma, delta, epsilon, chi and the four sugar-ring bonds --",
-        "#every axis with a sugar carbon (C1'..C4') at one end. Each of those is",
-        "#a tetrahedral vertex whose three non-axis substituents have three",
-        "#DISTINCT parameter types, so its azimuths are a real chirality that no",
-        "#angle table can resolve: it needs the ribose's own (beta-D) reference",
-        "#frame, the exact counterpart of the L-amino-acid frame the protein",
-        "#generator uses for C-alpha. Those axes are SKIPPED and reported, never",
-        "#emitted from a guessed sign.",
+        "#DIHEDRAL COVERAGE IS COMPLETE: alpha..zeta, the glycosidic chi, the",
+        "#four furanose ring bonds and RNA's 2'-OH rotor, with no axis skipped.",
+        "#Every axis with a sugar carbon (C1'..C4') at one end goes through a",
+        "#tetrahedral vertex whose three non-axis substituents have three",
+        "#DISTINCT parameter types -- a real chirality no angle table can",
+        "#resolve. It is resolved from the CONVENTION, not from a structure:",
+        "#the sugar is always beta-D-ribofuranose, which in CIP descriptors is",
+        "#C1' R, C2' R, C3' S, C4' R (DNA's C2' carries two H and is not a",
+        "#stereocenter). The constructor builds both mirror images and keeps",
+        "#the one realising the descriptor -- the exact counterpart of the",
+        "#L-amino-acid frame the protein generator uses for C-alpha.",
         "#",
         "#Companion rigid-body files: DNAAtomRigidGroups.rbody and",
-        "#RNAAtomRigidGroups.rbody. Those keep the sugar RIGID, so no",
-        "#dihedral is emitted here yet for delta or the ring interior: with a",
-        "#rigid furanose they would have no effect. Freeing the pucker is the",
-        "#open question -- see the .rbody headers.",
+        "#RNAAtomRigidGroups.rbody. Measured on a real build, their per-vertex",
+        "#groups cover all 10 pairs of the 5 furanose atoms -- a 5-cycle puts",
+        "#every pair at graph distance <= 2, so 'vertex + its 2 ring",
+        "#neighbours' leaves nothing out. Under --rigidbody alone that is a",
+        "#complete clique at uniform stiffness and the pucker is FROZEN, which",
+        "#is why NUCLEIC_SUGAR exists as its own family. Add --stretching",
+        "#--bending and those same 10 pairs become real AMBER bonds and angles:",
+        "#a soft ring, the way AMBER itself has no pucker term either and lets",
+        "#the state emerge from bonds, angles, torsions and 1-4 together.",
         "",
     ]
 
