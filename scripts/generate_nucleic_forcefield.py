@@ -66,6 +66,10 @@ class ForceFieldTables:
     def __init__(self, path):
         root = ET.parse(path).getroot()
         self.root = root
+        # Kept so the same file can be handed to OpenMM's own ForceField --
+        # see base_improper_quads, which needs AMBER's assignment engine
+        # rather than a reimplementation of its improper matching rules.
+        self.path = path
         self.type_to_class = {t.get("name"): t.get("class")
                               for t in root.find("AtomTypes").findall("Type")}
         self.residues = {r.get("name"): r for r in root.find("Residues").findall("Residue")}
@@ -284,6 +288,141 @@ SUGAR_RING_AXES = [("C1'", "C2'", "ring_C1_C2"), ("C2'", "C3'", "ring_C2_C3"),
 # pyrimidine. Plus RNA's 2'-OH rotor.
 GLYCOSIDIC_N = {"DA": "N9", "DG": "N9", "DC": "N1", "DT": "N1",
                 "A": "N9", "G": "N9", "C": "N1", "U": "N1"}
+
+# Every backbone/sugar atom name. Used only to tell a base hub from a sugar
+# one when reading impropers back: AMBER puts no improper on an sp3 sugar
+# carbon, so this is a guard against surprises rather than a filter that
+# does real work.
+SUGAR_AND_BACKBONE = {"P", "OP1", "OP2", "O1P", "O2P", "O5'", "C5'", "C4'", "O4'", "C3'",
+                      "O3'", "C2'", "C1'", "O2'", "H5'", "H5''", "H5'1", "H5'2", "H4'",
+                      "H3'", "H2'", "H2''", "H2'1", "H2'2", "H1'", "HO5'", "HO3'", "HO2'",
+                      "HO'2"}
+
+
+# ---------------------------------------------------------------------------
+# Base planarity impropers
+# ---------------------------------------------------------------------------
+# An AMBER improper IS a 4-atom dihedral (i,j,k,l) with the hub listed THIRD
+# (k bonded to i, j and l), measured about the real j-k bond -- so the ghost
+# ring models it as-is: axis=(j,k), refs=(i,l), one single-pair ring per
+# improper. Every base improper comes out n=2, phase=180 deg: the sp2 centre
+# is held in its plane, and both faces cost the same.
+#
+# AMBER's improper MATCHING rules (wildcards, the trefoil ordering that
+# decides which peripheral is listed where) are NOT reimplemented here --
+# that is the part most likely to be silently wrong. The quadruplets and
+# their parameters are read from a real OpenMM System built on a synthetic
+# chain, so AMBER's own assignment engine does the matching. Everything
+# after that is a parameter lookup, not a geometry derivation, so the
+# structure-free rule the rest of this file follows still holds: the chain
+# below carries no coordinates at all, only atoms and bonds.
+_improper_cache = {}
+
+
+def base_improper_quads(ff, chain_residues):
+    """[(hub_resname, (i, j, k, l) names, n, phase_rad, k)] for every improper
+    AMBER assigns to a base, read off a synthetic chain of `chain_residues`."""
+    if ff.path in _improper_cache:
+        return _improper_cache[ff.path]
+
+    import openmm.app as app
+    import openmm.unit as unit
+
+    top = app.Topology()
+    chain = top.addChain()
+    per_residue = []
+    for rname in chain_residues:
+        tpl = ff.residues[rname]
+        res = top.addResidue(rname, chain)
+        by_name = {}
+        for a in tpl.findall("Atom"):
+            name = a.get("name")
+            # AMBER atom names start with their element; no nucleic template
+            # uses a leading digit.
+            symbol = "Cl" if name.upper().startswith("CL") else name.lstrip("0123456789")[0]
+            by_name[name] = top.addAtom(name, app.element.get_by_symbol(symbol), res)
+        for b in tpl.findall("Bond"):
+            top.addBond(by_name[b.get("atomName1")], by_name[b.get("atomName2")])
+        per_residue.append(by_name)
+    # The phosphodiester link, the one bond a template cannot carry.
+    for a, b in zip(per_residue, per_residue[1:]):
+        if "O3'" in a and "P" in b:
+            top.addBond(a["O3'"], b["P"])
+
+    system = app.ForceField(ff.path).createSystem(top, nonbondedMethod=app.NoCutoff,
+                                                  constraints=None)
+    torsions = next(system.getForce(i) for i in range(system.getNumForces())
+                    if system.getForce(i).__class__.__name__ == "PeriodicTorsionForce")
+    bonded = set()
+    for b in top.bonds():
+        bonded.add((b[0].index, b[1].index))
+        bonded.add((b[1].index, b[0].index))
+    atoms = list(top.atoms())
+
+    quads = []
+    for t in range(torsions.getNumTorsions()):
+        i, j, k, l, per, phase, kv = torsions.getTorsionParameters(t)
+        quad = [i, j, k, l]
+        # An improper is exactly the case where one atom of the quad is
+        # bonded to the other three; a proper torsion never is.
+        hubs = [c for c in quad if all((c, o) in bonded for o in quad if o != c)]
+        if not hubs:
+            continue
+        hub = atoms[hubs[0]]
+        if hub.name in SUGAR_AND_BACKBONE:
+            continue
+        if any(atoms[x].residue.index != hub.residue.index for x in quad):
+            continue
+        quads.append((hub.residue.name, tuple(atoms[x].name for x in quad), per,
+                      phase.value_in_unit(unit.radian),
+                      kv.value_in_unit(unit.kilojoule_per_mole)))
+    _improper_cache[ff.path] = quads
+    return quads
+
+
+def generate_base_impropers(ff, resname, emit_as, quads):
+    """One ring group per improper whose hub belongs to `resname`'s base."""
+    atoms = ff.atoms_of(resname)
+    seen, emitted = set(), 0
+    for hub_res, names, n, phase, kv in quads:
+        # The 5'/3'/nucleoside variants carry the same base and so the same
+        # impropers; keying on the hub keeps exactly one of each. Without
+        # this the rule would be emitted several times under one name --
+        # silently doubled improper energy, the same trap the protein
+        # generator hit.
+        if hub_res != resname or names[2] in seen or kv <= 1e-6:
+            continue
+        if any(nm not in atoms for nm in names):
+            continue
+        seen.add(names[2])
+        cls = lambda nm: atoms[nm]
+        L_axis = axes.bond_len_A(cls(names[1]), cls(names[2]))
+        if L_axis is None:
+            print(f"SKIP PLANARITY ({resname} {names[2]}): no bond length for the axis")
+            axes.bump_axis_skip()
+            continue
+        # names[0] hangs off the HUB names[2], not off the b-side anchor
+        # names[1], so its (r, theta) has to be resolved through the hub --
+        # geom_via_far_anchor, exactly as the protein impropers do.
+        ref_geom_b = axes.geom_via_far_anchor(
+            L_axis, axes.bond_len_A(cls(names[0]), cls(names[2])),
+            axes.valence_deg(cls(names[2]), cls(names[0]), cls(names[1])))
+        ref_geom_c = (axes.bond_len_A(cls(names[3]), cls(names[2])),
+                      axes.valence_deg(cls(names[2]), cls(names[3]), cls(names[1])))
+        if ref_geom_b is None or None in ref_geom_c:
+            print(f"SKIP PLANARITY ({resname} {names[2]}): missing bond/angle for a peripheral")
+            axes.bump_axis_skip()
+            continue
+        target = kv * np.exp(-1j * phase)
+        for name in emit_as:
+            axes.emit_ghost_ring(name, f"imp_{names[2]}", "PLANARITY", n, L_axis, target,
+                                 names[1], names[2], names[0], names[3],
+                                 axis_dc_target=kv, ref_geom_b=ref_geom_b,
+                                 ref_geom_c=ref_geom_c)
+        emitted += 1
+    if emitted:
+        axes.bump_axis_ok()
+    return emitted
 
 
 
@@ -560,6 +699,13 @@ def main():
     for ff, bases, spellings in ((dna, ("DA", "DC", "DG", "DT"), lambda b: [b]),
                                  (rna, ("A", "C", "G", "U"), lambda b: [b, "R" + b])):
         ff.use()
+        # A synthetic chain carrying every base as an INTERIOR residue,
+        # bracketed by the 5'/3' terminal variants so no base of interest is
+        # itself terminal. Atoms and bonds only -- no coordinates, and none
+        # needed: what is read back off it is which improper AMBER assigns
+        # where, not any geometry.
+        chain = [bases[0] + "5"] + list(bases) + [bases[-1] + "3"]
+        quads = base_improper_quads(ff, chain)
         for base in bases:
             emit_as = spellings(base)
             for b_name, c_name, label in BACKBONE_AXES:
@@ -569,6 +715,7 @@ def main():
             generate_axis(ff, base, "C1'", GLYCOSIDIC_N[base], "chi", "NUCLEIC_CHI", emit_as)
             if "O2'" in ff.atoms_of(base):
                 generate_axis(ff, base, "C2'", "O2'", "rotor_O2", "NUCLEIC_CHI", emit_as)
+            generate_base_impropers(ff, base, emit_as, quads)
 
     out = os.path.join(REPO_ROOT, "data/reducerules/NucleicAtomBonded.bi.ff")
     body = lines + [
