@@ -1,0 +1,144 @@
+#Rigid-group definitions for DNA, springs-only articulated model: the whole
+#backbone (alpha..zeta), the glycosidic chi, and the sugar pucker, all as free
+#hinges in an otherwise rigid mesh. No bonded energy of any kind -- every
+#spring here carries pdb2spn's uniform --stiffness. Companion file for RNA:
+#RNAAtomRigidGroups.rbody.
+#
+#Same columnar syntax and same reader as ProteinAtomRigidGroups.rbody: a
+#.rbody line creates every pairwise spring between its atoms and leaves the
+#particles distinct -- nothing is reduced or merged. Adjacent groups overlap
+#on exactly the 2 atoms of a hinge axis, and that overlap alone gives
+#"2 anchors, 1 free rotation".
+#
+#CHARMM-style +/- prefix: "+X"/"-X" is atom X of the next/previous residue in
+#the chain. A rule's resname is always its own (unprefixed) residue.
+#
+#DOUBLE STRAND -- read this before expecting base pairing. This format has no
+#notion of chain: +/- walk the sequence, and there is no way to name "the
+#paired base on the other strand". Nothing here holds the two strands
+#together, and nothing here can. Both strands get these same per-residue
+#rules independently, which is correct -- their rigidity is identical -- but
+#the pairing itself must come from the hydrogen-bond mechanism (biospring's
+#hbond.* settings and a .hbond donor/acceptor table), not from a rigid-body
+#rule. A duplex built with this file and no hbond term will separate.
+#
+#Naming <ResidueCode>_<Part>, one group per backbone/sugar atom, walking 5'
+#to 3'. Each group holds its own atom, its two neighbours along the chain or
+#ring, and its hydrogens/substituents; consecutive groups then share exactly
+#the 2 atoms of one rotatable bond. The seven free torsions come out as:
+#   _P  /_O5  share {P, O5'}    -> alpha  (O3'(i-1)-P-O5'-C5')
+#   _O5 /_C5  share {O5', C5'}  -> beta   (P-O5'-C5'-C4')
+#   _C5 /_C4  share {C5', C4'}  -> gamma  (O5'-C5'-C4'-C3')
+#   _C4 /_C3  share {C4', C3'}  -> delta  (C5'-C4'-C3'-O3')
+#   _C3 /_O3  share {C3', O3'}  -> epsilon(C4'-C3'-O3'-P(i+1))
+#   _O3 /next _P share {O3', P} -> zeta   (C3'-O3'-P(i+1)-O5'(i+1))
+#   _C1 /_BASE share {C1', N9 or N1} -> chi (the glycosidic bond)
+#
+#THE SUGAR PUCKER IS FROZEN in this file, at whatever value the input
+#structure carries. That is a deliberate choice, and it needs stating
+#plainly because it is the one property a nucleic-acid model is judged on.
+#
+#The furanose is covered by five overlapping per-vertex groups (_C4, _O4,
+#_C1, _C2, _C3), the same construction ProteinAtomRigidGroups.rbody uses for
+#proline's pyrrolidine -- but that construction does NOT free a
+#five-membered ring, and measuring it says so: all 10 ring pairs end up
+#spring-connected. The reason is geometric and has no way around it. In a
+#5-cycle every pair of atoms is at graph distance <= 2, so a group holding
+#"vertex + its 2 ring neighbours" also creates the 1-3 spring between those
+#two neighbours; summed over the five vertices that covers every pair.
+#Fixing bond lengths AND valence angles is enough to rigidify a 5-ring.
+#(Worth knowing: proline in the protein file has exactly the same property,
+#10/10 -- its ring does not pucker either, whatever earlier notes claimed.)
+#
+#Freeing the pucker therefore requires dropping some of those 1-3 pairs, and
+#in an energy-free model nothing would then hold the ring's angles: it would
+#flatten or collapse. So the sugar stays rigid here, exactly as omega stays
+#rigid in ProteinAtomRigidGroups.rbody -- a cis input stays cis, a C2'-endo
+#input stays C2'-endo. Restoring a genuine, bimodal, correctly-populated
+#pucker is the job of the DNA bonded parameters, and it is the single most
+#important thing to validate when they land.
+#
+#Note delta rotates about C4'-C3', a RING bond, so it is not an independent
+#hinge at all: it is a readout of the pucker (~84 deg in C3'-endo, ~144 deg
+#in C2'-endo). With the ring rigid, delta is frozen with it -- the _C4/_C3
+#overlap is still exactly 2 atoms, but the ring closure holds it. The other
+#six torsions are genuinely free.
+#
+#Why the pucker matters at all: C2'-endo spaces the phosphates ~7 A along
+#the strand (B-DNA, wide helix), C3'-endo ~5.9 A (A-DNA and RNA, compact).
+#It is the lever translating a local sugar state into the global helix.
+#
+#THE BASE IS ONE RIGID CLIQUE here, deliberately, unlike the aromatic rings
+#in ProteinAtomRigidGroups.rbody. Those were split per vertex only because
+#the bonded force field supplies both their ring torsions and their
+#PLANARITY impropers; freeing a 6-ring without those lets it fold ("boat")
+#with no angle change, since its para pairs are 1-4. This file is the
+#no-energy model, so a split base would simply collapse. Split it later, at
+#the same time as the DNA bonded parameters land, not before.
+#
+#Terminal residues: a 5' end (DA5/DC5/DG5/DT5) has no P/O1P/O2P and carries
+#H5T instead; a 3' end (DA3/...) carries H3T. Groups that reference a missing
+#atom -- or a missing -O3'/+P neighbour at either chain end -- are skipped
+#rather than failing, same tolerance as the protein file's first/last
+#residue. The 5'/3' variant resnames are listed alongside the internal ones
+#so a PDB using either spelling is covered.
+
+#Adenine ------------------------------------------------------------------
+A_P    DA  -O3' P O1P O2P O5'
+A_O5   DA  P O5' C5'
+A_C5   DA  O5' C5' H5'1 H5' H5'2 H5'' C4'
+A_C4   DA  C5' C4' H4' O4' C3'
+A_O4   DA  C4' O4' C1'
+A_C1   DA  O4' C1' H1' C2' N9
+A_C2   DA  C1' C2' H2'1 H2' H2'2 H2'' C3'
+A_C3   DA  C2' C3' H3' C4' O3'
+A_O3   DA  C3' O3' +P
+A_BASE DA  C1' N9 C8 H8 N7 C5 C6 N6 H61 H62 N1 C2 H2 N3 C4
+A_5TER DA  H5T O5' C5'
+A_3TER DA  C3' O3' H3T
+
+#Cytosine -----------------------------------------------------------------
+C_P    DC  -O3' P O1P O2P O5'
+C_O5   DC  P O5' C5'
+C_C5   DC  O5' C5' H5'1 H5' H5'2 H5'' C4'
+C_C4   DC  C5' C4' H4' O4' C3'
+C_O4   DC  C4' O4' C1'
+C_C1   DC  O4' C1' H1' C2' N1
+C_C2   DC  C1' C2' H2'1 H2' H2'2 H2'' C3'
+C_C3   DC  C2' C3' H3' C4' O3'
+C_O3   DC  C3' O3' +P
+C_BASE DC  C1' N1 C6 H6 C5 H5 C4 N4 H41 H42 N3 C2 O2
+C_5TER DC  H5T O5' C5'
+C_3TER DC  C3' O3' H3T
+
+#Guanine ------------------------------------------------------------------
+G_P    DG  -O3' P O1P O2P O5'
+G_O5   DG  P O5' C5'
+G_C5   DG  O5' C5' H5'1 H5' H5'2 H5'' C4'
+G_C4   DG  C5' C4' H4' O4' C3'
+G_O4   DG  C4' O4' C1'
+G_C1   DG  O4' C1' H1' C2' N9
+G_C2   DG  C1' C2' H2'1 H2' H2'2 H2'' C3'
+G_C3   DG  C2' C3' H3' C4' O3'
+G_O3   DG  C3' O3' +P
+G_BASE DG  C1' N9 C8 H8 N7 C5 C6 O6 N1 H1 C2 N2 H21 H22 N3 C4
+G_5TER DG  H5T O5' C5'
+G_3TER DG  C3' O3' H3T
+
+#Thymine ------------------------------------------------------------------
+#C7 is the 5-methyl. Its three hydrogens sit inside the rigid base clique
+#here, so the methyl does not spin in the no-energy model; give it its own
+#{C5, C7, H71, H72, H73} group when the DNA torsion parameters land, exactly
+#as ProteinAtomRigidGroups.rbody does for Ala/Val/Leu methyls.
+T_P    DT  -O3' P O1P O2P O5'
+T_O5   DT  P O5' C5'
+T_C5   DT  O5' C5' H5'1 H5' H5'2 H5'' C4'
+T_C4   DT  C5' C4' H4' O4' C3'
+T_O4   DT  C4' O4' C1'
+T_C1   DT  O4' C1' H1' C2' N1
+T_C2   DT  C1' C2' H2'1 H2' H2'2 H2'' C3'
+T_C3   DT  C2' C3' H3' C4' O3'
+T_O3   DT  C3' O3' +P
+T_BASE DT  C1' N1 C6 H6 C5 C7 H71 H72 H73 C4 O4 N3 H3 C2 O2
+T_5TER DT  H5T O5' C5'
+T_3TER DT  C3' O3' H3T
