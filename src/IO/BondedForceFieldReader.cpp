@@ -17,11 +17,14 @@ namespace rigidbodygroup
 // with the enum -- SpringNetwork's DIHEDRAL_FAMILY_NAMES are a third
 // spelling of the same list, the .nc variable prefixes.
 static constexpr const char * DIHEDRAL_FAMILY_KEYWORDS[spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT] = {
-    "PHI",       // proper dihedral, backbone phi
-    "PSI",       // proper dihedral, backbone psi
-    "OMEGA",     // proper dihedral, backbone omega (peptide bond)
-    "SIDECHAIN", // proper dihedral, chi1-4
-    "PLANARITY"  // improper dihedral, ring/guanidinium planarity
+    "PHI",              // proper dihedral, backbone phi
+    "PSI",              // proper dihedral, backbone psi
+    "OMEGA",            // proper dihedral, backbone omega (peptide bond)
+    "SIDECHAIN",        // proper dihedral, chi1-4
+    "PLANARITY",        // improper dihedral, ring/guanidinium planarity
+    "NUCLEIC_BACKBONE", // proper dihedral, alpha..zeta
+    "NUCLEIC_CHI",      // proper dihedral, glycosidic torsion + RNA's 2'-OH rotor
+    "NUCLEIC_SUGAR"     // proper dihedral, the four furanose ring bonds (the pucker)
 };
 
 // The build-time flag each family answers to (see buildSprings's
@@ -41,7 +44,18 @@ static constexpr DihedralBuildGate DIHEDRAL_FAMILY_GATES[spn::SpringNetwork::DIH
     GATE_BACKBONE,  // PSI
     GATE_BACKBONE,  // OMEGA
     GATE_SIDECHAIN, // SIDECHAIN
-    GATE_PLANARITY  // PLANARITY
+    GATE_PLANARITY, // PLANARITY
+    // The nucleic families split along the same line: what lies on the
+    // chain itself is backbone, what hangs off it is sidechain. The
+    // furanose counts as backbone -- the chain runs THROUGH the ring
+    // (C4'-C3'), so building the phosphate torsions without the ring bonds
+    // that carry delta would leave the backbone half-restrained. They stay
+    // a separate FAMILY (own energy channel, own runtime toggle, since the
+    // pucker has to be measurable on its own) without needing a separate
+    // build flag.
+    GATE_BACKBONE,  // NUCLEIC_BACKBONE
+    GATE_SIDECHAIN, // NUCLEIC_CHI -- the base's own orientation, plus the 2'-OH rotor
+    GATE_BACKBONE   // NUCLEIC_SUGAR
 };
 
 void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_id)

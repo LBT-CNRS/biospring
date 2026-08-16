@@ -60,6 +60,15 @@ class Configuration
     // with no toggle, which made "turn every dihedral off" quietly leave
     // ~40 kJ/mol of improper energy behind on GKinase.
     EnergySetting dihedralplanarity;
+    // The nucleic-acid families (see
+    // spn::SpringNetwork::DihedralFamilyIndex for why they are separate
+    // families rather than SIDECHAIN). dihedralnucleicsugar gates the four
+    // furanose ring bonds on their own: the sugar pucker is what selects
+    // the A or B helical form, so being able to read -- and remove -- just
+    // that contribution is the point of giving it its own family.
+    EnergySetting dihedralnucleicbackbone;
+    EnergySetting dihedralnucleicchi;
+    EnergySetting dihedralnucleicsugar;
     EnergySetting bending;
 
     Configuration()
@@ -68,7 +77,8 @@ class Configuration
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), potentialgrid("potentialgrid"),
           densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody"), dihedralphi("dihedralphi"),
           dihedralpsi("dihedralpsi"), dihedralomega("dihedralomega"), dihedralchi("dihedralchi"),
-          dihedralplanarity("dihedralplanarity"), bending("bending")
+          dihedralplanarity("dihedralplanarity"), dihedralnucleicbackbone("dihedralnucleicbackbone"),
+          dihedralnucleicchi("dihedralnucleicchi"), dihedralnucleicsugar("dihedralnucleicsugar"), bending("bending")
     {
         _register(sim);
         _register(steric);
@@ -91,6 +101,9 @@ class Configuration
         _register(dihedralomega);
         _register(dihedralchi);
         _register(dihedralplanarity);
+        _register(dihedralnucleicbackbone);
+        _register(dihedralnucleicchi);
+        _register(dihedralnucleicsugar);
         _register(bending);
     }
 
@@ -136,6 +149,9 @@ class Configuration
         os << "\n";
         dihedralchi.print();
         dihedralplanarity.print();
+        dihedralnucleicbackbone.print();
+        dihedralnucleicchi.print();
+        dihedralnucleicsugar.print();
         os << "\n";
         bending.print();
     }
@@ -198,6 +214,12 @@ class Configuration
             dihedralchi.setFromString(name, value);
         else if (group == dihedralplanarity.name)
             dihedralplanarity.setFromString(name, value);
+        else if (group == dihedralnucleicbackbone.name)
+            dihedralnucleicbackbone.setFromString(name, value);
+        else if (group == dihedralnucleicchi.name)
+            dihedralnucleicchi.setFromString(name, value);
+        else if (group == dihedralnucleicsugar.name)
+            dihedralnucleicsugar.setFromString(name, value);
         else if (group == bending.name)
             bending.setFromString(name, value);
     }
@@ -288,6 +310,9 @@ inline Configuration defaultConfiguration()
     config.dihedralomega.enable = true;
     config.dihedralchi.enable = true;
     config.dihedralplanarity.enable = true;
+    config.dihedralnucleicbackbone.enable = true;
+    config.dihedralnucleicchi.enable = true;
+    config.dihedralnucleicsugar.enable = true;
     config.bending.enable = true;
 
     return config;

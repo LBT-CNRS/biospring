@@ -181,9 +181,10 @@ void SpringNetwork::computeDihedralForces()
                                                          /*subtractDcOffset=*/true);
     };
 
-    const bool enabled[DIHEDRAL_FAMILY_COUNT] = {isDihedralPhiEnabled(), isDihedralPsiEnabled(),
-                                                 isDihedralOmegaEnabled(), isDihedralChiEnabled(),
-                                                 isDihedralPlanarityEnabled()};
+    const bool enabled[DIHEDRAL_FAMILY_COUNT] = {
+        isDihedralPhiEnabled(),             isDihedralPsiEnabled(),        isDihedralOmegaEnabled(),
+        isDihedralChiEnabled(),             isDihedralPlanarityEnabled(),  isDihedralNucleicBackboneEnabled(),
+        isDihedralNucleicChiEnabled(),      isDihedralNucleicSugarEnabled()};
     for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
         if (enabled[family])
             accumulate(_dihedralsprings[family]);

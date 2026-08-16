@@ -187,7 +187,19 @@ class SpringNetwork
     float getBendEnergy() const { return _energies.bend; }
     // The dihedral families, used as the index of _dihedralsprings and of
     // anything that has to walk them in a fixed order (NetCDF I/O, the
-    // per-family runtime gates). Keep DIHEDRAL_FAMILY_COUNT last.
+    // per-family runtime gates, Topology's own collections and
+    // BondedForceFieldReader's DihedralFamily, which both alias this).
+    // Keep DIHEDRAL_FAMILY_COUNT last.
+    //
+    // The first five name protein chemistry (phi/psi/omega, chi1-4, and the
+    // improper that keeps aromatic rings planar); the nucleic ones are
+    // separate families rather than reusing SIDECHAIN because a nucleotide's
+    // axes do not map onto a residue's: alpha..zeta are six backbone
+    // torsions where a protein has three, and NUCLEIC_SUGAR is split off
+    // from the rest of the backbone because those four furanose ring bonds
+    // are what governs the sugar pucker -- the single lever selecting the A
+    // or B helical form -- so its energy has to be readable, and switchable,
+    // on its own.
     enum DihedralFamilyIndex
     {
         DIHEDRAL_PHI = 0,
@@ -195,15 +207,19 @@ class SpringNetwork
         DIHEDRAL_OMEGA,
         DIHEDRAL_SIDECHAIN,
         DIHEDRAL_PLANARITY,
+        DIHEDRAL_NUCLEIC_BACKBONE,
+        DIHEDRAL_NUCLEIC_CHI,
+        DIHEDRAL_NUCLEIC_SUGAR,
         DIHEDRAL_FAMILY_COUNT
     };
 
     // The .nc variable-group prefix of each family, in DihedralFamilyIndex
     // order. Stated once here so the writer and the reader cannot drift out
-    // of step -- they used to spell these five names out separately, four
-    // times over.
+    // of step -- they used to spell these names out separately, four times
+    // over.
     static constexpr const char * DIHEDRAL_FAMILY_NAMES[DIHEDRAL_FAMILY_COUNT] = {
-        "dihedralphi", "dihedralpsi", "dihedralomega", "dihedralsidechain", "dihedralplanarity"};
+        "dihedralphi",      "dihedralpsi",   "dihedralomega",           "dihedralsidechain", "dihedralplanarity",
+        "dihedralnucleicbackbone", "dihedralnucleicchi", "dihedralnucleicsugar"};
 
     // Read-only view of one family's springs, for NetCDF I/O.
     const std::vector<Spring> & getDihedralSprings(unsigned family) const
@@ -395,6 +411,9 @@ class SpringNetwork
     bool isDihedralOmegaEnabled() const { return _config.dihedralomega.enable; }
     bool isDihedralChiEnabled() const { return _config.dihedralchi.enable; }
     bool isDihedralPlanarityEnabled() const { return _config.dihedralplanarity.enable; }
+    bool isDihedralNucleicBackboneEnabled() const { return _config.dihedralnucleicbackbone.enable; }
+    bool isDihedralNucleicChiEnabled() const { return _config.dihedralnucleicchi.enable; }
+    bool isDihedralNucleicSugarEnabled() const { return _config.dihedralnucleicsugar.enable; }
     bool isViscosityEnabled() const { return _config.viscosity.enable; }
     bool isStericEnabled() const { return _config.steric.enable; }
     bool isElectrostaticEnabled() const { return _config.electrostatic.enable; }
