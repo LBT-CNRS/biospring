@@ -1,6 +1,7 @@
 #ifndef __TOPOLOGY_TOPOLOGY_HPP__
 #define __TOPOLOGY_TOPOLOGY_HPP__
 
+#include <array>
 #include <unordered_map>
 
 #include "Particle.hpp"
@@ -42,11 +43,21 @@ class Topology
     // omega .msp settings). A dihedral ghost spring is always a new
     // addition (never a retune of a real 1-2/1-3 spring), so unlike
     // _springs these are never populated by RigidBodyBuilder.
-    SpringCollection _dihedral_phi_springs;
-    SpringCollection _dihedral_psi_springs;
-    SpringCollection _dihedral_omega_springs;
-    SpringCollection _dihedral_sidechain_springs;
-    SpringCollection _dihedral_planarity_springs;
+    // One collection per family, indexed by the family itself rather than
+    // held as parallel members. Adding a family used to mean repeating the
+    // same declaration/clear/copy/convert lines here and in four other
+    // layers; indexed, everything below loops instead, and a new family is
+    // one enum value.
+    enum DihedralFamilyIndex
+    {
+        DIHEDRAL_PHI = 0,
+        DIHEDRAL_PSI,
+        DIHEDRAL_OMEGA,
+        DIHEDRAL_SIDECHAIN,
+        DIHEDRAL_PLANARITY,
+        DIHEDRAL_FAMILY_COUNT
+    };
+    std::array<SpringCollection, DIHEDRAL_FAMILY_COUNT> _dihedral_springs;
 
     // A real 1-2 bond, retuned to real AMBER r0/k -- kept separate from
     // _springs (rather than retuned in place there) so it has its own
@@ -115,17 +126,21 @@ class Topology
     // =============================================================================
 
     Topology()
-        : _springs(_particles), _dihedral_phi_springs(_particles), _dihedral_psi_springs(_particles),
-          _dihedral_omega_springs(_particles), _dihedral_sidechain_springs(_particles),
-          _dihedral_planarity_springs(_particles), _stretch_springs(_particles), _bend_springs(_particles)
+        : _springs(_particles),
+          _dihedral_springs{SpringCollection(_particles), SpringCollection(_particles),
+                            SpringCollection(_particles), SpringCollection(_particles),
+                            SpringCollection(_particles)},
+          _stretch_springs(_particles), _bend_springs(_particles)
     {
     }
 
     // Copy constructor.
     Topology(const Topology & other)
-        : _springs(_particles), _dihedral_phi_springs(_particles), _dihedral_psi_springs(_particles),
-          _dihedral_omega_springs(_particles), _dihedral_sidechain_springs(_particles),
-          _dihedral_planarity_springs(_particles), _stretch_springs(_particles), _bend_springs(_particles)
+        : _springs(_particles),
+          _dihedral_springs{SpringCollection(_particles), SpringCollection(_particles),
+                            SpringCollection(_particles), SpringCollection(_particles),
+                            SpringCollection(_particles)},
+          _stretch_springs(_particles), _bend_springs(_particles)
     {
         _copy_particles(other);
         _copy_springs(other);
@@ -150,11 +165,8 @@ class Topology
         if (_particles.size() != other._particles.size())
         {
             _springs.clear();
-            _dihedral_phi_springs.clear();
-            _dihedral_psi_springs.clear();
-            _dihedral_omega_springs.clear();
-            _dihedral_sidechain_springs.clear();
-            _dihedral_planarity_springs.clear();
+            for (auto & family : _dihedral_springs)
+                family.clear();
             _stretch_springs.clear();
             _bend_springs.clear();
         }
@@ -210,9 +222,10 @@ class Topology
     // _particles grow again once anything actually references it.
     void reserve_particles(size_t n)
     {
-        if (_springs.size() == 0 && _dihedral_phi_springs.size() == 0 && _dihedral_psi_springs.size() == 0 &&
-            _dihedral_omega_springs.size() == 0 && _dihedral_sidechain_springs.size() == 0 &&
-            _dihedral_planarity_springs.size() == 0 && _ghost_particles.empty())
+        bool no_dihedral = true;
+        for (const auto & family : _dihedral_springs)
+            no_dihedral = no_dihedral && family.size() == 0;
+        if (_springs.size() == 0 && no_dihedral && _ghost_particles.empty())
         {
             _particles.data().reserve(n);
             return;
@@ -221,11 +234,8 @@ class Topology
         Topology snapshot(*this);
         _particles.clear();
         _springs.clear();
-        _dihedral_phi_springs.clear();
-        _dihedral_psi_springs.clear();
-        _dihedral_omega_springs.clear();
-        _dihedral_sidechain_springs.clear();
-        _dihedral_planarity_springs.clear();
+        for (auto & family : _dihedral_springs)
+            family.clear();
         _ghost_particles.clear();
         _particles.data().reserve(n);
         _copy_particles(snapshot);
@@ -296,29 +306,29 @@ class Topology
     // _dihedral_*_springs member comment above.
     auto & add_dihedral_phi_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
     {
-        return _dihedral_phi_springs.add_spring(p1, p2, equilibrium, stiffness);
+        return _dihedral_springs[DIHEDRAL_PHI].add_spring(p1, p2, equilibrium, stiffness);
     }
 
     auto & add_dihedral_psi_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
     {
-        return _dihedral_psi_springs.add_spring(p1, p2, equilibrium, stiffness);
+        return _dihedral_springs[DIHEDRAL_PSI].add_spring(p1, p2, equilibrium, stiffness);
     }
 
     auto & add_dihedral_omega_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
     {
-        return _dihedral_omega_springs.add_spring(p1, p2, equilibrium, stiffness);
+        return _dihedral_springs[DIHEDRAL_OMEGA].add_spring(p1, p2, equilibrium, stiffness);
     }
 
     auto & add_dihedral_sidechain_spring(Particle & p1, Particle & p2, double equilibrium = -1.0,
                                          double stiffness = 1.0)
     {
-        return _dihedral_sidechain_springs.add_spring(p1, p2, equilibrium, stiffness);
+        return _dihedral_springs[DIHEDRAL_SIDECHAIN].add_spring(p1, p2, equilibrium, stiffness);
     }
 
     auto & add_dihedral_planarity_spring(Particle & p1, Particle & p2, double equilibrium = -1.0,
                                          double stiffness = 1.0)
     {
-        return _dihedral_planarity_springs.add_spring(p1, p2, equilibrium, stiffness);
+        return _dihedral_springs[DIHEDRAL_PLANARITY].add_spring(p1, p2, equilibrium, stiffness);
     }
 
     // Creates a STRETCH spring between two real atoms (see _stretch_springs'
@@ -437,20 +447,20 @@ class Topology
     auto & springs() { return _springs; }
     const auto & springs() const { return _springs; }
 
-    auto & dihedral_phi_springs() { return _dihedral_phi_springs; }
-    const auto & dihedral_phi_springs() const { return _dihedral_phi_springs; }
+    auto & dihedral_phi_springs() { return _dihedral_springs[DIHEDRAL_PHI]; }
+    const auto & dihedral_phi_springs() const { return _dihedral_springs[DIHEDRAL_PHI]; }
 
-    auto & dihedral_psi_springs() { return _dihedral_psi_springs; }
-    const auto & dihedral_psi_springs() const { return _dihedral_psi_springs; }
+    auto & dihedral_psi_springs() { return _dihedral_springs[DIHEDRAL_PSI]; }
+    const auto & dihedral_psi_springs() const { return _dihedral_springs[DIHEDRAL_PSI]; }
 
-    auto & dihedral_omega_springs() { return _dihedral_omega_springs; }
-    const auto & dihedral_omega_springs() const { return _dihedral_omega_springs; }
+    auto & dihedral_omega_springs() { return _dihedral_springs[DIHEDRAL_OMEGA]; }
+    const auto & dihedral_omega_springs() const { return _dihedral_springs[DIHEDRAL_OMEGA]; }
 
-    auto & dihedral_sidechain_springs() { return _dihedral_sidechain_springs; }
-    const auto & dihedral_sidechain_springs() const { return _dihedral_sidechain_springs; }
+    auto & dihedral_sidechain_springs() { return _dihedral_springs[DIHEDRAL_SIDECHAIN]; }
+    const auto & dihedral_sidechain_springs() const { return _dihedral_springs[DIHEDRAL_SIDECHAIN]; }
 
-    auto & dihedral_planarity_springs() { return _dihedral_planarity_springs; }
-    const auto & dihedral_planarity_springs() const { return _dihedral_planarity_springs; }
+    auto & dihedral_planarity_springs() { return _dihedral_springs[DIHEDRAL_PLANARITY]; }
+    const auto & dihedral_planarity_springs() const { return _dihedral_springs[DIHEDRAL_PLANARITY]; }
 
     auto & stretch_springs() { return _stretch_springs; }
     const auto & stretch_springs() const { return _stretch_springs; }
@@ -582,19 +592,19 @@ class Topology
                 add_to_spn(i, j, source.equilibrium(), source.stiffness(), source.dc_offset());
             }
         };
-        copy_dihedral(_dihedral_phi_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+        copy_dihedral(_dihedral_springs[DIHEDRAL_PHI], [&spn](size_t i, size_t j, double eq, double k, double dc) {
             spn.addDihedralPhiSpring(i, j, eq, k, dc);
         });
-        copy_dihedral(_dihedral_psi_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+        copy_dihedral(_dihedral_springs[DIHEDRAL_PSI], [&spn](size_t i, size_t j, double eq, double k, double dc) {
             spn.addDihedralPsiSpring(i, j, eq, k, dc);
         });
-        copy_dihedral(_dihedral_omega_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+        copy_dihedral(_dihedral_springs[DIHEDRAL_OMEGA], [&spn](size_t i, size_t j, double eq, double k, double dc) {
             spn.addDihedralOmegaSpring(i, j, eq, k, dc);
         });
-        copy_dihedral(_dihedral_sidechain_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+        copy_dihedral(_dihedral_springs[DIHEDRAL_SIDECHAIN], [&spn](size_t i, size_t j, double eq, double k, double dc) {
             spn.addDihedralSidechainSpring(i, j, eq, k, dc);
         });
-        copy_dihedral(_dihedral_planarity_springs, [&spn](size_t i, size_t j, double eq, double k, double dc) {
+        copy_dihedral(_dihedral_springs[DIHEDRAL_PLANARITY], [&spn](size_t i, size_t j, double eq, double k, double dc) {
             spn.addDihedralPlanaritySpring(i, j, eq, k, dc);
         });
 
@@ -668,12 +678,12 @@ class Topology
     void _copy_springs(const Topology & other, size_t offset = 0)
     {
         _copy_spring_collection(_springs, other._springs, other._particles, offset);
-        _copy_spring_collection(_dihedral_phi_springs, other._dihedral_phi_springs, other._particles, offset);
-        _copy_spring_collection(_dihedral_psi_springs, other._dihedral_psi_springs, other._particles, offset);
-        _copy_spring_collection(_dihedral_omega_springs, other._dihedral_omega_springs, other._particles, offset);
-        _copy_spring_collection(_dihedral_sidechain_springs, other._dihedral_sidechain_springs, other._particles,
+        _copy_spring_collection(_dihedral_springs[DIHEDRAL_PHI], other._dihedral_springs[DIHEDRAL_PHI], other._particles, offset);
+        _copy_spring_collection(_dihedral_springs[DIHEDRAL_PSI], other._dihedral_springs[DIHEDRAL_PSI], other._particles, offset);
+        _copy_spring_collection(_dihedral_springs[DIHEDRAL_OMEGA], other._dihedral_springs[DIHEDRAL_OMEGA], other._particles, offset);
+        _copy_spring_collection(_dihedral_springs[DIHEDRAL_SIDECHAIN], other._dihedral_springs[DIHEDRAL_SIDECHAIN], other._particles,
                                 offset);
-        _copy_spring_collection(_dihedral_planarity_springs, other._dihedral_planarity_springs, other._particles,
+        _copy_spring_collection(_dihedral_springs[DIHEDRAL_PLANARITY], other._dihedral_springs[DIHEDRAL_PLANARITY], other._particles,
                                 offset);
         _copy_spring_collection(_stretch_springs, other._stretch_springs, other._particles, offset);
         _copy_spring_collection(_bend_springs, other._bend_springs, other._particles, offset);
