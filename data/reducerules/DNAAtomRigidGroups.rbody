@@ -10,6 +10,14 @@
 #on exactly the 2 atoms of a hinge axis, and that overlap alone gives
 #"2 anchors, 1 free rotation".
 #
+#ATOM-NAME SPELLINGS ARE LISTED IN PAIRS THROUGHOUT, and that is load-bearing
+#rather than cosmetic. The phosphate oxygens are O1P/O2P in amber99sb.xml and
+#OP1/OP2 in PDB v3 and in AMBER's own DNA.OL15/RNA.OL3 -- the very files the
+#bonded parameters come from. Same for the sugar hydrogens (H5'1 vs H5', ...).
+#A group naming only one spelling silently matches nothing on a file written
+#in the other: no error, just missing springs. Both are listed; the reader
+#skips whichever atom is absent.
+#
 #CHARMM-style +/- prefix: "+X"/"-X" is atom X of the next/previous residue in
 #the chain. A rule's resname is always its own (unprefixed) residue.
 #
@@ -84,7 +92,7 @@
 #so a PDB using either spelling is covered.
 
 #Adenine ------------------------------------------------------------------
-A_P    DA  -O3' P O1P O2P O5'
+A_P    DA  -O3' P O1P OP1 O2P OP2 O5'
 A_O5   DA  P O5' C5'
 A_C5   DA  O5' C5' H5'1 H5' H5'2 H5'' C4'
 A_C4   DA  C5' C4' H4' O4' C3'
@@ -98,7 +106,7 @@ A_5TER DA  H5T O5' C5'
 A_3TER DA  C3' O3' H3T
 
 #Cytosine -----------------------------------------------------------------
-C_P    DC  -O3' P O1P O2P O5'
+C_P    DC  -O3' P O1P OP1 O2P OP2 O5'
 C_O5   DC  P O5' C5'
 C_C5   DC  O5' C5' H5'1 H5' H5'2 H5'' C4'
 C_C4   DC  C5' C4' H4' O4' C3'
@@ -112,7 +120,7 @@ C_5TER DC  H5T O5' C5'
 C_3TER DC  C3' O3' H3T
 
 #Guanine ------------------------------------------------------------------
-G_P    DG  -O3' P O1P O2P O5'
+G_P    DG  -O3' P O1P OP1 O2P OP2 O5'
 G_O5   DG  P O5' C5'
 G_C5   DG  O5' C5' H5'1 H5' H5'2 H5'' C4'
 G_C4   DG  C5' C4' H4' O4' C3'
@@ -130,7 +138,7 @@ G_3TER DG  C3' O3' H3T
 #here, so the methyl does not spin in the no-energy model; give it its own
 #{C5, C7, H71, H72, H73} group when the DNA torsion parameters land, exactly
 #as ProteinAtomRigidGroups.rbody does for Ala/Val/Leu methyls.
-T_P    DT  -O3' P O1P O2P O5'
+T_P    DT  -O3' P O1P OP1 O2P OP2 O5'
 T_O5   DT  P O5' C5'
 T_C5   DT  O5' C5' H5'1 H5' H5'2 H5'' C4'
 T_C4   DT  C5' C4' H4' O4' C3'

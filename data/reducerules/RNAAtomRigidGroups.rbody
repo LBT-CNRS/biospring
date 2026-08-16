@@ -43,8 +43,8 @@
 #thing to validate once they exist.
 
 #Adenine ------------------------------------------------------------------
-A_P    RA  -O3' P O1P O2P O5'
-A_P    A   -O3' P O1P O2P O5'
+A_P    RA  -O3' P O1P OP1 O2P OP2 O5'
+A_P    A   -O3' P O1P OP1 O2P OP2 O5'
 A_O5   RA  P O5' C5'
 A_O5   A   P O5' C5'
 A_C5   RA  O5' C5' H5'1 H5' H5'2 H5'' C4'
@@ -71,8 +71,8 @@ A_3TER RA  C3' O3' H3T
 A_3TER A   C3' O3' H3T
 
 #Cytosine -----------------------------------------------------------------
-C_P    RC  -O3' P O1P O2P O5'
-C_P    C   -O3' P O1P O2P O5'
+C_P    RC  -O3' P O1P OP1 O2P OP2 O5'
+C_P    C   -O3' P O1P OP1 O2P OP2 O5'
 C_O5   RC  P O5' C5'
 C_O5   C   P O5' C5'
 C_C5   RC  O5' C5' H5'1 H5' H5'2 H5'' C4'
@@ -99,8 +99,8 @@ C_3TER RC  C3' O3' H3T
 C_3TER C   C3' O3' H3T
 
 #Guanine ------------------------------------------------------------------
-G_P    RG  -O3' P O1P O2P O5'
-G_P    G   -O3' P O1P O2P O5'
+G_P    RG  -O3' P O1P OP1 O2P OP2 O5'
+G_P    G   -O3' P O1P OP1 O2P OP2 O5'
 G_O5   RG  P O5' C5'
 G_O5   G   P O5' C5'
 G_C5   RG  O5' C5' H5'1 H5' H5'2 H5'' C4'
@@ -130,8 +130,8 @@ G_3TER G   C3' O3' H3T
 #Uracil is thymine without the 5-methyl: it carries H5 where DT has C7 and
 #its three hydrogens. Nothing else differs, so no methyl rotor is needed
 #here (see the DNA file's thymine note).
-U_P    RU  -O3' P O1P O2P O5'
-U_P    U   -O3' P O1P O2P O5'
+U_P    RU  -O3' P O1P OP1 O2P OP2 O5'
+U_P    U   -O3' P O1P OP1 O2P OP2 O5'
 U_O5   RU  P O5' C5'
 U_O5   U   P O5' C5'
 U_C5   RU  O5' C5' H5'1 H5' H5'2 H5'' C4'
