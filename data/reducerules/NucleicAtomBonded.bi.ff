@@ -16,22 +16,28 @@
 #one spelling matches NOTHING on a file written in another, with no
 #error at all -- measured, 0 springs out of 963 particles.
 #
-#DIHEDRAL COVERAGE IS PARTIAL, and the gap is one single cause. Emitted:
-#alpha, beta, zeta (the phosphate torsions) and RNA's 2'-OH rotor.
-#Missing: gamma, delta, epsilon, chi and the four sugar-ring bonds --
-#every axis with a sugar carbon (C1'..C4') at one end. Each of those is
-#a tetrahedral vertex whose three non-axis substituents have three
-#DISTINCT parameter types, so its azimuths are a real chirality that no
-#angle table can resolve: it needs the ribose's own (beta-D) reference
-#frame, the exact counterpart of the L-amino-acid frame the protein
-#generator uses for C-alpha. Those axes are SKIPPED and reported, never
-#emitted from a guessed sign.
+#DIHEDRAL COVERAGE IS COMPLETE: alpha..zeta, the glycosidic chi, the
+#four furanose ring bonds and RNA's 2'-OH rotor, with no axis skipped.
+#Every axis with a sugar carbon (C1'..C4') at one end goes through a
+#tetrahedral vertex whose three non-axis substituents have three
+#DISTINCT parameter types -- a real chirality no angle table can
+#resolve. It is resolved from the CONVENTION, not from a structure:
+#the sugar is always beta-D-ribofuranose, which in CIP descriptors is
+#C1' R, C2' R, C3' S, C4' R (DNA's C2' carries two H and is not a
+#stereocenter). The constructor builds both mirror images and keeps
+#the one realising the descriptor -- the exact counterpart of the
+#L-amino-acid frame the protein generator uses for C-alpha.
 #
 #Companion rigid-body files: DNAAtomRigidGroups.rbody and
-#RNAAtomRigidGroups.rbody. Those keep the sugar RIGID, so no
-#dihedral is emitted here yet for delta or the ring interior: with a
-#rigid furanose they would have no effect. Freeing the pucker is the
-#open question -- see the .rbody headers.
+#RNAAtomRigidGroups.rbody. Measured on a real build, their per-vertex
+#groups cover all 10 pairs of the 5 furanose atoms -- a 5-cycle puts
+#every pair at graph distance <= 2, so 'vertex + its 2 ring
+#neighbours' leaves nothing out. Under --rigidbody alone that is a
+#complete clique at uniform stiffness and the pucker is FROZEN, which
+#is why NUCLEIC_SUGAR exists as its own family. Add --stretching
+#--bending and those same 10 pairs become real AMBER bonds and angles:
+#a soft ring, the way AMBER itself has no pucker term either and lets
+#the state emerge from bonds, angles, torsions and 1-4 together.
 
 STRETCH DA_P_OP1          DA      P      OP1      1.4800    4393.20
 STRETCH DA_P_O1P          DA      P      O1P      1.4800    4393.20
@@ -1458,10 +1464,10 @@ GHOSTPARTICLE GHepsilonn1C0    DA      O3'   C3'    +P      1.6100  120.50  -274
 GHOSTPARTICLE GHzetan3B0       DA      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       DA      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       DA      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       DA      +P    O3'    OP1     1.4800  108.23    -6.289
+GHOSTPARTICLE GHzetan3C0       DA      +P    O3'    +OP1    1.4800  108.23    -6.289
 GHOSTPARTICLE GHzetan2B1       DA      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       DA      +P    O3'    OP1     1.4800  108.23   -70.284
-GHOSTPARTICLE GHzetan1C0       DA      +P    O3'    OP1     1.4800  108.23   296.028
+GHOSTPARTICLE GHzetan2C0       DA      +P    O3'    +OP1    1.4800  108.23   -70.284
+GHOSTPARTICLE GHzetan1C0       DA      +P    O3'    +OP1    1.4800  108.23   296.028
 GHOSTPARTICLE GHring_C1_C2n3B0 DA      C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 DA      C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 DA      C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1531,10 +1537,10 @@ GHOSTPARTICLE GHepsilonn1C0    DC      O3'   C3'    +P      1.6100  120.50  -274
 GHOSTPARTICLE GHzetan3B0       DC      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       DC      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       DC      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       DC      +P    O3'    OP1     1.4800  108.23    -6.289
+GHOSTPARTICLE GHzetan3C0       DC      +P    O3'    +OP1    1.4800  108.23    -6.289
 GHOSTPARTICLE GHzetan2B1       DC      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       DC      +P    O3'    OP1     1.4800  108.23   -70.284
-GHOSTPARTICLE GHzetan1C0       DC      +P    O3'    OP1     1.4800  108.23   296.028
+GHOSTPARTICLE GHzetan2C0       DC      +P    O3'    +OP1    1.4800  108.23   -70.284
+GHOSTPARTICLE GHzetan1C0       DC      +P    O3'    +OP1    1.4800  108.23   296.028
 GHOSTPARTICLE GHring_C1_C2n3B0 DC      C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 DC      C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 DC      C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1607,10 +1613,10 @@ GHOSTPARTICLE GHepsilonn1C0    DG      O3'   C3'    +P      1.6100  120.50  -274
 GHOSTPARTICLE GHzetan3B0       DG      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       DG      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       DG      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       DG      +P    O3'    OP1     1.4800  108.23    -6.289
+GHOSTPARTICLE GHzetan3C0       DG      +P    O3'    +OP1    1.4800  108.23    -6.289
 GHOSTPARTICLE GHzetan2B1       DG      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       DG      +P    O3'    OP1     1.4800  108.23   -70.284
-GHOSTPARTICLE GHzetan1C0       DG      +P    O3'    OP1     1.4800  108.23   296.028
+GHOSTPARTICLE GHzetan2C0       DG      +P    O3'    +OP1    1.4800  108.23   -70.284
+GHOSTPARTICLE GHzetan1C0       DG      +P    O3'    +OP1    1.4800  108.23   296.028
 GHOSTPARTICLE GHring_C1_C2n3B0 DG      C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 DG      C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 DG      C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1680,10 +1686,10 @@ GHOSTPARTICLE GHepsilonn1C0    DT      O3'   C3'    +P      1.6100  120.50  -274
 GHOSTPARTICLE GHzetan3B0       DT      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       DT      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       DT      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       DT      +P    O3'    OP1     1.4800  108.23    -6.289
+GHOSTPARTICLE GHzetan3C0       DT      +P    O3'    +OP1    1.4800  108.23    -6.289
 GHOSTPARTICLE GHzetan2B1       DT      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       DT      +P    O3'    OP1     1.4800  108.23   -70.284
-GHOSTPARTICLE GHzetan1C0       DT      +P    O3'    OP1     1.4800  108.23   296.028
+GHOSTPARTICLE GHzetan2C0       DT      +P    O3'    +OP1    1.4800  108.23   -70.284
+GHOSTPARTICLE GHzetan1C0       DT      +P    O3'    +OP1    1.4800  108.23   296.028
 GHOSTPARTICLE GHring_C1_C2n3B0 DT      C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 DT      C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 DT      C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1773,15 +1779,15 @@ GHOSTPARTICLE GHepsilonn3C0    RA      O3'   C3'    +P      1.6100  120.50    -0
 GHOSTPARTICLE GHzetan3B0       A       O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       A       O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       A       O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       A       +P    O3'    OP1     1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       A       +P    O3'    +OP1    1.4800  108.23    -5.717
 GHOSTPARTICLE GHzetan2B1       A       O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       A       +P    O3'    OP1     1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       A       +P    O3'    +OP1    1.4800  108.23   -65.725
 GHOSTPARTICLE GHzetan3B0       RA      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       RA      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       RA      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       RA      +P    O3'    OP1     1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       RA      +P    O3'    +OP1    1.4800  108.23    -5.717
 GHOSTPARTICLE GHzetan2B1       RA      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       RA      +P    O3'    OP1     1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       RA      +P    O3'    +OP1    1.4800  108.23   -65.725
 GHOSTPARTICLE GHring_C1_C2n3B0 A       C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 A       C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 A       C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1919,15 +1925,15 @@ GHOSTPARTICLE GHepsilonn3C0    RC      O3'   C3'    +P      1.6100  120.50    -0
 GHOSTPARTICLE GHzetan3B0       C       O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       C       O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       C       O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       C       +P    O3'    OP1     1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       C       +P    O3'    +OP1    1.4800  108.23    -5.717
 GHOSTPARTICLE GHzetan2B1       C       O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       C       +P    O3'    OP1     1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       C       +P    O3'    +OP1    1.4800  108.23   -65.725
 GHOSTPARTICLE GHzetan3B0       RC      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       RC      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       RC      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       RC      +P    O3'    OP1     1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       RC      +P    O3'    +OP1    1.4800  108.23    -5.717
 GHOSTPARTICLE GHzetan2B1       RC      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       RC      +P    O3'    OP1     1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       RC      +P    O3'    +OP1    1.4800  108.23   -65.725
 GHOSTPARTICLE GHring_C1_C2n3B0 C       C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 C       C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 C       C1'   C2'    O4'     1.4100  109.50   240.000
@@ -2065,15 +2071,15 @@ GHOSTPARTICLE GHepsilonn3C0    RG      O3'   C3'    +P      1.6100  120.50    -0
 GHOSTPARTICLE GHzetan3B0       G       O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       G       O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       G       O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       G       +P    O3'    OP1     1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       G       +P    O3'    +OP1    1.4800  108.23    -5.717
 GHOSTPARTICLE GHzetan2B1       G       O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       G       +P    O3'    OP1     1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       G       +P    O3'    +OP1    1.4800  108.23   -65.725
 GHOSTPARTICLE GHzetan3B0       RG      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       RG      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       RG      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       RG      +P    O3'    OP1     1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       RG      +P    O3'    +OP1    1.4800  108.23    -5.717
 GHOSTPARTICLE GHzetan2B1       RG      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       RG      +P    O3'    OP1     1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       RG      +P    O3'    +OP1    1.4800  108.23   -65.725
 GHOSTPARTICLE GHring_C1_C2n3B0 G       C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 G       C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 G       C1'   C2'    O4'     1.4100  109.50   240.000
@@ -2211,15 +2217,15 @@ GHOSTPARTICLE GHepsilonn3C0    RU      O3'   C3'    +P      1.6100  120.50    -0
 GHOSTPARTICLE GHzetan3B0       U       O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       U       O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       U       O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       U       +P    O3'    OP1     1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       U       +P    O3'    +OP1    1.4800  108.23    -5.717
 GHOSTPARTICLE GHzetan2B1       U       O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       U       +P    O3'    OP1     1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       U       +P    O3'    +OP1    1.4800  108.23   -65.725
 GHOSTPARTICLE GHzetan3B0       RU      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       RU      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       RU      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       RU      +P    O3'    OP1     1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       RU      +P    O3'    +OP1    1.4800  108.23    -5.717
 GHOSTPARTICLE GHzetan2B1       RU      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       RU      +P    O3'    OP1     1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       RU      +P    O3'    +OP1    1.4800  108.23   -65.725
 GHOSTPARTICLE GHring_C1_C2n3B0 U       C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 U       C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 U       C1'   C2'    O4'     1.4100  109.50   240.000
