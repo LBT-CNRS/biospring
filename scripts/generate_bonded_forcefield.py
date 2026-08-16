@@ -10,10 +10,13 @@
 # every atom-type assignment comes straight from OpenMM's bundled
 # amber99sb.xml (per-residue atom->type assignment +
 # HarmonicBondForce/HarmonicAngleForce/PeriodicTorsionForce
-# class1/class2/[class3]/...), matched against the real bond connectivity
-# mdtraj infers from each PDB's standard residue templates (ubiquitin.pdb
-# for most residues, example/001_GKinase/model.pdb for Cys/Trp chi1, which
-# ubiquitin lacks entirely). BEND angles are found generically: any real
+# class1/class2/[class3]/...), matched against the bond connectivity the
+# XML residue templates state directly. STRETCH, BEND and the phi/psi/omega/
+# chi rings are built on a SYNTHETIC residue chain assembled from those
+# templates -- no PDB structure at all (see the _build_chain section below).
+# Cys/Trp chi1, the Trp/His planarity impropers and the ACE/NME caps are the
+# last three paths still reading a real structure; migrating them is
+# in progress. BEND angles are found generically: any real
 # atom with >=2 bonded neighbours is a valence vertex, its neighbour pairs
 # are its real angles -- no residue-specific angle list needed. See
 # doc/BondedForceFieldSprings.md for the full derivation and validation of
@@ -110,34 +113,188 @@ def atom_class(variant, atomname):
     return type_to_class[type_id] if type_id is not None else None
 
 def resolved_class(resname, atomname, is_nterm, is_cterm):
-    # Prefer the plain (interior) template; only reach for the N/C-terminal
-    # variant when the atom doesn't exist there (H1/H2/H3, OXT) -- see
-    # module docstring for the accepted approximation this implies.
+    # A terminal residue is typed from its OWN template (NXXX/CXXX), not from
+    # the interior one. This is not cosmetic: AMBER retypes atoms that exist
+    # in both, and getting it wrong silently picks the neutral parameters for
+    # a charged group. The C-terminal carbonyl O is class O2, not O (the
+    # carboxylate is symmetric and delocalised, so O-C-OXT is really the
+    # O2-C-O2 angle), and the N-terminal N is N3, not N (ammonium, not amide).
+    # Reading the interior template first used to be a documented
+    # approximation, forced by the terminal residues coming from whichever
+    # ones a PDB happened to end with; now that they are built from AMBER's
+    # own terminal templates, the approximation has no reason to stay.
     base = base_variant(resname)
-    c = atom_class(base, atomname)
-    if c is not None:
-        return c
     if is_nterm:
-        return atom_class("N" + base, atomname)
+        c = atom_class("N" + base, atomname)
+        if c is not None:
+            return c
     if is_cterm:
-        return atom_class("C" + base, atomname)
-    return None
+        c = atom_class("C" + base, atomname)
+        if c is not None:
+            return c
+    return atom_class(base, atomname)
 
-top = md.load_topology(PDB, standard_names=False)
-residues = list(top.residues)
+# --- Synthetic residue chain built from the AMBER XML templates -----------
+#
+# Replaces loading real PDB structures. The generator only ever reads five
+# attributes off these objects (.name/.index/.residue/.atoms/.resSeq --
+# counted, nothing else), and it needs a chain so the +/- cross-residue
+# neighbours resolve, so a synthetic chain carrying every residue type once
+# is a complete stand-in.
+#
+# Why this replaced ubiquitin.pdb + GKinase/model.pdb: every parameter
+# emitted already comes from the AMBER tables and the CIP rule (measured: the
+# structure-reading fallback branches were taken 0 times over a full run), so
+# the structures were only enumerating which atoms a residue has -- which the
+# XML templates state exactly, and for EVERY residue rather than only those
+# the two files happened to contain. The old arrangement silently dropped
+# real parameters: Cys's thiol rotor was skipped because both cysteines in
+# GKinase are disulfide-bonded and carry no HG, though AMBER defines both the
+# template (with HG) and the torsion (X-CT-SH-X, k=1.046, n=3).
+
+class _Atom:
+    __slots__ = ("name", "index", "residue")
+    def __init__(self, name, index, residue):
+        self.name, self.index, self.residue = name, index, residue
+    def __repr__(self):
+        return "%s-%s%d" % (self.name, self.residue.name, self.residue.resSeq)
+
+class _Residue:
+    __slots__ = ("name", "index", "resSeq", "atoms", "is_nterm", "is_cterm")
+    def __init__(self, name, index):
+        self.name, self.index, self.resSeq, self.atoms = name, index, index + 1, []
+        self.is_nterm = self.is_cterm = False
+    def __repr__(self):
+        return "%s%d" % (self.name, self.resSeq)
+
+def _build_chain(residue_names, template_of, first_atom_index=0, first_residue_index=0):
+    """One residue per name, linked C(i)-N(i+1) into a single chain.
+
+    template_of(name) -> the XML <Residue> element to take atoms/bonds from
+    (lets HIS be spelled HIS here while carrying HID's atoms, as before).
+    """
+    residues, bonds, counter = [], [], first_atom_index
+    for i, name in enumerate(residue_names):
+        tpl = template_of(name)
+        res = _Residue(name, first_residue_index + i)
+        names = [a.get("name") for a in tpl.findall("Atom")]
+        for n in names:
+            res.atoms.append(_Atom(n, counter, res))
+            counter += 1
+        by_name = {a.name: a for a in res.atoms}
+        for b in tpl.findall("Bond"):
+            f, t = b.get("from"), b.get("to")
+            if f is not None:                      # amber99sb: indices
+                bonds.append((res.atoms[int(f)], res.atoms[int(t)]))
+            else:                                  # amber14: names
+                bonds.append((by_name[b.get("atomName1")], by_name[b.get("atomName2")]))
+        residues.append(res)
+    # Peptide bond C(i)-N(i+1). Residues with no C or no N (caps) just skip.
+    for a, b in zip(residues, residues[1:]):
+        ca = next((x for x in a.atoms if x.name == "C"), None)
+        nb = next((x for x in b.atoms if x.name == "N"), None)
+        if ca is not None and nb is not None:
+            bonds.append((ca, nb))
+    return residues, bonds
+
+# Every residue the generator asks about, in one chain. ACE/NME bracket the
+# list so no residue of interest is terminal (the generator prefers interior
+# instances), and the two caps are themselves generated from their own
+# templates like any other residue.
+
+class _SyntheticTopology:
+    """Just enough of an mdtraj topology for generate_planarity_impropers:
+    an ordered atom list and a to_openmm() that AMBER can parameterise."""
+    def __init__(self, residues, bonds):
+        self._residues = residues
+        self._bonds = bonds
+        self.atoms = [a for r in residues for a in r.atoms]
+
+    def to_openmm(self):
+        import openmm.app as _app
+        top = _app.Topology()
+        chain = top.addChain()
+        self._omm = {}
+        for r in self._residues:
+            orr = top.addResidue(r.name, chain)
+            for a in r.atoms:
+                el = _app.element.get_by_symbol(_element_symbol(a.name))
+                self._omm[a.index] = top.addAtom(a.name, el, orr)
+        for a, b in self._bonds:
+            top.addBond(self._omm[a.index], self._omm[b.index])
+        return top
+
+
+def _element_symbol(atom_name):
+    # AMBER atom names start with their element except for hydrogens written
+    # with a leading digit (1HB...), which no XML template uses.
+    n = atom_name.lstrip("0123456789")
+    return "Cl" if n.startswith("CL") else ("Na" if n.startswith("NA") else n[0])
+
+# Each residue of interest sits between two ALA spacers, rather than in one
+# long chain of all of them. That matters because several rules depend on the
+# NEIGHBOURING residue: omega's n=1 harmonic is carried by the (O, +H) pair,
+# so a residue followed by proline -- which has no amide H -- resolves
+# differently and emits a differently-named rule. Chaining the 20 types back
+# to back would just swap ubiquitin's arbitrary sequence for this list's
+# arbitrary order; ALA spacers give every residue the same, neutral
+# environment. _residue_instance takes the first interior instance, so the
+# spacers themselves are never the ALA that ALA's own rules come from --
+# hence the explicit ALA triplet first in the list.
+_INTERIOR = ["ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS",
+             "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP",
+             "TYR", "VAL"]
+CHAIN_RESIDUES = (["ACE"]
+                  + [r for name in _INTERIOR for r in ("ALA", name, "ALA")]
+                  + ["NME"])
+
+# A second, separate chain carrying the terminal variants: a free N-terminus
+# (H1/H2/H3 ammonium) and a free C-terminus (OXT carboxylate). Both exist in
+# AMBER for all 20 residues (NALA..NVAL, CALA..CVAL) but appear in no capped
+# chain, so their bonds and angles would otherwise never be emitted -- they
+# were previously picked up only because ubiquitin happens to have a free
+# terminus at each end.
+TERMINAL_RESIDUES = [t + r for t in ("N", "C") for r in _INTERIOR]
+
+_xml_residues = {r.get("name"): r for r in root.find("Residues").findall("Residue")}
+residues, bonds = _build_chain(CHAIN_RESIDUES, lambda n: _xml_residues[base_variant(n)])
+_main_residues, _main_bonds = list(residues), list(bonds)
+
+# One free N-terminal and one free C-terminal instance of every amino acid,
+# each as its own two-residue chain so the terminal one really is at an end.
+# Their templates are AMBER's own NXXX/CXXX (NALA carries H1/H2/H3, CALA
+# carries OXT), so this is still tables-only -- it just stops the terminal
+# rules from depending on which residues a particular PDB happened to end
+# with.
+for _base in _INTERIOR:
+    for _prefix, _nterm in (("N", True), ("C", False)):
+        _tpl = _prefix + base_variant(_base)
+        if _tpl not in _xml_residues:
+            continue
+        _pair = [_base, "ALA"] if _nterm else ["ALA", _base]
+        _extra, _extra_bonds = _build_chain(
+            _pair, lambda n, t=_tpl, b=_base: _xml_residues[t if n == b else base_variant(n)],
+            first_atom_index=sum(len(r.atoms) for r in residues),
+            first_residue_index=len(residues))
+        _term = _extra[0] if _nterm else _extra[-1]
+        _term.is_nterm, _term.is_cterm = _nterm, not _nterm
+        residues.extend(_extra)
+        bonds.extend(_extra_bonds)
 n_res = len(residues)
 
-# Manual patch: mdtraj's standard-bond guesser misses the N-H1 bond of a
-# free N-terminus for at least one residue type (checked: MET1 gets N-H2/
-# N-H3 but not N-H1, even though atom H1 is real) -- same chemistry as
-# H2/H3, added explicitly rather than trusted to the guesser.
-bonds = list(top.bonds)
-for res in residues:
-    names = {a.name: a for a in res.atoms}
-    if "H1" in names and "N" in names:
-        pair = (names["N"], names["H1"])
-        if not any({b[0], b[1]} == {pair[0], pair[1]} for b in bonds):
-            bonds.append(pair)
+def _is_nterm(res):
+    """True for a FREE N-terminus (NH3+), i.e. one built from AMBER's NXXX
+    template -- not for the ACE cap, which is not a free terminus."""
+    return res.is_nterm
+
+
+def _is_cterm(res):
+    """True for a FREE C-terminus (COO-), built from AMBER's CXXX template."""
+    return res.is_cterm
+
+top = _SyntheticTopology(_main_residues, _main_bonds)
+
+# No bond guessing to patch: the XML templates state every bond.
 
 lines = [
     "# STRETCH (real 1-2 bonds) and BEND (real 1-3 valence angles): real",
@@ -269,8 +426,14 @@ n_ok = 0
 n_skip = 0
 
 for ridx, res in enumerate(residues):
-    is_nterm = ridx == 0
-    is_cterm = ridx == n_res - 1
+    # Terminality is a property of the residue, not of its position in
+    # this list: the chain below carries a free N-terminal and a free
+    # C-terminal instance of EVERY amino acid, where a real PDB only
+    # ever gave two (whichever residues happened to sit at its ends --
+    # ubiquitin gave MET and GLY, so the other 18 got no terminal
+    # rules at all).
+    is_nterm = getattr(res, "is_nterm", ridx == 0)
+    is_cterm = getattr(res, "is_cterm", ridx == n_res - 1)
 
     for a1, a2 in bonds:
         if a1.residue.index == ridx and a2.residue.index == ridx:
@@ -331,8 +494,8 @@ for ridx, res in enumerate(residues):
 generate_bends(
     bonds,
     vertex_predicate=lambda a: True,
-    class_resolver=lambda a: resolved_class(a.residue.name, a.name, a.residue.index == 0,
-                                            a.residue.index == n_res - 1),
+    class_resolver=lambda a: resolved_class(a.residue.name, a.name,
+                                            _is_nterm(a.residue), _is_cterm(a.residue)),
 )
 
 # ===========================================================================
@@ -1269,7 +1432,7 @@ def generate_pro_ring_ncd():
     intra-residue neighbor scan cannot see."""
     global n_dihedral_ok, n_dihedral_skip
     res = _residue_instance("PRO")
-    if res.index == 0:
+    if _is_nterm(res):
         print("SKIP DIHEDRAL (PRO ring_NCD): source instance is the chain start, no real -C")
         n_dihedral_skip += 1
         return
@@ -1629,7 +1792,7 @@ def real_dihedral_deg_atoms(a1, a2, a3, a4):
     return float(np.degrees(md.compute_dihedrals(traj_ubq, idx)[0, 0]))
 
 def bb_atom_class(a):
-    return resolved_class(a.residue.name, a.name, a.residue.index == 0, a.residue.index == n_res - 1)
+    return resolved_class(a.residue.name, a.name, _is_nterm(a.residue), _is_cterm(a.residue))
 
 def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=None):
     """source_resname: sources the real 3D geometry (which substituents,
@@ -1669,7 +1832,7 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
 
     geom_resname = source_resname or resname
     res = _residue_instance(geom_resname)
-    if res.index == 0 or res.index == n_res - 1:
+    if _is_nterm(res) or _is_cterm(res):
         print(f"SKIP DIHEDRAL BACKBONE ({resname} {axis_label}): only real ubiquitin instance "
              f"of {geom_resname} is a chain terminus, no real neighbouring residue to source from")
         n_dihedral_skip += 1
@@ -2039,7 +2202,15 @@ def generate_omega_axis(resname, source_resname=None):
 # (confirmed identical target either way -- the N/CA/C/CB pattern doesn't
 # depend on anything past CB); every other residue uses its own real
 # instance directly.
-BACKBONE_RESIDUES = sorted({r.name for r in residues})
+# A backbone axis needs N, CA and C. The caps have none of that (ACE is
+# CH3-C=O, NME is N-CH3), and never reached this loop before because no
+# ubiquitin residue was a cap -- with the synthetic chain they do, so the
+# precondition is now stated rather than left to the input's contents.
+def _has_backbone(resname):
+    names = {a.name for a in _residue_instance(resname).atoms}
+    return {"N", "CA", "C"} <= names
+
+BACKBONE_RESIDUES = sorted(r for r in {r.name for r in residues} if _has_backbone(r))
 GENERIC_BACKBONE_SOURCE = {"MET": "LEU", "CYS": "LEU", "TRP": "LEU"}
 for _resname in BACKBONE_RESIDUES + ["CYS", "TRP"]:
     _source = GENERIC_BACKBONE_SOURCE.get(_resname)
