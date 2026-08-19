@@ -638,8 +638,28 @@ def neighbours(ff, resname, vertex, exclude):
     return out
 
 
-def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as):
-    """One axis, one call -- mirrors generate_sidechain_axis exactly."""
+def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as, per_pair=False):
+    """One axis, one call -- mirrors generate_sidechain_axis exactly.
+
+    per_pair: emit ONE ring per real (b-substituent, c-substituent) pair,
+    anchored on that pair's own two atoms, instead of one combined ring per
+    harmonic. Same option, same criterion and same reason as the protein
+    generator's: use it only where every pair reinforces IN PHASE under the
+    ideal geometry, because there a combined ring bakes that maximal
+    coherence in and comes out too stiff on a real structure, whose
+    substituents never sit exactly at their ideal azimuths.
+
+    Measured, and NOT used by any nucleic axis today. chi looks like the
+    textbook case -- coherence 1.00 on every harmonic, DNA and RNA alike --
+    but that is trivially true because AMBER defines chi through a SINGLE
+    specific quadruplet (O4'-C1'-N9-C8, which is what the chiOL15/chiOL3
+    correction is) with no generic wildcard on the axis: one term is always
+    in phase with itself, and per-pair then emits the same single ring.
+    Verified by running it: identical energies to the digit. gamma (n=1 at
+    0.69) and epsilon (0.50/0.50/0.19) partly cancel, so the combined ring
+    is already unbiased there. Kept because the option costs nothing and
+    the next axis that needs it should not have to reinvent it.
+    """
     atoms = ff.atoms_of(resname)
     b_bare, c_bare = b_name.lstrip("+-"), c_name.lstrip("+-")
     if b_bare not in atoms or c_bare not in atoms:
@@ -706,6 +726,31 @@ def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as):
               f"zero barrier (a real, deliberate null -- not a gap)")
         axes.bump_axis_skip()
         return
+
+    if per_pair:
+        emitted = 0
+        for bn in b_neighbors:
+            for cn in c_neighbors:
+                t_pair, dc_pair = axes.combined_target_for_axis(
+                    {bn: (0, 0, 0.0)}, {cn: (0, 0, 0.0)}, b_class, c_class,
+                    lambda n: atoms[n.lstrip('+-')])
+                if t_pair is None:
+                    continue
+                for n, tn in sorted(t_pair.items()):
+                    if n == 0 or abs(tn) <= 1e-6:
+                        continue
+                    for name in emit_as:
+                        axes.emit_ghost_ring(name, axis_label, family, n, L_axis, tn,
+                                             b_name, c_name, bn, cn,
+                                             axis_dc_target=dc_pair.get(n, 0.0),
+                                             group_tag=f"{bn}{cn}",
+                                             ref_geom_b=b_geom[bn][:2],
+                                             ref_geom_c=c_geom[cn][:2])
+                    emitted += 1
+        if emitted:
+            axes.bump_axis_ok()
+            return
+        # Nothing resolved per pair: fall through rather than emit nothing.
 
     for name in emit_as:
         axes.emit_ghost_rings_for_axis(name, axis_label, family, L_axis, target,
