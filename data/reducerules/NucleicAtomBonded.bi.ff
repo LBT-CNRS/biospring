@@ -164,6 +164,10 @@ BEND DA_H2'_C2'_H2''       DA      H2'    C2'    H2''    109.500   292.8800
 BEND DA_H2'_C2'_H2'2       DA      H2'    C2'    H2'2    109.500   292.8800
 BEND DA_H2'1_C2'_H2''       DA      H2'1   C2'    H2''    109.500   292.8800
 BEND DA_H2'1_C2'_H2'2       DA      H2'1   C2'    H2'2    109.500   292.8800
+STRETCH DA_HO5'_O5'          DA      HO5'   O5'      0.9600    4627.50
+BEND DA_C5'_O5'_HO5'       DA      C5'    O5'    HO5'    108.500   460.2400
+STRETCH DA_O3'_HO3'         DA      O3'    HO3'     0.9600    4627.50
+BEND DA_C3'_O3'_HO3'       DA      C3'    O3'    HO3'    108.500   460.2400
 STRETCH DC_P_OP1          DC      P      OP1      1.4800    4393.20
 STRETCH DC_P_O1P          DC      P      O1P      1.4800    4393.20
 STRETCH DC_P_OP2          DC      P      OP2      1.4800    4393.20
@@ -281,6 +285,10 @@ BEND DC_H2'_C2'_H2''       DC      H2'    C2'    H2''    109.500   292.8800
 BEND DC_H2'_C2'_H2'2       DC      H2'    C2'    H2'2    109.500   292.8800
 BEND DC_H2'1_C2'_H2''       DC      H2'1   C2'    H2''    109.500   292.8800
 BEND DC_H2'1_C2'_H2'2       DC      H2'1   C2'    H2'2    109.500   292.8800
+STRETCH DC_HO5'_O5'          DC      HO5'   O5'      0.9600    4627.50
+BEND DC_C5'_O5'_HO5'       DC      C5'    O5'    HO5'    108.500   460.2400
+STRETCH DC_O3'_HO3'         DC      O3'    HO3'     0.9600    4627.50
+BEND DC_C3'_O3'_HO3'       DC      C3'    O3'    HO3'    108.500   460.2400
 STRETCH DG_P_OP1          DG      P      OP1      1.4800    4393.20
 STRETCH DG_P_O1P          DG      P      O1P      1.4800    4393.20
 STRETCH DG_P_OP2          DG      P      OP2      1.4800    4393.20
@@ -409,6 +417,10 @@ BEND DG_H2'_C2'_H2''       DG      H2'    C2'    H2''    109.500   292.8800
 BEND DG_H2'_C2'_H2'2       DG      H2'    C2'    H2'2    109.500   292.8800
 BEND DG_H2'1_C2'_H2''       DG      H2'1   C2'    H2''    109.500   292.8800
 BEND DG_H2'1_C2'_H2'2       DG      H2'1   C2'    H2'2    109.500   292.8800
+STRETCH DG_HO5'_O5'          DG      HO5'   O5'      0.9600    4627.50
+BEND DG_C5'_O5'_HO5'       DG      C5'    O5'    HO5'    108.500   460.2400
+STRETCH DG_O3'_HO3'         DG      O3'    HO3'     0.9600    4627.50
+BEND DG_C3'_O3'_HO3'       DG      C3'    O3'    HO3'    108.500   460.2400
 STRETCH DT_P_OP1          DT      P      OP1      1.4800    4393.20
 STRETCH DT_P_O1P          DT      P      O1P      1.4800    4393.20
 STRETCH DT_P_OP2          DT      P      OP2      1.4800    4393.20
@@ -533,6 +545,10 @@ BEND DT_H2'_C2'_H2''       DT      H2'    C2'    H2''    109.500   292.8800
 BEND DT_H2'_C2'_H2'2       DT      H2'    C2'    H2'2    109.500   292.8800
 BEND DT_H2'1_C2'_H2''       DT      H2'1   C2'    H2''    109.500   292.8800
 BEND DT_H2'1_C2'_H2'2       DT      H2'1   C2'    H2'2    109.500   292.8800
+STRETCH DT_HO5'_O5'          DT      HO5'   O5'      0.9600    4627.50
+BEND DT_C5'_O5'_HO5'       DT      C5'    O5'    HO5'    108.500   460.2400
+STRETCH DT_O3'_HO3'         DT      O3'    HO3'     0.9600    4627.50
+BEND DT_C3'_O3'_HO3'       DT      C3'    O3'    HO3'    108.500   460.2400
 STRETCH A_P_OP1          A       P      OP1      1.4800    4393.20
 STRETCH A_P_O1P          A       P      O1P      1.4800    4393.20
 STRETCH RA_P_OP1          RA      P      OP1      1.4800    4393.20
@@ -781,6 +797,14 @@ BEND A_C2'_O2'_HO2'       A       C2'    O2'    HO2'    108.500   460.2400
 BEND A_C2'_O2'_HO'2       A       C2'    O2'    HO'2    108.500   460.2400
 BEND RA_C2'_O2'_HO2'       RA      C2'    O2'    HO2'    108.500   460.2400
 BEND RA_C2'_O2'_HO'2       RA      C2'    O2'    HO'2    108.500   460.2400
+STRETCH A_HO5'_O5'          A       HO5'   O5'      0.9600    4627.50
+STRETCH RA_HO5'_O5'          RA      HO5'   O5'      0.9600    4627.50
+BEND A_C5'_O5'_HO5'       A       C5'    O5'    HO5'    108.500   460.2400
+BEND RA_C5'_O5'_HO5'       RA      C5'    O5'    HO5'    108.500   460.2400
+STRETCH A_O3'_HO3'         A       O3'    HO3'     0.9600    4627.50
+STRETCH RA_O3'_HO3'         RA      O3'    HO3'     0.9600    4627.50
+BEND A_C3'_O3'_HO3'       A       C3'    O3'    HO3'    108.500   460.2400
+BEND RA_C3'_O3'_HO3'       RA      C3'    O3'    HO3'    108.500   460.2400
 STRETCH C_P_OP1          C       P      OP1      1.4800    4393.20
 STRETCH C_P_O1P          C       P      O1P      1.4800    4393.20
 STRETCH RC_P_OP1          RC      P      OP1      1.4800    4393.20
@@ -1013,6 +1037,14 @@ BEND C_C2'_O2'_HO2'       C       C2'    O2'    HO2'    108.500   460.2400
 BEND C_C2'_O2'_HO'2       C       C2'    O2'    HO'2    108.500   460.2400
 BEND RC_C2'_O2'_HO2'       RC      C2'    O2'    HO2'    108.500   460.2400
 BEND RC_C2'_O2'_HO'2       RC      C2'    O2'    HO'2    108.500   460.2400
+STRETCH C_HO5'_O5'          C       HO5'   O5'      0.9600    4627.50
+STRETCH RC_HO5'_O5'          RC      HO5'   O5'      0.9600    4627.50
+BEND C_C5'_O5'_HO5'       C       C5'    O5'    HO5'    108.500   460.2400
+BEND RC_C5'_O5'_HO5'       RC      C5'    O5'    HO5'    108.500   460.2400
+STRETCH C_O3'_HO3'         C       O3'    HO3'     0.9600    4627.50
+STRETCH RC_O3'_HO3'         RC      O3'    HO3'     0.9600    4627.50
+BEND C_C3'_O3'_HO3'       C       C3'    O3'    HO3'    108.500   460.2400
+BEND RC_C3'_O3'_HO3'       RC      C3'    O3'    HO3'    108.500   460.2400
 STRETCH G_P_OP1          G       P      OP1      1.4800    4393.20
 STRETCH G_P_O1P          G       P      O1P      1.4800    4393.20
 STRETCH RG_P_OP1          RG      P      OP1      1.4800    4393.20
@@ -1267,6 +1299,14 @@ BEND G_C2'_O2'_HO2'       G       C2'    O2'    HO2'    108.500   460.2400
 BEND G_C2'_O2'_HO'2       G       C2'    O2'    HO'2    108.500   460.2400
 BEND RG_C2'_O2'_HO2'       RG      C2'    O2'    HO2'    108.500   460.2400
 BEND RG_C2'_O2'_HO'2       RG      C2'    O2'    HO'2    108.500   460.2400
+STRETCH G_HO5'_O5'          G       HO5'   O5'      0.9600    4627.50
+STRETCH RG_HO5'_O5'          RG      HO5'   O5'      0.9600    4627.50
+BEND G_C5'_O5'_HO5'       G       C5'    O5'    HO5'    108.500   460.2400
+BEND RG_C5'_O5'_HO5'       RG      C5'    O5'    HO5'    108.500   460.2400
+STRETCH G_O3'_HO3'         G       O3'    HO3'     0.9600    4627.50
+STRETCH RG_O3'_HO3'         RG      O3'    HO3'     0.9600    4627.50
+BEND G_C3'_O3'_HO3'       G       C3'    O3'    HO3'    108.500   460.2400
+BEND RG_C3'_O3'_HO3'       RG      C3'    O3'    HO3'    108.500   460.2400
 STRETCH U_P_OP1          U       P      OP1      1.4800    4393.20
 STRETCH U_P_O1P          U       P      O1P      1.4800    4393.20
 STRETCH RU_P_OP1          RU      P      OP1      1.4800    4393.20
@@ -1495,6 +1535,14 @@ BEND U_C2'_O2'_HO2'       U       C2'    O2'    HO2'    108.500   460.2400
 BEND U_C2'_O2'_HO'2       U       C2'    O2'    HO'2    108.500   460.2400
 BEND RU_C2'_O2'_HO2'       RU      C2'    O2'    HO2'    108.500   460.2400
 BEND RU_C2'_O2'_HO'2       RU      C2'    O2'    HO'2    108.500   460.2400
+STRETCH U_HO5'_O5'          U       HO5'   O5'      0.9600    4627.50
+STRETCH RU_HO5'_O5'          RU      HO5'   O5'      0.9600    4627.50
+BEND U_C5'_O5'_HO5'       U       C5'    O5'    HO5'    108.500   460.2400
+BEND RU_C5'_O5'_HO5'       RU      C5'    O5'    HO5'    108.500   460.2400
+STRETCH U_O3'_HO3'         U       O3'    HO3'     0.9600    4627.50
+STRETCH RU_O3'_HO3'         RU      O3'    HO3'     0.9600    4627.50
+BEND U_C3'_O3'_HO3'       U       C3'    O3'    HO3'    108.500   460.2400
+BEND RU_C3'_O3'_HO3'       RU      C3'    O3'    HO3'    108.500   460.2400
 #
 #GHOSTPARTICLE <name> <resname> <atom_B> <atom_C> <atom_ref> <r_A> <theta_deg> <delta_deg>
 #Massless virtual sites, placed algebraically from 3 real anchors.

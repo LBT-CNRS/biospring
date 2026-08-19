@@ -247,7 +247,10 @@ def generate_residue(ff, resname, emit_as):
     # a missing rule never retunes -- silently, since a BEND rule that
     # doesn't exist reports nothing).
     junction = []
-    if "O3'" in atoms and "C3'" in atoms and "P" in atoms:
+    # A 3'-terminal template caps its O3' with HO3' and has no next residue,
+    # so this angle genuinely does not exist for it -- not a missing table
+    # entry. The interior template emits it under the same residue name.
+    if "O3'" in atoms and "C3'" in atoms and "P" in atoms and "HO3'" not in atoms:
         junction.append(("C3'", "O3'", NEXT_P))
     if "P" in atoms:
         for x in ("O5'", "OP1", "OP2"):
@@ -725,11 +728,26 @@ def main():
         "",
     ]
 
+    # The interior template first, then the 5'/3'/nucleoside variants under
+    # the SAME residue name. A PDB does not spell terminal residues
+    # differently -- OpenMM writes plain "DA" for a 5' or 3' end -- so a
+    # rule emitted under "DA5" would match nothing, and the atoms only those
+    # variants carry (HO5', HO3', and the 5'-OH's own geometry) would have
+    # no rule at all. Measured before this: HO3' ended a quench 9.4 A from
+    # its own O3', with no spring to notice, because every rule came from
+    # the interior template. Same "list every spelling, the reader skips
+    # what is absent" convention as OP1/O1P -- emit_stretch/emit_bend
+    # deduplicate, so the variants only ever ADD their own extra rules.
+    # Interior first so that is the version that wins any tie.
     for base in ("DA", "DC", "DG", "DT"):
-        generate_residue(dna, base, [base])
+        for variant in (base, base + "5", base + "3", base + "N"):
+            if variant in dna.residues:
+                generate_residue(dna, variant, [base])
     # OL3 spells them A/C/G/U; amber99sb spells the same residues RA/RC/RG/RU.
     for base in ("A", "C", "G", "U"):
-        generate_residue(rna, base, [base, "R" + base])
+        for variant in (base, base + "5", base + "3", base + "N"):
+            if variant in rna.residues:
+                generate_residue(rna, variant, [base, "R" + base])
 
     # Dihedrals, in three nucleic-specific families so nothing borrows a
     # protein-backbone label that would misdescribe it:
