@@ -780,8 +780,8 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
 
     const float delta_rad = delta_deg * static_cast<float>(M_PI) / 180.0f;
     _ghostparticles.push_back(GhostParticleBinding{ownIndex, anchorBIndex, anchorCIndex, anchorRefIndex, r, theta_deg,
-                                                   delta_deg, GhostParticle::localOffset(r, theta_deg, delta_deg),
-                                                   std::cos(delta_rad), std::sin(delta_rad), axisIndex, placement});
+                                                   delta_deg, std::cos(delta_rad), std::sin(delta_rad), axisIndex,
+                                                   placement});
     return ownIndex;
 }
 
