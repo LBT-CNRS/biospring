@@ -1,0 +1,63 @@
+# 075.RNAHairpin -- the bonded model on A-form RNA
+
+A 12-nucleotide RNA hairpin (GGGCGCAAGCCU, GCAA tetraloop) under the same
+model as 074.DNADuplex, from a SOLUTION NMR structure.
+
+    make prep     build rna.nc
+    make point    the energy table below
+    make run      dynamics
+
+
+## Why RNA is not just DNA with one more oxygen
+
+Two things exist here that no DNA file has, and neither had ever been
+exercised before this example:
+
+  * the 2'-OH group, whose rotation is a real torsion of its own (it lands in
+    the NUCLEIC_CHI family alongside the glycosidic bond);
+  * the A-form geometry. RNA's sugars sit at C3'-endo where B-DNA's sit at
+    C2'-endo, and that single difference is what makes the helix compact
+    rather than wide.
+
+Point energy at the input conformation:
+
+    stretch      485.83 kJ/mol
+    bend         713.79 kJ/mol
+    dihedral     599.24 kJ/mol
+
+against AMBER's 547.3 kJ/mol of torsion on the same axes: +8.9% over 132
+axes. Per-axis torque correlation against AMBER: zeta 0.990, alpha 0.982,
+chi 0.978 (the 12 glycosidic torsions AND the 12 2'-OH rotors), beta 0.901,
+epsilon 0.868, gamma 0.853.
+
+
+## The pucker test, which is the point of this example
+
+The 12 sugars of 1ZIH enter at 100% C3'-endo, phase 12.9 degrees -- a clean
+A-form signature, which is what makes this hairpin a test and not merely a
+second nucleic structure. After 6 ps:
+
+    amplitude   37.0 -> 31.1 degrees
+    C3'-endo (North)   100% -> 100%, phase 12.9 -> 15.0 degrees
+
+Every sugar keeps its state and its phase. The sugar ring carries no bonded
+rule of its own and is held rigid by the mesh (see 074.DNADuplex's README for
+why, and for the --stiffness/timestep coupling that follows from it), so this
+shows the A-form is preserved -- not that the model would find it on its own
+from a wrong starting point.
+
+
+## Provenance
+
+PDB 1ZIH, model 1: solution NMR, never a crystal. Standard residues only,
+hydrogens rebuilt from the OL3 templates, energy minimised, then 50 ps of
+Langevin dynamics at 300 K with GBn2 implicit solvent. A deposited structure
+is restraint-derived and does not sit at the force field's own equilibrium;
+the implicit solvent is not optional either, every phosphate carrying -1.
+
+
+## What this cannot show
+
+Same three limits as 074.DNADuplex: no IMPALA or hydrophobicity parameters,
+terminal residues approximate to about 0.25 e, and the pucker preserved
+rather than predicted.
