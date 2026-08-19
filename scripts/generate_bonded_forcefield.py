@@ -1354,7 +1354,19 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
                 return 0.0
             if use_ca_formula and ((is_b_side and ca_side == "b") or (not is_b_side and ca_side == "c")):
                 ref_name = (ref_b if is_b_side else ref_c).name
-                return ca_tetrahedral_delta(ref_name, b_name, c_name, atom.name)
+                # VERTEX first, then its axis partner -- the same convention
+                # side_geom uses (see generate_sidechain_axis) and the one
+                # combined_target_for_axis assumes: each side's azimuths are
+                # measured about its OWN outward axis. Passing (b_name,
+                # c_name) unconditionally measured the c-side about B->C
+                # instead of C->B, i.e. negated, which is only ever the case
+                # for phi (the sole backbone axis whose CA sits on the c
+                # side). It cancelled exactly against the pair-combination
+                # sign error in combined_target_for_axis, so both were
+                # invisible until either was fixed alone.
+                vertex_name = b_name if is_b_side else c_name
+                partner_name = c_name if is_b_side else b_name
+                return ca_tetrahedral_delta(ref_name, vertex_name, partner_name, atom.name)
             side_formula = b_formula if is_b_side else c_formula
             if side_formula is None:
                 raise RuntimeError(

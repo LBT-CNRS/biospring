@@ -503,7 +503,24 @@ def combined_target_for_axis(b_geom, c_geom, b_class, c_class, class_of):
             if terms is None:
                 continue
             any_term = True
-            delta_pair_rad = np.radians(d2 - d1)
+            # The pair's dihedral offset from the reference pair is
+            # -(d1 + d2), NOT d2 - d1: each side's delta is measured about
+            # its own outward axis (dihedral(ref, V, partner, X)), and
+            # dihedral(ref_c, C, B, Y) = dihedral(Y, B, C, ref_c) -- the
+            # standard reversal identity -- so the c-side delta enters the
+            # B->C frame with its sign flipped. phi(X-B-C-Y) =
+            # phi(refb-B-C-refc) - d1 - d2. The old d2 - d1 was invisible
+            # everywhere the protein force field exercises this code: a
+            # single/symmetric c-side comb makes the c-factor real (sign-
+            # invariant), and the per-pair-anchored families never have
+            # d1, d2 != 0 at all. It broke exactly the first axis with a
+            # strong SPECIFIC cross-pair term on an asymmetric comb --
+            # DNA's delta, whose O4'-C4'-C3'-O3' (k=4.916, the gauche
+            # term steering the pucker) came out at the wrong phase.
+            # Verified against AMBER's own curve, Fourier component by
+            # Fourier component: n2 5.53@+13 with the old sign, 3.87@-113
+            # measured, 3.87 with this one; n1 1.28 -> 1.88 vs 1.89.
+            delta_pair_rad = np.radians(-(d1 + d2))
             for (n, k, phase) in terms:
                 target[n] = target.get(n, 0j) + k * np.exp(-1j * phase) * np.exp(1j * n * delta_pair_rad)
                 target[0] += k
