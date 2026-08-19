@@ -338,8 +338,21 @@ NTERM_H_NAME_VARIANTS = [
 ]
 CTERM_OXT_NAME_VARIANTS = ["OXT", "OT2", "O2"]  # PDB v3/AMBER, CHARMM, other
 
+# Proline's ring stays rigid, so nothing retunes what is inside it: the
+# .rbody's uniform springs are what hold those 5 atoms (the measurement
+# behind this is with PRO_RING_AXIS, further down).
+# A "+"/"-" prefixed atom belongs to another residue and is never
+# ring-internal.
+PRO_RING_ATOMS = frozenset(("N", "CA", "CB", "CG", "CD"))
+
+
+def _pro_ring_internal(resname, *atoms):
+    return resname == "PRO" and all(a in PRO_RING_ATOMS for a in atoms)
+
 def emit_stretch(rule_name, resname, atom1, atom2_display, r0_A, k_biospring):
     global n_ok
+    if _pro_ring_internal(resname, atom1, atom2_display):
+        return
     lines.append(f"STRETCH {rule_name:20s} {resname:7s} {atom1:5s} {atom2_display:6s} "
                  f"{r0_A:7.4f} {k_biospring:10.2f}")
     n_ok += 1
@@ -358,6 +371,8 @@ def emit_cterm_oxt_variants(resname, r0_A, k_biospring):
 
 def emit_bend(rule_name, resname, atom1, atom2, atom3_display, theta0_deg, k_biospring):
     global n_ok
+    if _pro_ring_internal(resname, atom1, atom2, atom3_display):
+        return
     lines.append(f"BEND {rule_name:20s} {resname:7s} {atom1:5s} {atom2:5s} {atom3_display:6s} "
                  f"{theta0_deg:7.3f} {k_biospring:10.4f}")
     n_ok += 1
@@ -995,25 +1010,29 @@ for _resname, (_b_name, _c_name) in ROTOR_AXIS.items():
 # Cys is absent from ubiquitin.pdb entirely -- sourced from the GKinase
 # structure, same as its chi1 (see generate_sidechain_axis_gkinase above).
 
-# Proline pyrrolidine ring torsions. The ring is deliberately NOT one rigid
-# clique anymore (see ProteinAtomRigidGroups.rbody's own comment): real
-# prolines pucker (Cgamma-endo/exo, few-kJ/mol barriers, coupled to phi),
-# the real molecule has no improper there, and freezing it suppressed real
-# conformational dynamics -- the largest single uncovered energy family on
-# the all-20-AA validation (342 kJ/mol/frame on GKinase, 10 Pro). With the
-# ring split into per-vertex hinge groups, its 4 side torsions become free
-# and need their real AMBER terms (the 5th ring bond, N-CA, is phi's own
-# axis and was already covered by PRO's phi rings). That the 4 dihedrals
-# are coupled by ring closure is not a problem: AMBER itself treats each
-# ring dihedral as an ordinary independent term, and so do these springs --
-# closure and the bond/angle mesh do the rest, exactly as in a standard MD.
-# CA-CB and CG-CD are pure generic n=3 aliphatic axes; CB-CG carries the
-# usual 3-term CT-CT-CT-CT structure (same as any chi2) -- all verified by
-# direct inspection of a real built system, and all standard combined-ring
-# cases.
+# Proline's pyrrolidine ring is left RIGID: no torsion about any of its
+# bonds, and no STRETCH/BEND inside it either (see PRO_RING_ATOMS) -- the
+# .rbody's uniform springs keep the 5 atoms at the shape the input
+# structure had.
+#
+# This reverses the 2026-08-12 decision to free it, and the reason is
+# measured rather than argued. A ghost ring's energy is not a function of
+# its dihedral alone: the ghost is a REAL atom rotated about the axis, so
+# deforming the ring's angles moves the ghosts, and there is a relaxation
+# channel where every ghost-ghost distance reaches its d0 and the torsion
+# energy collapses. One deformation relaxes every ring axis at once, so
+# the gain outgrows what bonds and angles charge for it, and the ring
+# flattens. Quenched, ubiquitin's three prolines went from 0.130 A out of
+# plane to 0.021 -- flat -- and did so identically with every version of
+# this file since the ring was freed. Freeing it therefore did not restore
+# the pucker it was meant to restore; it produced a flat ring instead.
+#
+# Aromatic rings are NOT frozen and keep their torsions and impropers:
+# for them the idealised geometry IS the real one, so the same channel
+# leads to the correct structure (measured: 0.000 A out of plane after the
+# same quench). Only SATURATED rings, whose truth is puckered while their
+# ideal is flat, are affected.
 PRO_RING_AXIS = [("CA", "CB", "ring_CB"), ("CB", "CG", "ring_CG"), ("CG", "CD", "ring_CD")]
-for _b_name, _c_name, _label in PRO_RING_AXIS:
-    generate_sidechain_axis("PRO", _b_name, _c_name, _label)
 
 def generate_pro_ring_ncd():
     """Pro's N-CD ring-closure torsion: owned by the SINGLE real pair
@@ -1696,10 +1715,10 @@ for _resname in BACKBONE_RESIDUES + ["CYS", "TRP"]:
     generate_backbone_axis(_resname, "CA", "C", "psi", source_resname=_source)
     generate_omega_axis(_resname, source_resname=_source)
 
-# Pro's N-CD ring-closure torsion (see generate_pro_ring_ncd's own docstring
-# for why it lives with the sidechain axes but is called here: its -C anchor
-# needs bb_atom_class, defined just above for the backbone section).
-generate_pro_ring_ncd()
+# Pro's N-CD ring-closure torsion is frozen with the rest of the ring (see
+# PRO_RING_ATOMS); generate_pro_ring_ncd is kept, unused, because it is the
+# only place the proline-specific C-N-CT-CT entries are worked out and it
+# is what would be called again if the ring were ever freed.
 
 lines.append("#")
 lines.append("# GHOSTPARTICLE: massless virtual sites (see spn::GhostParticle), placed")

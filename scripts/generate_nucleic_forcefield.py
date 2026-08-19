@@ -202,6 +202,35 @@ def emit_bend(resname, a1, vertex, a3, theta0, k):
 NEXT_P = "+P"
 PREV_O3 = "-O3'"
 
+# The furanose is left RIGID: its five bonds and five valence angles keep
+# the .rbody's uniform springs and no bonded rule retunes them, and no
+# torsion is emitted about a ring bond (delta included -- it turns about
+# C4'-C3').
+#
+# Why, measured (2026-08-19): a ghost ring's energy is not a function of
+# the dihedral alone. Since the ghost is the image of a REAL atom rotated
+# about the axis, deforming the ring's angles moves the ghosts too, and
+# there is a relaxation channel in which every ghost-ghost distance
+# reaches its d0 and the torsion energy collapses -- measured at 293
+# kJ/mol where AMBER asks 5388. A single deformation relaxes all five ring
+# axes at once, so the gain (~2800) outgrows what the bonds and angles
+# charge for it (~1950): the ring flattens. Quenched, the pucker amplitude
+# went 37 deg -> 13 deg, all 42 sugars, while AMBER's own bonded terms
+# hold it at 41 deg. The five ring axes were exactly the five whose energy
+# moved OPPOSITE to AMBER's; the six open axes were all correct.
+#
+# Open axes keep their bonded terms: one deformation only relaxes one
+# axis there, and it has to pay for itself. Aromatic rings and the bases
+# are not concerned either -- for them the idealised geometry IS the true
+# one, so the channel leads nowhere (measured: 0.000 A out of plane).
+RING_ATOMS = frozenset(("C1'", "C2'", "C3'", "C4'", "O4'"))
+
+
+def is_ring_internal(*names):
+    """True when every atom named is a furanose ring atom of THIS residue
+    (a +/- prefix means another residue, so never ring-internal here)."""
+    return all(n in RING_ATOMS for n in names)
+
 
 def generate_residue(ff, resname, emit_as):
     """Emits STRETCH and BEND for one residue template.
@@ -223,6 +252,8 @@ def generate_residue(ff, resname, emit_as):
         bonds.append(("O3'", NEXT_P))
 
     for a1, a2 in bonds:
+        if is_ring_internal(a1, a2):
+            continue
         c1 = atoms[a1]
         c2 = atoms[a2.lstrip("+-")] if a2.lstrip("+-") in atoms else None
         if c2 is None:
@@ -262,6 +293,8 @@ def generate_residue(ff, resname, emit_as):
             for j in range(i + 1, len(nb)):
                 junction.append((nb[i], vertex, nb[j]))
     for a1, vertex, a3 in junction:
+        if is_ring_internal(a1, vertex, a3):
+            continue
         # A +/- atom's identifier comes from this residue's own template
         # (backbone identifiers are uniform across residues in these files).
         key = (atoms[vertex.lstrip("+-")],
@@ -298,9 +331,9 @@ BACKBONE_AXES = [("P", "O5'", "alpha"), ("O5'", "C5'", "beta"),
                  ("C5'", "C4'", "gamma"), ("C4'", "C3'", "delta"),
                  ("C3'", "O3'", "epsilon"), ("O3'", NEXT_P, "zeta")]
 
-# The furanose's other four bonds. They matter for the same reason the
-# protein's aromatic rings needed theirs: with the ring's angles fixed and
-# nothing else, the pucker cannot move. These are what --bending acts on.
+# The furanose's other four bonds. No torsion is emitted about any of them
+# any more -- the ring is frozen, see RING_ATOMS -- so this list is kept
+# only to say which bonds that covers, next to BACKBONE_AXES' delta.
 SUGAR_RING_AXES = [("C1'", "C2'", "ring_C1_C2"), ("C2'", "C3'", "ring_C2_C3"),
                    ("C4'", "O4'", "ring_C4_O4"), ("O4'", "C1'", "ring_O4_C1")]
 
@@ -769,9 +802,12 @@ def main():
         for base in bases:
             emit_as = spellings(base)
             for b_name, c_name, label in BACKBONE_AXES:
+                # delta turns about C4'-C3', a ring bond: frozen with the
+                # ring (see RING_ATOMS). It was never an independent hinge
+                # anyway -- it is a readout of the pucker.
+                if is_ring_internal(b_name, c_name):
+                    continue
                 generate_axis(ff, base, b_name, c_name, label, "NUCLEIC_BACKBONE", emit_as)
-            for b_name, c_name, label in SUGAR_RING_AXES:
-                generate_axis(ff, base, b_name, c_name, label, "NUCLEIC_SUGAR", emit_as)
             generate_axis(ff, base, "C1'", GLYCOSIDIC_N[base], "chi", "NUCLEIC_CHI", emit_as)
             if "O2'" in ff.atoms_of(base):
                 generate_axis(ff, base, "C2'", "O2'", "rotor_O2", "NUCLEIC_CHI", emit_as)

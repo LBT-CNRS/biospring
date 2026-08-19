@@ -252,17 +252,12 @@ STRETCH PHE_CE2_CD2          PHE     CE2   CD2     1.4000    3924.59
 STRETCH PHE_CD2_HD2          PHE     CD2   HD2     1.0800    3071.06
 STRETCH PHE_C_O              PHE     C     O       1.2290    4769.76
 STRETCH PHE_C_N              PHE     C     +N      1.3350    4100.32
-STRETCH PRO_N_CD             PRO     N     CD      1.4490    2820.02
-STRETCH PRO_N_CA             PRO     N     CA      1.4490    2820.02
 STRETCH PRO_CD_HD2           PRO     CD    HD2     1.0900    2845.12
 STRETCH PRO_CD_HD3           PRO     CD    HD3     1.0900    2845.12
-STRETCH PRO_CD_CG            PRO     CD    CG      1.5260    2594.08
 STRETCH PRO_CG_HG2           PRO     CG    HG2     1.0900    2845.12
 STRETCH PRO_CG_HG3           PRO     CG    HG3     1.0900    2845.12
-STRETCH PRO_CG_CB            PRO     CG    CB      1.5260    2594.08
 STRETCH PRO_CB_HB2           PRO     CB    HB2     1.0900    2845.12
 STRETCH PRO_CB_HB3           PRO     CB    HB3     1.0900    2845.12
-STRETCH PRO_CB_CA            PRO     CB    CA      1.5260    2594.08
 STRETCH PRO_CA_HA            PRO     CA    HA      1.0900    2845.12
 STRETCH PRO_CA_C             PRO     CA    C       1.5220    2652.66
 STRETCH PRO_C_O              PRO     C     O       1.2290    4769.76
@@ -1011,10 +1006,8 @@ BEND PHE_CD2_CE2_HE2      PHE     CD2   CE2   HE2    120.000   418.4000
 BEND PHE_CZ_CE2_HE2       PHE     CZ    CE2   HE2    120.000   418.4000
 BEND PRO_C_N_CA           PRO     -C    N     CA     121.900   418.4000
 BEND PRO_C_N_CD           PRO     -C    N     CD     121.900   418.4000
-BEND PRO_CA_N_CD          PRO     CA    N     CD     118.000   418.4000
 BEND PRO_CG_CD_HD2        PRO     CG    CD    HD2    109.500   418.4000
 BEND PRO_CG_CD_HD3        PRO     CG    CD    HD3    109.500   418.4000
-BEND PRO_CG_CD_N          PRO     CG    CD    N      109.700   669.4400
 BEND PRO_HD2_CD_HD3       PRO     HD2   CD    HD3    109.500   292.8800
 BEND PRO_HD2_CD_N         PRO     HD2   CD    N      109.500   418.4000
 BEND PRO_HD3_CD_N         PRO     HD3   CD    N      109.500   418.4000
@@ -1022,15 +1015,12 @@ BEND PRO_C_CA_CB          PRO     C     CA    CB     111.100   527.1840
 BEND PRO_C_CA_HA          PRO     C     CA    HA     109.500   418.4000
 BEND PRO_C_CA_N           PRO     C     CA    N      110.100   527.1840
 BEND PRO_CB_CA_HA         PRO     CB    CA    HA     109.500   418.4000
-BEND PRO_CB_CA_N          PRO     CB    CA    N      109.700   669.4400
 BEND PRO_HA_CA_N          PRO     HA    CA    N      109.500   418.4000
-BEND PRO_CB_CG_CD         PRO     CB    CG    CD     109.500   334.7200
 BEND PRO_CB_CG_HG2        PRO     CB    CG    HG2    109.500   418.4000
 BEND PRO_CB_CG_HG3        PRO     CB    CG    HG3    109.500   418.4000
 BEND PRO_CD_CG_HG2        PRO     CD    CG    HG2    109.500   418.4000
 BEND PRO_CD_CG_HG3        PRO     CD    CG    HG3    109.500   418.4000
 BEND PRO_HG2_CG_HG3       PRO     HG2   CG    HG3    109.500   292.8800
-BEND PRO_CA_CB_CG         PRO     CA    CB    CG     109.500   334.7200
 BEND PRO_CA_CB_HB2        PRO     CA    CB    HB2    109.500   418.4000
 BEND PRO_CA_CB_HB3        PRO     CA    CB    HB3    109.500   418.4000
 BEND PRO_CG_CB_HB2        PRO     CG    CB    HB2    109.500   418.4000
@@ -1553,21 +1543,6 @@ GHOSTPARTICLE GHrotor_NZn3B0   LYS     CE    NZ     CD      1.5260  111.20     0
 GHOSTPARTICLE GHrotor_NZn3B1   LYS     CE    NZ     CD      1.5260  111.20   120.000
 GHOSTPARTICLE GHrotor_NZn3B2   LYS     CE    NZ     CD      1.5260  111.20   240.000
 GHOSTPARTICLE GHrotor_NZn3C0   LYS     NZ    CE     HZ1     1.0100  109.50     0.401
-GHOSTPARTICLE GHring_CBn3B0    PRO     CA    CB     N       1.4490  109.70     0.000
-GHOSTPARTICLE GHring_CBn3B1    PRO     CA    CB     N       1.4490  109.70   120.000
-GHOSTPARTICLE GHring_CBn3B2    PRO     CA    CB     N       1.4490  109.70   240.000
-GHOSTPARTICLE GHring_CBn3C0    PRO     CB    CA     CG      1.5260  109.50     1.157
-GHOSTPARTICLE GHring_CGn3B0    PRO     CB    CG     HB2     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_CGn3B1    PRO     CB    CG     HB2     1.0900  109.50   120.000
-GHOSTPARTICLE GHring_CGn3B2    PRO     CB    CG     HB2     1.0900  109.50   240.000
-GHOSTPARTICLE GHring_CGn3C0    PRO     CG    CB     CD      1.5260  109.50    -0.002
-GHOSTPARTICLE GHring_CGn2B1    PRO     CB    CG     HB2     1.0900  109.50   180.000
-GHOSTPARTICLE GHring_CGn2C0    PRO     CG    CB     CD      1.5260  109.50   -30.071
-GHOSTPARTICLE GHring_CGn1C0    PRO     CG    CB     CD      1.5260  109.50   239.929
-GHOSTPARTICLE GHring_CDn3B0    PRO     CG    CD     HG2     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_CDn3B1    PRO     CG    CD     HG2     1.0900  109.50   120.000
-GHOSTPARTICLE GHring_CDn3B2    PRO     CG    CD     HG2     1.0900  109.50   240.000
-GHOSTPARTICLE GHring_CDn3C0    PRO     CD    CG     N       1.4490  109.70     0.041
 GHOSTPARTICLE GHmethyl_CBn3B0  ALA     CA    CB     N       1.4490  109.70     0.000
 GHOSTPARTICLE GHmethyl_CBn3B1  ALA     CA    CB     N       1.4490  109.70   120.000
 GHOSTPARTICLE GHmethyl_CBn3B2  ALA     CA    CB     N       1.4490  109.70   240.000
@@ -2296,12 +2271,6 @@ GHOSTPARTICLE GHomegaCACAn2C0  VAL     +N    C      +CA     1.4490  121.90   -90
 GHOSTPARTICLE GHomegaOHn2B0    VAL     C     +N     O       1.2290  122.90     0.000
 GHOSTPARTICLE GHomegaOHn2B1    VAL     C     +N     O       1.2290  122.90   180.000
 GHOSTPARTICLE GHomegan1C0      VAL     +N    C      +H      1.0100  120.00   180.000
-GHOSTPARTICLE GHring_NCDn1B0   PRO     N     CD     -C      1.3350  121.90     0.000
-GHOSTPARTICLE GHring_NCDn1C0   PRO     CD    N      CG      1.5260  109.70   180.000
-GHOSTPARTICLE GHring_NCDn2B1   PRO     N     CD     -C      1.3350  121.90   180.000
-GHOSTPARTICLE GHring_NCDn2C0   PRO     CD    N      CG      1.5260  109.70    -0.000
-GHOSTPARTICLE GHring_NCDn3B1   PRO     N     CD     -C      1.3350  121.90   120.000
-GHOSTPARTICLE GHring_NCDn3B2   PRO     N     CD     -C      1.3350  121.90   240.000
 #
 # DIHEDRAL (proper): ghost-ghost springs, one ring group per real AMBER
 # Fourier harmonic of each covered chi1-4 (family SIDECHAIN), phi (family PHI),
@@ -2478,18 +2447,6 @@ DIHEDRAL TYR_rotor_OH_n2_10           TYR     SIDECHAIN GHrotor_OHn2B1   GHrotor
 DIHEDRAL LYS_rotor_NZ_n3_00           LYS     SIDECHAIN GHrotor_NZn3B0   GHrotor_NZn3C0     2.9155   428.5352   21.74888
 DIHEDRAL LYS_rotor_NZ_n3_10           LYS     SIDECHAIN GHrotor_NZn3B1   GHrotor_NZn3C0     2.9155   428.5352   21.74888
 DIHEDRAL LYS_rotor_NZ_n3_20           LYS     SIDECHAIN GHrotor_NZn3B2   GHrotor_NZn3C0     2.9155   428.5352   21.74888
-DIHEDRAL PRO_ring_CB_n3_00            PRO     SIDECHAIN GHring_CBn3B0    GHring_CBn3C0      3.2094   201.4974   17.56595
-DIHEDRAL PRO_ring_CB_n3_10            PRO     SIDECHAIN GHring_CBn3B1    GHring_CBn3C0      3.2094   201.4974   17.56595
-DIHEDRAL PRO_ring_CB_n3_20            PRO     SIDECHAIN GHring_CBn3B2    GHring_CBn3C0      3.2094   201.4974   17.56595
-DIHEDRAL PRO_ring_CG_n3_00            PRO     SIDECHAIN GHring_CGn3B0    GHring_CGn3C0      2.9801   363.4082   20.97621
-DIHEDRAL PRO_ring_CG_n3_10            PRO     SIDECHAIN GHring_CGn3B1    GHring_CGn3C0      2.9801   363.4082   20.97621
-DIHEDRAL PRO_ring_CG_n3_20            PRO     SIDECHAIN GHring_CGn3B2    GHring_CGn3C0      2.9801   363.4082   20.97621
-DIHEDRAL PRO_ring_CG_n2_00            PRO     SIDECHAIN GHring_CGn3B0    GHring_CGn2C0      2.9801     8.2046   -0.00471
-DIHEDRAL PRO_ring_CG_n2_10            PRO     SIDECHAIN GHring_CGn2B1    GHring_CGn2C0      2.9801     8.2046   -0.00471
-DIHEDRAL PRO_ring_CG_n1_00            PRO     SIDECHAIN GHring_CGn3B0    GHring_CGn1C0      0.0000     0.5662    1.67736
-DIHEDRAL PRO_ring_CD_n3_00            PRO     SIDECHAIN GHring_CDn3B0    GHring_CDn3C0      2.9280   392.3014   21.11489
-DIHEDRAL PRO_ring_CD_n3_10            PRO     SIDECHAIN GHring_CDn3B1    GHring_CDn3C0      2.9280   392.3014   21.11489
-DIHEDRAL PRO_ring_CD_n3_20            PRO     SIDECHAIN GHring_CDn3B2    GHring_CDn3C0      2.9280   392.3014   21.11489
 DIHEDRAL ALA_methyl_CB_n3_00          ALA     SIDECHAIN GHmethyl_CBn3B0  GHmethyl_CBn3C0    2.9280   391.9388   21.09357
 DIHEDRAL ALA_methyl_CB_n3_10          ALA     SIDECHAIN GHmethyl_CBn3B1  GHmethyl_CBn3C0    2.9280   391.9388   21.09357
 DIHEDRAL ALA_methyl_CB_n3_20          ALA     SIDECHAIN GHmethyl_CBn3B2  GHmethyl_CBn3C0    2.9280   391.9388   21.09357
@@ -3329,12 +3286,6 @@ DIHEDRAL TRP_omegaOH_n2_10            TRP     OMEGA     GHomegaOHn2B1    GHomega
 DIHEDRAL TRP_omegaOCA_n2_00           TRP     OMEGA     GHomegaOHn2B0    GHomegaCACAn2C0    3.2002   130.3800   -0.02566
 DIHEDRAL TRP_omegaOCA_n2_10           TRP     OMEGA     GHomegaOHn2B1    GHomegaCACAn2C0    3.2002   130.3800   -0.02566
 DIHEDRAL TRP_omega_n1_00              TRP     OMEGA     GHomegaOHn2B0    GHomegan1C0        0.0000     9.2712   29.26253
-DIHEDRAL PRO_ring_NCD_n1_00           PRO     SIDECHAIN GHring_NCDn1B0   GHring_NCDn1C0     0.0000     5.1391   18.53894
-DIHEDRAL PRO_ring_NCD_n2_00           PRO     SIDECHAIN GHring_NCDn1B0   GHring_NCDn2C0     3.2360    64.0638   -0.03272
-DIHEDRAL PRO_ring_NCD_n2_10           PRO     SIDECHAIN GHring_NCDn2B1   GHring_NCDn2C0     3.2360    64.0638   -0.03272
-DIHEDRAL PRO_ring_NCD_n3_00           PRO     SIDECHAIN GHring_NCDn1B0   GHring_NCDn2C0     3.2360   107.3124    6.39588
-DIHEDRAL PRO_ring_NCD_n3_10           PRO     SIDECHAIN GHring_NCDn3B1   GHring_NCDn2C0     3.2360   107.3124    6.39588
-DIHEDRAL PRO_ring_NCD_n3_20           PRO     SIDECHAIN GHring_NCDn3B2   GHring_NCDn2C0     3.2360   107.3124    6.39588
 STRETCH ACE_H1_CH3           ACE     H1    CH3     1.0900    2845.12
 STRETCH ACE_CH3_H2           ACE     CH3   H2      1.0900    2845.12
 STRETCH ACE_CH3_H3           ACE     CH3   H3      1.0900    2845.12

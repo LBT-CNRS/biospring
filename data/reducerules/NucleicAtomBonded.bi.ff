@@ -51,12 +51,8 @@ STRETCH DA_C5'_H5''         DA      C5'    H5''     1.0900    2845.12
 STRETCH DA_C5'_H5'2         DA      C5'    H5'2     1.0900    2845.12
 STRETCH DA_C5'_C4'          DA      C5'    C4'      1.5260    2594.08
 STRETCH DA_C4'_H4'          DA      C4'    H4'      1.0900    2845.12
-STRETCH DA_C4'_O4'          DA      C4'    O4'      1.4100    2677.76
-STRETCH DA_C4'_C3'          DA      C4'    C3'      1.5260    2594.08
-STRETCH DA_O4'_C1'          DA      O4'    C1'      1.4100    2677.76
 STRETCH DA_C1'_H1'          DA      C1'    H1'      1.0900    2845.12
 STRETCH DA_C1'_N9           DA      C1'    N9       1.4750    2820.02
-STRETCH DA_C1'_C2'          DA      C1'    C2'      1.5260    2594.08
 STRETCH DA_N9_C8           DA      N9     C8       1.3710    3681.92
 STRETCH DA_N9_C4           DA      N9     C4       1.3740    3648.45
 STRETCH DA_C8_H8           DA      C8     H8       1.0800    3071.06
@@ -73,7 +69,6 @@ STRETCH DA_C2_H2           DA      C2     H2       1.0800    3071.06
 STRETCH DA_C2_N3           DA      C2     N3       1.3240    4200.74
 STRETCH DA_N3_C4           DA      N3     C4       1.3540    3857.65
 STRETCH DA_C3'_H3'          DA      C3'    H3'      1.0900    2845.12
-STRETCH DA_C3'_C2'          DA      C3'    C2'      1.5260    2594.08
 STRETCH DA_C3'_O3'          DA      C3'    O3'      1.4100    2677.76
 STRETCH DA_C2'_H2'          DA      C2'    H2'      1.0900    2845.12
 STRETCH DA_C2'_H2'1         DA      C2'    H2'1     1.0900    2845.12
@@ -110,14 +105,11 @@ BEND DA_H5''_C5'_O5'        DA      H5''   C5'    O5'     109.500   418.4000
 BEND DA_H5'2_C5'_O5'        DA      H5'2   C5'    O5'     109.500   418.4000
 BEND DA_C3'_C4'_C5'        DA      C3'    C4'    C5'     109.500   334.7200
 BEND DA_C3'_C4'_H4'        DA      C3'    C4'    H4'     109.500   418.4000
-BEND DA_C3'_C4'_O4'        DA      C3'    C4'    O4'     109.500   418.4000
 BEND DA_C5'_C4'_H4'        DA      C5'    C4'    H4'     109.500   418.4000
 BEND DA_C5'_C4'_O4'        DA      C5'    C4'    O4'     109.500   418.4000
 BEND DA_H4'_C4'_O4'        DA      H4'    C4'    O4'     109.500   418.4000
-BEND DA_C1'_O4'_C4'        DA      C1'    O4'    C4'     109.500   502.0800
 BEND DA_C2'_C1'_H1'        DA      C2'    C1'    H1'     109.500   418.4000
 BEND DA_C2'_C1'_N9         DA      C2'    C1'    N9      109.500   418.4000
-BEND DA_C2'_C1'_O4'        DA      C2'    C1'    O4'     109.500   418.4000
 BEND DA_H1'_C1'_N9         DA      H1'    C1'    N9      109.500   418.4000
 BEND DA_H1'_C1'_O4'        DA      H1'    C1'    O4'     109.500   418.4000
 BEND DA_N9_C1'_O4'        DA      N9     C1'    O4'     109.500   418.4000
@@ -145,13 +137,11 @@ BEND DA_C2_N3_C4         DA      C2     N3     C4      111.000   585.7600
 BEND DA_C5_C4_N3         DA      C5     C4     N3      127.700   585.7600
 BEND DA_C5_C4_N9         DA      C5     C4     N9      106.200   585.7600
 BEND DA_N3_C4_N9         DA      N3     C4     N9      126.200   585.7600
-BEND DA_C2'_C3'_C4'        DA      C2'    C3'    C4'     109.500   334.7200
 BEND DA_C2'_C3'_H3'        DA      C2'    C3'    H3'     109.500   418.4000
 BEND DA_C2'_C3'_O3'        DA      C2'    C3'    O3'     109.500   418.4000
 BEND DA_C4'_C3'_H3'        DA      C4'    C3'    H3'     109.500   418.4000
 BEND DA_C4'_C3'_O3'        DA      C4'    C3'    O3'     109.500   418.4000
 BEND DA_H3'_C3'_O3'        DA      H3'    C3'    O3'     109.500   418.4000
-BEND DA_C1'_C2'_C3'        DA      C1'    C2'    C3'     109.500   334.7200
 BEND DA_C1'_C2'_H2'        DA      C1'    C2'    H2'     109.500   418.4000
 BEND DA_C1'_C2'_H2'1       DA      C1'    C2'    H2'1    109.500   418.4000
 BEND DA_C1'_C2'_H2''       DA      C1'    C2'    H2''    109.500   418.4000
@@ -180,12 +170,8 @@ STRETCH DC_C5'_H5''         DC      C5'    H5''     1.0900    2845.12
 STRETCH DC_C5'_H5'2         DC      C5'    H5'2     1.0900    2845.12
 STRETCH DC_C5'_C4'          DC      C5'    C4'      1.5260    2594.08
 STRETCH DC_C4'_H4'          DC      C4'    H4'      1.0900    2845.12
-STRETCH DC_C4'_O4'          DC      C4'    O4'      1.4100    2677.76
-STRETCH DC_C4'_C3'          DC      C4'    C3'      1.5260    2594.08
-STRETCH DC_O4'_C1'          DC      O4'    C1'      1.4100    2677.76
 STRETCH DC_C1'_H1'          DC      C1'    H1'      1.0900    2845.12
 STRETCH DC_C1'_N1           DC      C1'    N1       1.4750    2820.02
-STRETCH DC_C1'_C2'          DC      C1'    C2'      1.5260    2594.08
 STRETCH DC_N1_C6           DC      N1     C6       1.3650    3748.86
 STRETCH DC_N1_C2           DC      N1     C2       1.3830    3548.03
 STRETCH DC_C6_H6           DC      C6     H6       1.0800    3071.06
@@ -199,7 +185,6 @@ STRETCH DC_N4_H42          DC      N4     H42      1.0100    3631.71
 STRETCH DC_N3_C2           DC      N3     C2       1.3580    3824.18
 STRETCH DC_C2_O2           DC      C2     O2       1.2290    4769.76
 STRETCH DC_C3'_H3'          DC      C3'    H3'      1.0900    2845.12
-STRETCH DC_C3'_C2'          DC      C3'    C2'      1.5260    2594.08
 STRETCH DC_C3'_O3'          DC      C3'    O3'      1.4100    2677.76
 STRETCH DC_C2'_H2'          DC      C2'    H2'      1.0900    2845.12
 STRETCH DC_C2'_H2'1         DC      C2'    H2'1     1.0900    2845.12
@@ -236,14 +221,11 @@ BEND DC_H5''_C5'_O5'        DC      H5''   C5'    O5'     109.500   418.4000
 BEND DC_H5'2_C5'_O5'        DC      H5'2   C5'    O5'     109.500   418.4000
 BEND DC_C3'_C4'_C5'        DC      C3'    C4'    C5'     109.500   334.7200
 BEND DC_C3'_C4'_H4'        DC      C3'    C4'    H4'     109.500   418.4000
-BEND DC_C3'_C4'_O4'        DC      C3'    C4'    O4'     109.500   418.4000
 BEND DC_C5'_C4'_H4'        DC      C5'    C4'    H4'     109.500   418.4000
 BEND DC_C5'_C4'_O4'        DC      C5'    C4'    O4'     109.500   418.4000
 BEND DC_H4'_C4'_O4'        DC      H4'    C4'    O4'     109.500   418.4000
-BEND DC_C1'_O4'_C4'        DC      C1'    O4'    C4'     109.500   502.0800
 BEND DC_C2'_C1'_H1'        DC      C2'    C1'    H1'     109.500   418.4000
 BEND DC_C2'_C1'_N1         DC      C2'    C1'    N1      109.500   418.4000
-BEND DC_C2'_C1'_O4'        DC      C2'    C1'    O4'     109.500   418.4000
 BEND DC_H1'_C1'_N1         DC      H1'    C1'    N1      109.500   418.4000
 BEND DC_H1'_C1'_O4'        DC      H1'    C1'    O4'     109.500   418.4000
 BEND DC_N1_C1'_O4'        DC      N1     C1'    O4'     109.500   418.4000
@@ -266,13 +248,11 @@ BEND DC_C2_N3_C4         DC      C2     N3     C4      120.500   585.7600
 BEND DC_N1_C2_N3         DC      N1     C2     N3      118.600   585.7600
 BEND DC_N1_C2_O2         DC      N1     C2     O2      120.900   669.4400
 BEND DC_N3_C2_O2         DC      N3     C2     O2      122.500   669.4400
-BEND DC_C2'_C3'_C4'        DC      C2'    C3'    C4'     109.500   334.7200
 BEND DC_C2'_C3'_H3'        DC      C2'    C3'    H3'     109.500   418.4000
 BEND DC_C2'_C3'_O3'        DC      C2'    C3'    O3'     109.500   418.4000
 BEND DC_C4'_C3'_H3'        DC      C4'    C3'    H3'     109.500   418.4000
 BEND DC_C4'_C3'_O3'        DC      C4'    C3'    O3'     109.500   418.4000
 BEND DC_H3'_C3'_O3'        DC      H3'    C3'    O3'     109.500   418.4000
-BEND DC_C1'_C2'_C3'        DC      C1'    C2'    C3'     109.500   334.7200
 BEND DC_C1'_C2'_H2'        DC      C1'    C2'    H2'     109.500   418.4000
 BEND DC_C1'_C2'_H2'1       DC      C1'    C2'    H2'1    109.500   418.4000
 BEND DC_C1'_C2'_H2''       DC      C1'    C2'    H2''    109.500   418.4000
@@ -301,12 +281,8 @@ STRETCH DG_C5'_H5''         DG      C5'    H5''     1.0900    2845.12
 STRETCH DG_C5'_H5'2         DG      C5'    H5'2     1.0900    2845.12
 STRETCH DG_C5'_C4'          DG      C5'    C4'      1.5260    2594.08
 STRETCH DG_C4'_H4'          DG      C4'    H4'      1.0900    2845.12
-STRETCH DG_C4'_O4'          DG      C4'    O4'      1.4100    2677.76
-STRETCH DG_C4'_C3'          DG      C4'    C3'      1.5260    2594.08
-STRETCH DG_O4'_C1'          DG      O4'    C1'      1.4100    2677.76
 STRETCH DG_C1'_H1'          DG      C1'    H1'      1.0900    2845.12
 STRETCH DG_C1'_N9           DG      C1'    N9       1.4750    2820.02
-STRETCH DG_C1'_C2'          DG      C1'    C2'      1.5260    2594.08
 STRETCH DG_N9_C8           DG      N9     C8       1.3710    3681.92
 STRETCH DG_N9_C4           DG      N9     C4       1.3740    3648.45
 STRETCH DG_C8_H8           DG      C8     H8       1.0800    3071.06
@@ -324,7 +300,6 @@ STRETCH DG_N2_H21          DG      N2     H21      1.0100    3631.71
 STRETCH DG_N2_H22          DG      N2     H22      1.0100    3631.71
 STRETCH DG_N3_C4           DG      N3     C4       1.3540    3857.65
 STRETCH DG_C3'_H3'          DG      C3'    H3'      1.0900    2845.12
-STRETCH DG_C3'_C2'          DG      C3'    C2'      1.5260    2594.08
 STRETCH DG_C3'_O3'          DG      C3'    O3'      1.4100    2677.76
 STRETCH DG_C2'_H2'          DG      C2'    H2'      1.0900    2845.12
 STRETCH DG_C2'_H2'1         DG      C2'    H2'1     1.0900    2845.12
@@ -361,14 +336,11 @@ BEND DG_H5''_C5'_O5'        DG      H5''   C5'    O5'     109.500   418.4000
 BEND DG_H5'2_C5'_O5'        DG      H5'2   C5'    O5'     109.500   418.4000
 BEND DG_C3'_C4'_C5'        DG      C3'    C4'    C5'     109.500   334.7200
 BEND DG_C3'_C4'_H4'        DG      C3'    C4'    H4'     109.500   418.4000
-BEND DG_C3'_C4'_O4'        DG      C3'    C4'    O4'     109.500   418.4000
 BEND DG_C5'_C4'_H4'        DG      C5'    C4'    H4'     109.500   418.4000
 BEND DG_C5'_C4'_O4'        DG      C5'    C4'    O4'     109.500   418.4000
 BEND DG_H4'_C4'_O4'        DG      H4'    C4'    O4'     109.500   418.4000
-BEND DG_C1'_O4'_C4'        DG      C1'    O4'    C4'     109.500   502.0800
 BEND DG_C2'_C1'_H1'        DG      C2'    C1'    H1'     109.500   418.4000
 BEND DG_C2'_C1'_N9         DG      C2'    C1'    N9      109.500   418.4000
-BEND DG_C2'_C1'_O4'        DG      C2'    C1'    O4'     109.500   418.4000
 BEND DG_H1'_C1'_N9         DG      H1'    C1'    N9      109.500   418.4000
 BEND DG_H1'_C1'_O4'        DG      H1'    C1'    O4'     109.500   418.4000
 BEND DG_N9_C1'_O4'        DG      N9     C1'    O4'     109.500   418.4000
@@ -398,13 +370,11 @@ BEND DG_C2_N3_C4         DG      C2     N3     C4      112.200   585.7600
 BEND DG_C5_C4_N3         DG      C5     C4     N3      127.700   585.7600
 BEND DG_C5_C4_N9         DG      C5     C4     N9      106.200   585.7600
 BEND DG_N3_C4_N9         DG      N3     C4     N9      126.200   585.7600
-BEND DG_C2'_C3'_C4'        DG      C2'    C3'    C4'     109.500   334.7200
 BEND DG_C2'_C3'_H3'        DG      C2'    C3'    H3'     109.500   418.4000
 BEND DG_C2'_C3'_O3'        DG      C2'    C3'    O3'     109.500   418.4000
 BEND DG_C4'_C3'_H3'        DG      C4'    C3'    H3'     109.500   418.4000
 BEND DG_C4'_C3'_O3'        DG      C4'    C3'    O3'     109.500   418.4000
 BEND DG_H3'_C3'_O3'        DG      H3'    C3'    O3'     109.500   418.4000
-BEND DG_C1'_C2'_C3'        DG      C1'    C2'    C3'     109.500   334.7200
 BEND DG_C1'_C2'_H2'        DG      C1'    C2'    H2'     109.500   418.4000
 BEND DG_C1'_C2'_H2'1       DG      C1'    C2'    H2'1    109.500   418.4000
 BEND DG_C1'_C2'_H2''       DG      C1'    C2'    H2''    109.500   418.4000
@@ -433,12 +403,8 @@ STRETCH DT_C5'_H5''         DT      C5'    H5''     1.0900    2845.12
 STRETCH DT_C5'_H5'2         DT      C5'    H5'2     1.0900    2845.12
 STRETCH DT_C5'_C4'          DT      C5'    C4'      1.5260    2594.08
 STRETCH DT_C4'_H4'          DT      C4'    H4'      1.0900    2845.12
-STRETCH DT_C4'_O4'          DT      C4'    O4'      1.4100    2677.76
-STRETCH DT_C4'_C3'          DT      C4'    C3'      1.5260    2594.08
-STRETCH DT_O4'_C1'          DT      O4'    C1'      1.4100    2677.76
 STRETCH DT_C1'_H1'          DT      C1'    H1'      1.0900    2845.12
 STRETCH DT_C1'_N1           DT      C1'    N1       1.4750    2820.02
-STRETCH DT_C1'_C2'          DT      C1'    C2'      1.5260    2594.08
 STRETCH DT_N1_C6           DT      N1     C6       1.3650    3748.86
 STRETCH DT_N1_C2           DT      N1     C2       1.3830    3548.03
 STRETCH DT_C6_H6           DT      C6     H6       1.0800    3071.06
@@ -454,7 +420,6 @@ STRETCH DT_N3_H3           DT      N3     H3       1.0100    3631.71
 STRETCH DT_N3_C2           DT      N3     C2       1.3880    3497.82
 STRETCH DT_C2_O2           DT      C2     O2       1.2290    4769.76
 STRETCH DT_C3'_H3'          DT      C3'    H3'      1.0900    2845.12
-STRETCH DT_C3'_C2'          DT      C3'    C2'      1.5260    2594.08
 STRETCH DT_C3'_O3'          DT      C3'    O3'      1.4100    2677.76
 STRETCH DT_C2'_H2'          DT      C2'    H2'      1.0900    2845.12
 STRETCH DT_C2'_H2'1         DT      C2'    H2'1     1.0900    2845.12
@@ -491,14 +456,11 @@ BEND DT_H5''_C5'_O5'        DT      H5''   C5'    O5'     109.500   418.4000
 BEND DT_H5'2_C5'_O5'        DT      H5'2   C5'    O5'     109.500   418.4000
 BEND DT_C3'_C4'_C5'        DT      C3'    C4'    C5'     109.500   334.7200
 BEND DT_C3'_C4'_H4'        DT      C3'    C4'    H4'     109.500   418.4000
-BEND DT_C3'_C4'_O4'        DT      C3'    C4'    O4'     109.500   418.4000
 BEND DT_C5'_C4'_H4'        DT      C5'    C4'    H4'     109.500   418.4000
 BEND DT_C5'_C4'_O4'        DT      C5'    C4'    O4'     109.500   418.4000
 BEND DT_H4'_C4'_O4'        DT      H4'    C4'    O4'     109.500   418.4000
-BEND DT_C1'_O4'_C4'        DT      C1'    O4'    C4'     109.500   502.0800
 BEND DT_C2'_C1'_H1'        DT      C2'    C1'    H1'     109.500   418.4000
 BEND DT_C2'_C1'_N1         DT      C2'    C1'    N1      109.500   418.4000
-BEND DT_C2'_C1'_O4'        DT      C2'    C1'    O4'     109.500   418.4000
 BEND DT_H1'_C1'_N1         DT      H1'    C1'    N1      109.500   418.4000
 BEND DT_H1'_C1'_O4'        DT      H1'    C1'    O4'     109.500   418.4000
 BEND DT_N1_C1'_O4'        DT      N1     C1'    O4'     109.500   418.4000
@@ -526,13 +488,11 @@ BEND DT_C4_N3_H3         DT      C4     N3     H3      116.800   418.4000
 BEND DT_N1_C2_N3         DT      N1     C2     N3      115.400   585.7600
 BEND DT_N1_C2_O2         DT      N1     C2     O2      120.900   669.4400
 BEND DT_N3_C2_O2         DT      N3     C2     O2      120.600   669.4400
-BEND DT_C2'_C3'_C4'        DT      C2'    C3'    C4'     109.500   334.7200
 BEND DT_C2'_C3'_H3'        DT      C2'    C3'    H3'     109.500   418.4000
 BEND DT_C2'_C3'_O3'        DT      C2'    C3'    O3'     109.500   418.4000
 BEND DT_C4'_C3'_H3'        DT      C4'    C3'    H3'     109.500   418.4000
 BEND DT_C4'_C3'_O3'        DT      C4'    C3'    O3'     109.500   418.4000
 BEND DT_H3'_C3'_O3'        DT      H3'    C3'    O3'     109.500   418.4000
-BEND DT_C1'_C2'_C3'        DT      C1'    C2'    C3'     109.500   334.7200
 BEND DT_C1'_C2'_H2'        DT      C1'    C2'    H2'     109.500   418.4000
 BEND DT_C1'_C2'_H2'1       DT      C1'    C2'    H2'1    109.500   418.4000
 BEND DT_C1'_C2'_H2''       DT      C1'    C2'    H2''    109.500   418.4000
@@ -573,18 +533,10 @@ STRETCH A_C5'_C4'          A       C5'    C4'      1.5260    2594.08
 STRETCH RA_C5'_C4'          RA      C5'    C4'      1.5260    2594.08
 STRETCH A_C4'_H4'          A       C4'    H4'      1.0900    2845.12
 STRETCH RA_C4'_H4'          RA      C4'    H4'      1.0900    2845.12
-STRETCH A_C4'_O4'          A       C4'    O4'      1.4100    2677.76
-STRETCH RA_C4'_O4'          RA      C4'    O4'      1.4100    2677.76
-STRETCH A_C4'_C3'          A       C4'    C3'      1.5260    2594.08
-STRETCH RA_C4'_C3'          RA      C4'    C3'      1.5260    2594.08
-STRETCH A_O4'_C1'          A       O4'    C1'      1.4100    2677.76
-STRETCH RA_O4'_C1'          RA      O4'    C1'      1.4100    2677.76
 STRETCH A_C1'_H1'          A       C1'    H1'      1.0900    2845.12
 STRETCH RA_C1'_H1'          RA      C1'    H1'      1.0900    2845.12
 STRETCH A_C1'_N9           A       C1'    N9       1.4750    2820.02
 STRETCH RA_C1'_N9           RA      C1'    N9       1.4750    2820.02
-STRETCH A_C1'_C2'          A       C1'    C2'      1.5260    2594.08
-STRETCH RA_C1'_C2'          RA      C1'    C2'      1.5260    2594.08
 STRETCH A_N9_C8           A       N9     C8       1.3710    3681.92
 STRETCH RA_N9_C8           RA      N9     C8       1.3710    3681.92
 STRETCH A_N9_C4           A       N9     C4       1.3740    3648.45
@@ -617,8 +569,6 @@ STRETCH A_N3_C4           A       N3     C4       1.3540    3857.65
 STRETCH RA_N3_C4           RA      N3     C4       1.3540    3857.65
 STRETCH A_C3'_H3'          A       C3'    H3'      1.0900    2845.12
 STRETCH RA_C3'_H3'          RA      C3'    H3'      1.0900    2845.12
-STRETCH A_C3'_C2'          A       C3'    C2'      1.5260    2594.08
-STRETCH RA_C3'_C2'          RA      C3'    C2'      1.5260    2594.08
 STRETCH A_C3'_O3'          A       C3'    O3'      1.4100    2677.76
 STRETCH RA_C3'_O3'          RA      C3'    O3'      1.4100    2677.76
 STRETCH A_C2'_H2'          A       C2'    H2'      1.0900    2845.12
@@ -693,22 +643,16 @@ BEND A_C3'_C4'_C5'        A       C3'    C4'    C5'     109.500   334.7200
 BEND RA_C3'_C4'_C5'        RA      C3'    C4'    C5'     109.500   334.7200
 BEND A_C3'_C4'_H4'        A       C3'    C4'    H4'     109.500   418.4000
 BEND RA_C3'_C4'_H4'        RA      C3'    C4'    H4'     109.500   418.4000
-BEND A_C3'_C4'_O4'        A       C3'    C4'    O4'     109.500   418.4000
-BEND RA_C3'_C4'_O4'        RA      C3'    C4'    O4'     109.500   418.4000
 BEND A_C5'_C4'_H4'        A       C5'    C4'    H4'     109.500   418.4000
 BEND RA_C5'_C4'_H4'        RA      C5'    C4'    H4'     109.500   418.4000
 BEND A_C5'_C4'_O4'        A       C5'    C4'    O4'     109.500   418.4000
 BEND RA_C5'_C4'_O4'        RA      C5'    C4'    O4'     109.500   418.4000
 BEND A_H4'_C4'_O4'        A       H4'    C4'    O4'     109.500   418.4000
 BEND RA_H4'_C4'_O4'        RA      H4'    C4'    O4'     109.500   418.4000
-BEND A_C1'_O4'_C4'        A       C1'    O4'    C4'     109.500   502.0800
-BEND RA_C1'_O4'_C4'        RA      C1'    O4'    C4'     109.500   502.0800
 BEND A_C2'_C1'_H1'        A       C2'    C1'    H1'     109.500   418.4000
 BEND RA_C2'_C1'_H1'        RA      C2'    C1'    H1'     109.500   418.4000
 BEND A_C2'_C1'_N9         A       C2'    C1'    N9      109.500   418.4000
 BEND RA_C2'_C1'_N9         RA      C2'    C1'    N9      109.500   418.4000
-BEND A_C2'_C1'_O4'        A       C2'    C1'    O4'     109.500   418.4000
-BEND RA_C2'_C1'_O4'        RA      C2'    C1'    O4'     109.500   418.4000
 BEND A_H1'_C1'_N9         A       H1'    C1'    N9      109.500   418.4000
 BEND RA_H1'_C1'_N9         RA      H1'    C1'    N9      109.500   418.4000
 BEND A_H1'_C1'_O4'        A       H1'    C1'    O4'     109.500   418.4000
@@ -763,8 +707,6 @@ BEND A_C5_C4_N9         A       C5     C4     N9      106.200   585.7600
 BEND RA_C5_C4_N9         RA      C5     C4     N9      106.200   585.7600
 BEND A_N3_C4_N9         A       N3     C4     N9      126.200   585.7600
 BEND RA_N3_C4_N9         RA      N3     C4     N9      126.200   585.7600
-BEND A_C2'_C3'_C4'        A       C2'    C3'    C4'     109.500   334.7200
-BEND RA_C2'_C3'_C4'        RA      C2'    C3'    C4'     109.500   334.7200
 BEND A_C2'_C3'_H3'        A       C2'    C3'    H3'     109.500   418.4000
 BEND RA_C2'_C3'_H3'        RA      C2'    C3'    H3'     109.500   418.4000
 BEND A_C2'_C3'_O3'        A       C2'    C3'    O3'     109.500   418.4000
@@ -775,8 +717,6 @@ BEND A_C4'_C3'_O3'        A       C4'    C3'    O3'     109.500   418.4000
 BEND RA_C4'_C3'_O3'        RA      C4'    C3'    O3'     109.500   418.4000
 BEND A_H3'_C3'_O3'        A       H3'    C3'    O3'     109.500   418.4000
 BEND RA_H3'_C3'_O3'        RA      H3'    C3'    O3'     109.500   418.4000
-BEND A_C1'_C2'_C3'        A       C1'    C2'    C3'     109.500   334.7200
-BEND RA_C1'_C2'_C3'        RA      C1'    C2'    C3'     109.500   334.7200
 BEND A_C1'_C2'_H2'        A       C1'    C2'    H2'     109.500   418.4000
 BEND A_C1'_C2'_H2'1       A       C1'    C2'    H2'1    109.500   418.4000
 BEND RA_C1'_C2'_H2'        RA      C1'    C2'    H2'     109.500   418.4000
@@ -829,18 +769,10 @@ STRETCH C_C5'_C4'          C       C5'    C4'      1.5260    2594.08
 STRETCH RC_C5'_C4'          RC      C5'    C4'      1.5260    2594.08
 STRETCH C_C4'_H4'          C       C4'    H4'      1.0900    2845.12
 STRETCH RC_C4'_H4'          RC      C4'    H4'      1.0900    2845.12
-STRETCH C_C4'_O4'          C       C4'    O4'      1.4100    2677.76
-STRETCH RC_C4'_O4'          RC      C4'    O4'      1.4100    2677.76
-STRETCH C_C4'_C3'          C       C4'    C3'      1.5260    2594.08
-STRETCH RC_C4'_C3'          RC      C4'    C3'      1.5260    2594.08
-STRETCH C_O4'_C1'          C       O4'    C1'      1.4100    2677.76
-STRETCH RC_O4'_C1'          RC      O4'    C1'      1.4100    2677.76
 STRETCH C_C1'_H1'          C       C1'    H1'      1.0900    2845.12
 STRETCH RC_C1'_H1'          RC      C1'    H1'      1.0900    2845.12
 STRETCH C_C1'_N1           C       C1'    N1       1.4750    2820.02
 STRETCH RC_C1'_N1           RC      C1'    N1       1.4750    2820.02
-STRETCH C_C1'_C2'          C       C1'    C2'      1.5260    2594.08
-STRETCH RC_C1'_C2'          RC      C1'    C2'      1.5260    2594.08
 STRETCH C_N1_C6           C       N1     C6       1.3650    3748.86
 STRETCH RC_N1_C6           RC      N1     C6       1.3650    3748.86
 STRETCH C_N1_C2           C       N1     C2       1.3830    3548.03
@@ -867,8 +799,6 @@ STRETCH C_C2_O2           C       C2     O2       1.2290    4769.76
 STRETCH RC_C2_O2           RC      C2     O2       1.2290    4769.76
 STRETCH C_C3'_H3'          C       C3'    H3'      1.0900    2845.12
 STRETCH RC_C3'_H3'          RC      C3'    H3'      1.0900    2845.12
-STRETCH C_C3'_C2'          C       C3'    C2'      1.5260    2594.08
-STRETCH RC_C3'_C2'          RC      C3'    C2'      1.5260    2594.08
 STRETCH C_C3'_O3'          C       C3'    O3'      1.4100    2677.76
 STRETCH RC_C3'_O3'          RC      C3'    O3'      1.4100    2677.76
 STRETCH C_C2'_H2'          C       C2'    H2'      1.0900    2845.12
@@ -943,22 +873,16 @@ BEND C_C3'_C4'_C5'        C       C3'    C4'    C5'     109.500   334.7200
 BEND RC_C3'_C4'_C5'        RC      C3'    C4'    C5'     109.500   334.7200
 BEND C_C3'_C4'_H4'        C       C3'    C4'    H4'     109.500   418.4000
 BEND RC_C3'_C4'_H4'        RC      C3'    C4'    H4'     109.500   418.4000
-BEND C_C3'_C4'_O4'        C       C3'    C4'    O4'     109.500   418.4000
-BEND RC_C3'_C4'_O4'        RC      C3'    C4'    O4'     109.500   418.4000
 BEND C_C5'_C4'_H4'        C       C5'    C4'    H4'     109.500   418.4000
 BEND RC_C5'_C4'_H4'        RC      C5'    C4'    H4'     109.500   418.4000
 BEND C_C5'_C4'_O4'        C       C5'    C4'    O4'     109.500   418.4000
 BEND RC_C5'_C4'_O4'        RC      C5'    C4'    O4'     109.500   418.4000
 BEND C_H4'_C4'_O4'        C       H4'    C4'    O4'     109.500   418.4000
 BEND RC_H4'_C4'_O4'        RC      H4'    C4'    O4'     109.500   418.4000
-BEND C_C1'_O4'_C4'        C       C1'    O4'    C4'     109.500   502.0800
-BEND RC_C1'_O4'_C4'        RC      C1'    O4'    C4'     109.500   502.0800
 BEND C_C2'_C1'_H1'        C       C2'    C1'    H1'     109.500   418.4000
 BEND RC_C2'_C1'_H1'        RC      C2'    C1'    H1'     109.500   418.4000
 BEND C_C2'_C1'_N1         C       C2'    C1'    N1      109.500   418.4000
 BEND RC_C2'_C1'_N1         RC      C2'    C1'    N1      109.500   418.4000
-BEND C_C2'_C1'_O4'        C       C2'    C1'    O4'     109.500   418.4000
-BEND RC_C2'_C1'_O4'        RC      C2'    C1'    O4'     109.500   418.4000
 BEND C_H1'_C1'_N1         C       H1'    C1'    N1      109.500   418.4000
 BEND RC_H1'_C1'_N1         RC      H1'    C1'    N1      109.500   418.4000
 BEND C_H1'_C1'_O4'        C       H1'    C1'    O4'     109.500   418.4000
@@ -1003,8 +927,6 @@ BEND C_N1_C2_O2         C       N1     C2     O2      120.900   669.4400
 BEND RC_N1_C2_O2         RC      N1     C2     O2      120.900   669.4400
 BEND C_N3_C2_O2         C       N3     C2     O2      122.500   669.4400
 BEND RC_N3_C2_O2         RC      N3     C2     O2      122.500   669.4400
-BEND C_C2'_C3'_C4'        C       C2'    C3'    C4'     109.500   334.7200
-BEND RC_C2'_C3'_C4'        RC      C2'    C3'    C4'     109.500   334.7200
 BEND C_C2'_C3'_H3'        C       C2'    C3'    H3'     109.500   418.4000
 BEND RC_C2'_C3'_H3'        RC      C2'    C3'    H3'     109.500   418.4000
 BEND C_C2'_C3'_O3'        C       C2'    C3'    O3'     109.500   418.4000
@@ -1015,8 +937,6 @@ BEND C_C4'_C3'_O3'        C       C4'    C3'    O3'     109.500   418.4000
 BEND RC_C4'_C3'_O3'        RC      C4'    C3'    O3'     109.500   418.4000
 BEND C_H3'_C3'_O3'        C       H3'    C3'    O3'     109.500   418.4000
 BEND RC_H3'_C3'_O3'        RC      H3'    C3'    O3'     109.500   418.4000
-BEND C_C1'_C2'_C3'        C       C1'    C2'    C3'     109.500   334.7200
-BEND RC_C1'_C2'_C3'        RC      C1'    C2'    C3'     109.500   334.7200
 BEND C_C1'_C2'_H2'        C       C1'    C2'    H2'     109.500   418.4000
 BEND C_C1'_C2'_H2'1       C       C1'    C2'    H2'1    109.500   418.4000
 BEND RC_C1'_C2'_H2'        RC      C1'    C2'    H2'     109.500   418.4000
@@ -1069,18 +989,10 @@ STRETCH G_C5'_C4'          G       C5'    C4'      1.5260    2594.08
 STRETCH RG_C5'_C4'          RG      C5'    C4'      1.5260    2594.08
 STRETCH G_C4'_H4'          G       C4'    H4'      1.0900    2845.12
 STRETCH RG_C4'_H4'          RG      C4'    H4'      1.0900    2845.12
-STRETCH G_C4'_O4'          G       C4'    O4'      1.4100    2677.76
-STRETCH RG_C4'_O4'          RG      C4'    O4'      1.4100    2677.76
-STRETCH G_C4'_C3'          G       C4'    C3'      1.5260    2594.08
-STRETCH RG_C4'_C3'          RG      C4'    C3'      1.5260    2594.08
-STRETCH G_O4'_C1'          G       O4'    C1'      1.4100    2677.76
-STRETCH RG_O4'_C1'          RG      O4'    C1'      1.4100    2677.76
 STRETCH G_C1'_H1'          G       C1'    H1'      1.0900    2845.12
 STRETCH RG_C1'_H1'          RG      C1'    H1'      1.0900    2845.12
 STRETCH G_C1'_N9           G       C1'    N9       1.4750    2820.02
 STRETCH RG_C1'_N9           RG      C1'    N9       1.4750    2820.02
-STRETCH G_C1'_C2'          G       C1'    C2'      1.5260    2594.08
-STRETCH RG_C1'_C2'          RG      C1'    C2'      1.5260    2594.08
 STRETCH G_N9_C8           G       N9     C8       1.3710    3681.92
 STRETCH RG_N9_C8           RG      N9     C8       1.3710    3681.92
 STRETCH G_N9_C4           G       N9     C4       1.3740    3648.45
@@ -1115,8 +1027,6 @@ STRETCH G_N3_C4           G       N3     C4       1.3540    3857.65
 STRETCH RG_N3_C4           RG      N3     C4       1.3540    3857.65
 STRETCH G_C3'_H3'          G       C3'    H3'      1.0900    2845.12
 STRETCH RG_C3'_H3'          RG      C3'    H3'      1.0900    2845.12
-STRETCH G_C3'_C2'          G       C3'    C2'      1.5260    2594.08
-STRETCH RG_C3'_C2'          RG      C3'    C2'      1.5260    2594.08
 STRETCH G_C3'_O3'          G       C3'    O3'      1.4100    2677.76
 STRETCH RG_C3'_O3'          RG      C3'    O3'      1.4100    2677.76
 STRETCH G_C2'_H2'          G       C2'    H2'      1.0900    2845.12
@@ -1191,22 +1101,16 @@ BEND G_C3'_C4'_C5'        G       C3'    C4'    C5'     109.500   334.7200
 BEND RG_C3'_C4'_C5'        RG      C3'    C4'    C5'     109.500   334.7200
 BEND G_C3'_C4'_H4'        G       C3'    C4'    H4'     109.500   418.4000
 BEND RG_C3'_C4'_H4'        RG      C3'    C4'    H4'     109.500   418.4000
-BEND G_C3'_C4'_O4'        G       C3'    C4'    O4'     109.500   418.4000
-BEND RG_C3'_C4'_O4'        RG      C3'    C4'    O4'     109.500   418.4000
 BEND G_C5'_C4'_H4'        G       C5'    C4'    H4'     109.500   418.4000
 BEND RG_C5'_C4'_H4'        RG      C5'    C4'    H4'     109.500   418.4000
 BEND G_C5'_C4'_O4'        G       C5'    C4'    O4'     109.500   418.4000
 BEND RG_C5'_C4'_O4'        RG      C5'    C4'    O4'     109.500   418.4000
 BEND G_H4'_C4'_O4'        G       H4'    C4'    O4'     109.500   418.4000
 BEND RG_H4'_C4'_O4'        RG      H4'    C4'    O4'     109.500   418.4000
-BEND G_C1'_O4'_C4'        G       C1'    O4'    C4'     109.500   502.0800
-BEND RG_C1'_O4'_C4'        RG      C1'    O4'    C4'     109.500   502.0800
 BEND G_C2'_C1'_H1'        G       C2'    C1'    H1'     109.500   418.4000
 BEND RG_C2'_C1'_H1'        RG      C2'    C1'    H1'     109.500   418.4000
 BEND G_C2'_C1'_N9         G       C2'    C1'    N9      109.500   418.4000
 BEND RG_C2'_C1'_N9         RG      C2'    C1'    N9      109.500   418.4000
-BEND G_C2'_C1'_O4'        G       C2'    C1'    O4'     109.500   418.4000
-BEND RG_C2'_C1'_O4'        RG      C2'    C1'    O4'     109.500   418.4000
 BEND G_H1'_C1'_N9         G       H1'    C1'    N9      109.500   418.4000
 BEND RG_H1'_C1'_N9         RG      H1'    C1'    N9      109.500   418.4000
 BEND G_H1'_C1'_O4'        G       H1'    C1'    O4'     109.500   418.4000
@@ -1265,8 +1169,6 @@ BEND G_C5_C4_N9         G       C5     C4     N9      106.200   585.7600
 BEND RG_C5_C4_N9         RG      C5     C4     N9      106.200   585.7600
 BEND G_N3_C4_N9         G       N3     C4     N9      126.200   585.7600
 BEND RG_N3_C4_N9         RG      N3     C4     N9      126.200   585.7600
-BEND G_C2'_C3'_C4'        G       C2'    C3'    C4'     109.500   334.7200
-BEND RG_C2'_C3'_C4'        RG      C2'    C3'    C4'     109.500   334.7200
 BEND G_C2'_C3'_H3'        G       C2'    C3'    H3'     109.500   418.4000
 BEND RG_C2'_C3'_H3'        RG      C2'    C3'    H3'     109.500   418.4000
 BEND G_C2'_C3'_O3'        G       C2'    C3'    O3'     109.500   418.4000
@@ -1277,8 +1179,6 @@ BEND G_C4'_C3'_O3'        G       C4'    C3'    O3'     109.500   418.4000
 BEND RG_C4'_C3'_O3'        RG      C4'    C3'    O3'     109.500   418.4000
 BEND G_H3'_C3'_O3'        G       H3'    C3'    O3'     109.500   418.4000
 BEND RG_H3'_C3'_O3'        RG      H3'    C3'    O3'     109.500   418.4000
-BEND G_C1'_C2'_C3'        G       C1'    C2'    C3'     109.500   334.7200
-BEND RG_C1'_C2'_C3'        RG      C1'    C2'    C3'     109.500   334.7200
 BEND G_C1'_C2'_H2'        G       C1'    C2'    H2'     109.500   418.4000
 BEND G_C1'_C2'_H2'1       G       C1'    C2'    H2'1    109.500   418.4000
 BEND RG_C1'_C2'_H2'        RG      C1'    C2'    H2'     109.500   418.4000
@@ -1331,18 +1231,10 @@ STRETCH U_C5'_C4'          U       C5'    C4'      1.5260    2594.08
 STRETCH RU_C5'_C4'          RU      C5'    C4'      1.5260    2594.08
 STRETCH U_C4'_H4'          U       C4'    H4'      1.0900    2845.12
 STRETCH RU_C4'_H4'          RU      C4'    H4'      1.0900    2845.12
-STRETCH U_C4'_O4'          U       C4'    O4'      1.4100    2677.76
-STRETCH RU_C4'_O4'          RU      C4'    O4'      1.4100    2677.76
-STRETCH U_C4'_C3'          U       C4'    C3'      1.5260    2594.08
-STRETCH RU_C4'_C3'          RU      C4'    C3'      1.5260    2594.08
-STRETCH U_O4'_C1'          U       O4'    C1'      1.4100    2677.76
-STRETCH RU_O4'_C1'          RU      O4'    C1'      1.4100    2677.76
 STRETCH U_C1'_H1'          U       C1'    H1'      1.0900    2845.12
 STRETCH RU_C1'_H1'          RU      C1'    H1'      1.0900    2845.12
 STRETCH U_C1'_N1           U       C1'    N1       1.4750    2820.02
 STRETCH RU_C1'_N1           RU      C1'    N1       1.4750    2820.02
-STRETCH U_C1'_C2'          U       C1'    C2'      1.5260    2594.08
-STRETCH RU_C1'_C2'          RU      C1'    C2'      1.5260    2594.08
 STRETCH U_N1_C6           U       N1     C6       1.3650    3748.86
 STRETCH RU_N1_C6           RU      N1     C6       1.3650    3748.86
 STRETCH U_N1_C2           U       N1     C2       1.3830    3548.03
@@ -1367,8 +1259,6 @@ STRETCH U_C2_O2           U       C2     O2       1.2290    4769.76
 STRETCH RU_C2_O2           RU      C2     O2       1.2290    4769.76
 STRETCH U_C3'_H3'          U       C3'    H3'      1.0900    2845.12
 STRETCH RU_C3'_H3'          RU      C3'    H3'      1.0900    2845.12
-STRETCH U_C3'_C2'          U       C3'    C2'      1.5260    2594.08
-STRETCH RU_C3'_C2'          RU      C3'    C2'      1.5260    2594.08
 STRETCH U_C3'_O3'          U       C3'    O3'      1.4100    2677.76
 STRETCH RU_C3'_O3'          RU      C3'    O3'      1.4100    2677.76
 STRETCH U_C2'_H2'          U       C2'    H2'      1.0900    2845.12
@@ -1443,22 +1333,16 @@ BEND U_C3'_C4'_C5'        U       C3'    C4'    C5'     109.500   334.7200
 BEND RU_C3'_C4'_C5'        RU      C3'    C4'    C5'     109.500   334.7200
 BEND U_C3'_C4'_H4'        U       C3'    C4'    H4'     109.500   418.4000
 BEND RU_C3'_C4'_H4'        RU      C3'    C4'    H4'     109.500   418.4000
-BEND U_C3'_C4'_O4'        U       C3'    C4'    O4'     109.500   418.4000
-BEND RU_C3'_C4'_O4'        RU      C3'    C4'    O4'     109.500   418.4000
 BEND U_C5'_C4'_H4'        U       C5'    C4'    H4'     109.500   418.4000
 BEND RU_C5'_C4'_H4'        RU      C5'    C4'    H4'     109.500   418.4000
 BEND U_C5'_C4'_O4'        U       C5'    C4'    O4'     109.500   418.4000
 BEND RU_C5'_C4'_O4'        RU      C5'    C4'    O4'     109.500   418.4000
 BEND U_H4'_C4'_O4'        U       H4'    C4'    O4'     109.500   418.4000
 BEND RU_H4'_C4'_O4'        RU      H4'    C4'    O4'     109.500   418.4000
-BEND U_C1'_O4'_C4'        U       C1'    O4'    C4'     109.500   502.0800
-BEND RU_C1'_O4'_C4'        RU      C1'    O4'    C4'     109.500   502.0800
 BEND U_C2'_C1'_H1'        U       C2'    C1'    H1'     109.500   418.4000
 BEND RU_C2'_C1'_H1'        RU      C2'    C1'    H1'     109.500   418.4000
 BEND U_C2'_C1'_N1         U       C2'    C1'    N1      109.500   418.4000
 BEND RU_C2'_C1'_N1         RU      C2'    C1'    N1      109.500   418.4000
-BEND U_C2'_C1'_O4'        U       C2'    C1'    O4'     109.500   418.4000
-BEND RU_C2'_C1'_O4'        RU      C2'    C1'    O4'     109.500   418.4000
 BEND U_H1'_C1'_N1         U       H1'    C1'    N1      109.500   418.4000
 BEND RU_H1'_C1'_N1         RU      H1'    C1'    N1      109.500   418.4000
 BEND U_H1'_C1'_O4'        U       H1'    C1'    O4'     109.500   418.4000
@@ -1501,8 +1385,6 @@ BEND U_N1_C2_O2         U       N1     C2     O2      120.900   669.4400
 BEND RU_N1_C2_O2         RU      N1     C2     O2      120.900   669.4400
 BEND U_N3_C2_O2         U       N3     C2     O2      120.600   669.4400
 BEND RU_N3_C2_O2         RU      N3     C2     O2      120.600   669.4400
-BEND U_C2'_C3'_C4'        U       C2'    C3'    C4'     109.500   334.7200
-BEND RU_C2'_C3'_C4'        RU      C2'    C3'    C4'     109.500   334.7200
 BEND U_C2'_C3'_H3'        U       C2'    C3'    H3'     109.500   418.4000
 BEND RU_C2'_C3'_H3'        RU      C2'    C3'    H3'     109.500   418.4000
 BEND U_C2'_C3'_O3'        U       C2'    C3'    O3'     109.500   418.4000
@@ -1513,8 +1395,6 @@ BEND U_C4'_C3'_O3'        U       C4'    C3'    O3'     109.500   418.4000
 BEND RU_C4'_C3'_O3'        RU      C4'    C3'    O3'     109.500   418.4000
 BEND U_H3'_C3'_O3'        U       H3'    C3'    O3'     109.500   418.4000
 BEND RU_H3'_C3'_O3'        RU      H3'    C3'    O3'     109.500   418.4000
-BEND U_C1'_C2'_C3'        U       C1'    C2'    C3'     109.500   334.7200
-BEND RU_C1'_C2'_C3'        RU      C1'    C2'    C3'     109.500   334.7200
 BEND U_C1'_C2'_H2'        U       C1'    C2'    H2'     109.500   418.4000
 BEND U_C1'_C2'_H2'1       U       C1'    C2'    H2'1    109.500   418.4000
 BEND RU_C1'_C2'_H2'        RU      C1'    C2'    H2'     109.500   418.4000
@@ -1570,13 +1450,6 @@ GHOSTPARTICLE GHgamman3B2      DA      C5'   C4'    O5'     1.4100  109.50   240
 GHOSTPARTICLE GHgamman3C0      DA      C4'   C5'    H4'     1.0900  109.50    -2.200
 GHOSTPARTICLE GHgamman2B1      DA      C5'   C4'    O5'     1.4100  109.50   180.000
 GHOSTPARTICLE GHgamman2C0      DA      C4'   C5'    H4'     1.0900  109.50    87.781
-GHOSTPARTICLE GHdeltan3B0      DA      C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      DA      C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      DA      C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      DA      C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      DA      C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      DA      C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      DA      C3'   C4'    H3'     1.0900  109.50   119.965
 GHOSTPARTICLE GHepsilonn3B0    DA      C3'   O3'    H3'     1.0900  109.50     0.000
 GHOSTPARTICLE GHepsilonn3B1    DA      C3'   O3'    H3'     1.0900  109.50   120.000
 GHOSTPARTICLE GHepsilonn3B2    DA      C3'   O3'    H3'     1.0900  109.50   240.000
@@ -1591,30 +1464,6 @@ GHOSTPARTICLE GHzetan3C0       DA      +P    O3'    +O5'    1.6100  102.60    -0
 GHOSTPARTICLE GHzetan2B1       DA      O3'   +P     C3'     1.4100  120.50   180.000
 GHOSTPARTICLE GHzetan2C0       DA      +P    O3'    +O5'    1.6100  102.60    -4.559
 GHOSTPARTICLE GHzetan1C0       DA      +P    O3'    +O5'    1.6100  102.60   181.753
-GHOSTPARTICLE GHring_C1_C2n3B0 DA      C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 DA      C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 DA      C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 DA      C2'   C1'    C3'     1.5260  109.50    -0.015
-GHOSTPARTICLE GHring_C1_C2n1C0 DA      C2'   C1'    C3'     1.5260  109.50     0.053
-GHOSTPARTICLE GHring_C2_C3n3B0 DA      C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 DA      C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 DA      C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 DA      C3'   C2'    C4'     1.5260  109.50     0.005
-GHOSTPARTICLE GHring_C2_C3n2B1 DA      C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n2C0 DA      C3'   C2'    C4'     1.5260  109.50    90.000
-GHOSTPARTICLE GHring_C2_C3n1C0 DA      C3'   C2'    C4'     1.5260  109.50   289.069
-GHOSTPARTICLE GHring_C4_O4n3B0 DA      C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 DA      C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 DA      C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 DA      O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 DA      C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 DA      O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_O4_C1n3B0 DA      O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 DA      O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 DA      O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 DA      C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 DA      O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 DA      C1'   O4'    H1'     1.0900  109.50    56.503
 GHOSTPARTICLE GHchin1B0        DA      C1'   N9     O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHchin1C0        DA      N9    C1'    C8      1.3710  128.80   220.592
 GHOSTPARTICLE GHchin2B1        DA      C1'   N9     O4'     1.4100  109.50   180.000
@@ -1661,13 +1510,6 @@ GHOSTPARTICLE GHgamman3B2      DC      C5'   C4'    O5'     1.4100  109.50   240
 GHOSTPARTICLE GHgamman3C0      DC      C4'   C5'    H4'     1.0900  109.50    -2.200
 GHOSTPARTICLE GHgamman2B1      DC      C5'   C4'    O5'     1.4100  109.50   180.000
 GHOSTPARTICLE GHgamman2C0      DC      C4'   C5'    H4'     1.0900  109.50    87.781
-GHOSTPARTICLE GHdeltan3B0      DC      C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      DC      C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      DC      C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      DC      C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      DC      C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      DC      C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      DC      C3'   C4'    H3'     1.0900  109.50   119.965
 GHOSTPARTICLE GHepsilonn3B0    DC      C3'   O3'    H3'     1.0900  109.50     0.000
 GHOSTPARTICLE GHepsilonn3B1    DC      C3'   O3'    H3'     1.0900  109.50   120.000
 GHOSTPARTICLE GHepsilonn3B2    DC      C3'   O3'    H3'     1.0900  109.50   240.000
@@ -1682,30 +1524,6 @@ GHOSTPARTICLE GHzetan3C0       DC      +P    O3'    +O5'    1.6100  102.60    -0
 GHOSTPARTICLE GHzetan2B1       DC      O3'   +P     C3'     1.4100  120.50   180.000
 GHOSTPARTICLE GHzetan2C0       DC      +P    O3'    +O5'    1.6100  102.60    -4.559
 GHOSTPARTICLE GHzetan1C0       DC      +P    O3'    +O5'    1.6100  102.60   181.753
-GHOSTPARTICLE GHring_C1_C2n3B0 DC      C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 DC      C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 DC      C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 DC      C2'   C1'    C3'     1.5260  109.50    -0.015
-GHOSTPARTICLE GHring_C1_C2n1C0 DC      C2'   C1'    C3'     1.5260  109.50     0.053
-GHOSTPARTICLE GHring_C2_C3n3B0 DC      C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 DC      C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 DC      C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 DC      C3'   C2'    C4'     1.5260  109.50     0.005
-GHOSTPARTICLE GHring_C2_C3n2B1 DC      C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n2C0 DC      C3'   C2'    C4'     1.5260  109.50    90.000
-GHOSTPARTICLE GHring_C2_C3n1C0 DC      C3'   C2'    C4'     1.5260  109.50   289.069
-GHOSTPARTICLE GHring_C4_O4n3B0 DC      C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 DC      C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 DC      C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 DC      O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 DC      C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 DC      O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_O4_C1n3B0 DC      O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 DC      O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 DC      O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 DC      C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 DC      O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 DC      C1'   O4'    H1'     1.0900  109.50    56.503
 GHOSTPARTICLE GHchin1B0        DC      C1'   N1     O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHchin1C0        DC      N1    C1'    C6      1.3650  121.20   291.317
 GHOSTPARTICLE GHchin2B1        DC      C1'   N1     O4'     1.4100  109.50   180.000
@@ -1758,13 +1576,6 @@ GHOSTPARTICLE GHgamman3B2      DG      C5'   C4'    O5'     1.4100  109.50   240
 GHOSTPARTICLE GHgamman3C0      DG      C4'   C5'    H4'     1.0900  109.50    -2.200
 GHOSTPARTICLE GHgamman2B1      DG      C5'   C4'    O5'     1.4100  109.50   180.000
 GHOSTPARTICLE GHgamman2C0      DG      C4'   C5'    H4'     1.0900  109.50    87.781
-GHOSTPARTICLE GHdeltan3B0      DG      C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      DG      C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      DG      C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      DG      C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      DG      C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      DG      C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      DG      C3'   C4'    H3'     1.0900  109.50   119.965
 GHOSTPARTICLE GHepsilonn3B0    DG      C3'   O3'    H3'     1.0900  109.50     0.000
 GHOSTPARTICLE GHepsilonn3B1    DG      C3'   O3'    H3'     1.0900  109.50   120.000
 GHOSTPARTICLE GHepsilonn3B2    DG      C3'   O3'    H3'     1.0900  109.50   240.000
@@ -1779,30 +1590,6 @@ GHOSTPARTICLE GHzetan3C0       DG      +P    O3'    +O5'    1.6100  102.60    -0
 GHOSTPARTICLE GHzetan2B1       DG      O3'   +P     C3'     1.4100  120.50   180.000
 GHOSTPARTICLE GHzetan2C0       DG      +P    O3'    +O5'    1.6100  102.60    -4.559
 GHOSTPARTICLE GHzetan1C0       DG      +P    O3'    +O5'    1.6100  102.60   181.753
-GHOSTPARTICLE GHring_C1_C2n3B0 DG      C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 DG      C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 DG      C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 DG      C2'   C1'    C3'     1.5260  109.50    -0.015
-GHOSTPARTICLE GHring_C1_C2n1C0 DG      C2'   C1'    C3'     1.5260  109.50     0.053
-GHOSTPARTICLE GHring_C2_C3n3B0 DG      C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 DG      C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 DG      C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 DG      C3'   C2'    C4'     1.5260  109.50     0.005
-GHOSTPARTICLE GHring_C2_C3n2B1 DG      C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n2C0 DG      C3'   C2'    C4'     1.5260  109.50    90.000
-GHOSTPARTICLE GHring_C2_C3n1C0 DG      C3'   C2'    C4'     1.5260  109.50   289.069
-GHOSTPARTICLE GHring_C4_O4n3B0 DG      C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 DG      C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 DG      C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 DG      O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 DG      C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 DG      O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_O4_C1n3B0 DG      O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 DG      O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 DG      O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 DG      C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 DG      O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 DG      C1'   O4'    H1'     1.0900  109.50    56.503
 GHOSTPARTICLE GHchin1B0        DG      C1'   N9     O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHchin1C0        DG      N9    C1'    C8      1.3710  128.80   223.925
 GHOSTPARTICLE GHchin2B1        DG      C1'   N9     O4'     1.4100  109.50   180.000
@@ -1852,13 +1639,6 @@ GHOSTPARTICLE GHgamman3B2      DT      C5'   C4'    O5'     1.4100  109.50   240
 GHOSTPARTICLE GHgamman3C0      DT      C4'   C5'    H4'     1.0900  109.50    -2.200
 GHOSTPARTICLE GHgamman2B1      DT      C5'   C4'    O5'     1.4100  109.50   180.000
 GHOSTPARTICLE GHgamman2C0      DT      C4'   C5'    H4'     1.0900  109.50    87.781
-GHOSTPARTICLE GHdeltan3B0      DT      C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      DT      C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      DT      C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      DT      C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      DT      C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      DT      C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      DT      C3'   C4'    H3'     1.0900  109.50   119.965
 GHOSTPARTICLE GHepsilonn3B0    DT      C3'   O3'    H3'     1.0900  109.50     0.000
 GHOSTPARTICLE GHepsilonn3B1    DT      C3'   O3'    H3'     1.0900  109.50   120.000
 GHOSTPARTICLE GHepsilonn3B2    DT      C3'   O3'    H3'     1.0900  109.50   240.000
@@ -1873,30 +1653,6 @@ GHOSTPARTICLE GHzetan3C0       DT      +P    O3'    +O5'    1.6100  102.60    -0
 GHOSTPARTICLE GHzetan2B1       DT      O3'   +P     C3'     1.4100  120.50   180.000
 GHOSTPARTICLE GHzetan2C0       DT      +P    O3'    +O5'    1.6100  102.60    -4.559
 GHOSTPARTICLE GHzetan1C0       DT      +P    O3'    +O5'    1.6100  102.60   181.753
-GHOSTPARTICLE GHring_C1_C2n3B0 DT      C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 DT      C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 DT      C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 DT      C2'   C1'    C3'     1.5260  109.50    -0.015
-GHOSTPARTICLE GHring_C1_C2n1C0 DT      C2'   C1'    C3'     1.5260  109.50     0.053
-GHOSTPARTICLE GHring_C2_C3n3B0 DT      C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 DT      C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 DT      C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 DT      C3'   C2'    C4'     1.5260  109.50     0.005
-GHOSTPARTICLE GHring_C2_C3n2B1 DT      C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n2C0 DT      C3'   C2'    C4'     1.5260  109.50    90.000
-GHOSTPARTICLE GHring_C2_C3n1C0 DT      C3'   C2'    C4'     1.5260  109.50   289.069
-GHOSTPARTICLE GHring_C4_O4n3B0 DT      C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 DT      C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 DT      C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 DT      O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 DT      C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 DT      O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_O4_C1n3B0 DT      O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 DT      O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 DT      O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 DT      C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 DT      O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 DT      C1'   O4'    H1'     1.0900  109.50    56.503
 GHOSTPARTICLE GHchin1B0        DT      C1'   N1     O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHchin1C0        DT      N1    C1'    C6      1.3650  121.20   274.706
 GHOSTPARTICLE GHchin2B1        DT      C1'   N1     O4'     1.4100  109.50   180.000
@@ -1961,20 +1717,6 @@ GHOSTPARTICLE GHgamman3B2      RA      C5'   C4'    O5'     1.4100  109.50   240
 GHOSTPARTICLE GHgamman3C0      RA      C4'   C5'    H4'     1.0900  109.50    -2.200
 GHOSTPARTICLE GHgamman2B1      RA      C5'   C4'    O5'     1.4100  109.50   180.000
 GHOSTPARTICLE GHgamman2C0      RA      C4'   C5'    H4'     1.0900  109.50    87.781
-GHOSTPARTICLE GHdeltan3B0      A       C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      A       C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      A       C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      A       C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      A       C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      A       C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      A       C3'   C4'    H3'     1.0900  109.50   119.965
-GHOSTPARTICLE GHdeltan3B0      RA      C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      RA      C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      RA      C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      RA      C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      RA      C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      RA      C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      RA      C3'   C4'    H3'     1.0900  109.50   119.965
 GHOSTPARTICLE GHepsilonn3B0    A       C3'   O3'    H3'     1.0900  109.50     0.000
 GHOSTPARTICLE GHepsilonn3B1    A       C3'   O3'    H3'     1.0900  109.50   120.000
 GHOSTPARTICLE GHepsilonn3B2    A       C3'   O3'    H3'     1.0900  109.50   240.000
@@ -1995,56 +1737,6 @@ GHOSTPARTICLE GHzetan3B2       RA      O3'   +P     C3'     1.4100  120.50   240
 GHOSTPARTICLE GHzetan3C0       RA      +P    O3'    +O5'    1.6100  102.60    -0.008
 GHOSTPARTICLE GHzetan2B1       RA      O3'   +P     C3'     1.4100  120.50   180.000
 GHOSTPARTICLE GHzetan2C0       RA      +P    O3'    +O5'    1.6100  102.60     0.000
-GHOSTPARTICLE GHring_C1_C2n3B0 A       C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 A       C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 A       C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 A       C2'   C1'    C3'     1.5260  109.50    -0.075
-GHOSTPARTICLE GHring_C1_C2n1C0 A       C2'   C1'    C3'     1.5260  109.50   299.965
-GHOSTPARTICLE GHring_C1_C2n2B1 A       C1'   C2'    O4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_C1_C2n2C0 A       C2'   C1'    C3'     1.5260  109.50    59.929
-GHOSTPARTICLE GHring_C1_C2n3B0 RA      C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 RA      C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 RA      C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 RA      C2'   C1'    C3'     1.5260  109.50    -0.075
-GHOSTPARTICLE GHring_C1_C2n1C0 RA      C2'   C1'    C3'     1.5260  109.50   299.965
-GHOSTPARTICLE GHring_C1_C2n2B1 RA      C1'   C2'    O4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_C1_C2n2C0 RA      C2'   C1'    C3'     1.5260  109.50    59.929
-GHOSTPARTICLE GHring_C2_C3n3B0 A       C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 A       C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 A       C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 A       C3'   C2'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n2B1 A       C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n1C0 A       C3'   C2'    C4'     1.5260  109.50   360.000
-GHOSTPARTICLE GHring_C2_C3n3B0 RA      C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 RA      C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 RA      C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 RA      C3'   C2'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n2B1 RA      C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n1C0 RA      C3'   C2'    C4'     1.5260  109.50   360.000
-GHOSTPARTICLE GHring_C4_O4n3B0 A       C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 A       C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 A       C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 A       O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 A       C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 A       O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_C4_O4n3B0 RA      C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 RA      C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 RA      C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 RA      O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 RA      C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 RA      O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_O4_C1n3B0 A       O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 A       O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 A       O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 A       C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 A       O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 A       C1'   O4'    H1'     1.0900  109.50    56.503
-GHOSTPARTICLE GHring_O4_C1n3B0 RA      O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 RA      O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 RA      O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 RA      C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 RA      O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 RA      C1'   O4'    H1'     1.0900  109.50    56.503
 GHOSTPARTICLE GHchin1B0        A       C1'   N9     O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHchin1C0        A       N9    C1'    C8      1.3710  128.80   248.790
 GHOSTPARTICLE GHchin2B1        A       C1'   N9     O4'     1.4100  109.50   180.000
@@ -2141,20 +1833,6 @@ GHOSTPARTICLE GHgamman3B2      RC      C5'   C4'    O5'     1.4100  109.50   240
 GHOSTPARTICLE GHgamman3C0      RC      C4'   C5'    H4'     1.0900  109.50    -2.200
 GHOSTPARTICLE GHgamman2B1      RC      C5'   C4'    O5'     1.4100  109.50   180.000
 GHOSTPARTICLE GHgamman2C0      RC      C4'   C5'    H4'     1.0900  109.50    87.781
-GHOSTPARTICLE GHdeltan3B0      C       C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      C       C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      C       C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      C       C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      C       C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      C       C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      C       C3'   C4'    H3'     1.0900  109.50   119.965
-GHOSTPARTICLE GHdeltan3B0      RC      C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      RC      C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      RC      C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      RC      C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      RC      C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      RC      C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      RC      C3'   C4'    H3'     1.0900  109.50   119.965
 GHOSTPARTICLE GHepsilonn3B0    C       C3'   O3'    H3'     1.0900  109.50     0.000
 GHOSTPARTICLE GHepsilonn3B1    C       C3'   O3'    H3'     1.0900  109.50   120.000
 GHOSTPARTICLE GHepsilonn3B2    C       C3'   O3'    H3'     1.0900  109.50   240.000
@@ -2175,56 +1853,6 @@ GHOSTPARTICLE GHzetan3B2       RC      O3'   +P     C3'     1.4100  120.50   240
 GHOSTPARTICLE GHzetan3C0       RC      +P    O3'    +O5'    1.6100  102.60    -0.008
 GHOSTPARTICLE GHzetan2B1       RC      O3'   +P     C3'     1.4100  120.50   180.000
 GHOSTPARTICLE GHzetan2C0       RC      +P    O3'    +O5'    1.6100  102.60     0.000
-GHOSTPARTICLE GHring_C1_C2n3B0 C       C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 C       C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 C       C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 C       C2'   C1'    C3'     1.5260  109.50    -0.075
-GHOSTPARTICLE GHring_C1_C2n1C0 C       C2'   C1'    C3'     1.5260  109.50   299.965
-GHOSTPARTICLE GHring_C1_C2n2B1 C       C1'   C2'    O4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_C1_C2n2C0 C       C2'   C1'    C3'     1.5260  109.50    59.929
-GHOSTPARTICLE GHring_C1_C2n3B0 RC      C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 RC      C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 RC      C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 RC      C2'   C1'    C3'     1.5260  109.50    -0.075
-GHOSTPARTICLE GHring_C1_C2n1C0 RC      C2'   C1'    C3'     1.5260  109.50   299.965
-GHOSTPARTICLE GHring_C1_C2n2B1 RC      C1'   C2'    O4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_C1_C2n2C0 RC      C2'   C1'    C3'     1.5260  109.50    59.929
-GHOSTPARTICLE GHring_C2_C3n3B0 C       C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 C       C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 C       C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 C       C3'   C2'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n2B1 C       C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n1C0 C       C3'   C2'    C4'     1.5260  109.50   360.000
-GHOSTPARTICLE GHring_C2_C3n3B0 RC      C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 RC      C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 RC      C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 RC      C3'   C2'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n2B1 RC      C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n1C0 RC      C3'   C2'    C4'     1.5260  109.50   360.000
-GHOSTPARTICLE GHring_C4_O4n3B0 C       C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 C       C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 C       C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 C       O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 C       C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 C       O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_C4_O4n3B0 RC      C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 RC      C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 RC      C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 RC      O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 RC      C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 RC      O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_O4_C1n3B0 C       O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 C       O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 C       O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 C       C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 C       O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 C       C1'   O4'    H1'     1.0900  109.50    56.503
-GHOSTPARTICLE GHring_O4_C1n3B0 RC      O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 RC      O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 RC      O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 RC      C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 RC      O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 RC      C1'   O4'    H1'     1.0900  109.50    56.503
 GHOSTPARTICLE GHchin1B0        C       C1'   N1     O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHchin1C0        C       N1    C1'    C6      1.3650  121.20   326.989
 GHOSTPARTICLE GHchin2B1        C       C1'   N1     O4'     1.4100  109.50   180.000
@@ -2327,20 +1955,6 @@ GHOSTPARTICLE GHgamman3B2      RG      C5'   C4'    O5'     1.4100  109.50   240
 GHOSTPARTICLE GHgamman3C0      RG      C4'   C5'    H4'     1.0900  109.50    -2.200
 GHOSTPARTICLE GHgamman2B1      RG      C5'   C4'    O5'     1.4100  109.50   180.000
 GHOSTPARTICLE GHgamman2C0      RG      C4'   C5'    H4'     1.0900  109.50    87.781
-GHOSTPARTICLE GHdeltan3B0      G       C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      G       C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      G       C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      G       C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      G       C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      G       C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      G       C3'   C4'    H3'     1.0900  109.50   119.965
-GHOSTPARTICLE GHdeltan3B0      RG      C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      RG      C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      RG      C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      RG      C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      RG      C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      RG      C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      RG      C3'   C4'    H3'     1.0900  109.50   119.965
 GHOSTPARTICLE GHepsilonn3B0    G       C3'   O3'    H3'     1.0900  109.50     0.000
 GHOSTPARTICLE GHepsilonn3B1    G       C3'   O3'    H3'     1.0900  109.50   120.000
 GHOSTPARTICLE GHepsilonn3B2    G       C3'   O3'    H3'     1.0900  109.50   240.000
@@ -2361,56 +1975,6 @@ GHOSTPARTICLE GHzetan3B2       RG      O3'   +P     C3'     1.4100  120.50   240
 GHOSTPARTICLE GHzetan3C0       RG      +P    O3'    +O5'    1.6100  102.60    -0.008
 GHOSTPARTICLE GHzetan2B1       RG      O3'   +P     C3'     1.4100  120.50   180.000
 GHOSTPARTICLE GHzetan2C0       RG      +P    O3'    +O5'    1.6100  102.60     0.000
-GHOSTPARTICLE GHring_C1_C2n3B0 G       C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 G       C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 G       C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 G       C2'   C1'    C3'     1.5260  109.50    -0.075
-GHOSTPARTICLE GHring_C1_C2n1C0 G       C2'   C1'    C3'     1.5260  109.50   299.965
-GHOSTPARTICLE GHring_C1_C2n2B1 G       C1'   C2'    O4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_C1_C2n2C0 G       C2'   C1'    C3'     1.5260  109.50    59.929
-GHOSTPARTICLE GHring_C1_C2n3B0 RG      C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 RG      C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 RG      C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 RG      C2'   C1'    C3'     1.5260  109.50    -0.075
-GHOSTPARTICLE GHring_C1_C2n1C0 RG      C2'   C1'    C3'     1.5260  109.50   299.965
-GHOSTPARTICLE GHring_C1_C2n2B1 RG      C1'   C2'    O4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_C1_C2n2C0 RG      C2'   C1'    C3'     1.5260  109.50    59.929
-GHOSTPARTICLE GHring_C2_C3n3B0 G       C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 G       C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 G       C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 G       C3'   C2'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n2B1 G       C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n1C0 G       C3'   C2'    C4'     1.5260  109.50   360.000
-GHOSTPARTICLE GHring_C2_C3n3B0 RG      C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 RG      C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 RG      C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 RG      C3'   C2'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n2B1 RG      C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n1C0 RG      C3'   C2'    C4'     1.5260  109.50   360.000
-GHOSTPARTICLE GHring_C4_O4n3B0 G       C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 G       C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 G       C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 G       O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 G       C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 G       O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_C4_O4n3B0 RG      C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 RG      C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 RG      C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 RG      O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 RG      C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 RG      O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_O4_C1n3B0 G       O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 G       O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 G       O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 G       C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 G       O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 G       C1'   O4'    H1'     1.0900  109.50    56.503
-GHOSTPARTICLE GHring_O4_C1n3B0 RG      O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 RG      O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 RG      O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 RG      C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 RG      O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 RG      C1'   O4'    H1'     1.0900  109.50    56.503
 GHOSTPARTICLE GHchin1B0        G       C1'   N9     O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHchin1C0        G       N9    C1'    C8      1.3710  128.80   254.756
 GHOSTPARTICLE GHchin2B1        G       C1'   N9     O4'     1.4100  109.50   180.000
@@ -2513,20 +2077,6 @@ GHOSTPARTICLE GHgamman3B2      RU      C5'   C4'    O5'     1.4100  109.50   240
 GHOSTPARTICLE GHgamman3C0      RU      C4'   C5'    H4'     1.0900  109.50    -2.200
 GHOSTPARTICLE GHgamman2B1      RU      C5'   C4'    O5'     1.4100  109.50   180.000
 GHOSTPARTICLE GHgamman2C0      RU      C4'   C5'    H4'     1.0900  109.50    87.781
-GHOSTPARTICLE GHdeltan3B0      U       C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      U       C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      U       C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      U       C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      U       C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      U       C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      U       C3'   C4'    H3'     1.0900  109.50   119.965
-GHOSTPARTICLE GHdeltan3B0      RU      C4'   C3'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHdeltan3B1      RU      C4'   C3'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHdeltan3B2      RU      C4'   C3'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHdeltan3C0      RU      C3'   C4'    H3'     1.0900  109.50    -0.035
-GHOSTPARTICLE GHdeltan2B1      RU      C4'   C3'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHdeltan2C0      RU      C3'   C4'    H3'     1.0900  109.50   -60.035
-GHOSTPARTICLE GHdeltan1C0      RU      C3'   C4'    H3'     1.0900  109.50   119.965
 GHOSTPARTICLE GHepsilonn3B0    U       C3'   O3'    H3'     1.0900  109.50     0.000
 GHOSTPARTICLE GHepsilonn3B1    U       C3'   O3'    H3'     1.0900  109.50   120.000
 GHOSTPARTICLE GHepsilonn3B2    U       C3'   O3'    H3'     1.0900  109.50   240.000
@@ -2547,56 +2097,6 @@ GHOSTPARTICLE GHzetan3B2       RU      O3'   +P     C3'     1.4100  120.50   240
 GHOSTPARTICLE GHzetan3C0       RU      +P    O3'    +O5'    1.6100  102.60    -0.008
 GHOSTPARTICLE GHzetan2B1       RU      O3'   +P     C3'     1.4100  120.50   180.000
 GHOSTPARTICLE GHzetan2C0       RU      +P    O3'    +O5'    1.6100  102.60     0.000
-GHOSTPARTICLE GHring_C1_C2n3B0 U       C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 U       C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 U       C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 U       C2'   C1'    C3'     1.5260  109.50    -0.075
-GHOSTPARTICLE GHring_C1_C2n1C0 U       C2'   C1'    C3'     1.5260  109.50   299.965
-GHOSTPARTICLE GHring_C1_C2n2B1 U       C1'   C2'    O4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_C1_C2n2C0 U       C2'   C1'    C3'     1.5260  109.50    59.929
-GHOSTPARTICLE GHring_C1_C2n3B0 RU      C1'   C2'    O4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_C1_C2n3B1 RU      C1'   C2'    O4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_C1_C2n3B2 RU      C1'   C2'    O4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_C1_C2n3C0 RU      C2'   C1'    C3'     1.5260  109.50    -0.075
-GHOSTPARTICLE GHring_C1_C2n1C0 RU      C2'   C1'    C3'     1.5260  109.50   299.965
-GHOSTPARTICLE GHring_C1_C2n2B1 RU      C1'   C2'    O4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_C1_C2n2C0 RU      C2'   C1'    C3'     1.5260  109.50    59.929
-GHOSTPARTICLE GHring_C2_C3n3B0 U       C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 U       C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 U       C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 U       C3'   C2'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n2B1 U       C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n1C0 U       C3'   C2'    C4'     1.5260  109.50   360.000
-GHOSTPARTICLE GHring_C2_C3n3B0 RU      C2'   C3'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n3B1 RU      C2'   C3'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C2_C3n3B2 RU      C2'   C3'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C2_C3n3C0 RU      C3'   C2'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C2_C3n2B1 RU      C2'   C3'    C1'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C2_C3n1C0 RU      C3'   C2'    C4'     1.5260  109.50   360.000
-GHOSTPARTICLE GHring_C4_O4n3B0 U       C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 U       C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 U       C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 U       O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 U       C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 U       O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_C4_O4n3B0 RU      C4'   O4'    C5'     1.5260  109.50     0.000
-GHOSTPARTICLE GHring_C4_O4n3B1 RU      C4'   O4'    C5'     1.5260  109.50   120.000
-GHOSTPARTICLE GHring_C4_O4n3B2 RU      C4'   O4'    C5'     1.5260  109.50   240.000
-GHOSTPARTICLE GHring_C4_O4n3C0 RU      O4'   C4'    C1'     1.4100  109.50     0.035
-GHOSTPARTICLE GHring_C4_O4n2B1 RU      C4'   O4'    C5'     1.5260  109.50   180.000
-GHOSTPARTICLE GHring_C4_O4n2C0 RU      O4'   C4'    C1'     1.4100  109.50    60.035
-GHOSTPARTICLE GHring_O4_C1n3B0 U       O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 U       O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 U       O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 U       C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 U       O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 U       C1'   O4'    H1'     1.0900  109.50    56.503
-GHOSTPARTICLE GHring_O4_C1n3B0 RU      O4'   C1'    C4'     1.4100  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n3B1 RU      O4'   C1'    C4'     1.4100  109.50   120.000
-GHOSTPARTICLE GHring_O4_C1n3B2 RU      O4'   C1'    C4'     1.4100  109.50   240.000
-GHOSTPARTICLE GHring_O4_C1n3C0 RU      C1'   O4'    H1'     1.0900  109.50     0.000
-GHOSTPARTICLE GHring_O4_C1n2B1 RU      O4'   C1'    C4'     1.4100  109.50   180.000
-GHOSTPARTICLE GHring_O4_C1n2C0 RU      C1'   O4'    H1'     1.0900  109.50    56.503
 GHOSTPARTICLE GHchin1B0        U       C1'   N1     O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHchin1C0        U       N1    C1'    C6      1.3650  121.20   329.858
 GHOSTPARTICLE GHchin2B1        U       C1'   N1     O4'     1.4100  109.50   180.000
@@ -2688,12 +2188,6 @@ DIHEDRAL DA_gamma_n3_10               DA      NUCLEIC_BACKBONE GHgamman3B1      
 DIHEDRAL DA_gamma_n3_20               DA      NUCLEIC_BACKBONE GHgamman3B2      GHgamman3C0        2.8973   503.1464   26.24642
 DIHEDRAL DA_gamma_n2_00               DA      NUCLEIC_BACKBONE GHgamman1B0      GHgamman2C0        2.8973     3.3519   -0.00166
 DIHEDRAL DA_gamma_n2_10               DA      NUCLEIC_BACKBONE GHgamman2B1      GHgamman2C0        2.8973     3.3519   -0.00166
-DIHEDRAL DA_delta_n3_00               DA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DA_delta_n3_10               DA      NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DA_delta_n3_20               DA      NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DA_delta_n2_00               DA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL DA_delta_n2_10               DA      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL DA_delta_n1_00               DA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
 DIHEDRAL DA_epsilon_n3_00             DA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134    44.6199    1.42698
 DIHEDRAL DA_epsilon_n3_10             DA      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134    44.6199    1.42698
 DIHEDRAL DA_epsilon_n3_20             DA      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134    44.6199    1.42698
@@ -2706,26 +2200,6 @@ DIHEDRAL DA_zeta_n3_20                DA      NUCLEIC_BACKBONE GHzetan3B2       
 DIHEDRAL DA_zeta_n2_00                DA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    23.9197   -0.01962
 DIHEDRAL DA_zeta_n2_10                DA      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    23.9197   -0.01962
 DIHEDRAL DA_zeta_n1_00                DA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.0360    7.42355
-DIHEDRAL DA_ring_C1_C2_n3_00          DA      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DA_ring_C1_C2_n3_10          DA      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DA_ring_C1_C2_n3_20          DA      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DA_ring_C1_C2_n1_00          DA      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5474    0.67672
-DIHEDRAL DA_ring_C2_C3_n3_00          DA      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DA_ring_C2_C3_n3_10          DA      NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DA_ring_C2_C3_n3_20          DA      NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DA_ring_C2_C3_n2_00          DA      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n2C0   3.2580     4.9326   -0.00656
-DIHEDRAL DA_ring_C2_C3_n2_10          DA      NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n2C0   3.2580     4.9326   -0.00656
-DIHEDRAL DA_ring_C2_C3_n1_00          DA      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.4634   -0.46965
-DIHEDRAL DA_ring_C4_O4_n3_00          DA      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DA_ring_C4_O4_n3_10          DA      NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DA_ring_C4_O4_n3_20          DA      NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DA_ring_C4_O4_n2_00          DA      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL DA_ring_C4_O4_n2_10          DA      NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL DA_ring_O4_C1_n3_00          DA      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DA_ring_O4_C1_n3_10          DA      NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DA_ring_O4_C1_n3_20          DA      NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DA_ring_O4_C1_n2_00          DA      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL DA_ring_O4_C1_n2_10          DA      NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
 DIHEDRAL DA_chi_n1_00                 DA      NUCLEIC_CHI GHchin1B0        GHchin1C0          0.0000     4.5519   18.05838
 DIHEDRAL DA_chi_n2_00                 DA      NUCLEIC_CHI GHchin1B0        GHchin2C0          3.2825    79.9543   -0.02128
 DIHEDRAL DA_chi_n2_10                 DA      NUCLEIC_CHI GHchin2B1        GHchin2C0          3.2825    79.9543   -0.02128
@@ -2764,12 +2238,6 @@ DIHEDRAL DC_gamma_n3_10               DC      NUCLEIC_BACKBONE GHgamman3B1      
 DIHEDRAL DC_gamma_n3_20               DC      NUCLEIC_BACKBONE GHgamman3B2      GHgamman3C0        2.8973   503.1464   26.24642
 DIHEDRAL DC_gamma_n2_00               DC      NUCLEIC_BACKBONE GHgamman1B0      GHgamman2C0        2.8973     3.3519   -0.00166
 DIHEDRAL DC_gamma_n2_10               DC      NUCLEIC_BACKBONE GHgamman2B1      GHgamman2C0        2.8973     3.3519   -0.00166
-DIHEDRAL DC_delta_n3_00               DC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DC_delta_n3_10               DC      NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DC_delta_n3_20               DC      NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DC_delta_n2_00               DC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL DC_delta_n2_10               DC      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL DC_delta_n1_00               DC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
 DIHEDRAL DC_epsilon_n3_00             DC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134    44.6199    1.42698
 DIHEDRAL DC_epsilon_n3_10             DC      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134    44.6199    1.42698
 DIHEDRAL DC_epsilon_n3_20             DC      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134    44.6199    1.42698
@@ -2782,26 +2250,6 @@ DIHEDRAL DC_zeta_n3_20                DC      NUCLEIC_BACKBONE GHzetan3B2       
 DIHEDRAL DC_zeta_n2_00                DC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    23.9197   -0.01962
 DIHEDRAL DC_zeta_n2_10                DC      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    23.9197   -0.01962
 DIHEDRAL DC_zeta_n1_00                DC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.0360    7.42355
-DIHEDRAL DC_ring_C1_C2_n3_00          DC      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DC_ring_C1_C2_n3_10          DC      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DC_ring_C1_C2_n3_20          DC      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DC_ring_C1_C2_n1_00          DC      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5474    0.67672
-DIHEDRAL DC_ring_C2_C3_n3_00          DC      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DC_ring_C2_C3_n3_10          DC      NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DC_ring_C2_C3_n3_20          DC      NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DC_ring_C2_C3_n2_00          DC      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n2C0   3.2580     4.9326   -0.00656
-DIHEDRAL DC_ring_C2_C3_n2_10          DC      NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n2C0   3.2580     4.9326   -0.00656
-DIHEDRAL DC_ring_C2_C3_n1_00          DC      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.4634   -0.46965
-DIHEDRAL DC_ring_C4_O4_n3_00          DC      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DC_ring_C4_O4_n3_10          DC      NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DC_ring_C4_O4_n3_20          DC      NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DC_ring_C4_O4_n2_00          DC      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL DC_ring_C4_O4_n2_10          DC      NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL DC_ring_O4_C1_n3_00          DC      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DC_ring_O4_C1_n3_10          DC      NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DC_ring_O4_C1_n3_20          DC      NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DC_ring_O4_C1_n2_00          DC      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL DC_ring_O4_C1_n2_10          DC      NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
 DIHEDRAL DC_chi_n1_00                 DC      NUCLEIC_CHI GHchin1B0        GHchin1C0          0.0000     1.8537    6.54655
 DIHEDRAL DC_chi_n2_00                 DC      NUCLEIC_CHI GHchin1B0        GHchin2C0          3.1886    73.3773   -0.03370
 DIHEDRAL DC_chi_n2_10                 DC      NUCLEIC_CHI GHchin2B1        GHchin2C0          3.1886    73.3773   -0.03370
@@ -2846,12 +2294,6 @@ DIHEDRAL DG_gamma_n3_10               DG      NUCLEIC_BACKBONE GHgamman3B1      
 DIHEDRAL DG_gamma_n3_20               DG      NUCLEIC_BACKBONE GHgamman3B2      GHgamman3C0        2.8973   503.1464   26.24642
 DIHEDRAL DG_gamma_n2_00               DG      NUCLEIC_BACKBONE GHgamman1B0      GHgamman2C0        2.8973     3.3519   -0.00166
 DIHEDRAL DG_gamma_n2_10               DG      NUCLEIC_BACKBONE GHgamman2B1      GHgamman2C0        2.8973     3.3519   -0.00166
-DIHEDRAL DG_delta_n3_00               DG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DG_delta_n3_10               DG      NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DG_delta_n3_20               DG      NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DG_delta_n2_00               DG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL DG_delta_n2_10               DG      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL DG_delta_n1_00               DG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
 DIHEDRAL DG_epsilon_n3_00             DG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134    44.6199    1.42698
 DIHEDRAL DG_epsilon_n3_10             DG      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134    44.6199    1.42698
 DIHEDRAL DG_epsilon_n3_20             DG      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134    44.6199    1.42698
@@ -2864,26 +2306,6 @@ DIHEDRAL DG_zeta_n3_20                DG      NUCLEIC_BACKBONE GHzetan3B2       
 DIHEDRAL DG_zeta_n2_00                DG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    23.9197   -0.01962
 DIHEDRAL DG_zeta_n2_10                DG      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    23.9197   -0.01962
 DIHEDRAL DG_zeta_n1_00                DG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.0360    7.42355
-DIHEDRAL DG_ring_C1_C2_n3_00          DG      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DG_ring_C1_C2_n3_10          DG      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DG_ring_C1_C2_n3_20          DG      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DG_ring_C1_C2_n1_00          DG      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5474    0.67672
-DIHEDRAL DG_ring_C2_C3_n3_00          DG      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DG_ring_C2_C3_n3_10          DG      NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DG_ring_C2_C3_n3_20          DG      NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DG_ring_C2_C3_n2_00          DG      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n2C0   3.2580     4.9326   -0.00656
-DIHEDRAL DG_ring_C2_C3_n2_10          DG      NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n2C0   3.2580     4.9326   -0.00656
-DIHEDRAL DG_ring_C2_C3_n1_00          DG      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.4634   -0.46965
-DIHEDRAL DG_ring_C4_O4_n3_00          DG      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DG_ring_C4_O4_n3_10          DG      NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DG_ring_C4_O4_n3_20          DG      NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DG_ring_C4_O4_n2_00          DG      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL DG_ring_C4_O4_n2_10          DG      NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL DG_ring_O4_C1_n3_00          DG      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DG_ring_O4_C1_n3_10          DG      NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DG_ring_O4_C1_n3_20          DG      NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DG_ring_O4_C1_n2_00          DG      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL DG_ring_O4_C1_n2_10          DG      NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
 DIHEDRAL DG_chi_n1_00                 DG      NUCLEIC_CHI GHchin1B0        GHchin1C0          0.0000     3.4958   13.86857
 DIHEDRAL DG_chi_n2_00                 DG      NUCLEIC_CHI GHchin1B0        GHchin2C0          3.2825    79.9744   -0.02129
 DIHEDRAL DG_chi_n2_10                 DG      NUCLEIC_CHI GHchin2B1        GHchin2C0          3.2825    79.9744   -0.02129
@@ -2924,12 +2346,6 @@ DIHEDRAL DT_gamma_n3_10               DT      NUCLEIC_BACKBONE GHgamman3B1      
 DIHEDRAL DT_gamma_n3_20               DT      NUCLEIC_BACKBONE GHgamman3B2      GHgamman3C0        2.8973   503.1464   26.24642
 DIHEDRAL DT_gamma_n2_00               DT      NUCLEIC_BACKBONE GHgamman1B0      GHgamman2C0        2.8973     3.3519   -0.00166
 DIHEDRAL DT_gamma_n2_10               DT      NUCLEIC_BACKBONE GHgamman2B1      GHgamman2C0        2.8973     3.3519   -0.00166
-DIHEDRAL DT_delta_n3_00               DT      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DT_delta_n3_10               DT      NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DT_delta_n3_20               DT      NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL DT_delta_n2_00               DT      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL DT_delta_n2_10               DT      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL DT_delta_n1_00               DT      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
 DIHEDRAL DT_epsilon_n3_00             DT      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134    44.6199    1.42698
 DIHEDRAL DT_epsilon_n3_10             DT      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134    44.6199    1.42698
 DIHEDRAL DT_epsilon_n3_20             DT      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134    44.6199    1.42698
@@ -2942,26 +2358,6 @@ DIHEDRAL DT_zeta_n3_20                DT      NUCLEIC_BACKBONE GHzetan3B2       
 DIHEDRAL DT_zeta_n2_00                DT      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    23.9197   -0.01962
 DIHEDRAL DT_zeta_n2_10                DT      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    23.9197   -0.01962
 DIHEDRAL DT_zeta_n1_00                DT      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.0360    7.42355
-DIHEDRAL DT_ring_C1_C2_n3_00          DT      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DT_ring_C1_C2_n3_10          DT      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DT_ring_C1_C2_n3_20          DT      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   163.8411   13.81145
-DIHEDRAL DT_ring_C1_C2_n1_00          DT      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5474    0.67672
-DIHEDRAL DT_ring_C2_C3_n3_00          DT      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DT_ring_C2_C3_n3_10          DT      NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DT_ring_C2_C3_n3_20          DT      NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   145.8305   13.70320
-DIHEDRAL DT_ring_C2_C3_n2_00          DT      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n2C0   3.2580     4.9326   -0.00656
-DIHEDRAL DT_ring_C2_C3_n2_10          DT      NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n2C0   3.2580     4.9326   -0.00656
-DIHEDRAL DT_ring_C2_C3_n1_00          DT      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.4634   -0.46965
-DIHEDRAL DT_ring_C4_O4_n3_00          DT      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DT_ring_C4_O4_n3_10          DT      NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DT_ring_C4_O4_n3_20          DT      NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL DT_ring_C4_O4_n2_00          DT      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL DT_ring_C4_O4_n2_10          DT      NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL DT_ring_O4_C1_n3_00          DT      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DT_ring_O4_C1_n3_10          DT      NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DT_ring_O4_C1_n3_20          DT      NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL DT_ring_O4_C1_n2_00          DT      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL DT_ring_O4_C1_n2_10          DT      NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
 DIHEDRAL DT_chi_n1_00                 DT      NUCLEIC_CHI GHchin1B0        GHchin1C0          0.0000     1.5185    5.36298
 DIHEDRAL DT_chi_n2_00                 DT      NUCLEIC_CHI GHchin1B0        GHchin2C0          3.1886    74.6680   -0.03429
 DIHEDRAL DT_chi_n2_10                 DT      NUCLEIC_CHI GHchin2B1        GHchin2C0          3.1886    74.6680   -0.03429
@@ -3014,18 +2410,6 @@ DIHEDRAL RA_gamma_n3_10               RA      NUCLEIC_BACKBONE GHgamman3B1      
 DIHEDRAL RA_gamma_n3_20               RA      NUCLEIC_BACKBONE GHgamman3B2      GHgamman3C0        2.8973   503.1464   26.24642
 DIHEDRAL RA_gamma_n2_00               RA      NUCLEIC_BACKBONE GHgamman1B0      GHgamman2C0        2.8973     3.3519   -0.00166
 DIHEDRAL RA_gamma_n2_10               RA      NUCLEIC_BACKBONE GHgamman2B1      GHgamman2C0        2.8973     3.3519   -0.00166
-DIHEDRAL A_delta_n3_00                A       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL A_delta_n3_10                A       NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL A_delta_n3_20                A       NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL A_delta_n2_00                A       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL A_delta_n2_10                A       NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL A_delta_n1_00                A       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
-DIHEDRAL RA_delta_n3_00               RA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RA_delta_n3_10               RA      NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RA_delta_n3_20               RA      NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RA_delta_n2_00               RA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL RA_delta_n2_10               RA      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL RA_delta_n1_00               RA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
 DIHEDRAL A_epsilon_n3_00              A       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
 DIHEDRAL A_epsilon_n3_10              A       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
 DIHEDRAL A_epsilon_n3_20              A       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
@@ -3042,50 +2426,6 @@ DIHEDRAL RA_zeta_n3_10                RA      NUCLEIC_BACKBONE GHzetan3B1       
 DIHEDRAL RA_zeta_n3_20                RA      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
 DIHEDRAL RA_zeta_n2_00                RA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
 DIHEDRAL RA_zeta_n2_10                RA      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
-DIHEDRAL A_ring_C1_C2_n3_00           A       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL A_ring_C1_C2_n3_10           A       NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL A_ring_C1_C2_n3_20           A       NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL A_ring_C1_C2_n1_00           A       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5471    1.72125
-DIHEDRAL A_ring_C1_C2_n2_00           A       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL A_ring_C1_C2_n2_10           A       NUCLEIC_SUGAR GHring_C1_C2n2B1 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL RA_ring_C1_C2_n3_00          RA      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RA_ring_C1_C2_n3_10          RA      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RA_ring_C1_C2_n3_20          RA      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RA_ring_C1_C2_n1_00          RA      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5471    1.72125
-DIHEDRAL RA_ring_C1_C2_n2_00          RA      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL RA_ring_C1_C2_n2_10          RA      NUCLEIC_SUGAR GHring_C1_C2n2B1 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL A_ring_C2_C3_n3_00           A       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL A_ring_C2_C3_n3_10           A       NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL A_ring_C2_C3_n3_20           A       NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL A_ring_C2_C3_n2_00           A       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL A_ring_C2_C3_n2_10           A       NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL A_ring_C2_C3_n1_00           A       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.9094    1.89740
-DIHEDRAL RA_ring_C2_C3_n3_00          RA      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RA_ring_C2_C3_n3_10          RA      NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RA_ring_C2_C3_n3_20          RA      NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RA_ring_C2_C3_n2_00          RA      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL RA_ring_C2_C3_n2_10          RA      NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL RA_ring_C2_C3_n1_00          RA      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.9094    1.89740
-DIHEDRAL A_ring_C4_O4_n3_00           A       NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL A_ring_C4_O4_n3_10           A       NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL A_ring_C4_O4_n3_20           A       NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL A_ring_C4_O4_n2_00           A       NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL A_ring_C4_O4_n2_10           A       NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL RA_ring_C4_O4_n3_00          RA      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RA_ring_C4_O4_n3_10          RA      NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RA_ring_C4_O4_n3_20          RA      NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RA_ring_C4_O4_n2_00          RA      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL RA_ring_C4_O4_n2_10          RA      NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL A_ring_O4_C1_n3_00           A       NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL A_ring_O4_C1_n3_10           A       NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL A_ring_O4_C1_n3_20           A       NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL A_ring_O4_C1_n2_00           A       NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL A_ring_O4_C1_n2_10           A       NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL RA_ring_O4_C1_n3_00          RA      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RA_ring_O4_C1_n3_10          RA      NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RA_ring_O4_C1_n3_20          RA      NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RA_ring_O4_C1_n2_00          RA      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL RA_ring_O4_C1_n2_10          RA      NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
 DIHEDRAL A_chi_n1_00                  A       NUCLEIC_CHI GHchin1B0        GHchin1C0          0.0000     2.8449   11.28638
 DIHEDRAL A_chi_n2_00                  A       NUCLEIC_CHI GHchin1B0        GHchin2C0          3.2825    46.9602   -0.01250
 DIHEDRAL A_chi_n2_10                  A       NUCLEIC_CHI GHchin2B1        GHchin2C0          3.2825    46.9602   -0.01250
@@ -3164,18 +2504,6 @@ DIHEDRAL RC_gamma_n3_10               RC      NUCLEIC_BACKBONE GHgamman3B1      
 DIHEDRAL RC_gamma_n3_20               RC      NUCLEIC_BACKBONE GHgamman3B2      GHgamman3C0        2.8973   503.1464   26.24642
 DIHEDRAL RC_gamma_n2_00               RC      NUCLEIC_BACKBONE GHgamman1B0      GHgamman2C0        2.8973     3.3519   -0.00166
 DIHEDRAL RC_gamma_n2_10               RC      NUCLEIC_BACKBONE GHgamman2B1      GHgamman2C0        2.8973     3.3519   -0.00166
-DIHEDRAL C_delta_n3_00                C       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL C_delta_n3_10                C       NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL C_delta_n3_20                C       NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL C_delta_n2_00                C       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL C_delta_n2_10                C       NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL C_delta_n1_00                C       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
-DIHEDRAL RC_delta_n3_00               RC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RC_delta_n3_10               RC      NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RC_delta_n3_20               RC      NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RC_delta_n2_00               RC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL RC_delta_n2_10               RC      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL RC_delta_n1_00               RC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
 DIHEDRAL C_epsilon_n3_00              C       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
 DIHEDRAL C_epsilon_n3_10              C       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
 DIHEDRAL C_epsilon_n3_20              C       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
@@ -3192,50 +2520,6 @@ DIHEDRAL RC_zeta_n3_10                RC      NUCLEIC_BACKBONE GHzetan3B1       
 DIHEDRAL RC_zeta_n3_20                RC      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
 DIHEDRAL RC_zeta_n2_00                RC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
 DIHEDRAL RC_zeta_n2_10                RC      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
-DIHEDRAL C_ring_C1_C2_n3_00           C       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL C_ring_C1_C2_n3_10           C       NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL C_ring_C1_C2_n3_20           C       NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL C_ring_C1_C2_n1_00           C       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5471    1.72125
-DIHEDRAL C_ring_C1_C2_n2_00           C       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL C_ring_C1_C2_n2_10           C       NUCLEIC_SUGAR GHring_C1_C2n2B1 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL RC_ring_C1_C2_n3_00          RC      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RC_ring_C1_C2_n3_10          RC      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RC_ring_C1_C2_n3_20          RC      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RC_ring_C1_C2_n1_00          RC      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5471    1.72125
-DIHEDRAL RC_ring_C1_C2_n2_00          RC      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL RC_ring_C1_C2_n2_10          RC      NUCLEIC_SUGAR GHring_C1_C2n2B1 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL C_ring_C2_C3_n3_00           C       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL C_ring_C2_C3_n3_10           C       NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL C_ring_C2_C3_n3_20           C       NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL C_ring_C2_C3_n2_00           C       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL C_ring_C2_C3_n2_10           C       NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL C_ring_C2_C3_n1_00           C       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.9094    1.89740
-DIHEDRAL RC_ring_C2_C3_n3_00          RC      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RC_ring_C2_C3_n3_10          RC      NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RC_ring_C2_C3_n3_20          RC      NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RC_ring_C2_C3_n2_00          RC      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL RC_ring_C2_C3_n2_10          RC      NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL RC_ring_C2_C3_n1_00          RC      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.9094    1.89740
-DIHEDRAL C_ring_C4_O4_n3_00           C       NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL C_ring_C4_O4_n3_10           C       NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL C_ring_C4_O4_n3_20           C       NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL C_ring_C4_O4_n2_00           C       NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL C_ring_C4_O4_n2_10           C       NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL RC_ring_C4_O4_n3_00          RC      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RC_ring_C4_O4_n3_10          RC      NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RC_ring_C4_O4_n3_20          RC      NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RC_ring_C4_O4_n2_00          RC      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL RC_ring_C4_O4_n2_10          RC      NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL C_ring_O4_C1_n3_00           C       NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL C_ring_O4_C1_n3_10           C       NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL C_ring_O4_C1_n3_20           C       NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL C_ring_O4_C1_n2_00           C       NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL C_ring_O4_C1_n2_10           C       NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL RC_ring_O4_C1_n3_00          RC      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RC_ring_O4_C1_n3_10          RC      NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RC_ring_O4_C1_n3_20          RC      NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RC_ring_O4_C1_n2_00          RC      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL RC_ring_O4_C1_n2_10          RC      NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
 DIHEDRAL C_chi_n1_00                  C       NUCLEIC_CHI GHchin1B0        GHchin1C0          0.0000     3.3029   11.66482
 DIHEDRAL C_chi_n2_00                  C       NUCLEIC_CHI GHchin1B0        GHchin2C0          3.1886    56.0353   -0.02573
 DIHEDRAL C_chi_n2_10                  C       NUCLEIC_CHI GHchin2B1        GHchin2C0          3.1886    56.0353   -0.02573
@@ -3318,18 +2602,6 @@ DIHEDRAL RG_gamma_n3_10               RG      NUCLEIC_BACKBONE GHgamman3B1      
 DIHEDRAL RG_gamma_n3_20               RG      NUCLEIC_BACKBONE GHgamman3B2      GHgamman3C0        2.8973   503.1464   26.24642
 DIHEDRAL RG_gamma_n2_00               RG      NUCLEIC_BACKBONE GHgamman1B0      GHgamman2C0        2.8973     3.3519   -0.00166
 DIHEDRAL RG_gamma_n2_10               RG      NUCLEIC_BACKBONE GHgamman2B1      GHgamman2C0        2.8973     3.3519   -0.00166
-DIHEDRAL G_delta_n3_00                G       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL G_delta_n3_10                G       NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL G_delta_n3_20                G       NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL G_delta_n2_00                G       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL G_delta_n2_10                G       NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL G_delta_n1_00                G       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
-DIHEDRAL RG_delta_n3_00               RG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RG_delta_n3_10               RG      NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RG_delta_n3_20               RG      NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RG_delta_n2_00               RG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL RG_delta_n2_10               RG      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL RG_delta_n1_00               RG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
 DIHEDRAL G_epsilon_n3_00              G       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
 DIHEDRAL G_epsilon_n3_10              G       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
 DIHEDRAL G_epsilon_n3_20              G       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
@@ -3346,50 +2618,6 @@ DIHEDRAL RG_zeta_n3_10                RG      NUCLEIC_BACKBONE GHzetan3B1       
 DIHEDRAL RG_zeta_n3_20                RG      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
 DIHEDRAL RG_zeta_n2_00                RG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
 DIHEDRAL RG_zeta_n2_10                RG      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
-DIHEDRAL G_ring_C1_C2_n3_00           G       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL G_ring_C1_C2_n3_10           G       NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL G_ring_C1_C2_n3_20           G       NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL G_ring_C1_C2_n1_00           G       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5471    1.72125
-DIHEDRAL G_ring_C1_C2_n2_00           G       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL G_ring_C1_C2_n2_10           G       NUCLEIC_SUGAR GHring_C1_C2n2B1 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL RG_ring_C1_C2_n3_00          RG      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RG_ring_C1_C2_n3_10          RG      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RG_ring_C1_C2_n3_20          RG      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RG_ring_C1_C2_n1_00          RG      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5471    1.72125
-DIHEDRAL RG_ring_C1_C2_n2_00          RG      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL RG_ring_C1_C2_n2_10          RG      NUCLEIC_SUGAR GHring_C1_C2n2B1 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL G_ring_C2_C3_n3_00           G       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL G_ring_C2_C3_n3_10           G       NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL G_ring_C2_C3_n3_20           G       NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL G_ring_C2_C3_n2_00           G       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL G_ring_C2_C3_n2_10           G       NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL G_ring_C2_C3_n1_00           G       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.9094    1.89740
-DIHEDRAL RG_ring_C2_C3_n3_00          RG      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RG_ring_C2_C3_n3_10          RG      NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RG_ring_C2_C3_n3_20          RG      NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RG_ring_C2_C3_n2_00          RG      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL RG_ring_C2_C3_n2_10          RG      NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL RG_ring_C2_C3_n1_00          RG      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.9094    1.89740
-DIHEDRAL G_ring_C4_O4_n3_00           G       NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL G_ring_C4_O4_n3_10           G       NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL G_ring_C4_O4_n3_20           G       NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL G_ring_C4_O4_n2_00           G       NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL G_ring_C4_O4_n2_10           G       NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL RG_ring_C4_O4_n3_00          RG      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RG_ring_C4_O4_n3_10          RG      NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RG_ring_C4_O4_n3_20          RG      NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RG_ring_C4_O4_n2_00          RG      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL RG_ring_C4_O4_n2_10          RG      NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL G_ring_O4_C1_n3_00           G       NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL G_ring_O4_C1_n3_10           G       NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL G_ring_O4_C1_n3_20           G       NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL G_ring_O4_C1_n2_00           G       NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL G_ring_O4_C1_n2_10           G       NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL RG_ring_O4_C1_n3_00          RG      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RG_ring_O4_C1_n3_10          RG      NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RG_ring_O4_C1_n3_20          RG      NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RG_ring_O4_C1_n2_00          RG      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL RG_ring_O4_C1_n2_10          RG      NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
 DIHEDRAL G_chi_n1_00                  G       NUCLEIC_CHI GHchin1B0        GHchin1C0          0.0000     2.0774    8.24145
 DIHEDRAL G_chi_n2_00                  G       NUCLEIC_CHI GHchin1B0        GHchin2C0          3.2825    46.5855   -0.01240
 DIHEDRAL G_chi_n2_10                  G       NUCLEIC_CHI GHchin2B1        GHchin2C0          3.2825    46.5855   -0.01240
@@ -3472,18 +2700,6 @@ DIHEDRAL RU_gamma_n3_10               RU      NUCLEIC_BACKBONE GHgamman3B1      
 DIHEDRAL RU_gamma_n3_20               RU      NUCLEIC_BACKBONE GHgamman3B2      GHgamman3C0        2.8973   503.1464   26.24642
 DIHEDRAL RU_gamma_n2_00               RU      NUCLEIC_BACKBONE GHgamman1B0      GHgamman2C0        2.8973     3.3519   -0.00166
 DIHEDRAL RU_gamma_n2_10               RU      NUCLEIC_BACKBONE GHgamman2B1      GHgamman2C0        2.8973     3.3519   -0.00166
-DIHEDRAL U_delta_n3_00                U       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL U_delta_n3_10                U       NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL U_delta_n3_20                U       NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL U_delta_n2_00                U       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL U_delta_n2_10                U       NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL U_delta_n1_00                U       NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
-DIHEDRAL RU_delta_n3_00               RU      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RU_delta_n3_10               RU      NUCLEIC_BACKBONE GHdeltan3B1      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RU_delta_n3_20               RU      NUCLEIC_BACKBONE GHdeltan3B2      GHdeltan3C0        2.9801   281.9683   16.27544
-DIHEDRAL RU_delta_n2_00               RU      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL RU_delta_n2_10               RU      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    30.3572   -1.06342
-DIHEDRAL RU_delta_n1_00               RU      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     1.2731    2.72470
 DIHEDRAL U_epsilon_n3_00              U       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
 DIHEDRAL U_epsilon_n3_10              U       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
 DIHEDRAL U_epsilon_n3_20              U       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
@@ -3500,50 +2716,6 @@ DIHEDRAL RU_zeta_n3_10                RU      NUCLEIC_BACKBONE GHzetan3B1       
 DIHEDRAL RU_zeta_n3_20                RU      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
 DIHEDRAL RU_zeta_n2_00                RU      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
 DIHEDRAL RU_zeta_n2_10                RU      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
-DIHEDRAL U_ring_C1_C2_n3_00           U       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL U_ring_C1_C2_n3_10           U       NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL U_ring_C1_C2_n3_20           U       NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL U_ring_C1_C2_n1_00           U       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5471    1.72125
-DIHEDRAL U_ring_C1_C2_n2_00           U       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL U_ring_C1_C2_n2_10           U       NUCLEIC_SUGAR GHring_C1_C2n2B1 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL RU_ring_C1_C2_n3_00          RU      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RU_ring_C1_C2_n3_10          RU      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RU_ring_C1_C2_n3_20          RU      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
-DIHEDRAL RU_ring_C1_C2_n1_00          RU      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n1C0   0.0000     0.5471    1.72125
-DIHEDRAL RU_ring_C1_C2_n2_00          RU      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL RU_ring_C1_C2_n2_10          RU      NUCLEIC_SUGAR GHring_C1_C2n2B1 GHring_C1_C2n2C0   3.1806    25.9622   -0.02890
-DIHEDRAL U_ring_C2_C3_n3_00           U       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL U_ring_C2_C3_n3_10           U       NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL U_ring_C2_C3_n3_20           U       NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL U_ring_C2_C3_n2_00           U       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL U_ring_C2_C3_n2_10           U       NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL U_ring_C2_C3_n1_00           U       NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.9094    1.89740
-DIHEDRAL RU_ring_C2_C3_n3_00          RU      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RU_ring_C2_C3_n3_10          RU      NUCLEIC_SUGAR GHring_C2_C3n3B1 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RU_ring_C2_C3_n3_20          RU      NUCLEIC_SUGAR GHring_C2_C3n3B2 GHring_C2_C3n3C0   3.2580   143.1739   13.45356
-DIHEDRAL RU_ring_C2_C3_n2_00          RU      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL RU_ring_C2_C3_n2_10          RU      NUCLEIC_SUGAR GHring_C2_C3n2B1 GHring_C2_C3n3C0   3.2580    18.2505   -1.07029
-DIHEDRAL RU_ring_C2_C3_n1_00          RU      NUCLEIC_SUGAR GHring_C2_C3n3B0 GHring_C2_C3n1C0   0.0000     0.9094    1.89740
-DIHEDRAL U_ring_C4_O4_n3_00           U       NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL U_ring_C4_O4_n3_10           U       NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL U_ring_C4_O4_n3_20           U       NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL U_ring_C4_O4_n2_00           U       NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL U_ring_C4_O4_n2_10           U       NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL RU_ring_C4_O4_n3_00          RU      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RU_ring_C4_O4_n3_10          RU      NUCLEIC_SUGAR GHring_C4_O4n3B1 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RU_ring_C4_O4_n3_20          RU      NUCLEIC_SUGAR GHring_C4_O4n3B2 GHring_C4_O4n3C0   3.0900   152.4214   13.57591
-DIHEDRAL RU_ring_C4_O4_n2_00          RU      NUCLEIC_SUGAR GHring_C4_O4n3B0 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL RU_ring_C4_O4_n2_10          RU      NUCLEIC_SUGAR GHring_C4_O4n2B1 GHring_C4_O4n2C0   3.0900     2.0772   -0.21154
-DIHEDRAL U_ring_O4_C1_n3_00           U       NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL U_ring_O4_C1_n3_10           U       NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL U_ring_O4_C1_n3_20           U       NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL U_ring_O4_C1_n2_00           U       NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL U_ring_O4_C1_n2_10           U       NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL RU_ring_O4_C1_n3_00          RU      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RU_ring_O4_C1_n3_10          RU      NUCLEIC_SUGAR GHring_O4_C1n3B1 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RU_ring_O4_C1_n3_20          RU      NUCLEIC_SUGAR GHring_O4_C1n3B2 GHring_O4_C1n3C0   2.8036   290.3323   16.13403
-DIHEDRAL RU_ring_O4_C1_n2_00          RU      NUCLEIC_SUGAR GHring_O4_C1n3B0 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
-DIHEDRAL RU_ring_O4_C1_n2_10          RU      NUCLEIC_SUGAR GHring_O4_C1n2B1 GHring_O4_C1n2C0   2.8036    23.9086   -0.10838
 DIHEDRAL U_chi_n1_00                  U       NUCLEIC_CHI GHchin1B0        GHchin1C0          0.0000     2.7639    9.76121
 DIHEDRAL U_chi_n2_00                  U       NUCLEIC_CHI GHchin1B0        GHchin2C0          3.1886    59.9491   -0.02753
 DIHEDRAL U_chi_n2_10                  U       NUCLEIC_CHI GHchin2B1        GHchin2C0          3.1886    59.9491   -0.02753

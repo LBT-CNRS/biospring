@@ -22,8 +22,8 @@ make run-stage2 # interactive session on any one of them
 ```
 stage            spring      stretch         bend     dihedral
 1                  0.00         0.00         0.00         0.00
-2                  0.00         0.00         0.00      3252.71
-3                  0.00       443.36       291.59      3252.71
+2                  0.00         0.00         0.00      3009.46
+3                  0.00       425.85       256.87      3009.46
 ```
 
 Stage 1 reads zero everywhere because a rigid-body spring's equilibrium *is*
@@ -56,7 +56,7 @@ for two reasons:
 
 Use the `.msp` switches for what they are good at instead: measuring what one
 family costs inside one model, e.g. `dihedralchi.enable = 0` on stage 2 to
-see the side chains' share of the 3252.71 above.
+see the side chains' share of the 3009.46 above.
 
 
 ## What stage 2 is actually for
