@@ -80,6 +80,12 @@ STRETCH DA_C2'_H2'1         DA      C2'    H2'1     1.0900    2845.12
 STRETCH DA_C2'_H2''         DA      C2'    H2''     1.0900    2845.12
 STRETCH DA_C2'_H2'2         DA      C2'    H2'2     1.0900    2845.12
 STRETCH DA_O3'_P            DA      O3'    +P       1.6100    1924.64
+BEND DA_C3'_O3'_P          DA      C3'    O3'    +P      120.500   836.8000
+BEND DA_-O3'_P_O5'        DA      -O3'   P      O5'     102.600   376.5600
+BEND DA_-O3'_P_OP1        DA      -O3'   P      OP1     108.230   836.8000
+BEND DA_-O3'_P_O1P        DA      -O3'   P      O1P     108.230   836.8000
+BEND DA_-O3'_P_OP2        DA      -O3'   P      OP2     108.230   836.8000
+BEND DA_-O3'_P_O2P        DA      -O3'   P      O2P     108.230   836.8000
 BEND DA_O5'_P_OP1        DA      O5'    P      OP1     108.230   836.8000
 BEND DA_O5'_P_O1P        DA      O5'    P      O1P     108.230   836.8000
 BEND DA_O5'_P_OP2        DA      O5'    P      OP2     108.230   836.8000
@@ -196,6 +202,12 @@ STRETCH DC_C2'_H2'1         DC      C2'    H2'1     1.0900    2845.12
 STRETCH DC_C2'_H2''         DC      C2'    H2''     1.0900    2845.12
 STRETCH DC_C2'_H2'2         DC      C2'    H2'2     1.0900    2845.12
 STRETCH DC_O3'_P            DC      O3'    +P       1.6100    1924.64
+BEND DC_C3'_O3'_P          DC      C3'    O3'    +P      120.500   836.8000
+BEND DC_-O3'_P_O5'        DC      -O3'   P      O5'     102.600   376.5600
+BEND DC_-O3'_P_OP1        DC      -O3'   P      OP1     108.230   836.8000
+BEND DC_-O3'_P_O1P        DC      -O3'   P      O1P     108.230   836.8000
+BEND DC_-O3'_P_OP2        DC      -O3'   P      OP2     108.230   836.8000
+BEND DC_-O3'_P_O2P        DC      -O3'   P      O2P     108.230   836.8000
 BEND DC_O5'_P_OP1        DC      O5'    P      OP1     108.230   836.8000
 BEND DC_O5'_P_O1P        DC      O5'    P      O1P     108.230   836.8000
 BEND DC_O5'_P_OP2        DC      O5'    P      OP2     108.230   836.8000
@@ -311,6 +323,12 @@ STRETCH DG_C2'_H2'1         DG      C2'    H2'1     1.0900    2845.12
 STRETCH DG_C2'_H2''         DG      C2'    H2''     1.0900    2845.12
 STRETCH DG_C2'_H2'2         DG      C2'    H2'2     1.0900    2845.12
 STRETCH DG_O3'_P            DG      O3'    +P       1.6100    1924.64
+BEND DG_C3'_O3'_P          DG      C3'    O3'    +P      120.500   836.8000
+BEND DG_-O3'_P_O5'        DG      -O3'   P      O5'     102.600   376.5600
+BEND DG_-O3'_P_OP1        DG      -O3'   P      OP1     108.230   836.8000
+BEND DG_-O3'_P_O1P        DG      -O3'   P      O1P     108.230   836.8000
+BEND DG_-O3'_P_OP2        DG      -O3'   P      OP2     108.230   836.8000
+BEND DG_-O3'_P_O2P        DG      -O3'   P      O2P     108.230   836.8000
 BEND DG_O5'_P_OP1        DG      O5'    P      OP1     108.230   836.8000
 BEND DG_O5'_P_O1P        DG      O5'    P      O1P     108.230   836.8000
 BEND DG_O5'_P_OP2        DG      O5'    P      OP2     108.230   836.8000
@@ -431,6 +449,12 @@ STRETCH DT_C2'_H2'1         DT      C2'    H2'1     1.0900    2845.12
 STRETCH DT_C2'_H2''         DT      C2'    H2''     1.0900    2845.12
 STRETCH DT_C2'_H2'2         DT      C2'    H2'2     1.0900    2845.12
 STRETCH DT_O3'_P            DT      O3'    +P       1.6100    1924.64
+BEND DT_C3'_O3'_P          DT      C3'    O3'    +P      120.500   836.8000
+BEND DT_-O3'_P_O5'        DT      -O3'   P      O5'     102.600   376.5600
+BEND DT_-O3'_P_OP1        DT      -O3'   P      OP1     108.230   836.8000
+BEND DT_-O3'_P_O1P        DT      -O3'   P      O1P     108.230   836.8000
+BEND DT_-O3'_P_OP2        DT      -O3'   P      OP2     108.230   836.8000
+BEND DT_-O3'_P_O2P        DT      -O3'   P      O2P     108.230   836.8000
 BEND DT_O5'_P_OP1        DT      O5'    P      OP1     108.230   836.8000
 BEND DT_O5'_P_O1P        DT      O5'    P      O1P     108.230   836.8000
 BEND DT_O5'_P_OP2        DT      O5'    P      OP2     108.230   836.8000
@@ -593,6 +617,18 @@ STRETCH RA_O2'_HO2'         RA      O2'    HO2'     0.9600    4627.50
 STRETCH RA_O2'_HO'2         RA      O2'    HO'2     0.9600    4627.50
 STRETCH A_O3'_P            A       O3'    +P       1.6100    1924.64
 STRETCH RA_O3'_P            RA      O3'    +P       1.6100    1924.64
+BEND A_C3'_O3'_P          A       C3'    O3'    +P      120.500   836.8000
+BEND RA_C3'_O3'_P          RA      C3'    O3'    +P      120.500   836.8000
+BEND A_-O3'_P_O5'        A       -O3'   P      O5'     102.600   376.5600
+BEND RA_-O3'_P_O5'        RA      -O3'   P      O5'     102.600   376.5600
+BEND A_-O3'_P_OP1        A       -O3'   P      OP1     108.230   836.8000
+BEND A_-O3'_P_O1P        A       -O3'   P      O1P     108.230   836.8000
+BEND RA_-O3'_P_OP1        RA      -O3'   P      OP1     108.230   836.8000
+BEND RA_-O3'_P_O1P        RA      -O3'   P      O1P     108.230   836.8000
+BEND A_-O3'_P_OP2        A       -O3'   P      OP2     108.230   836.8000
+BEND A_-O3'_P_O2P        A       -O3'   P      O2P     108.230   836.8000
+BEND RA_-O3'_P_OP2        RA      -O3'   P      OP2     108.230   836.8000
+BEND RA_-O3'_P_O2P        RA      -O3'   P      O2P     108.230   836.8000
 BEND A_O5'_P_OP1        A       O5'    P      OP1     108.230   836.8000
 BEND A_O5'_P_O1P        A       O5'    P      O1P     108.230   836.8000
 BEND RA_O5'_P_OP1        RA      O5'    P      OP1     108.230   836.8000
@@ -823,6 +859,18 @@ STRETCH RC_O2'_HO2'         RC      O2'    HO2'     0.9600    4627.50
 STRETCH RC_O2'_HO'2         RC      O2'    HO'2     0.9600    4627.50
 STRETCH C_O3'_P            C       O3'    +P       1.6100    1924.64
 STRETCH RC_O3'_P            RC      O3'    +P       1.6100    1924.64
+BEND C_C3'_O3'_P          C       C3'    O3'    +P      120.500   836.8000
+BEND RC_C3'_O3'_P          RC      C3'    O3'    +P      120.500   836.8000
+BEND C_-O3'_P_O5'        C       -O3'   P      O5'     102.600   376.5600
+BEND RC_-O3'_P_O5'        RC      -O3'   P      O5'     102.600   376.5600
+BEND C_-O3'_P_OP1        C       -O3'   P      OP1     108.230   836.8000
+BEND C_-O3'_P_O1P        C       -O3'   P      O1P     108.230   836.8000
+BEND RC_-O3'_P_OP1        RC      -O3'   P      OP1     108.230   836.8000
+BEND RC_-O3'_P_O1P        RC      -O3'   P      O1P     108.230   836.8000
+BEND C_-O3'_P_OP2        C       -O3'   P      OP2     108.230   836.8000
+BEND C_-O3'_P_O2P        C       -O3'   P      O2P     108.230   836.8000
+BEND RC_-O3'_P_OP2        RC      -O3'   P      OP2     108.230   836.8000
+BEND RC_-O3'_P_O2P        RC      -O3'   P      O2P     108.230   836.8000
 BEND C_O5'_P_OP1        C       O5'    P      OP1     108.230   836.8000
 BEND C_O5'_P_O1P        C       O5'    P      O1P     108.230   836.8000
 BEND RC_O5'_P_OP1        RC      O5'    P      OP1     108.230   836.8000
@@ -1051,6 +1099,18 @@ STRETCH RG_O2'_HO2'         RG      O2'    HO2'     0.9600    4627.50
 STRETCH RG_O2'_HO'2         RG      O2'    HO'2     0.9600    4627.50
 STRETCH G_O3'_P            G       O3'    +P       1.6100    1924.64
 STRETCH RG_O3'_P            RG      O3'    +P       1.6100    1924.64
+BEND G_C3'_O3'_P          G       C3'    O3'    +P      120.500   836.8000
+BEND RG_C3'_O3'_P          RG      C3'    O3'    +P      120.500   836.8000
+BEND G_-O3'_P_O5'        G       -O3'   P      O5'     102.600   376.5600
+BEND RG_-O3'_P_O5'        RG      -O3'   P      O5'     102.600   376.5600
+BEND G_-O3'_P_OP1        G       -O3'   P      OP1     108.230   836.8000
+BEND G_-O3'_P_O1P        G       -O3'   P      O1P     108.230   836.8000
+BEND RG_-O3'_P_OP1        RG      -O3'   P      OP1     108.230   836.8000
+BEND RG_-O3'_P_O1P        RG      -O3'   P      O1P     108.230   836.8000
+BEND G_-O3'_P_OP2        G       -O3'   P      OP2     108.230   836.8000
+BEND G_-O3'_P_O2P        G       -O3'   P      O2P     108.230   836.8000
+BEND RG_-O3'_P_OP2        RG      -O3'   P      OP2     108.230   836.8000
+BEND RG_-O3'_P_O2P        RG      -O3'   P      O2P     108.230   836.8000
 BEND G_O5'_P_OP1        G       O5'    P      OP1     108.230   836.8000
 BEND G_O5'_P_O1P        G       O5'    P      O1P     108.230   836.8000
 BEND RG_O5'_P_OP1        RG      O5'    P      OP1     108.230   836.8000
@@ -1283,6 +1343,18 @@ STRETCH RU_O2'_HO2'         RU      O2'    HO2'     0.9600    4627.50
 STRETCH RU_O2'_HO'2         RU      O2'    HO'2     0.9600    4627.50
 STRETCH U_O3'_P            U       O3'    +P       1.6100    1924.64
 STRETCH RU_O3'_P            RU      O3'    +P       1.6100    1924.64
+BEND U_C3'_O3'_P          U       C3'    O3'    +P      120.500   836.8000
+BEND RU_C3'_O3'_P          RU      C3'    O3'    +P      120.500   836.8000
+BEND U_-O3'_P_O5'        U       -O3'   P      O5'     102.600   376.5600
+BEND RU_-O3'_P_O5'        RU      -O3'   P      O5'     102.600   376.5600
+BEND U_-O3'_P_OP1        U       -O3'   P      OP1     108.230   836.8000
+BEND U_-O3'_P_O1P        U       -O3'   P      O1P     108.230   836.8000
+BEND RU_-O3'_P_OP1        RU      -O3'   P      OP1     108.230   836.8000
+BEND RU_-O3'_P_O1P        RU      -O3'   P      O1P     108.230   836.8000
+BEND U_-O3'_P_OP2        U       -O3'   P      OP2     108.230   836.8000
+BEND U_-O3'_P_O2P        U       -O3'   P      O2P     108.230   836.8000
+BEND RU_-O3'_P_OP2        RU      -O3'   P      OP2     108.230   836.8000
+BEND RU_-O3'_P_O2P        RU      -O3'   P      O2P     108.230   836.8000
 BEND U_O5'_P_OP1        U       O5'    P      OP1     108.230   836.8000
 BEND U_O5'_P_O1P        U       O5'    P      O1P     108.230   836.8000
 BEND RU_O5'_P_OP1        RU      O5'    P      OP1     108.230   836.8000
@@ -1426,20 +1498,23 @@ BEND RU_C2'_O2'_HO'2       RU      C2'    O2'    HO'2    108.500   460.2400
 #
 #GHOSTPARTICLE <name> <resname> <atom_B> <atom_C> <atom_ref> <r_A> <theta_deg> <delta_deg>
 #Massless virtual sites, placed algebraically from 3 real anchors.
-GHOSTPARTICLE GHalphan3B0      DA      P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      DA      P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      DA      P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      DA      O5'   P      C5'     1.4100  120.50     5.690
-GHOSTPARTICLE GHbetan3B0       DA      O5'   C5'    P       1.6100  120.50     0.000
+GHOSTPARTICLE GHalphan1B0      DA      P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      DA      O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      DA      P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      DA      O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      DA      P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      DA      P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      DA      O5'   P      C5'     1.4100  120.50    -0.398
+GHOSTPARTICLE GHbetan1B0       DA      O5'   C5'    P       1.6100  120.50     0.000
+GHOSTPARTICLE GHbetan1C0       DA      C5'   O5'    C4'     1.5260  109.50   203.578
+GHOSTPARTICLE GHbetan2B1       DA      O5'   C5'    P       1.6100  120.50   180.000
+GHOSTPARTICLE GHbetan2C0       DA      C5'   O5'    C4'     1.5260  109.50   -68.176
 GHOSTPARTICLE GHbetan3B1       DA      O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       DA      O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       DA      C5'   O5'    H5'     1.0900  109.50    -1.342
-GHOSTPARTICLE GHbetan1C0       DA      C5'   O5'    H5'     1.0900  109.50   323.649
-GHOSTPARTICLE GHbetan2B1       DA      O5'   C5'    P       1.6100  120.50   180.000
-GHOSTPARTICLE GHbetan2C0       DA      C5'   O5'    H5'     1.0900  109.50    51.895
+GHOSTPARTICLE GHbetan3C0       DA      C5'   O5'    C4'     1.5260  109.50    -1.413
 GHOSTPARTICLE GHbetan4B1       DA      O5'   C5'    P       1.6100  120.50    90.000
 GHOSTPARTICLE GHbetan4B3       DA      O5'   C5'    P       1.6100  120.50   270.000
-GHOSTPARTICLE GHbetan4C0       DA      C5'   O5'    H5'     1.0900  109.50    -6.134
+GHOSTPARTICLE GHbetan4C0       DA      C5'   O5'    C4'     1.5260  109.50   -36.205
 GHOSTPARTICLE GHgamman1B0      DA      C5'   C4'    O5'     1.4100  109.50     0.000
 GHOSTPARTICLE GHgamman1C0      DA      C4'   C5'    H4'     1.0900  109.50  -130.204
 GHOSTPARTICLE GHgamman3B1      DA      C5'   C4'    O5'     1.4100  109.50   120.000
@@ -1454,20 +1529,20 @@ GHOSTPARTICLE GHdeltan3C0      DA      C3'   C4'    H3'     1.0900  109.50    -0
 GHOSTPARTICLE GHdeltan2B1      DA      C4'   C3'    C5'     1.5260  109.50   180.000
 GHOSTPARTICLE GHdeltan2C0      DA      C3'   C4'    H3'     1.0900  109.50    -4.817
 GHOSTPARTICLE GHdeltan1C0      DA      C3'   C4'    H3'     1.0900  109.50    59.859
-GHOSTPARTICLE GHepsilonn3B0    DA      C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    DA      C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    DA      C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    DA      O3'   C3'    +P      1.6100  120.50    14.820
-GHOSTPARTICLE GHepsilonn2B1    DA      C3'   O3'    C4'     1.5260  109.50   180.000
-GHOSTPARTICLE GHepsilonn2C0    DA      O3'   C3'    +P      1.6100  120.50    39.899
-GHOSTPARTICLE GHepsilonn1C0    DA      O3'   C3'    +P      1.6100  120.50  -274.098
+GHOSTPARTICLE GHepsilonn3B0    DA      C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    DA      C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    DA      C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    DA      O3'   C3'    +P      1.6100  120.50    14.890
+GHOSTPARTICLE GHepsilonn2B1    DA      C3'   O3'    H3'     1.0900  109.50   180.000
+GHOSTPARTICLE GHepsilonn2C0    DA      O3'   C3'    +P      1.6100  120.50   -20.030
+GHOSTPARTICLE GHepsilonn1C0    DA      O3'   C3'    +P      1.6100  120.50   205.972
 GHOSTPARTICLE GHzetan3B0       DA      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       DA      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       DA      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       DA      +P    O3'    +OP1    1.4800  108.23    -6.289
+GHOSTPARTICLE GHzetan3C0       DA      +P    O3'    +O5'    1.6100  102.60    -0.564
 GHOSTPARTICLE GHzetan2B1       DA      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       DA      +P    O3'    +OP1    1.4800  108.23   -70.284
-GHOSTPARTICLE GHzetan1C0       DA      +P    O3'    +OP1    1.4800  108.23   296.028
+GHOSTPARTICLE GHzetan2C0       DA      +P    O3'    +O5'    1.6100  102.60    -4.559
+GHOSTPARTICLE GHzetan1C0       DA      +P    O3'    +O5'    1.6100  102.60   181.753
 GHOSTPARTICLE GHring_C1_C2n3B0 DA      C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 DA      C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 DA      C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1514,20 +1589,23 @@ GHOSTPARTICLE GHimp_N6n2C0     DA      N6    H61    H62     1.0100  120.00    90
 GHOSTPARTICLE GHimp_C2n2B0     DA      N3    C2     N1      2.3910   25.45     0.000
 GHOSTPARTICLE GHimp_C2n2B1     DA      N3    C2     N1      2.3910   25.45   180.000
 GHOSTPARTICLE GHimp_C2n2C0     DA      C2    N3     H2      1.0800  115.45    90.000
-GHOSTPARTICLE GHalphan3B0      DC      P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      DC      P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      DC      P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      DC      O5'   P      C5'     1.4100  120.50     5.690
-GHOSTPARTICLE GHbetan3B0       DC      O5'   C5'    P       1.6100  120.50     0.000
+GHOSTPARTICLE GHalphan1B0      DC      P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      DC      O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      DC      P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      DC      O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      DC      P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      DC      P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      DC      O5'   P      C5'     1.4100  120.50    -0.398
+GHOSTPARTICLE GHbetan1B0       DC      O5'   C5'    P       1.6100  120.50     0.000
+GHOSTPARTICLE GHbetan1C0       DC      C5'   O5'    C4'     1.5260  109.50   203.578
+GHOSTPARTICLE GHbetan2B1       DC      O5'   C5'    P       1.6100  120.50   180.000
+GHOSTPARTICLE GHbetan2C0       DC      C5'   O5'    C4'     1.5260  109.50   -68.176
 GHOSTPARTICLE GHbetan3B1       DC      O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       DC      O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       DC      C5'   O5'    H5'     1.0900  109.50    -1.342
-GHOSTPARTICLE GHbetan1C0       DC      C5'   O5'    H5'     1.0900  109.50   323.649
-GHOSTPARTICLE GHbetan2B1       DC      O5'   C5'    P       1.6100  120.50   180.000
-GHOSTPARTICLE GHbetan2C0       DC      C5'   O5'    H5'     1.0900  109.50    51.895
+GHOSTPARTICLE GHbetan3C0       DC      C5'   O5'    C4'     1.5260  109.50    -1.413
 GHOSTPARTICLE GHbetan4B1       DC      O5'   C5'    P       1.6100  120.50    90.000
 GHOSTPARTICLE GHbetan4B3       DC      O5'   C5'    P       1.6100  120.50   270.000
-GHOSTPARTICLE GHbetan4C0       DC      C5'   O5'    H5'     1.0900  109.50    -6.134
+GHOSTPARTICLE GHbetan4C0       DC      C5'   O5'    C4'     1.5260  109.50   -36.205
 GHOSTPARTICLE GHgamman1B0      DC      C5'   C4'    O5'     1.4100  109.50     0.000
 GHOSTPARTICLE GHgamman1C0      DC      C4'   C5'    H4'     1.0900  109.50  -130.204
 GHOSTPARTICLE GHgamman3B1      DC      C5'   C4'    O5'     1.4100  109.50   120.000
@@ -1542,20 +1620,20 @@ GHOSTPARTICLE GHdeltan3C0      DC      C3'   C4'    H3'     1.0900  109.50    -0
 GHOSTPARTICLE GHdeltan2B1      DC      C4'   C3'    C5'     1.5260  109.50   180.000
 GHOSTPARTICLE GHdeltan2C0      DC      C3'   C4'    H3'     1.0900  109.50    -4.817
 GHOSTPARTICLE GHdeltan1C0      DC      C3'   C4'    H3'     1.0900  109.50    59.859
-GHOSTPARTICLE GHepsilonn3B0    DC      C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    DC      C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    DC      C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    DC      O3'   C3'    +P      1.6100  120.50    14.820
-GHOSTPARTICLE GHepsilonn2B1    DC      C3'   O3'    C4'     1.5260  109.50   180.000
-GHOSTPARTICLE GHepsilonn2C0    DC      O3'   C3'    +P      1.6100  120.50    39.899
-GHOSTPARTICLE GHepsilonn1C0    DC      O3'   C3'    +P      1.6100  120.50  -274.098
+GHOSTPARTICLE GHepsilonn3B0    DC      C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    DC      C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    DC      C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    DC      O3'   C3'    +P      1.6100  120.50    14.890
+GHOSTPARTICLE GHepsilonn2B1    DC      C3'   O3'    H3'     1.0900  109.50   180.000
+GHOSTPARTICLE GHepsilonn2C0    DC      O3'   C3'    +P      1.6100  120.50   -20.030
+GHOSTPARTICLE GHepsilonn1C0    DC      O3'   C3'    +P      1.6100  120.50   205.972
 GHOSTPARTICLE GHzetan3B0       DC      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       DC      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       DC      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       DC      +P    O3'    +OP1    1.4800  108.23    -6.289
+GHOSTPARTICLE GHzetan3C0       DC      +P    O3'    +O5'    1.6100  102.60    -0.564
 GHOSTPARTICLE GHzetan2B1       DC      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       DC      +P    O3'    +OP1    1.4800  108.23   -70.284
-GHOSTPARTICLE GHzetan1C0       DC      +P    O3'    +OP1    1.4800  108.23   296.028
+GHOSTPARTICLE GHzetan2C0       DC      +P    O3'    +O5'    1.6100  102.60    -4.559
+GHOSTPARTICLE GHzetan1C0       DC      +P    O3'    +O5'    1.6100  102.60   181.753
 GHOSTPARTICLE GHring_C1_C2n3B0 DC      C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 DC      C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 DC      C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1608,20 +1686,23 @@ GHOSTPARTICLE GHimp_N4n2C0     DC      N4    H41    H42     1.0100  120.00    90
 GHOSTPARTICLE GHimp_C2n2B0     DC      N3    C2     N1      2.3569   31.01     0.000
 GHOSTPARTICLE GHimp_C2n2B1     DC      N3    C2     N1      2.3569   31.01   180.000
 GHOSTPARTICLE GHimp_C2n2C0     DC      C2    N3     O2      1.2290  122.50    90.000
-GHOSTPARTICLE GHalphan3B0      DG      P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      DG      P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      DG      P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      DG      O5'   P      C5'     1.4100  120.50     5.690
-GHOSTPARTICLE GHbetan3B0       DG      O5'   C5'    P       1.6100  120.50     0.000
+GHOSTPARTICLE GHalphan1B0      DG      P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      DG      O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      DG      P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      DG      O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      DG      P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      DG      P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      DG      O5'   P      C5'     1.4100  120.50    -0.398
+GHOSTPARTICLE GHbetan1B0       DG      O5'   C5'    P       1.6100  120.50     0.000
+GHOSTPARTICLE GHbetan1C0       DG      C5'   O5'    C4'     1.5260  109.50   203.578
+GHOSTPARTICLE GHbetan2B1       DG      O5'   C5'    P       1.6100  120.50   180.000
+GHOSTPARTICLE GHbetan2C0       DG      C5'   O5'    C4'     1.5260  109.50   -68.176
 GHOSTPARTICLE GHbetan3B1       DG      O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       DG      O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       DG      C5'   O5'    H5'     1.0900  109.50    -1.342
-GHOSTPARTICLE GHbetan1C0       DG      C5'   O5'    H5'     1.0900  109.50   323.649
-GHOSTPARTICLE GHbetan2B1       DG      O5'   C5'    P       1.6100  120.50   180.000
-GHOSTPARTICLE GHbetan2C0       DG      C5'   O5'    H5'     1.0900  109.50    51.895
+GHOSTPARTICLE GHbetan3C0       DG      C5'   O5'    C4'     1.5260  109.50    -1.413
 GHOSTPARTICLE GHbetan4B1       DG      O5'   C5'    P       1.6100  120.50    90.000
 GHOSTPARTICLE GHbetan4B3       DG      O5'   C5'    P       1.6100  120.50   270.000
-GHOSTPARTICLE GHbetan4C0       DG      C5'   O5'    H5'     1.0900  109.50    -6.134
+GHOSTPARTICLE GHbetan4C0       DG      C5'   O5'    C4'     1.5260  109.50   -36.205
 GHOSTPARTICLE GHgamman1B0      DG      C5'   C4'    O5'     1.4100  109.50     0.000
 GHOSTPARTICLE GHgamman1C0      DG      C4'   C5'    H4'     1.0900  109.50  -130.204
 GHOSTPARTICLE GHgamman3B1      DG      C5'   C4'    O5'     1.4100  109.50   120.000
@@ -1636,20 +1717,20 @@ GHOSTPARTICLE GHdeltan3C0      DG      C3'   C4'    H3'     1.0900  109.50    -0
 GHOSTPARTICLE GHdeltan2B1      DG      C4'   C3'    C5'     1.5260  109.50   180.000
 GHOSTPARTICLE GHdeltan2C0      DG      C3'   C4'    H3'     1.0900  109.50    -4.817
 GHOSTPARTICLE GHdeltan1C0      DG      C3'   C4'    H3'     1.0900  109.50    59.859
-GHOSTPARTICLE GHepsilonn3B0    DG      C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    DG      C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    DG      C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    DG      O3'   C3'    +P      1.6100  120.50    14.820
-GHOSTPARTICLE GHepsilonn2B1    DG      C3'   O3'    C4'     1.5260  109.50   180.000
-GHOSTPARTICLE GHepsilonn2C0    DG      O3'   C3'    +P      1.6100  120.50    39.899
-GHOSTPARTICLE GHepsilonn1C0    DG      O3'   C3'    +P      1.6100  120.50  -274.098
+GHOSTPARTICLE GHepsilonn3B0    DG      C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    DG      C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    DG      C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    DG      O3'   C3'    +P      1.6100  120.50    14.890
+GHOSTPARTICLE GHepsilonn2B1    DG      C3'   O3'    H3'     1.0900  109.50   180.000
+GHOSTPARTICLE GHepsilonn2C0    DG      O3'   C3'    +P      1.6100  120.50   -20.030
+GHOSTPARTICLE GHepsilonn1C0    DG      O3'   C3'    +P      1.6100  120.50   205.972
 GHOSTPARTICLE GHzetan3B0       DG      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       DG      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       DG      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       DG      +P    O3'    +OP1    1.4800  108.23    -6.289
+GHOSTPARTICLE GHzetan3C0       DG      +P    O3'    +O5'    1.6100  102.60    -0.564
 GHOSTPARTICLE GHzetan2B1       DG      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       DG      +P    O3'    +OP1    1.4800  108.23   -70.284
-GHOSTPARTICLE GHzetan1C0       DG      +P    O3'    +OP1    1.4800  108.23   296.028
+GHOSTPARTICLE GHzetan2C0       DG      +P    O3'    +O5'    1.6100  102.60    -4.559
+GHOSTPARTICLE GHzetan1C0       DG      +P    O3'    +O5'    1.6100  102.60   181.753
 GHOSTPARTICLE GHring_C1_C2n3B0 DG      C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 DG      C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 DG      C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1699,20 +1780,23 @@ GHOSTPARTICLE GHimp_C2n2C0     DG      C2    N1     N3      1.3390  123.30    90
 GHOSTPARTICLE GHimp_N2n2B0     DG      H21   N2     C2      2.0418   34.64     0.000
 GHOSTPARTICLE GHimp_N2n2B1     DG      H21   N2     C2      2.0418   34.64   180.000
 GHOSTPARTICLE GHimp_N2n2C0     DG      N2    H21    H22     1.0100  120.00    90.000
-GHOSTPARTICLE GHalphan3B0      DT      P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      DT      P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      DT      P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      DT      O5'   P      C5'     1.4100  120.50     5.690
-GHOSTPARTICLE GHbetan3B0       DT      O5'   C5'    P       1.6100  120.50     0.000
+GHOSTPARTICLE GHalphan1B0      DT      P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      DT      O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      DT      P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      DT      O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      DT      P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      DT      P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      DT      O5'   P      C5'     1.4100  120.50    -0.398
+GHOSTPARTICLE GHbetan1B0       DT      O5'   C5'    P       1.6100  120.50     0.000
+GHOSTPARTICLE GHbetan1C0       DT      C5'   O5'    C4'     1.5260  109.50   203.578
+GHOSTPARTICLE GHbetan2B1       DT      O5'   C5'    P       1.6100  120.50   180.000
+GHOSTPARTICLE GHbetan2C0       DT      C5'   O5'    C4'     1.5260  109.50   -68.176
 GHOSTPARTICLE GHbetan3B1       DT      O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       DT      O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       DT      C5'   O5'    H5'     1.0900  109.50    -1.342
-GHOSTPARTICLE GHbetan1C0       DT      C5'   O5'    H5'     1.0900  109.50   323.649
-GHOSTPARTICLE GHbetan2B1       DT      O5'   C5'    P       1.6100  120.50   180.000
-GHOSTPARTICLE GHbetan2C0       DT      C5'   O5'    H5'     1.0900  109.50    51.895
+GHOSTPARTICLE GHbetan3C0       DT      C5'   O5'    C4'     1.5260  109.50    -1.413
 GHOSTPARTICLE GHbetan4B1       DT      O5'   C5'    P       1.6100  120.50    90.000
 GHOSTPARTICLE GHbetan4B3       DT      O5'   C5'    P       1.6100  120.50   270.000
-GHOSTPARTICLE GHbetan4C0       DT      C5'   O5'    H5'     1.0900  109.50    -6.134
+GHOSTPARTICLE GHbetan4C0       DT      C5'   O5'    C4'     1.5260  109.50   -36.205
 GHOSTPARTICLE GHgamman1B0      DT      C5'   C4'    O5'     1.4100  109.50     0.000
 GHOSTPARTICLE GHgamman1C0      DT      C4'   C5'    H4'     1.0900  109.50  -130.204
 GHOSTPARTICLE GHgamman3B1      DT      C5'   C4'    O5'     1.4100  109.50   120.000
@@ -1727,20 +1811,20 @@ GHOSTPARTICLE GHdeltan3C0      DT      C3'   C4'    H3'     1.0900  109.50    -0
 GHOSTPARTICLE GHdeltan2B1      DT      C4'   C3'    C5'     1.5260  109.50   180.000
 GHOSTPARTICLE GHdeltan2C0      DT      C3'   C4'    H3'     1.0900  109.50    -4.817
 GHOSTPARTICLE GHdeltan1C0      DT      C3'   C4'    H3'     1.0900  109.50    59.859
-GHOSTPARTICLE GHepsilonn3B0    DT      C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    DT      C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    DT      C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    DT      O3'   C3'    +P      1.6100  120.50    14.820
-GHOSTPARTICLE GHepsilonn2B1    DT      C3'   O3'    C4'     1.5260  109.50   180.000
-GHOSTPARTICLE GHepsilonn2C0    DT      O3'   C3'    +P      1.6100  120.50    39.899
-GHOSTPARTICLE GHepsilonn1C0    DT      O3'   C3'    +P      1.6100  120.50  -274.098
+GHOSTPARTICLE GHepsilonn3B0    DT      C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    DT      C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    DT      C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    DT      O3'   C3'    +P      1.6100  120.50    14.890
+GHOSTPARTICLE GHepsilonn2B1    DT      C3'   O3'    H3'     1.0900  109.50   180.000
+GHOSTPARTICLE GHepsilonn2C0    DT      O3'   C3'    +P      1.6100  120.50   -20.030
+GHOSTPARTICLE GHepsilonn1C0    DT      O3'   C3'    +P      1.6100  120.50   205.972
 GHOSTPARTICLE GHzetan3B0       DT      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       DT      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       DT      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       DT      +P    O3'    +OP1    1.4800  108.23    -6.289
+GHOSTPARTICLE GHzetan3C0       DT      +P    O3'    +O5'    1.6100  102.60    -0.564
 GHOSTPARTICLE GHzetan2B1       DT      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       DT      +P    O3'    +OP1    1.4800  108.23   -70.284
-GHOSTPARTICLE GHzetan1C0       DT      +P    O3'    +OP1    1.4800  108.23   296.028
+GHOSTPARTICLE GHzetan2C0       DT      +P    O3'    +O5'    1.6100  102.60    -4.559
+GHOSTPARTICLE GHzetan1C0       DT      +P    O3'    +O5'    1.6100  102.60   181.753
 GHOSTPARTICLE GHring_C1_C2n3B0 DT      C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 DT      C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 DT      C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1793,22 +1877,28 @@ GHOSTPARTICLE GHimp_N3n2C0     DT      N3    C2     H3      1.0100  116.80    90
 GHOSTPARTICLE GHimp_C2n2B0     DT      N3    C2     N1      2.3422   32.23     0.000
 GHOSTPARTICLE GHimp_C2n2B1     DT      N3    C2     N1      2.3422   32.23   180.000
 GHOSTPARTICLE GHimp_C2n2C0     DT      C2    N3     O2      1.2290  120.60    90.000
-GHOSTPARTICLE GHalphan3B0      A       P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      A       P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      A       P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      A       O5'   P      C5'     1.4100  120.50     5.690
-GHOSTPARTICLE GHalphan3B0      RA      P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      RA      P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      RA      P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      RA      O5'   P      C5'     1.4100  120.50     5.690
+GHOSTPARTICLE GHalphan1B0      A       P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      A       O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      A       P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      A       O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      A       P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      A       P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      A       O5'   P      C5'     1.4100  120.50    -0.398
+GHOSTPARTICLE GHalphan1B0      RA      P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      RA      O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      RA      P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      RA      O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      RA      P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      RA      P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      RA      O5'   P      C5'     1.4100  120.50    -0.398
 GHOSTPARTICLE GHbetan3B0       A       O5'   C5'    P       1.6100  120.50     0.000
 GHOSTPARTICLE GHbetan3B1       A       O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       A       O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       A       C5'   O5'    H5'     1.0900  109.50     0.035
+GHOSTPARTICLE GHbetan3C0       A       C5'   O5'    C4'     1.5260  109.50    -0.035
 GHOSTPARTICLE GHbetan3B0       RA      O5'   C5'    P       1.6100  120.50     0.000
 GHOSTPARTICLE GHbetan3B1       RA      O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       RA      O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       RA      C5'   O5'    H5'     1.0900  109.50     0.035
+GHOSTPARTICLE GHbetan3C0       RA      C5'   O5'    C4'     1.5260  109.50    -0.035
 GHOSTPARTICLE GHgamman1B0      A       C5'   C4'    O5'     1.4100  109.50     0.000
 GHOSTPARTICLE GHgamman1C0      A       C4'   C5'    H4'     1.0900  109.50  -130.204
 GHOSTPARTICLE GHgamman3B1      A       C5'   C4'    O5'     1.4100  109.50   120.000
@@ -1837,26 +1927,26 @@ GHOSTPARTICLE GHdeltan3C0      RA      C3'   C4'    H3'     1.0900  109.50    -0
 GHOSTPARTICLE GHdeltan2B1      RA      C4'   C3'    C5'     1.5260  109.50   180.000
 GHOSTPARTICLE GHdeltan2C0      RA      C3'   C4'    H3'     1.0900  109.50    -4.817
 GHOSTPARTICLE GHdeltan1C0      RA      C3'   C4'    H3'     1.0900  109.50    59.859
-GHOSTPARTICLE GHepsilonn3B0    A       C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    A       C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    A       C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    A       O3'   C3'    +P      1.6100  120.50    -0.035
-GHOSTPARTICLE GHepsilonn3B0    RA      C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    RA      C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    RA      C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    RA      O3'   C3'    +P      1.6100  120.50    -0.035
+GHOSTPARTICLE GHepsilonn3B0    A       C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    A       C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    A       C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    A       O3'   C3'    +P      1.6100  120.50     0.035
+GHOSTPARTICLE GHepsilonn3B0    RA      C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    RA      C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    RA      C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    RA      O3'   C3'    +P      1.6100  120.50     0.035
 GHOSTPARTICLE GHzetan3B0       A       O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       A       O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       A       O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       A       +P    O3'    +OP1    1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       A       +P    O3'    +O5'    1.6100  102.60     0.008
 GHOSTPARTICLE GHzetan2B1       A       O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       A       +P    O3'    +OP1    1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       A       +P    O3'    +O5'    1.6100  102.60     0.000
 GHOSTPARTICLE GHzetan3B0       RA      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       RA      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       RA      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       RA      +P    O3'    +OP1    1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       RA      +P    O3'    +O5'    1.6100  102.60     0.008
 GHOSTPARTICLE GHzetan2B1       RA      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       RA      +P    O3'    +OP1    1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       RA      +P    O3'    +O5'    1.6100  102.60     0.000
 GHOSTPARTICLE GHring_C1_C2n3B0 A       C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 A       C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 A       C1'   C2'    O4'     1.4100  109.50   240.000
@@ -1929,16 +2019,16 @@ GHOSTPARTICLE GHchin3C0        RA      N9    C1'    C8      1.3710  128.80    57
 GHOSTPARTICLE GHchin4B1        RA      C1'   N9     O4'     1.4100  109.50    90.000
 GHOSTPARTICLE GHchin4B3        RA      C1'   N9     O4'     1.4100  109.50   270.000
 GHOSTPARTICLE GHchin4C0        RA      N9    C1'    C8      1.3710  128.80     4.773
-GHOSTPARTICLE GHrotor_O2n3B0   A       C2'   O2'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHrotor_O2n3B1   A       C2'   O2'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHrotor_O2n3B2   A       C2'   O2'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHrotor_O2n3C0   A       O2'   C2'    HO2'    0.9600  108.50    -0.036
-GHOSTPARTICLE GHrotor_O2n1C0   A       O2'   C2'    HO2'    0.9600  108.50   239.982
-GHOSTPARTICLE GHrotor_O2n3B0   RA      C2'   O2'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHrotor_O2n3B1   RA      C2'   O2'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHrotor_O2n3B2   RA      C2'   O2'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHrotor_O2n3C0   RA      O2'   C2'    HO2'    0.9600  108.50    -0.036
-GHOSTPARTICLE GHrotor_O2n1C0   RA      O2'   C2'    HO2'    0.9600  108.50   239.982
+GHOSTPARTICLE GHrotor_O2n3B0   A       C2'   O2'    H2'     1.0900  109.50     0.000
+GHOSTPARTICLE GHrotor_O2n3B1   A       C2'   O2'    H2'     1.0900  109.50   120.000
+GHOSTPARTICLE GHrotor_O2n3B2   A       C2'   O2'    H2'     1.0900  109.50   240.000
+GHOSTPARTICLE GHrotor_O2n3C0   A       O2'   C2'    HO2'    0.9600  108.50     0.035
+GHOSTPARTICLE GHrotor_O2n1C0   A       O2'   C2'    HO2'    0.9600  108.50  -359.947
+GHOSTPARTICLE GHrotor_O2n3B0   RA      C2'   O2'    H2'     1.0900  109.50     0.000
+GHOSTPARTICLE GHrotor_O2n3B1   RA      C2'   O2'    H2'     1.0900  109.50   120.000
+GHOSTPARTICLE GHrotor_O2n3B2   RA      C2'   O2'    H2'     1.0900  109.50   240.000
+GHOSTPARTICLE GHrotor_O2n3C0   RA      O2'   C2'    HO2'    0.9600  108.50     0.035
+GHOSTPARTICLE GHrotor_O2n1C0   RA      O2'   C2'    HO2'    0.9600  108.50  -359.947
 GHOSTPARTICLE GHimp_N9n2B0     A       C4    N9     C8      2.1836   37.25     0.000
 GHOSTPARTICLE GHimp_N9n2B1     A       C4    N9     C8      2.1836   37.25   180.000
 GHOSTPARTICLE GHimp_N9n2C0     A       N9    C4     C1'     1.4750  125.80    90.000
@@ -1969,22 +2059,28 @@ GHOSTPARTICLE GHimp_C2n2C0     A       C2    N3     H2      1.0800  115.45    90
 GHOSTPARTICLE GHimp_C2n2B0     RA      N3    C2     N1      2.3910   25.45     0.000
 GHOSTPARTICLE GHimp_C2n2B1     RA      N3    C2     N1      2.3910   25.45   180.000
 GHOSTPARTICLE GHimp_C2n2C0     RA      C2    N3     H2      1.0800  115.45    90.000
-GHOSTPARTICLE GHalphan3B0      C       P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      C       P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      C       P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      C       O5'   P      C5'     1.4100  120.50     5.690
-GHOSTPARTICLE GHalphan3B0      RC      P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      RC      P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      RC      P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      RC      O5'   P      C5'     1.4100  120.50     5.690
+GHOSTPARTICLE GHalphan1B0      C       P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      C       O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      C       P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      C       O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      C       P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      C       P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      C       O5'   P      C5'     1.4100  120.50    -0.398
+GHOSTPARTICLE GHalphan1B0      RC      P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      RC      O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      RC      P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      RC      O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      RC      P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      RC      P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      RC      O5'   P      C5'     1.4100  120.50    -0.398
 GHOSTPARTICLE GHbetan3B0       C       O5'   C5'    P       1.6100  120.50     0.000
 GHOSTPARTICLE GHbetan3B1       C       O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       C       O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       C       C5'   O5'    H5'     1.0900  109.50     0.035
+GHOSTPARTICLE GHbetan3C0       C       C5'   O5'    C4'     1.5260  109.50    -0.035
 GHOSTPARTICLE GHbetan3B0       RC      O5'   C5'    P       1.6100  120.50     0.000
 GHOSTPARTICLE GHbetan3B1       RC      O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       RC      O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       RC      C5'   O5'    H5'     1.0900  109.50     0.035
+GHOSTPARTICLE GHbetan3C0       RC      C5'   O5'    C4'     1.5260  109.50    -0.035
 GHOSTPARTICLE GHgamman1B0      C       C5'   C4'    O5'     1.4100  109.50     0.000
 GHOSTPARTICLE GHgamman1C0      C       C4'   C5'    H4'     1.0900  109.50  -130.204
 GHOSTPARTICLE GHgamman3B1      C       C5'   C4'    O5'     1.4100  109.50   120.000
@@ -2013,26 +2109,26 @@ GHOSTPARTICLE GHdeltan3C0      RC      C3'   C4'    H3'     1.0900  109.50    -0
 GHOSTPARTICLE GHdeltan2B1      RC      C4'   C3'    C5'     1.5260  109.50   180.000
 GHOSTPARTICLE GHdeltan2C0      RC      C3'   C4'    H3'     1.0900  109.50    -4.817
 GHOSTPARTICLE GHdeltan1C0      RC      C3'   C4'    H3'     1.0900  109.50    59.859
-GHOSTPARTICLE GHepsilonn3B0    C       C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    C       C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    C       C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    C       O3'   C3'    +P      1.6100  120.50    -0.035
-GHOSTPARTICLE GHepsilonn3B0    RC      C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    RC      C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    RC      C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    RC      O3'   C3'    +P      1.6100  120.50    -0.035
+GHOSTPARTICLE GHepsilonn3B0    C       C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    C       C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    C       C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    C       O3'   C3'    +P      1.6100  120.50     0.035
+GHOSTPARTICLE GHepsilonn3B0    RC      C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    RC      C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    RC      C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    RC      O3'   C3'    +P      1.6100  120.50     0.035
 GHOSTPARTICLE GHzetan3B0       C       O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       C       O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       C       O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       C       +P    O3'    +OP1    1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       C       +P    O3'    +O5'    1.6100  102.60     0.008
 GHOSTPARTICLE GHzetan2B1       C       O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       C       +P    O3'    +OP1    1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       C       +P    O3'    +O5'    1.6100  102.60     0.000
 GHOSTPARTICLE GHzetan3B0       RC      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       RC      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       RC      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       RC      +P    O3'    +OP1    1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       RC      +P    O3'    +O5'    1.6100  102.60     0.008
 GHOSTPARTICLE GHzetan2B1       RC      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       RC      +P    O3'    +OP1    1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       RC      +P    O3'    +O5'    1.6100  102.60     0.000
 GHOSTPARTICLE GHring_C1_C2n3B0 C       C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 C       C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 C       C1'   C2'    O4'     1.4100  109.50   240.000
@@ -2105,16 +2201,16 @@ GHOSTPARTICLE GHchin3C0        RC      N1    C1'    C6      1.3650  121.20   -58
 GHOSTPARTICLE GHchin4B1        RC      C1'   N1     O4'     1.4100  109.50    90.000
 GHOSTPARTICLE GHchin4B3        RC      C1'   N1     O4'     1.4100  109.50   270.000
 GHOSTPARTICLE GHchin4C0        RC      N1    C1'    C6      1.3650  121.20     8.040
-GHOSTPARTICLE GHrotor_O2n3B0   C       C2'   O2'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHrotor_O2n3B1   C       C2'   O2'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHrotor_O2n3B2   C       C2'   O2'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHrotor_O2n3C0   C       O2'   C2'    HO2'    0.9600  108.50    -0.036
-GHOSTPARTICLE GHrotor_O2n1C0   C       O2'   C2'    HO2'    0.9600  108.50   239.982
-GHOSTPARTICLE GHrotor_O2n3B0   RC      C2'   O2'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHrotor_O2n3B1   RC      C2'   O2'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHrotor_O2n3B2   RC      C2'   O2'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHrotor_O2n3C0   RC      O2'   C2'    HO2'    0.9600  108.50    -0.036
-GHOSTPARTICLE GHrotor_O2n1C0   RC      O2'   C2'    HO2'    0.9600  108.50   239.982
+GHOSTPARTICLE GHrotor_O2n3B0   C       C2'   O2'    H2'     1.0900  109.50     0.000
+GHOSTPARTICLE GHrotor_O2n3B1   C       C2'   O2'    H2'     1.0900  109.50   120.000
+GHOSTPARTICLE GHrotor_O2n3B2   C       C2'   O2'    H2'     1.0900  109.50   240.000
+GHOSTPARTICLE GHrotor_O2n3C0   C       O2'   C2'    HO2'    0.9600  108.50     0.035
+GHOSTPARTICLE GHrotor_O2n1C0   C       O2'   C2'    HO2'    0.9600  108.50  -359.947
+GHOSTPARTICLE GHrotor_O2n3B0   RC      C2'   O2'    H2'     1.0900  109.50     0.000
+GHOSTPARTICLE GHrotor_O2n3B1   RC      C2'   O2'    H2'     1.0900  109.50   120.000
+GHOSTPARTICLE GHrotor_O2n3B2   RC      C2'   O2'    H2'     1.0900  109.50   240.000
+GHOSTPARTICLE GHrotor_O2n3C0   RC      O2'   C2'    HO2'    0.9600  108.50     0.035
+GHOSTPARTICLE GHrotor_O2n1C0   RC      O2'   C2'    HO2'    0.9600  108.50  -359.947
 GHOSTPARTICLE GHimp_N1n2B0     C       C6    N1     C2      2.3988   29.41     0.000
 GHOSTPARTICLE GHimp_N1n2B1     C       C6    N1     C2      2.3988   29.41   180.000
 GHOSTPARTICLE GHimp_N1n2C0     C       N1    C6     C1'     1.4750  121.20    90.000
@@ -2151,22 +2247,28 @@ GHOSTPARTICLE GHimp_C2n2C0     C       C2    N3     O2      1.2290  122.50    90
 GHOSTPARTICLE GHimp_C2n2B0     RC      N3    C2     N1      2.3569   31.01     0.000
 GHOSTPARTICLE GHimp_C2n2B1     RC      N3    C2     N1      2.3569   31.01   180.000
 GHOSTPARTICLE GHimp_C2n2C0     RC      C2    N3     O2      1.2290  122.50    90.000
-GHOSTPARTICLE GHalphan3B0      G       P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      G       P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      G       P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      G       O5'   P      C5'     1.4100  120.50     5.690
-GHOSTPARTICLE GHalphan3B0      RG      P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      RG      P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      RG      P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      RG      O5'   P      C5'     1.4100  120.50     5.690
+GHOSTPARTICLE GHalphan1B0      G       P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      G       O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      G       P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      G       O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      G       P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      G       P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      G       O5'   P      C5'     1.4100  120.50    -0.398
+GHOSTPARTICLE GHalphan1B0      RG      P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      RG      O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      RG      P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      RG      O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      RG      P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      RG      P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      RG      O5'   P      C5'     1.4100  120.50    -0.398
 GHOSTPARTICLE GHbetan3B0       G       O5'   C5'    P       1.6100  120.50     0.000
 GHOSTPARTICLE GHbetan3B1       G       O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       G       O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       G       C5'   O5'    H5'     1.0900  109.50     0.035
+GHOSTPARTICLE GHbetan3C0       G       C5'   O5'    C4'     1.5260  109.50    -0.035
 GHOSTPARTICLE GHbetan3B0       RG      O5'   C5'    P       1.6100  120.50     0.000
 GHOSTPARTICLE GHbetan3B1       RG      O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       RG      O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       RG      C5'   O5'    H5'     1.0900  109.50     0.035
+GHOSTPARTICLE GHbetan3C0       RG      C5'   O5'    C4'     1.5260  109.50    -0.035
 GHOSTPARTICLE GHgamman1B0      G       C5'   C4'    O5'     1.4100  109.50     0.000
 GHOSTPARTICLE GHgamman1C0      G       C4'   C5'    H4'     1.0900  109.50  -130.204
 GHOSTPARTICLE GHgamman3B1      G       C5'   C4'    O5'     1.4100  109.50   120.000
@@ -2195,26 +2297,26 @@ GHOSTPARTICLE GHdeltan3C0      RG      C3'   C4'    H3'     1.0900  109.50    -0
 GHOSTPARTICLE GHdeltan2B1      RG      C4'   C3'    C5'     1.5260  109.50   180.000
 GHOSTPARTICLE GHdeltan2C0      RG      C3'   C4'    H3'     1.0900  109.50    -4.817
 GHOSTPARTICLE GHdeltan1C0      RG      C3'   C4'    H3'     1.0900  109.50    59.859
-GHOSTPARTICLE GHepsilonn3B0    G       C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    G       C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    G       C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    G       O3'   C3'    +P      1.6100  120.50    -0.035
-GHOSTPARTICLE GHepsilonn3B0    RG      C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    RG      C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    RG      C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    RG      O3'   C3'    +P      1.6100  120.50    -0.035
+GHOSTPARTICLE GHepsilonn3B0    G       C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    G       C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    G       C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    G       O3'   C3'    +P      1.6100  120.50     0.035
+GHOSTPARTICLE GHepsilonn3B0    RG      C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    RG      C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    RG      C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    RG      O3'   C3'    +P      1.6100  120.50     0.035
 GHOSTPARTICLE GHzetan3B0       G       O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       G       O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       G       O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       G       +P    O3'    +OP1    1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       G       +P    O3'    +O5'    1.6100  102.60     0.008
 GHOSTPARTICLE GHzetan2B1       G       O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       G       +P    O3'    +OP1    1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       G       +P    O3'    +O5'    1.6100  102.60     0.000
 GHOSTPARTICLE GHzetan3B0       RG      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       RG      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       RG      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       RG      +P    O3'    +OP1    1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       RG      +P    O3'    +O5'    1.6100  102.60     0.008
 GHOSTPARTICLE GHzetan2B1       RG      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       RG      +P    O3'    +OP1    1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       RG      +P    O3'    +O5'    1.6100  102.60     0.000
 GHOSTPARTICLE GHring_C1_C2n3B0 G       C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 G       C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 G       C1'   C2'    O4'     1.4100  109.50   240.000
@@ -2287,16 +2389,16 @@ GHOSTPARTICLE GHchin3C0        RG      N9    C1'    C8      1.3710  128.80    56
 GHOSTPARTICLE GHchin4B1        RG      C1'   N9     O4'     1.4100  109.50    90.000
 GHOSTPARTICLE GHchin4B3        RG      C1'   N9     O4'     1.4100  109.50   270.000
 GHOSTPARTICLE GHchin4C0        RG      N9    C1'    C8      1.3710  128.80     0.994
-GHOSTPARTICLE GHrotor_O2n3B0   G       C2'   O2'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHrotor_O2n3B1   G       C2'   O2'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHrotor_O2n3B2   G       C2'   O2'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHrotor_O2n3C0   G       O2'   C2'    HO2'    0.9600  108.50    -0.036
-GHOSTPARTICLE GHrotor_O2n1C0   G       O2'   C2'    HO2'    0.9600  108.50   239.982
-GHOSTPARTICLE GHrotor_O2n3B0   RG      C2'   O2'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHrotor_O2n3B1   RG      C2'   O2'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHrotor_O2n3B2   RG      C2'   O2'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHrotor_O2n3C0   RG      O2'   C2'    HO2'    0.9600  108.50    -0.036
-GHOSTPARTICLE GHrotor_O2n1C0   RG      O2'   C2'    HO2'    0.9600  108.50   239.982
+GHOSTPARTICLE GHrotor_O2n3B0   G       C2'   O2'    H2'     1.0900  109.50     0.000
+GHOSTPARTICLE GHrotor_O2n3B1   G       C2'   O2'    H2'     1.0900  109.50   120.000
+GHOSTPARTICLE GHrotor_O2n3B2   G       C2'   O2'    H2'     1.0900  109.50   240.000
+GHOSTPARTICLE GHrotor_O2n3C0   G       O2'   C2'    HO2'    0.9600  108.50     0.035
+GHOSTPARTICLE GHrotor_O2n1C0   G       O2'   C2'    HO2'    0.9600  108.50  -359.947
+GHOSTPARTICLE GHrotor_O2n3B0   RG      C2'   O2'    H2'     1.0900  109.50     0.000
+GHOSTPARTICLE GHrotor_O2n3B1   RG      C2'   O2'    H2'     1.0900  109.50   120.000
+GHOSTPARTICLE GHrotor_O2n3B2   RG      C2'   O2'    H2'     1.0900  109.50   240.000
+GHOSTPARTICLE GHrotor_O2n3C0   RG      O2'   C2'    HO2'    0.9600  108.50     0.035
+GHOSTPARTICLE GHrotor_O2n1C0   RG      O2'   C2'    HO2'    0.9600  108.50  -359.947
 GHOSTPARTICLE GHimp_N9n2B0     G       C8    N9     C4      2.1836   37.35     0.000
 GHOSTPARTICLE GHimp_N9n2B1     G       C8    N9     C4      2.1836   37.35   180.000
 GHOSTPARTICLE GHimp_N9n2C0     G       N9    C8     C1'     1.4750  128.80    90.000
@@ -2333,22 +2435,28 @@ GHOSTPARTICLE GHimp_N2n2C0     G       N2    H21    H22     1.0100  120.00    90
 GHOSTPARTICLE GHimp_N2n2B0     RG      H21   N2     C2      2.0418   34.64     0.000
 GHOSTPARTICLE GHimp_N2n2B1     RG      H21   N2     C2      2.0418   34.64   180.000
 GHOSTPARTICLE GHimp_N2n2C0     RG      N2    H21    H22     1.0100  120.00    90.000
-GHOSTPARTICLE GHalphan3B0      U       P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      U       P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      U       P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      U       O5'   P      C5'     1.4100  120.50     5.690
-GHOSTPARTICLE GHalphan3B0      RU      P     O5'    OP1     1.4800  108.23     0.000
-GHOSTPARTICLE GHalphan3B1      RU      P     O5'    OP1     1.4800  108.23   120.000
-GHOSTPARTICLE GHalphan3B2      RU      P     O5'    OP1     1.4800  108.23   240.000
-GHOSTPARTICLE GHalphan3C0      RU      O5'   P      C5'     1.4100  120.50     5.690
+GHOSTPARTICLE GHalphan1B0      U       P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      U       O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      U       P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      U       O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      U       P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      U       P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      U       O5'   P      C5'     1.4100  120.50    -0.398
+GHOSTPARTICLE GHalphan1B0      RU      P     O5'    -O3'    1.6100  102.60     0.000
+GHOSTPARTICLE GHalphan1C0      RU      O5'   P      C5'     1.4100  120.50   211.795
+GHOSTPARTICLE GHalphan2B1      RU      P     O5'    -O3'    1.6100  102.60   180.000
+GHOSTPARTICLE GHalphan2C0      RU      O5'   P      C5'     1.4100  120.50    -4.020
+GHOSTPARTICLE GHalphan3B1      RU      P     O5'    -O3'    1.6100  102.60   120.000
+GHOSTPARTICLE GHalphan3B2      RU      P     O5'    -O3'    1.6100  102.60   240.000
+GHOSTPARTICLE GHalphan3C0      RU      O5'   P      C5'     1.4100  120.50    -0.398
 GHOSTPARTICLE GHbetan3B0       U       O5'   C5'    P       1.6100  120.50     0.000
 GHOSTPARTICLE GHbetan3B1       U       O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       U       O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       U       C5'   O5'    H5'     1.0900  109.50     0.035
+GHOSTPARTICLE GHbetan3C0       U       C5'   O5'    C4'     1.5260  109.50    -0.035
 GHOSTPARTICLE GHbetan3B0       RU      O5'   C5'    P       1.6100  120.50     0.000
 GHOSTPARTICLE GHbetan3B1       RU      O5'   C5'    P       1.6100  120.50   120.000
 GHOSTPARTICLE GHbetan3B2       RU      O5'   C5'    P       1.6100  120.50   240.000
-GHOSTPARTICLE GHbetan3C0       RU      C5'   O5'    H5'     1.0900  109.50     0.035
+GHOSTPARTICLE GHbetan3C0       RU      C5'   O5'    C4'     1.5260  109.50    -0.035
 GHOSTPARTICLE GHgamman1B0      U       C5'   C4'    O5'     1.4100  109.50     0.000
 GHOSTPARTICLE GHgamman1C0      U       C4'   C5'    H4'     1.0900  109.50  -130.204
 GHOSTPARTICLE GHgamman3B1      U       C5'   C4'    O5'     1.4100  109.50   120.000
@@ -2377,26 +2485,26 @@ GHOSTPARTICLE GHdeltan3C0      RU      C3'   C4'    H3'     1.0900  109.50    -0
 GHOSTPARTICLE GHdeltan2B1      RU      C4'   C3'    C5'     1.5260  109.50   180.000
 GHOSTPARTICLE GHdeltan2C0      RU      C3'   C4'    H3'     1.0900  109.50    -4.817
 GHOSTPARTICLE GHdeltan1C0      RU      C3'   C4'    H3'     1.0900  109.50    59.859
-GHOSTPARTICLE GHepsilonn3B0    U       C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    U       C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    U       C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    U       O3'   C3'    +P      1.6100  120.50    -0.035
-GHOSTPARTICLE GHepsilonn3B0    RU      C3'   O3'    C4'     1.5260  109.50     0.000
-GHOSTPARTICLE GHepsilonn3B1    RU      C3'   O3'    C4'     1.5260  109.50   120.000
-GHOSTPARTICLE GHepsilonn3B2    RU      C3'   O3'    C4'     1.5260  109.50   240.000
-GHOSTPARTICLE GHepsilonn3C0    RU      O3'   C3'    +P      1.6100  120.50    -0.035
+GHOSTPARTICLE GHepsilonn3B0    U       C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    U       C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    U       C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    U       O3'   C3'    +P      1.6100  120.50     0.035
+GHOSTPARTICLE GHepsilonn3B0    RU      C3'   O3'    H3'     1.0900  109.50     0.000
+GHOSTPARTICLE GHepsilonn3B1    RU      C3'   O3'    H3'     1.0900  109.50   120.000
+GHOSTPARTICLE GHepsilonn3B2    RU      C3'   O3'    H3'     1.0900  109.50   240.000
+GHOSTPARTICLE GHepsilonn3C0    RU      O3'   C3'    +P      1.6100  120.50     0.035
 GHOSTPARTICLE GHzetan3B0       U       O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       U       O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       U       O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       U       +P    O3'    +OP1    1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       U       +P    O3'    +O5'    1.6100  102.60     0.008
 GHOSTPARTICLE GHzetan2B1       U       O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       U       +P    O3'    +OP1    1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       U       +P    O3'    +O5'    1.6100  102.60     0.000
 GHOSTPARTICLE GHzetan3B0       RU      O3'   +P     C3'     1.4100  120.50     0.000
 GHOSTPARTICLE GHzetan3B1       RU      O3'   +P     C3'     1.4100  120.50   120.000
 GHOSTPARTICLE GHzetan3B2       RU      O3'   +P     C3'     1.4100  120.50   240.000
-GHOSTPARTICLE GHzetan3C0       RU      +P    O3'    +OP1    1.4800  108.23    -5.717
+GHOSTPARTICLE GHzetan3C0       RU      +P    O3'    +O5'    1.6100  102.60     0.008
 GHOSTPARTICLE GHzetan2B1       RU      O3'   +P     C3'     1.4100  120.50   180.000
-GHOSTPARTICLE GHzetan2C0       RU      +P    O3'    +OP1    1.4800  108.23   -65.725
+GHOSTPARTICLE GHzetan2C0       RU      +P    O3'    +O5'    1.6100  102.60     0.000
 GHOSTPARTICLE GHring_C1_C2n3B0 U       C1'   C2'    O4'     1.4100  109.50     0.000
 GHOSTPARTICLE GHring_C1_C2n3B1 U       C1'   C2'    O4'     1.4100  109.50   120.000
 GHOSTPARTICLE GHring_C1_C2n3B2 U       C1'   C2'    O4'     1.4100  109.50   240.000
@@ -2469,16 +2577,16 @@ GHOSTPARTICLE GHchin3C0        RU      N1    C1'    C6      1.3650  121.20    59
 GHOSTPARTICLE GHchin4B1        RU      C1'   N1     O4'     1.4100  109.50    90.000
 GHOSTPARTICLE GHchin4B3        RU      C1'   N1     O4'     1.4100  109.50   270.000
 GHOSTPARTICLE GHchin4C0        RU      N1    C1'    C6      1.3650  121.20     4.000
-GHOSTPARTICLE GHrotor_O2n3B0   U       C2'   O2'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHrotor_O2n3B1   U       C2'   O2'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHrotor_O2n3B2   U       C2'   O2'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHrotor_O2n3C0   U       O2'   C2'    HO2'    0.9600  108.50    -0.036
-GHOSTPARTICLE GHrotor_O2n1C0   U       O2'   C2'    HO2'    0.9600  108.50   239.982
-GHOSTPARTICLE GHrotor_O2n3B0   RU      C2'   O2'    C1'     1.5260  109.50     0.000
-GHOSTPARTICLE GHrotor_O2n3B1   RU      C2'   O2'    C1'     1.5260  109.50   120.000
-GHOSTPARTICLE GHrotor_O2n3B2   RU      C2'   O2'    C1'     1.5260  109.50   240.000
-GHOSTPARTICLE GHrotor_O2n3C0   RU      O2'   C2'    HO2'    0.9600  108.50    -0.036
-GHOSTPARTICLE GHrotor_O2n1C0   RU      O2'   C2'    HO2'    0.9600  108.50   239.982
+GHOSTPARTICLE GHrotor_O2n3B0   U       C2'   O2'    H2'     1.0900  109.50     0.000
+GHOSTPARTICLE GHrotor_O2n3B1   U       C2'   O2'    H2'     1.0900  109.50   120.000
+GHOSTPARTICLE GHrotor_O2n3B2   U       C2'   O2'    H2'     1.0900  109.50   240.000
+GHOSTPARTICLE GHrotor_O2n3C0   U       O2'   C2'    HO2'    0.9600  108.50     0.035
+GHOSTPARTICLE GHrotor_O2n1C0   U       O2'   C2'    HO2'    0.9600  108.50  -359.947
+GHOSTPARTICLE GHrotor_O2n3B0   RU      C2'   O2'    H2'     1.0900  109.50     0.000
+GHOSTPARTICLE GHrotor_O2n3B1   RU      C2'   O2'    H2'     1.0900  109.50   120.000
+GHOSTPARTICLE GHrotor_O2n3B2   RU      C2'   O2'    H2'     1.0900  109.50   240.000
+GHOSTPARTICLE GHrotor_O2n3C0   RU      O2'   C2'    HO2'    0.9600  108.50     0.035
+GHOSTPARTICLE GHrotor_O2n1C0   RU      O2'   C2'    HO2'    0.9600  108.50  -359.947
 GHOSTPARTICLE GHimp_N1n2B0     U       C6    N1     C2      2.3988   29.41     0.000
 GHOSTPARTICLE GHimp_N1n2B1     U       C6    N1     C2      2.3988   29.41   180.000
 GHOSTPARTICLE GHimp_N1n2C0     U       N1    C6     C1'     1.4750  121.20    90.000
@@ -2518,19 +2626,22 @@ GHOSTPARTICLE GHimp_C2n2C0     RU      C2    N3     O2      1.2290  120.60    90
 #
 #DIHEDRAL <name> <resname> <family> <atom_ref> <atom_rotant> <d0_A> <k> <dc_offset>
 #One ring group per real AMBER Fourier harmonic of each covered axis.
-DIHEDRAL DA_alpha_n3_00               DA      NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DA_alpha_n3_10               DA      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DA_alpha_n3_20               DA      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DA_beta_n3_00                DA      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DA_beta_n3_10                DA      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DA_beta_n3_20                DA      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DA_beta_n1_00                DA      NUCLEIC_BACKBONE GHbetan3B0       GHbetan1C0         0.0000     1.5498    5.30222
-DIHEDRAL DA_beta_n2_00                DA      NUCLEIC_BACKBONE GHbetan3B0       GHbetan2C0         3.1134     3.5441   -0.00133
-DIHEDRAL DA_beta_n2_10                DA      NUCLEIC_BACKBONE GHbetan2B1       GHbetan2C0         3.1134     3.5441   -0.00133
-DIHEDRAL DA_beta_n4_00                DA      NUCLEIC_BACKBONE GHbetan3B0       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DA_beta_n4_10                DA      NUCLEIC_BACKBONE GHbetan4B1       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DA_beta_n4_10                DA      NUCLEIC_BACKBONE GHbetan2B1       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DA_beta_n4_30                DA      NUCLEIC_BACKBONE GHbetan4B3       GHbetan4C0         3.1134   219.6570   11.66852
+DIHEDRAL DA_alpha_n1_00               DA      NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL DA_alpha_n2_00               DA      NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL DA_alpha_n2_10               DA      NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL DA_alpha_n3_00               DA      NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DA_alpha_n3_10               DA      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DA_alpha_n3_20               DA      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DA_beta_n1_00                DA      NUCLEIC_BACKBONE GHbetan1B0       GHbetan1C0         0.0000     1.1070    4.14628
+DIHEDRAL DA_beta_n2_00                DA      NUCLEIC_BACKBONE GHbetan1B0       GHbetan2C0         3.3885     2.1173   -0.00188
+DIHEDRAL DA_beta_n2_10                DA      NUCLEIC_BACKBONE GHbetan2B1       GHbetan2C0         3.3885     2.1173   -0.00188
+DIHEDRAL DA_beta_n3_00                DA      NUCLEIC_BACKBONE GHbetan1B0       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DA_beta_n3_10                DA      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DA_beta_n3_20                DA      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DA_beta_n4_00                DA      NUCLEIC_BACKBONE GHbetan1B0       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DA_beta_n4_10                DA      NUCLEIC_BACKBONE GHbetan4B1       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DA_beta_n4_10                DA      NUCLEIC_BACKBONE GHbetan2B1       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DA_beta_n4_30                DA      NUCLEIC_BACKBONE GHbetan4B3       GHbetan4C0         3.3885    92.3032    8.15855
 DIHEDRAL DA_gamma_n1_00               DA      NUCLEIC_BACKBONE GHgamman1B0      GHgamman1C0        0.0000     3.5997    7.04162
 DIHEDRAL DA_gamma_n3_00               DA      NUCLEIC_BACKBONE GHgamman1B0      GHgamman3C0        2.8973   503.2233   26.25081
 DIHEDRAL DA_gamma_n3_10               DA      NUCLEIC_BACKBONE GHgamman3B1      GHgamman3C0        2.8973   503.2233   26.25081
@@ -2543,18 +2654,18 @@ DIHEDRAL DA_delta_n3_20               DA      NUCLEIC_BACKBONE GHdeltan3B2      
 DIHEDRAL DA_delta_n2_00               DA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL DA_delta_n2_10               DA      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL DA_delta_n1_00               DA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     0.8493    0.84244
-DIHEDRAL DA_epsilon_n3_00             DA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DA_epsilon_n3_10             DA      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DA_epsilon_n3_20             DA      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DA_epsilon_n2_00             DA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn2C0      3.3885    14.9885   -1.36789
-DIHEDRAL DA_epsilon_n2_10             DA      NUCLEIC_BACKBONE GHepsilonn2B1    GHepsilonn2C0      3.3885    14.9885   -1.36789
-DIHEDRAL DA_epsilon_n1_00             DA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn1C0      0.0000     3.7234    6.52440
-DIHEDRAL DA_zeta_n3_00                DA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DA_zeta_n3_10                DA      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DA_zeta_n3_20                DA      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DA_zeta_n2_00                DA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    30.4627   -0.01523
-DIHEDRAL DA_zeta_n2_10                DA      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    30.4627   -0.01523
-DIHEDRAL DA_zeta_n1_00                DA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.2757    8.88970
+DIHEDRAL DA_epsilon_n3_00             DA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DA_epsilon_n3_10             DA      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DA_epsilon_n3_20             DA      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DA_epsilon_n2_00             DA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn2C0      3.1134    25.0884   -1.36399
+DIHEDRAL DA_epsilon_n2_10             DA      NUCLEIC_BACKBONE GHepsilonn2B1    GHepsilonn2C0      3.1134    25.0884   -1.36399
+DIHEDRAL DA_epsilon_n1_00             DA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn1C0      0.0000     5.2128   10.41255
+DIHEDRAL DA_zeta_n3_00                DA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DA_zeta_n3_10                DA      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DA_zeta_n3_20                DA      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DA_zeta_n2_00                DA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    23.9197   -0.01962
+DIHEDRAL DA_zeta_n2_10                DA      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    23.9197   -0.01962
+DIHEDRAL DA_zeta_n1_00                DA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.0360    7.42355
 DIHEDRAL DA_ring_C1_C2_n3_00          DA      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
 DIHEDRAL DA_ring_C1_C2_n3_10          DA      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
 DIHEDRAL DA_ring_C1_C2_n3_20          DA      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
@@ -2591,19 +2702,22 @@ DIHEDRAL DA_imp_N6_n2_00              DA      PLANARITY GHimp_N6n2B0     GHimp_N
 DIHEDRAL DA_imp_N6_n2_10              DA      PLANARITY GHimp_N6n2B1     GHimp_N6n2C0       1.4625    10.8129    0.00000
 DIHEDRAL DA_imp_C2_n2_00              DA      PLANARITY GHimp_C2n2B0     GHimp_C2n2C0       1.4643    12.6053    0.00000
 DIHEDRAL DA_imp_C2_n2_10              DA      PLANARITY GHimp_C2n2B1     GHimp_C2n2C0       1.4643    12.6053    0.00000
-DIHEDRAL DC_alpha_n3_00               DC      NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DC_alpha_n3_10               DC      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DC_alpha_n3_20               DC      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DC_beta_n3_00                DC      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DC_beta_n3_10                DC      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DC_beta_n3_20                DC      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DC_beta_n1_00                DC      NUCLEIC_BACKBONE GHbetan3B0       GHbetan1C0         0.0000     1.5498    5.30222
-DIHEDRAL DC_beta_n2_00                DC      NUCLEIC_BACKBONE GHbetan3B0       GHbetan2C0         3.1134     3.5441   -0.00133
-DIHEDRAL DC_beta_n2_10                DC      NUCLEIC_BACKBONE GHbetan2B1       GHbetan2C0         3.1134     3.5441   -0.00133
-DIHEDRAL DC_beta_n4_00                DC      NUCLEIC_BACKBONE GHbetan3B0       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DC_beta_n4_10                DC      NUCLEIC_BACKBONE GHbetan4B1       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DC_beta_n4_10                DC      NUCLEIC_BACKBONE GHbetan2B1       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DC_beta_n4_30                DC      NUCLEIC_BACKBONE GHbetan4B3       GHbetan4C0         3.1134   219.6570   11.66852
+DIHEDRAL DC_alpha_n1_00               DC      NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL DC_alpha_n2_00               DC      NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL DC_alpha_n2_10               DC      NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL DC_alpha_n3_00               DC      NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DC_alpha_n3_10               DC      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DC_alpha_n3_20               DC      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DC_beta_n1_00                DC      NUCLEIC_BACKBONE GHbetan1B0       GHbetan1C0         0.0000     1.1070    4.14628
+DIHEDRAL DC_beta_n2_00                DC      NUCLEIC_BACKBONE GHbetan1B0       GHbetan2C0         3.3885     2.1173   -0.00188
+DIHEDRAL DC_beta_n2_10                DC      NUCLEIC_BACKBONE GHbetan2B1       GHbetan2C0         3.3885     2.1173   -0.00188
+DIHEDRAL DC_beta_n3_00                DC      NUCLEIC_BACKBONE GHbetan1B0       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DC_beta_n3_10                DC      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DC_beta_n3_20                DC      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DC_beta_n4_00                DC      NUCLEIC_BACKBONE GHbetan1B0       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DC_beta_n4_10                DC      NUCLEIC_BACKBONE GHbetan4B1       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DC_beta_n4_10                DC      NUCLEIC_BACKBONE GHbetan2B1       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DC_beta_n4_30                DC      NUCLEIC_BACKBONE GHbetan4B3       GHbetan4C0         3.3885    92.3032    8.15855
 DIHEDRAL DC_gamma_n1_00               DC      NUCLEIC_BACKBONE GHgamman1B0      GHgamman1C0        0.0000     3.5997    7.04162
 DIHEDRAL DC_gamma_n3_00               DC      NUCLEIC_BACKBONE GHgamman1B0      GHgamman3C0        2.8973   503.2233   26.25081
 DIHEDRAL DC_gamma_n3_10               DC      NUCLEIC_BACKBONE GHgamman3B1      GHgamman3C0        2.8973   503.2233   26.25081
@@ -2616,18 +2730,18 @@ DIHEDRAL DC_delta_n3_20               DC      NUCLEIC_BACKBONE GHdeltan3B2      
 DIHEDRAL DC_delta_n2_00               DC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL DC_delta_n2_10               DC      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL DC_delta_n1_00               DC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     0.8493    0.84244
-DIHEDRAL DC_epsilon_n3_00             DC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DC_epsilon_n3_10             DC      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DC_epsilon_n3_20             DC      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DC_epsilon_n2_00             DC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn2C0      3.3885    14.9885   -1.36789
-DIHEDRAL DC_epsilon_n2_10             DC      NUCLEIC_BACKBONE GHepsilonn2B1    GHepsilonn2C0      3.3885    14.9885   -1.36789
-DIHEDRAL DC_epsilon_n1_00             DC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn1C0      0.0000     3.7234    6.52440
-DIHEDRAL DC_zeta_n3_00                DC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DC_zeta_n3_10                DC      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DC_zeta_n3_20                DC      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DC_zeta_n2_00                DC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    30.4627   -0.01523
-DIHEDRAL DC_zeta_n2_10                DC      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    30.4627   -0.01523
-DIHEDRAL DC_zeta_n1_00                DC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.2757    8.88970
+DIHEDRAL DC_epsilon_n3_00             DC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DC_epsilon_n3_10             DC      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DC_epsilon_n3_20             DC      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DC_epsilon_n2_00             DC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn2C0      3.1134    25.0884   -1.36399
+DIHEDRAL DC_epsilon_n2_10             DC      NUCLEIC_BACKBONE GHepsilonn2B1    GHepsilonn2C0      3.1134    25.0884   -1.36399
+DIHEDRAL DC_epsilon_n1_00             DC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn1C0      0.0000     5.2128   10.41255
+DIHEDRAL DC_zeta_n3_00                DC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DC_zeta_n3_10                DC      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DC_zeta_n3_20                DC      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DC_zeta_n2_00                DC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    23.9197   -0.01962
+DIHEDRAL DC_zeta_n2_10                DC      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    23.9197   -0.01962
+DIHEDRAL DC_zeta_n1_00                DC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.0360    7.42355
 DIHEDRAL DC_ring_C1_C2_n3_00          DC      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
 DIHEDRAL DC_ring_C1_C2_n3_10          DC      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
 DIHEDRAL DC_ring_C1_C2_n3_20          DC      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
@@ -2670,19 +2784,22 @@ DIHEDRAL DC_imp_N4_n2_00              DC      PLANARITY GHimp_N4n2B0     GHimp_N
 DIHEDRAL DC_imp_N4_n2_10              DC      PLANARITY GHimp_N4n2B1     GHimp_N4n2C0       1.4625    10.8129    0.00000
 DIHEDRAL DC_imp_C2_n2_00              DC      PLANARITY GHimp_C2n2B0     GHimp_C2n2C0       1.5965    78.8724    0.00000
 DIHEDRAL DC_imp_C2_n2_10              DC      PLANARITY GHimp_C2n2B1     GHimp_C2n2C0       1.5965    78.8724    0.00000
-DIHEDRAL DG_alpha_n3_00               DG      NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DG_alpha_n3_10               DG      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DG_alpha_n3_20               DG      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DG_beta_n3_00                DG      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DG_beta_n3_10                DG      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DG_beta_n3_20                DG      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DG_beta_n1_00                DG      NUCLEIC_BACKBONE GHbetan3B0       GHbetan1C0         0.0000     1.5498    5.30222
-DIHEDRAL DG_beta_n2_00                DG      NUCLEIC_BACKBONE GHbetan3B0       GHbetan2C0         3.1134     3.5441   -0.00133
-DIHEDRAL DG_beta_n2_10                DG      NUCLEIC_BACKBONE GHbetan2B1       GHbetan2C0         3.1134     3.5441   -0.00133
-DIHEDRAL DG_beta_n4_00                DG      NUCLEIC_BACKBONE GHbetan3B0       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DG_beta_n4_10                DG      NUCLEIC_BACKBONE GHbetan4B1       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DG_beta_n4_10                DG      NUCLEIC_BACKBONE GHbetan2B1       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DG_beta_n4_30                DG      NUCLEIC_BACKBONE GHbetan4B3       GHbetan4C0         3.1134   219.6570   11.66852
+DIHEDRAL DG_alpha_n1_00               DG      NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL DG_alpha_n2_00               DG      NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL DG_alpha_n2_10               DG      NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL DG_alpha_n3_00               DG      NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DG_alpha_n3_10               DG      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DG_alpha_n3_20               DG      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DG_beta_n1_00                DG      NUCLEIC_BACKBONE GHbetan1B0       GHbetan1C0         0.0000     1.1070    4.14628
+DIHEDRAL DG_beta_n2_00                DG      NUCLEIC_BACKBONE GHbetan1B0       GHbetan2C0         3.3885     2.1173   -0.00188
+DIHEDRAL DG_beta_n2_10                DG      NUCLEIC_BACKBONE GHbetan2B1       GHbetan2C0         3.3885     2.1173   -0.00188
+DIHEDRAL DG_beta_n3_00                DG      NUCLEIC_BACKBONE GHbetan1B0       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DG_beta_n3_10                DG      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DG_beta_n3_20                DG      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DG_beta_n4_00                DG      NUCLEIC_BACKBONE GHbetan1B0       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DG_beta_n4_10                DG      NUCLEIC_BACKBONE GHbetan4B1       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DG_beta_n4_10                DG      NUCLEIC_BACKBONE GHbetan2B1       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DG_beta_n4_30                DG      NUCLEIC_BACKBONE GHbetan4B3       GHbetan4C0         3.3885    92.3032    8.15855
 DIHEDRAL DG_gamma_n1_00               DG      NUCLEIC_BACKBONE GHgamman1B0      GHgamman1C0        0.0000     3.5997    7.04162
 DIHEDRAL DG_gamma_n3_00               DG      NUCLEIC_BACKBONE GHgamman1B0      GHgamman3C0        2.8973   503.2233   26.25081
 DIHEDRAL DG_gamma_n3_10               DG      NUCLEIC_BACKBONE GHgamman3B1      GHgamman3C0        2.8973   503.2233   26.25081
@@ -2695,18 +2812,18 @@ DIHEDRAL DG_delta_n3_20               DG      NUCLEIC_BACKBONE GHdeltan3B2      
 DIHEDRAL DG_delta_n2_00               DG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL DG_delta_n2_10               DG      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL DG_delta_n1_00               DG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     0.8493    0.84244
-DIHEDRAL DG_epsilon_n3_00             DG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DG_epsilon_n3_10             DG      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DG_epsilon_n3_20             DG      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DG_epsilon_n2_00             DG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn2C0      3.3885    14.9885   -1.36789
-DIHEDRAL DG_epsilon_n2_10             DG      NUCLEIC_BACKBONE GHepsilonn2B1    GHepsilonn2C0      3.3885    14.9885   -1.36789
-DIHEDRAL DG_epsilon_n1_00             DG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn1C0      0.0000     3.7234    6.52440
-DIHEDRAL DG_zeta_n3_00                DG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DG_zeta_n3_10                DG      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DG_zeta_n3_20                DG      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DG_zeta_n2_00                DG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    30.4627   -0.01523
-DIHEDRAL DG_zeta_n2_10                DG      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    30.4627   -0.01523
-DIHEDRAL DG_zeta_n1_00                DG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.2757    8.88970
+DIHEDRAL DG_epsilon_n3_00             DG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DG_epsilon_n3_10             DG      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DG_epsilon_n3_20             DG      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DG_epsilon_n2_00             DG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn2C0      3.1134    25.0884   -1.36399
+DIHEDRAL DG_epsilon_n2_10             DG      NUCLEIC_BACKBONE GHepsilonn2B1    GHepsilonn2C0      3.1134    25.0884   -1.36399
+DIHEDRAL DG_epsilon_n1_00             DG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn1C0      0.0000     5.2128   10.41255
+DIHEDRAL DG_zeta_n3_00                DG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DG_zeta_n3_10                DG      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DG_zeta_n3_20                DG      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DG_zeta_n2_00                DG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    23.9197   -0.01962
+DIHEDRAL DG_zeta_n2_10                DG      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    23.9197   -0.01962
+DIHEDRAL DG_zeta_n1_00                DG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.0360    7.42355
 DIHEDRAL DG_ring_C1_C2_n3_00          DG      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
 DIHEDRAL DG_ring_C1_C2_n3_10          DG      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
 DIHEDRAL DG_ring_C1_C2_n3_20          DG      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
@@ -2745,19 +2862,22 @@ DIHEDRAL DG_imp_C2_n2_00              DG      PLANARITY GHimp_C2n2B0     GHimp_C
 DIHEDRAL DG_imp_C2_n2_10              DG      PLANARITY GHimp_C2n2B1     GHimp_C2n2C0       1.6507     7.6482    0.00000
 DIHEDRAL DG_imp_N2_n2_00              DG      PLANARITY GHimp_N2n2B0     GHimp_N2n2C0       1.4625    10.8129    0.00000
 DIHEDRAL DG_imp_N2_n2_10              DG      PLANARITY GHimp_N2n2B1     GHimp_N2n2C0       1.4625    10.8129    0.00000
-DIHEDRAL DT_alpha_n3_00               DT      NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DT_alpha_n3_10               DT      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DT_alpha_n3_20               DT      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL DT_beta_n3_00                DT      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DT_beta_n3_10                DT      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DT_beta_n3_20                DT      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134    79.9836    2.46309
-DIHEDRAL DT_beta_n1_00                DT      NUCLEIC_BACKBONE GHbetan3B0       GHbetan1C0         0.0000     1.5498    5.30222
-DIHEDRAL DT_beta_n2_00                DT      NUCLEIC_BACKBONE GHbetan3B0       GHbetan2C0         3.1134     3.5441   -0.00133
-DIHEDRAL DT_beta_n2_10                DT      NUCLEIC_BACKBONE GHbetan2B1       GHbetan2C0         3.1134     3.5441   -0.00133
-DIHEDRAL DT_beta_n4_00                DT      NUCLEIC_BACKBONE GHbetan3B0       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DT_beta_n4_10                DT      NUCLEIC_BACKBONE GHbetan4B1       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DT_beta_n4_10                DT      NUCLEIC_BACKBONE GHbetan2B1       GHbetan4C0         3.1134   219.6570   11.66852
-DIHEDRAL DT_beta_n4_30                DT      NUCLEIC_BACKBONE GHbetan4B3       GHbetan4C0         3.1134   219.6570   11.66852
+DIHEDRAL DT_alpha_n1_00               DT      NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL DT_alpha_n2_00               DT      NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL DT_alpha_n2_10               DT      NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL DT_alpha_n3_00               DT      NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DT_alpha_n3_10               DT      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DT_alpha_n3_20               DT      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL DT_beta_n1_00                DT      NUCLEIC_BACKBONE GHbetan1B0       GHbetan1C0         0.0000     1.1070    4.14628
+DIHEDRAL DT_beta_n2_00                DT      NUCLEIC_BACKBONE GHbetan1B0       GHbetan2C0         3.3885     2.1173   -0.00188
+DIHEDRAL DT_beta_n2_10                DT      NUCLEIC_BACKBONE GHbetan2B1       GHbetan2C0         3.3885     2.1173   -0.00188
+DIHEDRAL DT_beta_n3_00                DT      NUCLEIC_BACKBONE GHbetan1B0       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DT_beta_n3_10                DT      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DT_beta_n3_20                DT      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885    40.0804    1.76274
+DIHEDRAL DT_beta_n4_00                DT      NUCLEIC_BACKBONE GHbetan1B0       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DT_beta_n4_10                DT      NUCLEIC_BACKBONE GHbetan4B1       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DT_beta_n4_10                DT      NUCLEIC_BACKBONE GHbetan2B1       GHbetan4C0         3.3885    92.3032    8.15855
+DIHEDRAL DT_beta_n4_30                DT      NUCLEIC_BACKBONE GHbetan4B3       GHbetan4C0         3.3885    92.3032    8.15855
 DIHEDRAL DT_gamma_n1_00               DT      NUCLEIC_BACKBONE GHgamman1B0      GHgamman1C0        0.0000     3.5997    7.04162
 DIHEDRAL DT_gamma_n3_00               DT      NUCLEIC_BACKBONE GHgamman1B0      GHgamman3C0        2.8973   503.2233   26.25081
 DIHEDRAL DT_gamma_n3_10               DT      NUCLEIC_BACKBONE GHgamman3B1      GHgamman3C0        2.8973   503.2233   26.25081
@@ -2770,18 +2890,18 @@ DIHEDRAL DT_delta_n3_20               DT      NUCLEIC_BACKBONE GHdeltan3B2      
 DIHEDRAL DT_delta_n2_00               DT      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL DT_delta_n2_10               DT      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL DT_delta_n1_00               DT      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     0.8493    0.84244
-DIHEDRAL DT_epsilon_n3_00             DT      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DT_epsilon_n3_10             DT      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DT_epsilon_n3_20             DT      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885    22.3594    1.03628
-DIHEDRAL DT_epsilon_n2_00             DT      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn2C0      3.3885    14.9885   -1.36789
-DIHEDRAL DT_epsilon_n2_10             DT      NUCLEIC_BACKBONE GHepsilonn2B1    GHepsilonn2C0      3.3885    14.9885   -1.36789
-DIHEDRAL DT_epsilon_n1_00             DT      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn1C0      0.0000     3.7234    6.52440
-DIHEDRAL DT_zeta_n3_00                DT      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DT_zeta_n3_10                DT      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DT_zeta_n3_20                DT      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   229.4512   14.00655
-DIHEDRAL DT_zeta_n2_00                DT      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    30.4627   -0.01523
-DIHEDRAL DT_zeta_n2_10                DT      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    30.4627   -0.01523
-DIHEDRAL DT_zeta_n1_00                DT      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.2757    8.88970
+DIHEDRAL DT_epsilon_n3_00             DT      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DT_epsilon_n3_10             DT      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DT_epsilon_n3_20             DT      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134    44.6199    1.42698
+DIHEDRAL DT_epsilon_n2_00             DT      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn2C0      3.1134    25.0884   -1.36399
+DIHEDRAL DT_epsilon_n2_10             DT      NUCLEIC_BACKBONE GHepsilonn2B1    GHepsilonn2C0      3.1134    25.0884   -1.36399
+DIHEDRAL DT_epsilon_n1_00             DT      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn1C0      0.0000     5.2128   10.41255
+DIHEDRAL DT_zeta_n3_00                DT      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DT_zeta_n3_10                DT      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DT_zeta_n3_20                DT      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   158.4619   12.14179
+DIHEDRAL DT_zeta_n2_00                DT      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    23.9197   -0.01962
+DIHEDRAL DT_zeta_n2_10                DT      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    23.9197   -0.01962
+DIHEDRAL DT_zeta_n1_00                DT      NUCLEIC_BACKBONE GHzetan3B0       GHzetan1C0         0.0000     2.0360    7.42355
 DIHEDRAL DT_ring_C1_C2_n3_00          DT      NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
 DIHEDRAL DT_ring_C1_C2_n3_10          DT      NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
 DIHEDRAL DT_ring_C1_C2_n3_20          DT      NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   163.8409   13.81143
@@ -2824,18 +2944,24 @@ DIHEDRAL DT_imp_N3_n2_00              DT      PLANARITY GHimp_N3n2B0     GHimp_N
 DIHEDRAL DT_imp_N3_n2_10              DT      PLANARITY GHimp_N3n2B1     GHimp_N3n2C0       1.4820    11.9889    0.00000
 DIHEDRAL DT_imp_C2_n2_00              DT      PLANARITY GHimp_C2n2B0     GHimp_C2n2C0       1.6373    75.7323    0.00000
 DIHEDRAL DT_imp_C2_n2_10              DT      PLANARITY GHimp_C2n2B1     GHimp_C2n2C0       1.6373    75.7323    0.00000
-DIHEDRAL A_alpha_n3_00                A       NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL A_alpha_n3_10                A       NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL A_alpha_n3_20                A       NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RA_alpha_n3_00               RA      NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RA_alpha_n3_10               RA      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RA_alpha_n3_20               RA      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL A_beta_n3_00                 A       NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL A_beta_n3_10                 A       NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL A_beta_n3_20                 A       NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RA_beta_n3_00                RA      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RA_beta_n3_10                RA      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RA_beta_n3_20                RA      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134   396.5154   19.61025
+DIHEDRAL A_alpha_n1_00                A       NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL A_alpha_n2_00                A       NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL A_alpha_n2_10                A       NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL A_alpha_n3_00                A       NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL A_alpha_n3_10                A       NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL A_alpha_n3_20                A       NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RA_alpha_n1_00               RA      NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL RA_alpha_n2_00               RA      NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL RA_alpha_n2_10               RA      NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL RA_alpha_n3_00               RA      NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RA_alpha_n3_10               RA      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RA_alpha_n3_20               RA      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL A_beta_n3_00                 A       NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL A_beta_n3_10                 A       NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL A_beta_n3_20                 A       NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RA_beta_n3_00                RA      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RA_beta_n3_10                RA      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RA_beta_n3_20                RA      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885   198.6969   16.13828
 DIHEDRAL A_gamma_n1_00                A       NUCLEIC_BACKBONE GHgamman1B0      GHgamman1C0        0.0000     3.5997    7.04162
 DIHEDRAL A_gamma_n3_00                A       NUCLEIC_BACKBONE GHgamman1B0      GHgamman3C0        2.8973   503.2233   26.25081
 DIHEDRAL A_gamma_n3_10                A       NUCLEIC_BACKBONE GHgamman3B1      GHgamman3C0        2.8973   503.2233   26.25081
@@ -2860,22 +2986,22 @@ DIHEDRAL RA_delta_n3_20               RA      NUCLEIC_BACKBONE GHdeltan3B2      
 DIHEDRAL RA_delta_n2_00               RA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL RA_delta_n2_10               RA      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL RA_delta_n1_00               RA      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     0.8493    0.84244
-DIHEDRAL A_epsilon_n3_00              A       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL A_epsilon_n3_10              A       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL A_epsilon_n3_20              A       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RA_epsilon_n3_00             RA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RA_epsilon_n3_10             RA      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RA_epsilon_n3_20             RA      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL A_zeta_n3_00                 A       NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL A_zeta_n3_10                 A       NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL A_zeta_n3_20                 A       NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL A_zeta_n2_00                 A       NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL A_zeta_n2_10                 A       NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL RA_zeta_n3_00                RA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RA_zeta_n3_10                RA      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RA_zeta_n3_20                RA      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RA_zeta_n2_00                RA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL RA_zeta_n2_10                RA      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    37.5214   -0.01875
+DIHEDRAL A_epsilon_n3_00              A       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL A_epsilon_n3_10              A       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL A_epsilon_n3_20              A       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RA_epsilon_n3_00             RA      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RA_epsilon_n3_10             RA      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RA_epsilon_n3_20             RA      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL A_zeta_n3_00                 A       NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL A_zeta_n3_10                 A       NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL A_zeta_n3_20                 A       NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL A_zeta_n2_00                 A       NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL A_zeta_n2_10                 A       NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL RA_zeta_n3_00                RA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RA_zeta_n3_10                RA      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RA_zeta_n3_20                RA      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RA_zeta_n2_00                RA      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL RA_zeta_n2_10                RA      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
 DIHEDRAL A_ring_C1_C2_n3_00           A       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
 DIHEDRAL A_ring_C1_C2_n3_10           A       NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
 DIHEDRAL A_ring_C1_C2_n3_20           A       NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
@@ -2940,14 +3066,14 @@ DIHEDRAL RA_chi_n4_00                 RA      NUCLEIC_CHI GHchin1B0        GHchi
 DIHEDRAL RA_chi_n4_10                 RA      NUCLEIC_CHI GHchin4B1        GHchin4C0          3.2825  1203.5983   56.94396
 DIHEDRAL RA_chi_n4_10                 RA      NUCLEIC_CHI GHchin2B1        GHchin4C0          3.2825  1203.5983   56.94396
 DIHEDRAL RA_chi_n4_30                 RA      NUCLEIC_CHI GHchin4B3        GHchin4C0          3.2825  1203.5983   56.94396
-DIHEDRAL A_rotor_O2_n3_00             A       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL A_rotor_O2_n3_10             A       NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL A_rotor_O2_n3_20             A       NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL A_rotor_O2_n1_00             A       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     0.7992    1.04239
-DIHEDRAL RA_rotor_O2_n3_00            RA      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RA_rotor_O2_n3_10            RA      NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RA_rotor_O2_n3_20            RA      NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RA_rotor_O2_n1_00            RA      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     0.7992    1.04239
+DIHEDRAL A_rotor_O2_n3_00             A       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL A_rotor_O2_n3_10             A       NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL A_rotor_O2_n3_20             A       NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL A_rotor_O2_n1_00             A       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     1.1188    1.37889
+DIHEDRAL RA_rotor_O2_n3_00            RA      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RA_rotor_O2_n3_10            RA      NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RA_rotor_O2_n3_20            RA      NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RA_rotor_O2_n1_00            RA      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     1.1188    1.37889
 DIHEDRAL A_imp_N9_n2_00               A       PLANARITY GHimp_N9n2B0     GHimp_N9n2C0       1.8512     7.5139    0.00000
 DIHEDRAL A_imp_N9_n2_10               A       PLANARITY GHimp_N9n2B1     GHimp_N9n2C0       1.8512     7.5139    0.00000
 DIHEDRAL RA_imp_N9_n2_00              RA      PLANARITY GHimp_N9n2B0     GHimp_N9n2C0       1.8512     7.5139    0.00000
@@ -2968,18 +3094,24 @@ DIHEDRAL A_imp_C2_n2_00               A       PLANARITY GHimp_C2n2B0     GHimp_C
 DIHEDRAL A_imp_C2_n2_10               A       PLANARITY GHimp_C2n2B1     GHimp_C2n2C0       1.4643    12.6053    0.00000
 DIHEDRAL RA_imp_C2_n2_00              RA      PLANARITY GHimp_C2n2B0     GHimp_C2n2C0       1.4643    12.6053    0.00000
 DIHEDRAL RA_imp_C2_n2_10              RA      PLANARITY GHimp_C2n2B1     GHimp_C2n2C0       1.4643    12.6053    0.00000
-DIHEDRAL C_alpha_n3_00                C       NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL C_alpha_n3_10                C       NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL C_alpha_n3_20                C       NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RC_alpha_n3_00               RC      NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RC_alpha_n3_10               RC      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RC_alpha_n3_20               RC      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL C_beta_n3_00                 C       NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL C_beta_n3_10                 C       NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL C_beta_n3_20                 C       NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RC_beta_n3_00                RC      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RC_beta_n3_10                RC      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RC_beta_n3_20                RC      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134   396.5154   19.61025
+DIHEDRAL C_alpha_n1_00                C       NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL C_alpha_n2_00                C       NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL C_alpha_n2_10                C       NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL C_alpha_n3_00                C       NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL C_alpha_n3_10                C       NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL C_alpha_n3_20                C       NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RC_alpha_n1_00               RC      NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL RC_alpha_n2_00               RC      NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL RC_alpha_n2_10               RC      NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL RC_alpha_n3_00               RC      NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RC_alpha_n3_10               RC      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RC_alpha_n3_20               RC      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL C_beta_n3_00                 C       NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL C_beta_n3_10                 C       NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL C_beta_n3_20                 C       NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RC_beta_n3_00                RC      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RC_beta_n3_10                RC      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RC_beta_n3_20                RC      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885   198.6969   16.13828
 DIHEDRAL C_gamma_n1_00                C       NUCLEIC_BACKBONE GHgamman1B0      GHgamman1C0        0.0000     3.5997    7.04162
 DIHEDRAL C_gamma_n3_00                C       NUCLEIC_BACKBONE GHgamman1B0      GHgamman3C0        2.8973   503.2233   26.25081
 DIHEDRAL C_gamma_n3_10                C       NUCLEIC_BACKBONE GHgamman3B1      GHgamman3C0        2.8973   503.2233   26.25081
@@ -3004,22 +3136,22 @@ DIHEDRAL RC_delta_n3_20               RC      NUCLEIC_BACKBONE GHdeltan3B2      
 DIHEDRAL RC_delta_n2_00               RC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL RC_delta_n2_10               RC      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL RC_delta_n1_00               RC      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     0.8493    0.84244
-DIHEDRAL C_epsilon_n3_00              C       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL C_epsilon_n3_10              C       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL C_epsilon_n3_20              C       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RC_epsilon_n3_00             RC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RC_epsilon_n3_10             RC      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RC_epsilon_n3_20             RC      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL C_zeta_n3_00                 C       NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL C_zeta_n3_10                 C       NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL C_zeta_n3_20                 C       NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL C_zeta_n2_00                 C       NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL C_zeta_n2_10                 C       NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL RC_zeta_n3_00                RC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RC_zeta_n3_10                RC      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RC_zeta_n3_20                RC      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RC_zeta_n2_00                RC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL RC_zeta_n2_10                RC      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    37.5214   -0.01875
+DIHEDRAL C_epsilon_n3_00              C       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL C_epsilon_n3_10              C       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL C_epsilon_n3_20              C       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RC_epsilon_n3_00             RC      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RC_epsilon_n3_10             RC      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RC_epsilon_n3_20             RC      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL C_zeta_n3_00                 C       NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL C_zeta_n3_10                 C       NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL C_zeta_n3_20                 C       NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL C_zeta_n2_00                 C       NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL C_zeta_n2_10                 C       NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL RC_zeta_n3_00                RC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RC_zeta_n3_10                RC      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RC_zeta_n3_20                RC      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RC_zeta_n2_00                RC      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL RC_zeta_n2_10                RC      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
 DIHEDRAL C_ring_C1_C2_n3_00           C       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
 DIHEDRAL C_ring_C1_C2_n3_10           C       NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
 DIHEDRAL C_ring_C1_C2_n3_20           C       NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
@@ -3084,14 +3216,14 @@ DIHEDRAL RC_chi_n4_00                 RC      NUCLEIC_CHI GHchin1B0        GHchi
 DIHEDRAL RC_chi_n4_10                 RC      NUCLEIC_CHI GHchin4B1        GHchin4C0          3.1886   697.8762   41.94292
 DIHEDRAL RC_chi_n4_10                 RC      NUCLEIC_CHI GHchin2B1        GHchin4C0          3.1886   697.8762   41.94292
 DIHEDRAL RC_chi_n4_30                 RC      NUCLEIC_CHI GHchin4B3        GHchin4C0          3.1886   697.8762   41.94292
-DIHEDRAL C_rotor_O2_n3_00             C       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL C_rotor_O2_n3_10             C       NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL C_rotor_O2_n3_20             C       NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL C_rotor_O2_n1_00             C       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     0.7992    1.04239
-DIHEDRAL RC_rotor_O2_n3_00            RC      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RC_rotor_O2_n3_10            RC      NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RC_rotor_O2_n3_20            RC      NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RC_rotor_O2_n1_00            RC      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     0.7992    1.04239
+DIHEDRAL C_rotor_O2_n3_00             C       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL C_rotor_O2_n3_10             C       NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL C_rotor_O2_n3_20             C       NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL C_rotor_O2_n1_00             C       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     1.1188    1.37889
+DIHEDRAL RC_rotor_O2_n3_00            RC      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RC_rotor_O2_n3_10            RC      NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RC_rotor_O2_n3_20            RC      NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RC_rotor_O2_n1_00            RC      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     1.1188    1.37889
 DIHEDRAL C_imp_N1_n2_00               C       PLANARITY GHimp_N1n2B0     GHimp_N1n2C0       1.7265     6.0173    0.00000
 DIHEDRAL C_imp_N1_n2_10               C       PLANARITY GHimp_N1n2B1     GHimp_N1n2C0       1.7265     6.0173    0.00000
 DIHEDRAL RC_imp_N1_n2_00              RC      PLANARITY GHimp_N1n2B0     GHimp_N1n2C0       1.7265     6.0173    0.00000
@@ -3116,18 +3248,24 @@ DIHEDRAL C_imp_C2_n2_00               C       PLANARITY GHimp_C2n2B0     GHimp_C
 DIHEDRAL C_imp_C2_n2_10               C       PLANARITY GHimp_C2n2B1     GHimp_C2n2C0       1.5965    78.8724    0.00000
 DIHEDRAL RC_imp_C2_n2_00              RC      PLANARITY GHimp_C2n2B0     GHimp_C2n2C0       1.5965    78.8724    0.00000
 DIHEDRAL RC_imp_C2_n2_10              RC      PLANARITY GHimp_C2n2B1     GHimp_C2n2C0       1.5965    78.8724    0.00000
-DIHEDRAL G_alpha_n3_00                G       NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL G_alpha_n3_10                G       NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL G_alpha_n3_20                G       NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RG_alpha_n3_00               RG      NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RG_alpha_n3_10               RG      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RG_alpha_n3_20               RG      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL G_beta_n3_00                 G       NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL G_beta_n3_10                 G       NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL G_beta_n3_20                 G       NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RG_beta_n3_00                RG      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RG_beta_n3_10                RG      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RG_beta_n3_20                RG      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134   396.5154   19.61025
+DIHEDRAL G_alpha_n1_00                G       NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL G_alpha_n2_00                G       NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL G_alpha_n2_10                G       NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL G_alpha_n3_00                G       NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL G_alpha_n3_10                G       NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL G_alpha_n3_20                G       NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RG_alpha_n1_00               RG      NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL RG_alpha_n2_00               RG      NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL RG_alpha_n2_10               RG      NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL RG_alpha_n3_00               RG      NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RG_alpha_n3_10               RG      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RG_alpha_n3_20               RG      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL G_beta_n3_00                 G       NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL G_beta_n3_10                 G       NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL G_beta_n3_20                 G       NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RG_beta_n3_00                RG      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RG_beta_n3_10                RG      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RG_beta_n3_20                RG      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885   198.6969   16.13828
 DIHEDRAL G_gamma_n1_00                G       NUCLEIC_BACKBONE GHgamman1B0      GHgamman1C0        0.0000     3.5997    7.04162
 DIHEDRAL G_gamma_n3_00                G       NUCLEIC_BACKBONE GHgamman1B0      GHgamman3C0        2.8973   503.2233   26.25081
 DIHEDRAL G_gamma_n3_10                G       NUCLEIC_BACKBONE GHgamman3B1      GHgamman3C0        2.8973   503.2233   26.25081
@@ -3152,22 +3290,22 @@ DIHEDRAL RG_delta_n3_20               RG      NUCLEIC_BACKBONE GHdeltan3B2      
 DIHEDRAL RG_delta_n2_00               RG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL RG_delta_n2_10               RG      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL RG_delta_n1_00               RG      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     0.8493    0.84244
-DIHEDRAL G_epsilon_n3_00              G       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL G_epsilon_n3_10              G       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL G_epsilon_n3_20              G       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RG_epsilon_n3_00             RG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RG_epsilon_n3_10             RG      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RG_epsilon_n3_20             RG      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL G_zeta_n3_00                 G       NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL G_zeta_n3_10                 G       NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL G_zeta_n3_20                 G       NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL G_zeta_n2_00                 G       NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL G_zeta_n2_10                 G       NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL RG_zeta_n3_00                RG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RG_zeta_n3_10                RG      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RG_zeta_n3_20                RG      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RG_zeta_n2_00                RG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL RG_zeta_n2_10                RG      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    37.5214   -0.01875
+DIHEDRAL G_epsilon_n3_00              G       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL G_epsilon_n3_10              G       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL G_epsilon_n3_20              G       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RG_epsilon_n3_00             RG      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RG_epsilon_n3_10             RG      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RG_epsilon_n3_20             RG      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL G_zeta_n3_00                 G       NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL G_zeta_n3_10                 G       NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL G_zeta_n3_20                 G       NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL G_zeta_n2_00                 G       NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL G_zeta_n2_10                 G       NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL RG_zeta_n3_00                RG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RG_zeta_n3_10                RG      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RG_zeta_n3_20                RG      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RG_zeta_n2_00                RG      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL RG_zeta_n2_10                RG      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
 DIHEDRAL G_ring_C1_C2_n3_00           G       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
 DIHEDRAL G_ring_C1_C2_n3_10           G       NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
 DIHEDRAL G_ring_C1_C2_n3_20           G       NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
@@ -3232,14 +3370,14 @@ DIHEDRAL RG_chi_n4_00                 RG      NUCLEIC_CHI GHchin1B0        GHchi
 DIHEDRAL RG_chi_n4_10                 RG      NUCLEIC_CHI GHchin4B1        GHchin4C0          3.2825   996.6855   47.15462
 DIHEDRAL RG_chi_n4_10                 RG      NUCLEIC_CHI GHchin2B1        GHchin4C0          3.2825   996.6855   47.15462
 DIHEDRAL RG_chi_n4_30                 RG      NUCLEIC_CHI GHchin4B3        GHchin4C0          3.2825   996.6855   47.15462
-DIHEDRAL G_rotor_O2_n3_00             G       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL G_rotor_O2_n3_10             G       NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL G_rotor_O2_n3_20             G       NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL G_rotor_O2_n1_00             G       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     0.7992    1.04239
-DIHEDRAL RG_rotor_O2_n3_00            RG      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RG_rotor_O2_n3_10            RG      NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RG_rotor_O2_n3_20            RG      NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RG_rotor_O2_n1_00            RG      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     0.7992    1.04239
+DIHEDRAL G_rotor_O2_n3_00             G       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL G_rotor_O2_n3_10             G       NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL G_rotor_O2_n3_20             G       NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL G_rotor_O2_n1_00             G       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     1.1188    1.37889
+DIHEDRAL RG_rotor_O2_n3_00            RG      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RG_rotor_O2_n3_10            RG      NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RG_rotor_O2_n3_20            RG      NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RG_rotor_O2_n1_00            RG      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     1.1188    1.37889
 DIHEDRAL G_imp_N9_n2_00               G       PLANARITY GHimp_N9n2B0     GHimp_N9n2C0       1.8409     8.3328    0.00000
 DIHEDRAL G_imp_N9_n2_10               G       PLANARITY GHimp_N9n2B1     GHimp_N9n2C0       1.8409     8.3328    0.00000
 DIHEDRAL RG_imp_N9_n2_00              RG      PLANARITY GHimp_N9n2B0     GHimp_N9n2C0       1.8409     8.3328    0.00000
@@ -3264,18 +3402,24 @@ DIHEDRAL G_imp_N2_n2_00               G       PLANARITY GHimp_N2n2B0     GHimp_N
 DIHEDRAL G_imp_N2_n2_10               G       PLANARITY GHimp_N2n2B1     GHimp_N2n2C0       1.4625    10.8129    0.00000
 DIHEDRAL RG_imp_N2_n2_00              RG      PLANARITY GHimp_N2n2B0     GHimp_N2n2C0       1.4625    10.8129    0.00000
 DIHEDRAL RG_imp_N2_n2_10              RG      PLANARITY GHimp_N2n2B1     GHimp_N2n2C0       1.4625    10.8129    0.00000
-DIHEDRAL U_alpha_n3_00                U       NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL U_alpha_n3_10                U       NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL U_alpha_n3_20                U       NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RU_alpha_n3_00               RU      NUCLEIC_BACKBONE GHalphan3B0      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RU_alpha_n3_10               RU      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL RU_alpha_n3_20               RU      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3509   128.1079    7.80980
-DIHEDRAL U_beta_n3_00                 U       NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL U_beta_n3_10                 U       NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL U_beta_n3_20                 U       NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RU_beta_n3_00                RU      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RU_beta_n3_10                RU      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.1134   396.5154   19.61025
-DIHEDRAL RU_beta_n3_20                RU      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.1134   396.5154   19.61025
+DIHEDRAL U_alpha_n1_00                U       NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL U_alpha_n2_00                U       NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL U_alpha_n2_10                U       NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL U_alpha_n3_00                U       NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL U_alpha_n3_10                U       NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL U_alpha_n3_20                U       NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RU_alpha_n1_00               RU      NUCLEIC_BACKBONE GHalphan1B0      GHalphan1C0        0.0000     0.4059    1.47997
+DIHEDRAL RU_alpha_n2_00               RU      NUCLEIC_BACKBONE GHalphan1B0      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL RU_alpha_n2_10               RU      NUCLEIC_BACKBONE GHalphan2B1      GHalphan2C0        3.3332    30.8502   -0.02530
+DIHEDRAL RU_alpha_n3_00               RU      NUCLEIC_BACKBONE GHalphan1B0      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RU_alpha_n3_10               RU      NUCLEIC_BACKBONE GHalphan3B1      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL RU_alpha_n3_20               RU      NUCLEIC_BACKBONE GHalphan3B2      GHalphan3C0        3.3332   154.0813   11.81026
+DIHEDRAL U_beta_n3_00                 U       NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL U_beta_n3_10                 U       NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL U_beta_n3_20                 U       NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RU_beta_n3_00                RU      NUCLEIC_BACKBONE GHbetan3B0       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RU_beta_n3_10                RU      NUCLEIC_BACKBONE GHbetan3B1       GHbetan3C0         3.3885   198.6969   16.13828
+DIHEDRAL RU_beta_n3_20                RU      NUCLEIC_BACKBONE GHbetan3B2       GHbetan3C0         3.3885   198.6969   16.13828
 DIHEDRAL U_gamma_n1_00                U       NUCLEIC_BACKBONE GHgamman1B0      GHgamman1C0        0.0000     3.5997    7.04162
 DIHEDRAL U_gamma_n3_00                U       NUCLEIC_BACKBONE GHgamman1B0      GHgamman3C0        2.8973   503.2233   26.25081
 DIHEDRAL U_gamma_n3_10                U       NUCLEIC_BACKBONE GHgamman3B1      GHgamman3C0        2.8973   503.2233   26.25081
@@ -3300,22 +3444,22 @@ DIHEDRAL RU_delta_n3_20               RU      NUCLEIC_BACKBONE GHdeltan3B2      
 DIHEDRAL RU_delta_n2_00               RU      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL RU_delta_n2_10               RU      NUCLEIC_BACKBONE GHdeltan2B1      GHdeltan2C0        2.9801    43.2829   -0.24690
 DIHEDRAL RU_delta_n1_00               RU      NUCLEIC_BACKBONE GHdeltan3B0      GHdeltan1C0        0.0000     0.8493    0.84244
-DIHEDRAL U_epsilon_n3_00              U       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL U_epsilon_n3_10              U       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL U_epsilon_n3_20              U       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RU_epsilon_n3_00             RU      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RU_epsilon_n3_10             RU      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL RU_epsilon_n3_20             RU      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.3885   198.6969   16.13828
-DIHEDRAL U_zeta_n3_00                 U       NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL U_zeta_n3_10                 U       NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL U_zeta_n3_20                 U       NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL U_zeta_n2_00                 U       NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL U_zeta_n2_10                 U       NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL RU_zeta_n3_00                RU      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RU_zeta_n3_10                RU      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RU_zeta_n3_20                RU      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3509   195.0651   11.90749
-DIHEDRAL RU_zeta_n2_00                RU      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3509    37.5214   -0.01875
-DIHEDRAL RU_zeta_n2_10                RU      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3509    37.5214   -0.01875
+DIHEDRAL U_epsilon_n3_00              U       NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL U_epsilon_n3_10              U       NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL U_epsilon_n3_20              U       NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RU_epsilon_n3_00             RU      NUCLEIC_BACKBONE GHepsilonn3B0    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RU_epsilon_n3_10             RU      NUCLEIC_BACKBONE GHepsilonn3B1    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL RU_epsilon_n3_20             RU      NUCLEIC_BACKBONE GHepsilonn3B2    GHepsilonn3C0      3.1134   396.5154   19.61025
+DIHEDRAL U_zeta_n3_00                 U       NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL U_zeta_n3_10                 U       NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL U_zeta_n3_20                 U       NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL U_zeta_n2_00                 U       NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL U_zeta_n2_10                 U       NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL RU_zeta_n3_00                RU      NUCLEIC_BACKBONE GHzetan3B0       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RU_zeta_n3_10                RU      NUCLEIC_BACKBONE GHzetan3B1       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RU_zeta_n3_20                RU      NUCLEIC_BACKBONE GHzetan3B2       GHzetan3C0         3.3332   134.7145   10.32219
+DIHEDRAL RU_zeta_n2_00                RU      NUCLEIC_BACKBONE GHzetan3B0       GHzetan2C0         3.3332    29.4622   -0.02416
+DIHEDRAL RU_zeta_n2_10                RU      NUCLEIC_BACKBONE GHzetan2B1       GHzetan2C0         3.3332    29.4622   -0.02416
 DIHEDRAL U_ring_C1_C2_n3_00           U       NUCLEIC_SUGAR GHring_C1_C2n3B0 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
 DIHEDRAL U_ring_C1_C2_n3_10           U       NUCLEIC_SUGAR GHring_C1_C2n3B1 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
 DIHEDRAL U_ring_C1_C2_n3_20           U       NUCLEIC_SUGAR GHring_C1_C2n3B2 GHring_C1_C2n3C0   3.1806   185.5080   15.63792
@@ -3380,14 +3524,14 @@ DIHEDRAL RU_chi_n4_00                 RU      NUCLEIC_CHI GHchin1B0        GHchi
 DIHEDRAL RU_chi_n4_10                 RU      NUCLEIC_CHI GHchin4B1        GHchin4C0          3.1886   790.4152   47.50458
 DIHEDRAL RU_chi_n4_10                 RU      NUCLEIC_CHI GHchin2B1        GHchin4C0          3.1886   790.4152   47.50458
 DIHEDRAL RU_chi_n4_30                 RU      NUCLEIC_CHI GHchin4B3        GHchin4C0          3.1886   790.4152   47.50458
-DIHEDRAL U_rotor_O2_n3_00             U       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL U_rotor_O2_n3_10             U       NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL U_rotor_O2_n3_20             U       NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL U_rotor_O2_n1_00             U       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     0.7992    1.04239
-DIHEDRAL RU_rotor_O2_n3_00            RU      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RU_rotor_O2_n3_10            RU      NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RU_rotor_O2_n3_20            RU      NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.8007   139.6175    7.16218
-DIHEDRAL RU_rotor_O2_n1_00            RU      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     0.7992    1.04239
+DIHEDRAL U_rotor_O2_n3_00             U       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL U_rotor_O2_n3_10             U       NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL U_rotor_O2_n3_20             U       NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL U_rotor_O2_n1_00             U       NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     1.1188    1.37889
+DIHEDRAL RU_rotor_O2_n3_00            RU      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RU_rotor_O2_n3_10            RU      NUCLEIC_CHI GHrotor_O2n3B1   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RU_rotor_O2_n3_20            RU      NUCLEIC_CHI GHrotor_O2n3B2   GHrotor_O2n3C0     2.4909   242.6059    8.06447
+DIHEDRAL RU_rotor_O2_n1_00            RU      NUCLEIC_CHI GHrotor_O2n3B0   GHrotor_O2n1C0     0.0000     1.1188    1.37889
 DIHEDRAL U_imp_N1_n2_00               U       PLANARITY GHimp_N1n2B0     GHimp_N1n2C0       1.7265     6.0173    0.00000
 DIHEDRAL U_imp_N1_n2_10               U       PLANARITY GHimp_N1n2B1     GHimp_N1n2C0       1.7265     6.0173    0.00000
 DIHEDRAL RU_imp_N1_n2_00              RU      PLANARITY GHimp_N1n2B0     GHimp_N1n2C0       1.7265     6.0173    0.00000

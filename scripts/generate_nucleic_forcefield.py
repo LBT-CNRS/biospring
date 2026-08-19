@@ -236,24 +236,41 @@ def generate_residue(ff, resname, emit_as):
         for name in emit_as:
             emit_stretch(name, a1, a2, length_nm * 10.0, k_nm2 / 100.0)
 
-    # Angles: every pair of neighbours around each vertex. The cross-residue
-    # ones (X-O3'-+P and O3'-+P-...) belong to the next residue's own rules,
-    # so only intra-residue vertices are walked here -- same split the
-    # protein generator uses.
+    # Angles: every pair of neighbours around each vertex -- including the
+    # junction. The adjacency walked here comes from ONE residue's template,
+    # so the phosphodiester link's angles appear at no vertex and must be
+    # added by hand (the protein generator never had this problem: its
+    # synthetic chain carries real peptide bonds, so its adjacency crosses
+    # residues on its own). Found by the torque bench, not by inspection:
+    # without these, C3'-O3'-P(i+1) and O3'(i-1)-P-{O5',OP1,OP2} have no
+    # BEND at all and are held only by the .rbody's uniform springs (which
+    # a missing rule never retunes -- silently, since a BEND rule that
+    # doesn't exist reports nothing).
+    junction = []
+    if "O3'" in atoms and "C3'" in atoms and "P" in atoms:
+        junction.append(("C3'", "O3'", NEXT_P))
+    if "P" in atoms:
+        for x in ("O5'", "OP1", "OP2"):
+            if x in atoms:
+                junction.append((PREV_O3, "P", x))
     for vertex, nbrs in adj.items():
         nb = sorted(nbrs)
         for i in range(len(nb)):
             for j in range(i + 1, len(nb)):
-                a1, a3 = nb[i], nb[j]
-                key = (atoms[vertex], frozenset((atoms[a1], atoms[a3])))
-                params = ff.angle_params.get(key)
-                if params is None:
-                    print(f"SKIP BEND {resname} {a1}-{vertex}-{a3}: no HarmonicAngleForce entry")
-                    counters["skip"] += 1
-                    continue
-                theta0, k = params
-                for name in emit_as:
-                    emit_bend(name, a1, vertex, a3, theta0, k)
+                junction.append((nb[i], vertex, nb[j]))
+    for a1, vertex, a3 in junction:
+        # A +/- atom's identifier comes from this residue's own template
+        # (backbone identifiers are uniform across residues in these files).
+        key = (atoms[vertex.lstrip("+-")],
+               frozenset((atoms[a1.lstrip("+-")], atoms[a3.lstrip("+-")])))
+        params = ff.angle_params.get(key)
+        if params is None:
+            print(f"SKIP BEND {resname} {a1}-{vertex}-{a3}: no HarmonicAngleForce entry")
+            counters["skip"] += 1
+            continue
+        theta0, k = params
+        for name in emit_as:
+            emit_bend(name, a1, vertex, a3, theta0, k)
 
 
 
@@ -551,12 +568,37 @@ def neighbours(ff, resname, vertex, exclude):
     out = [prefix + n
            for n in sorted((n for n in adj.get(bare, ()) if n != exclude.lstrip("+-")),
                            key=order.index)]
-    # O3' is bonded across the residue boundary to the next P. That bond is
-    # the phosphodiester link itself, so leaving it out does not merely lose
-    # a substituent -- it makes epsilon (C4'-C3'-O3'-P(i+1)) look like an axis
-    # with a bare end and skips it entirely.
+    # The phosphodiester link crosses the residue boundary, and the template
+    # adjacency stops there -- BOTH ends need patching by hand. O3' gains
+    # the next residue's P (without it, epsilon looks like a bare-ended axis
+    # and is skipped entirely). P gains the PREVIOUS residue's O3' -- and
+    # this one fails the other way: alpha (O3'-P-O5'-C5') still has OP1/OP2
+    # on its P side, so nothing was skipped or warned, the axis was simply
+    # built without the substituent that DEFINES alpha. Invisible in any
+    # energy total; the torque bench caught it as sign flips on half the
+    # alpha axes.
     if bare == "O3'" and not prefix and exclude.lstrip("+-") != "P":
         out.append(NEXT_P)
+    if bare == "P" and not prefix and exclude.lstrip("+-") != "O3'":
+        out.append(PREV_O3)
+    # Unique-class substituents first, so the azimuth REFERENCE is never one
+    # of an identical pair. A vertex like P (OP1, OP2, -O3') gets its frame
+    # from formula_derived_deltas' symmetric-tetrahedral case, which fixes
+    # the two identical atoms only up to a mirror -- that is fine for THEM
+    # (their pair-sum is exchange-invariant) but not for a distinct branch
+    # measured AGAINST one of them: the branch azimuth's sign is then
+    # arbitrary, and PDB naming of the pair (OP1/OP2, H5'/H5'') is itself
+    # arbitrary per residue. Measured on the thermalised duplex before this
+    # reordering: alpha mirrored on 40/40 residues, beta on 18/42 -- torque
+    # sign flips on about half of each. With the branch as reference, the
+    # identical pair sits at +/-symmetric azimuths and no baked sign is
+    # left to be wrong. Stable sort: template order otherwise.
+    atoms_of = ff.atoms_of(resname)
+    counts = {}
+    for n in out:
+        c = atoms_of[n.lstrip("+-")]
+        counts[c] = counts.get(c, 0) + 1
+    out.sort(key=lambda n: 0 if counts[atoms_of[n.lstrip("+-")]] == 1 else 1)
     return out
 
 
