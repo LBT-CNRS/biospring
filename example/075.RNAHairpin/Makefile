@@ -17,6 +17,11 @@ BONDED    = $(BS_DATA_DIR)/reducerules/NucleicAtomBonded.bi.ff
 
 PDB = rna_hairpin.pdb
 
+# Interactive MD, same convention as the other examples: biospring waits
+# for a viewer (VMD, UnityMol) to connect on this port. See example/README.md.
+IMDLOG = mddriver.log
+IMDOPT = -wait -port 3000 -debug 0 -log $(IMDLOG)
+
 GRP       = $(BS_DATA_DIR)/reducerules/amber.rna.grp
 FF        = $(BS_DATA_DIR)/forcefield/amber.rna.nbi.ff
 
@@ -38,7 +43,7 @@ rna.nc : $(PDB)
 	           --dihedral --stretching --bending
 
 run : rna.nc
-	$(BIOSPRING) -nc rna.nc -msp model.msp
+	$(BIOSPRING) -nc rna.nc -msp model.msp $(IMDOPT)
 
 # Point energy, timestep 0, one step: nothing moves, so these numbers depend
 # only on the model and the input conformation. This is the table the README

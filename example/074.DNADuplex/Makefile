@@ -17,6 +17,11 @@ BONDED    = $(BS_DATA_DIR)/reducerules/NucleicAtomBonded.bi.ff
 
 PDB = dna_duplex.pdb
 
+# Interactive MD, same convention as the other examples: biospring waits
+# for a viewer (VMD, UnityMol) to connect on this port. See example/README.md.
+IMDLOG = mddriver.log
+IMDOPT = -wait -port 3000 -debug 0 -log $(IMDLOG)
+
 GRP       = $(BS_DATA_DIR)/reducerules/amber.dna.grp
 FF        = $(BS_DATA_DIR)/forcefield/amber.dna.nbi.ff
 
@@ -38,7 +43,7 @@ dna.nc : $(PDB)
 	           --dihedral --stretching --bending
 
 run : dna.nc
-	$(BIOSPRING) -nc dna.nc -msp model.msp
+	$(BIOSPRING) -nc dna.nc -msp model.msp $(IMDOPT)
 
 # Point energy, timestep 0, one step: nothing moves, so these numbers depend
 # only on the model and the input conformation. This is the table the README
