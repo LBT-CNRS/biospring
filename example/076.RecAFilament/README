@@ -1,0 +1,70 @@
+# 076.RecAFilament -- protein and DNA in one system
+
+Four RecA protomers of a nucleoprotein filament with the dT13 strand they
+wrap, all-atom, under the full bonded model.
+
+    make prep     build reca.nc
+    make point    the energy table below
+    make run      dynamics, drivable from VMD or UnityMol
+
+
+## What it is for
+
+074 and 075 exercise nucleic acids alone; 070-073 exercise proteins alone.
+This is the only example where BOTH parameter sets are loaded at once, and
+that is the thing it tests.
+
+pdb2spn takes one --grp and one --nonbondedinteraction, so the Makefile
+concatenates them. That works only because the type names cannot collide:
+amber.grp prefixes every protein type with an UPPERCASE residue letter (ACA
+for ALA's CA) while amber.dna.grp uses lowercase and digits (dC5, 1C1).
+amber.dna.grp was built that way deliberately, for this case; before this
+example, nothing had ever checked it. The rigid-body and bonded rules
+concatenate too, their residue sets being disjoint.
+
+
+## The system, and what was done to it
+
+3CMX is the RecA-DNA filament this example's system comes from -- the same
+structure the coarse-grained example 022.RecA uses, at all-atom resolution
+here, which makes this a different model of the same object rather than a
+reproduction of it.
+
+Kept: the four RecA protomers whose backbone is continuous in the crystal
+(chain A residues 37-333, 1001-1333, 2001-2333, 3001-3333, split into four
+chains here since they are four molecules) and the dT13 strand. 10020 heavy
+atoms in, about 20000 once hydrogenated.
+
+Dropped, and why:
+
+  * ADP, Mg and AlF4. No AMBER template, and no parameters of ours either --
+    modelling them would be a separate piece of work, not a preparation
+    step.
+  * the fifth protomer. Residues 4155-4167 and 4197-4204 are disordered and
+    absent from the crystal, and rebuilding 21 residues of backbone is a
+    modelling decision. It is also the protomer that touches the DNA least
+    -- 153 atom pairs within 5 A, against 264 to 373 for the other four
+    (measured, not assumed).
+  * the strand's free 5'-monophosphate, leaving a 5'-OH. AMBER has no
+    template for it and it is what tleap builds from a sequence.
+
+Added: the terminal OXT of each protein chain, by pdbfixer. It reports no
+missing side-chain atom anywhere, which is worth knowing -- a missing heavy
+atom is not a warning but a template error deep inside createSystem.
+
+Then minimised and run 5 ps at 300 K with GBn2 implicit solvent, like every
+other structure in these examples. A crystal is cold, packed and away from
+the force field's own equilibrium; it is never used as deposited.
+
+
+## Stiffness, deliberately 250 and not 3000
+
+074.DNADuplex runs at 3000 kJ/mol/A^2 because the furanose rings carry no
+bonded rule of their own and are held by the mesh alone. Here the value is
+250, the protein examples' validated one, so those rings relax more than
+they do in 074.
+
+That is the right trade for this example: raising the stiffness for 13
+nucleotides would stiffen 1188 protein residues with them, and the pucker
+is already measured properly in 074 and 075. What this example is about is
+the two chemistries coexisting.

@@ -1,0 +1,29 @@
+#076.RecAFilament -- dynamics settings.
+
+#fs. The protein examples' validated value: this system runs at the same
+#--stiffness 250 they do, and carries real AMBER masses on both chemistries
+#(amber.grp for the protein, amber.dna.grp for the DNA).
+simulation.timestep = 1.5
+simulation.nbsteps = -1
+simulation.samplerate = 2000
+
+#Da.fs-1. Low friction, so the structure answers interactive pulling instead
+#of being damped away. NOTE this is viscosity WITHOUT a random force: the
+#dynamics is a quench, not a thermostatted ensemble.
+viscosity.enable = 1
+viscosity.value = 0.01
+
+spring.enable = 1
+spring.scale = 1.0
+
+#Both chemistries' bonded families, on together. This is the only example
+#where the protein and nucleic families are populated at the same time.
+bending.enable = 1
+dihedralphi.enable = 1
+dihedralpsi.enable = 1
+dihedralomega.enable = 1
+dihedralchi.enable = 1
+dihedralplanarity.enable = 1
+dihedralnucleicbackbone.enable = 1
+dihedralnucleicchi.enable = 1
+dihedralnucleicsugar.enable = 1
