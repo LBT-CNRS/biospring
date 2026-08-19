@@ -1,6 +1,9 @@
 #include "IO/BondedForceFieldReader.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <set>
 #include <stdexcept>
 
 #include "logging.h"
@@ -551,6 +554,10 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             }
 
         if (enableBend)
+        {
+            // (vertex, lower outer, upper outer) unique ids of every angle
+            // already restrained in THIS residue -- see the guard below.
+            std::set<std::array<topology::pid_t, 3>> bend_done;
             for (const BendEntry & entry : _bend)
             {
                 if (entry.resname != resname)
@@ -560,6 +567,22 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                 topology::Particle * p2 = _resolve_atom(entry.atom2, residues, index, topology, translation);
                 topology::Particle * p3 = _resolve_atom(entry.atom3, residues, index, topology, translation);
                 if (p1 == nullptr || p2 == nullptr || p3 == nullptr)
+                    continue;
+
+                // One BEND per real angle, whatever spelling reached it. A
+                // .bi.ff lists every known spelling of an atom (OP1 and
+                // O1P, H5'' and H5'2) so it matches a file written either
+                // way; with a --grp that maps both onto ONE particle type,
+                // both rules then resolve to the same three atoms and the
+                // angle would be restrained twice. STRETCH cannot hit this
+                // (it retunes the existing 1-2 spring) and neither can
+                // DIHEDRAL (its ghosts deduplicate by name), but BEND
+                // creates its two ghosts unconditionally -- measured on a
+                // DNA duplex with amber.dna.grp: 3268 springs for 2400 real
+                // angles, 868 of them doubled. Never seen before because
+                // amber.grp is strictly one type per atom.
+                const auto outer = std::minmax(p1->unique_id(), p3->unique_id());
+                if (!bend_done.insert({p2->unique_id(), outer.first, outer.second}).second)
                     continue;
 
                 double r12 = 0.0;
@@ -641,6 +664,7 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                 nb_bend_applied++;
                 nb_ghostparticles_created += 2;
             }
+        }
 
         for (const DihedralEntry & entry : _dihedral)
         {
