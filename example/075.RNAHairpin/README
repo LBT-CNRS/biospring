@@ -19,10 +19,9 @@ exercised before this example:
     C2'-endo, and that single difference is what makes the helix compact
     rather than wide.
 
-Point energy at the input conformation:
+Point energy at the input conformation, over 567 dihedral springs on 709
+ghost particles:
 
-    stretch      485.83 kJ/mol
-    bend         713.79 kJ/mol
     dihedral     599.24 kJ/mol
 
 against AMBER's 547.3 kJ/mol of torsion on the same axes: +8.9% over 132
@@ -37,14 +36,17 @@ The 12 sugars of 1ZIH enter at 100% C3'-endo, phase 12.9 degrees -- a clean
 A-form signature, which is what makes this hairpin a test and not merely a
 second nucleic structure. After 6 ps:
 
-    amplitude   37.0 -> 31.1 degrees
-    C3'-endo (North)   100% -> 100%, phase 12.9 -> 15.0 degrees
+    amplitude   37.0 -> 38.1 degrees
+    C3'-endo (North)   100% -> 100%, phase 12.9 -> 13.3 degrees
 
-Every sugar keeps its state and its phase. The sugar ring carries no bonded
-rule of its own and is held rigid by the mesh (see 074.DNADuplex's README for
-why, and for the --stiffness/timestep coupling that follows from it), so this
-shows the A-form is preserved -- not that the model would find it on its own
-from a wrong starting point.
+Every sugar keeps its state, its phase to within half a degree, and its
+amplitude -- which now moves the other way, slightly up rather than the 5.9
+degrees this example used to lose when the mesh ran softer. The sugar ring
+carries no torsion rule of its own and is held rigid by the mesh, as every
+bond and angle in the model is (see 074.DNADuplex's README for why, and for
+the --stiffness/timestep coupling that follows from it), so this shows the
+A-form is preserved -- not that the model would find it on its own from a
+wrong starting point.
 
 
 ## Provenance

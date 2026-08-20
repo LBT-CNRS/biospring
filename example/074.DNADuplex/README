@@ -1,8 +1,8 @@
 # 074.DNADuplex -- the bonded model on B-DNA
 
-A 2 x 21 nucleotide B-DNA duplex under the full nucleic model: AMBER bonds,
-valence angles and torsions on top of the articulated rigid-body mesh, with
-real charges, radii and masses.
+A 2 x 21 nucleotide B-DNA duplex under the nucleic bonded model: AMBER
+torsions on top of the articulated rigid-body mesh, which holds bonds and
+valence angles at --stiffness, with real charges, radii and masses.
 
     make prep     build dna.nc
     make point    the energy table below
@@ -16,10 +16,9 @@ what a nucleotide has instead: six backbone torsions per residue rather than
 three (alpha, beta, gamma, delta, epsilon, zeta), the glycosidic chi, and a
 five-membered sugar that no protein has an equivalent of.
 
-Point energy at the input conformation:
+Point energy at the input conformation, over 2192 dihedral springs on 2630
+ghost particles:
 
-    stretch     1020.80 kJ/mol
-    bend        2403.61 kJ/mol
     dihedral    3046.03 kJ/mol
 
 against AMBER's own value for the same axes, 3214.5 kJ/mol of torsion: -5.2%
@@ -29,9 +28,9 @@ with 0 to 3 sign flips per axis type.
 
 ## The furanose is RIGID, and that is the model's one real compromise
 
-No STRETCH, no BEND and no torsion is emitted inside the five ring atoms
-(C1'-C2'-C3'-C4'-O4'), so what holds them is the .rbody mesh alone, at
-whatever --stiffness the build used. delta is frozen with the ring, since it
+No torsion rule is emitted inside the five ring atoms (C1'-C2'-C3'-C4'-O4'),
+so what holds them is the .rbody mesh alone -- as it holds every bond and
+angle in the model, at --stiffness. delta is frozen with the ring, since it
 turns about C4'-C3'.
 
 Why: the ghost-ring construction reproduces a torsion as springs between
@@ -43,22 +42,24 @@ relaxes all five ring axes at once, so the ring flattens. Measured before
 freezing: the pucker amplitude fell from 37 to 13 degrees on all 42 sugars,
 where AMBER's own bonded terms hold it at 41.
 
-The consequence to know: a frozen ring is only as rigid as --stiffness. At
-250 kJ/mol/A^2, the value the protein examples use, the ring is ten times
-softer than the real bonds around it and relaxes anyway. Hence 3000 here,
-and 0.3 fs in model.msp -- the two are tied, a spring N times stiffer needing
-a timestep divided by sqrt(N).
+The consequence to know: a frozen ring is only as rigid as --stiffness. This
+example used to need 3000 for the ring alone while the protein examples ran
+at 250; both now use 8000, which the whole model needs anyway (see 073's
+README). model.msp keeps 0.3 fs, comfortably inside the 1.0 fs that
+stiffness allows -- the two are tied, a spring N times stiffer needing a
+timestep divided by sqrt(N).
 
 After 6 ps at that setting, over the 42 sugars:
 
-    amplitude   37.0 -> 30.9 degrees
-    C2'-endo (South, the B-form state)   36% -> 57%
-    C3'-endo (North)                      0% ->  5%
+    amplitude   37.0 -> 36.2 degrees
+    C2'-endo (South, the B-form state)   36% -> 62%
+    C3'-endo (North)                      0% ->  0%
     intermediate                         64% -> 38%
 
-The B-form majority is kept and even sharpens. This is a quench, though --
-viscosity with no random force -- so it says a state is preserved, not that
-its population is predicted.
+The B-form majority is kept and sharpens, and the amplitude barely moves --
+0.8 degrees, against the 6.1 this example lost when the ring was held at
+3000. This is a quench, though -- viscosity with no random force -- so it
+says a state is preserved, not that its population is predicted.
 
 
 ## What this cannot show
