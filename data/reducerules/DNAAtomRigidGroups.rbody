@@ -104,8 +104,8 @@ A_C2   DA  C1' C2' H2'1 H2' H2'2 H2'' C3'
 A_C3   DA  C2' C3' H3' C4' O3'
 A_O3   DA  C3' O3' +P
 A_BASE DA  C1' N9 C8 H8 N7 C5 C6 N6 H61 H62 N1 C2 H2 N3 C4
-A_5TER DA  H5T O5' C5'
-A_3TER DA  C3' O3' H3T
+A_5TER DA  H5T HO5' O5' C5'
+A_3TER DA  C3' O3' H3T HO3'
 
 #Cytosine -----------------------------------------------------------------
 C_P    DC  -O3' P O1P OP1 O2P OP2 O5'
@@ -118,8 +118,8 @@ C_C2   DC  C1' C2' H2'1 H2' H2'2 H2'' C3'
 C_C3   DC  C2' C3' H3' C4' O3'
 C_O3   DC  C3' O3' +P
 C_BASE DC  C1' N1 C6 H6 C5 H5 C4 N4 H41 H42 N3 C2 O2
-C_5TER DC  H5T O5' C5'
-C_3TER DC  C3' O3' H3T
+C_5TER DC  H5T HO5' O5' C5'
+C_3TER DC  C3' O3' H3T HO3'
 
 #Guanine ------------------------------------------------------------------
 G_P    DG  -O3' P O1P OP1 O2P OP2 O5'
@@ -132,8 +132,8 @@ G_C2   DG  C1' C2' H2'1 H2' H2'2 H2'' C3'
 G_C3   DG  C2' C3' H3' C4' O3'
 G_O3   DG  C3' O3' +P
 G_BASE DG  C1' N9 C8 H8 N7 C5 C6 O6 N1 H1 C2 N2 H21 H22 N3 C4
-G_5TER DG  H5T O5' C5'
-G_3TER DG  C3' O3' H3T
+G_5TER DG  H5T HO5' O5' C5'
+G_3TER DG  C3' O3' H3T HO3'
 
 #Thymine ------------------------------------------------------------------
 #C7 is the 5-methyl. Its three hydrogens sit inside the rigid base clique
@@ -150,5 +150,5 @@ T_C2   DT  C1' C2' H2'1 H2' H2'2 H2'' C3'
 T_C3   DT  C2' C3' H3' C4' O3'
 T_O3   DT  C3' O3' +P
 T_BASE DT  C1' N1 C6 H6 C5 C7 H71 H72 H73 C4 O4 N3 H3 C2 O2
-T_5TER DT  H5T O5' C5'
-T_3TER DT  C3' O3' H3T
+T_5TER DT  H5T HO5' O5' C5'
+T_3TER DT  C3' O3' H3T HO3'

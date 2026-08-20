@@ -67,10 +67,10 @@ A_O3   RA  C3' O3' +P
 A_O3   A   C3' O3' +P
 A_BASE RA  C1' N9 C8 H8 N7 C5 C6 N6 H61 H62 N1 C2 H2 N3 C4
 A_BASE A   C1' N9 C8 H8 N7 C5 C6 N6 H61 H62 N1 C2 H2 N3 C4
-A_5TER RA  H5T O5' C5'
-A_5TER A   H5T O5' C5'
-A_3TER RA  C3' O3' H3T
-A_3TER A   C3' O3' H3T
+A_5TER RA  H5T HO5' O5' C5'
+A_5TER A   H5T HO5' O5' C5'
+A_3TER RA  C3' O3' H3T HO3'
+A_3TER A   C3' O3' H3T HO3'
 
 #Cytosine -----------------------------------------------------------------
 C_P    RC  -O3' P O1P OP1 O2P OP2 O5'
@@ -95,10 +95,10 @@ C_O3   RC  C3' O3' +P
 C_O3   C   C3' O3' +P
 C_BASE RC  C1' N1 C6 H6 C5 H5 C4 N4 H41 H42 N3 C2 O2
 C_BASE C   C1' N1 C6 H6 C5 H5 C4 N4 H41 H42 N3 C2 O2
-C_5TER RC  H5T O5' C5'
-C_5TER C   H5T O5' C5'
-C_3TER RC  C3' O3' H3T
-C_3TER C   C3' O3' H3T
+C_5TER RC  H5T HO5' O5' C5'
+C_5TER C   H5T HO5' O5' C5'
+C_3TER RC  C3' O3' H3T HO3'
+C_3TER C   C3' O3' H3T HO3'
 
 #Guanine ------------------------------------------------------------------
 G_P    RG  -O3' P O1P OP1 O2P OP2 O5'
@@ -123,10 +123,10 @@ G_O3   RG  C3' O3' +P
 G_O3   G   C3' O3' +P
 G_BASE RG  C1' N9 C8 H8 N7 C5 C6 O6 N1 H1 C2 N2 H21 H22 N3 C4
 G_BASE G   C1' N9 C8 H8 N7 C5 C6 O6 N1 H1 C2 N2 H21 H22 N3 C4
-G_5TER RG  H5T O5' C5'
-G_5TER G   H5T O5' C5'
-G_3TER RG  C3' O3' H3T
-G_3TER G   C3' O3' H3T
+G_5TER RG  H5T HO5' O5' C5'
+G_5TER G   H5T HO5' O5' C5'
+G_3TER RG  C3' O3' H3T HO3'
+G_3TER G   C3' O3' H3T HO3'
 
 #Uracil -------------------------------------------------------------------
 #Uracil is thymine without the 5-methyl: it carries H5 where DT has C7 and
@@ -154,7 +154,7 @@ U_O3   RU  C3' O3' +P
 U_O3   U   C3' O3' +P
 U_BASE RU  C1' N1 C6 H6 C5 H5 C4 O4 N3 H3 C2 O2
 U_BASE U   C1' N1 C6 H6 C5 H5 C4 O4 N3 H3 C2 O2
-U_5TER RU  H5T O5' C5'
-U_5TER U   H5T O5' C5'
-U_3TER RU  C3' O3' H3T
-U_3TER U   C3' O3' H3T
+U_5TER RU  H5T HO5' O5' C5'
+U_5TER U   H5T HO5' O5' C5'
+U_3TER RU  C3' O3' H3T HO3'
+U_3TER U   C3' O3' H3T HO3'
