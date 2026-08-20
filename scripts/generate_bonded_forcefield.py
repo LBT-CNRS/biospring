@@ -1095,7 +1095,14 @@ def generate_pro_ring_ncd():
 # or the already-solved 1-branch+2-identical case unchanged -- only the
 # methyl's own 3 H's need the new all-same-class geometry, so no other
 # function needed changing.
-METHYL_AXIS = {"ALA": [("CA", "CB")],
+# The two caps' methyls are hindered rotors in amber99sb exactly like the
+# side-chain ones, but they sit on the caps' own axes: ACE's methyl turns
+# about C-CH3, NME's about N-C. Without a rule they rotate FREELY -- the
+# rigid mesh leaves them one degree of freedom by design (ACE_C and ACE_CH3
+# overlap on {C, CH3}, a hinge) and nothing then supplies the barrier.
+METHYL_AXIS = {"ACE": [("C", "CH3")],
+               "NME": [("N", "CH3")],
+               "ALA": [("CA", "CB")],
                "VAL": [("CB", "CG1"), ("CB", "CG2")],
                "THR": [("CB", "CG2")],
                "ILE": [("CB", "CG2"), ("CG1", "CD1")],

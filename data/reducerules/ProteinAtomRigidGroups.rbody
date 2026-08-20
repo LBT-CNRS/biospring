@@ -315,6 +315,6 @@ V_CG2 VAL CB CG2 HG21 HG22 HG23
 #finds are enough; nothing extra is needed on the ACE side beyond the two
 #groups below. Same idea for NME on the C-terminal side.
 ACE_C ACE CH3 C O +N
-ACE_CH3 ACE C CH3 H1 H2 H3
-NME_N NME -C N H C
-NME_C NME N C H1 H2 H3
+ACE_CH3 ACE C CH3 H1 H2 H3 HH31 HH32 HH33
+NME_N NME -C N H C CH3
+NME_C NME N C CH3 H1 H2 H3 HH31 HH32 HH33
