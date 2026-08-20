@@ -29,38 +29,38 @@
 #bonds: two stacked same-strand groups sit closer to each other
 #(2.75 A) than to their real partners (2.90 and 2.94 A).
 #
-DA   dOP1   0 1
-DA   dOP2   0 1
-DA   dO5    0 1
-DA   dO4    0 1
-DA   aN7    0 1
-DA   aN6    1 0
-DA   aN1    0 1
-DA   aN3    0 1
-DA   dO3    0 1
-DC   dOP1   0 1
-DC   dOP2   0 1
-DC   dO5    0 1
-DC   dO4    0 1
-DC   cN4    1 0
-DC   cN3    0 1
-DC   cO2    0 1
-DC   dO3    0 1
-DG   dOP1   0 1
-DG   dOP2   0 1
-DG   dO5    0 1
-DG   dO4    0 1
-DG   gN7    0 1
-DG   gO6    0 1
-DG   gN1    1 0
-DG   gN2    1 0
-DG   gN3    0 1
-DG   dO3    0 1
-DT   dOP1   0 1
-DT   dOP2   0 1
-DT   dO5    0 1
-DT   dO4    0 1
-DT   tO4    0 1
-DT   tN3    1 0
-DT   tO2    0 1
-DT   dO3    0 1
+DA   dOP1   0 2 dP
+DA   dOP2   0 2 dP
+DA   dO5    0 2 dC5
+DA   dO4    0 2 dC4
+DA   aN7    0 1 aC5
+DA   aN6    2 0 aC6
+DA   aN1    0 1 aC2
+DA   aN3    0 1 aC2
+DA   dO3    0 2 dC3
+DC   dOP1   0 2 dP
+DC   dOP2   0 2 dP
+DC   dO5    0 2 dC5
+DC   dO4    0 2 dC4
+DC   cN4    2 0 cC4
+DC   cN3    0 1 cC2
+DC   cO2    0 2 cC2
+DC   dO3    0 2 dC3
+DG   dOP1   0 2 dP
+DG   dOP2   0 2 dP
+DG   dO5    0 2 dC5
+DG   dO4    0 2 dC4
+DG   gN7    0 1 gC5
+DG   gO6    0 2 gC6
+DG   gN1    1 0 gC2
+DG   gN2    2 0 gC2
+DG   gN3    0 1 gC2
+DG   dO3    0 2 dC3
+DT   dOP1   0 2 dP
+DT   dOP2   0 2 dP
+DT   dO5    0 2 dC5
+DT   dO4    0 2 dC4
+DT   tO4    0 2 tC4
+DT   tN3    1 0 tC2
+DT   tO2    0 2 tC2
+DT   dO3    0 2 dC3

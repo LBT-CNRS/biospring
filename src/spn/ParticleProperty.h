@@ -20,7 +20,7 @@ class ParticleProperty
     ParticleProperty()
         : _mass(1.0), _charge(0.0), _electroncharge(0), _radius(1.0), _epsilon(0.0), _tempfactor(0.0), _occupancy(0.0),
           _hydrophobicity(0.0), _solventaccessibilitysurface(0.0), _transferenergybyaccessiblesurface(0.0),
-          _ischarged(false), _ishydrophobic(false), _burying(1.0), _isdonor(false), _isacceptor(false)
+          _ischarged(false), _ishydrophobic(false), _burying(1.0), _donorcapacity(0), _acceptorcapacity(0), _antecedentindex(-1)
     {
     }
 
@@ -60,16 +60,33 @@ class ParticleProperty
     float getBurying() const { return _burying; }
     void setBurying(float burying) { _burying = burying; }
 
-    // Hydrogen-bond donor/acceptor role. Unlike isCharged()/isHydrophobic(),
-    // this is not derived from an existing numeric property: it is an
-    // independent chemistry classification, set explicitly (see the
-    // ProteinDonorAcceptor.hbond table and its loader). A particle can be
-    // both (e.g. a Ser/Thr/Tyr hydroxyl oxygen).
-    bool isDonor() const { return _isdonor; }
-    void setDonor(bool isdonor) { _isdonor = isdonor; }
+    // Hydrogen-bond donor/acceptor CAPACITY: how many bonds this atom can
+    // hold at once in each role, not a yes/no. Chemistry sets it -- a
+    // donatable hydrogen each for a donor (an amino nitrogen has two), a
+    // lone pair each for an acceptor (a carbonyl oxygen has two) -- and it
+    // is read from the .hbond table, whose columns are counts. 0/1 remains
+    // valid and means exactly what it always did, so a table written before
+    // capacities existed keeps its behaviour. A particle can be both (a
+    // Ser/Thr/Tyr hydroxyl donates one and accepts two).
+    unsigned donorCapacity() const { return _donorcapacity; }
+    void setDonorCapacity(unsigned n) { _donorcapacity = n; }
 
-    bool isAcceptor() const { return _isacceptor; }
-    void setAcceptor(bool isacceptor) { _isacceptor = isacceptor; }
+    unsigned acceptorCapacity() const { return _acceptorcapacity; }
+    void setAcceptorCapacity(unsigned n) { _acceptorcapacity = n; }
+
+    bool isDonor() const { return _donorcapacity > 0; }
+    bool isAcceptor() const { return _acceptorcapacity > 0; }
+
+    // Index of the heavy atom this donor/acceptor hangs off, or -1 when the
+    // .hbond table names none. It is what gives a hydrogen bond a direction
+    // without an explicit hydrogen: the antecedent->self vector stands in
+    // for where the H (or the lone pair) points, and the angle between it
+    // and self->partner weights the Morse well (see
+    // forcefield::hydrogen_bond_angular_factor). Measured on a B-DNA duplex,
+    // that weight is ~0.25 on a real Watson-Crick bond and 0.003 on a
+    // stacked same-strand pair that the distance criterion alone accepts.
+    int antecedentIndex() const { return _antecedentindex; }
+    void setAntecedentIndex(int index) { _antecedentindex = index; }
 
   protected:
   private:
@@ -86,8 +103,9 @@ class ParticleProperty
     bool _ischarged;
     bool _ishydrophobic;
     float _burying;
-    bool _isdonor;
-    bool _isacceptor;
+    unsigned _donorcapacity;
+    unsigned _acceptorcapacity;
+    int _antecedentindex;
 };
 
 } // namespace spn

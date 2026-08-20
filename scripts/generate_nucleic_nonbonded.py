@@ -74,7 +74,13 @@ BACKBONE = ["P", "OP1", "OP2", "O5'", "C5'", "H5'", "H5''", "C4'", "H4'",
 PER_BASE_SUGAR = ["C1'", "H1'"]
 
 
-# Hydrogen-bond donor/acceptor roles, as (donor, acceptor).
+# Hydrogen-bond roles, as (donor capacity, acceptor capacity, antecedent).
+#
+# The capacity is chemistry: one donatable hydrogen per donation, one lone
+# pair per acceptance -- an exocyclic amine gives two, a carbonyl accepts
+# two. The antecedent is the heavy atom the site hangs off; it is what gives
+# the bond its DIRECTION, the antecedent->site vector standing in for where
+# the hydrogen (or the lone pair) points.
 #
 # Same source as the protein side (HBPLUS / McDonald & Thornton, and
 # Reduce/Probe), cited in ProteinDonorAcceptor.hbond's own header. Using one
@@ -88,35 +94,41 @@ PER_BASE_SUGAR = ["C1'", "H1'"]
 # Hoogsteen geometries a folded RNA actually uses. Measured on 074's duplex,
 # they cost almost nothing: BioSpring's reciprocal-best-hit rule still
 # recovers 46 of the 48 Watson-Crick bonds.
-PURINE = {"N3": (0, 1), "N7": (0, 1)}
+PURINE = {"N3": (0, 1, "C2"), "N7": (0, 1, "C5")}
 BASE_ROLES = {
-    "A": {"N1": (0, 1), "N6": (1, 0), **PURINE},          # N1/N6 Watson-Crick
-    "G": {"N1": (1, 0), "N2": (1, 0), "O6": (0, 1), **PURINE},
-    "C": {"N3": (0, 1), "N4": (1, 0), "O2": (0, 1)},
-    "T": {"N3": (1, 0), "O4": (0, 1), "O2": (0, 1)},
-    "U": {"N3": (1, 0), "O4": (0, 1), "O2": (0, 1)},
+    "A": {"N1": (0, 1, "C2"), "N6": (2, 0, "C6"), **PURINE},      # N1/N6 Watson-Crick
+    "G": {"N1": (1, 0, "C2"), "N2": (2, 0, "C2"), "O6": (0, 2, "C6"), **PURINE},
+    "C": {"N3": (0, 1, "C2"), "N4": (2, 0, "C4"), "O2": (0, 2, "C2")},
+    "T": {"N3": (1, 0, "C2"), "O4": (0, 2, "C4"), "O2": (0, 2, "C2")},
+    "U": {"N3": (1, 0, "C2"), "O4": (0, 2, "C4"), "O2": (0, 2, "C2")},
 }
 # Phosphate oxygens are strong acceptors; the esters and the furanose ring
 # oxygen are weak ones. O2' is RNA's alone and is both roles at once.
-SUGAR_ROLES = {"OP1": (0, 1), "OP2": (0, 1),
-               "O5'": (0, 1), "O3'": (0, 1), "O4'": (0, 1),
-               "O2'": (1, 1)}
+SUGAR_ROLES = {"OP1": (0, 2, "P"), "OP2": (0, 2, "P"),
+               "O5'": (0, 2, "C5'"), "O3'": (0, 2, "C3'"), "O4'": (0, 2, "C4'"),
+               "O2'": (1, 2, "C2'")}
 
 
 def roles(base, atom):
-    """(donor, acceptor) for one atom, or None when it has no H-bond role."""
+    """(donor cap, acceptor cap, antecedent) or None when the atom has no role."""
     if atom in BASE_ROLES[base]:
         return BASE_ROLES[base][atom]
     return SUGAR_ROLES.get(atom)
 
 
 def hbond_lines(grp, base_of):
-    """<resname> <type> <donor> <acceptor>, one line per (residue, type).
+    """<resname> <type> <donor> <acceptor> <antecedent>, one per (residue, type).
 
     Derived from the .grp just built, so the two files cannot drift apart:
     a type that the .grp stops naming stops being classified here too.
     """
     out, emitted = [], {}
+    # (residue, atom name) -> type, so an antecedent named by chemistry can be
+    # emitted as the type name the .grp actually uses.
+    by_atom = {}
+    for line in grp:
+        t, r, a = line.split()
+        by_atom.setdefault((r, a), t)
     for line in grp:
         type_name, resname, atom = line.split()
         role = roles(base_of(resname), atom)
@@ -130,8 +142,14 @@ def hbond_lines(grp, base_of):
                 raise SystemExit("type %s in %s would be both %s and %s"
                                  % (type_name, resname, emitted[key], role))
             continue
-        emitted[key] = role
-        out.append("%-4s %-6s %d %d" % (resname, type_name, role[0], role[1]))
+        anc = by_atom.get((resname, role[2]))
+        if anc is None:
+            # Antecedent absent from this residue (a 5'-terminal O5' has no
+            # phosphorus, say). The site keeps its capacities and loses only
+            # its direction -- degraded, still valid.
+            out.append("%-4s %-6s %d %d" % (resname, type_name, role[0], role[1]))
+        else:
+            out.append("%-4s %-6s %d %d %s" % (resname, type_name, role[0], role[1], anc))
     return out
 
 

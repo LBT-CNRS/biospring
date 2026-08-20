@@ -549,3 +549,91 @@ int main(int argc, char * argv[])
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+
+// The hydrogen bond's angular weight makes the antecedent a third body, and
+// its gradient is easy to transcribe with a sign flipped -- which is exactly
+// what happened once and what nothing but this check caught (the energy is
+// unaffected by it, and so is every pairing count).
+TEST(Topology, hydrogen_bond_forces_match_energy_gradient_by_finite_differences)
+{
+    topology::Topology top;
+
+    // Antecedent, donor, acceptor. Deliberately off-axis and off-equilibrium
+    // so the radial and the angular term are both doing real work, and the
+    // angle is nowhere near 0 or 90 degrees where one of them vanishes.
+    const std::array<std::array<double, 3>, 3> pos = {{{0.0, 0.0, 0.0},
+                                                       {1.35, 0.22, -0.11},
+                                                       {3.4, 1.9, 0.35}}};
+    for (size_t i = 0; i < pos.size(); ++i)
+    {
+        topology::ParticleProperties p;
+        p.set_position(Vector3f(static_cast<float>(pos[i][0]), static_cast<float>(pos[i][1]),
+                                static_cast<float>(pos[i][2])));
+        p.set_mass(12.0f);
+        // Distinct residues: the pairing rule skips a candidate inside the
+        // donor's own residue (a backbone N and O sit at covalent distance
+        // and would otherwise always win).
+        p.set_residue_id(static_cast<int>(i) + 1);
+        top.add_particle(topology::Particle(p));
+    }
+
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+    spn.getParticle(1).setDonorCapacity(1);
+    spn.getParticle(1).setAntecedentIndex(0);
+    spn.getParticle(2).setAcceptorCapacity(1);
+
+    configuration::Configuration conf = configuration::defaultConfiguration();
+    conf.hbond.enable = true;
+    conf.hbond.cutoff = 7.0;
+    spn.setup(conf);
+
+    auto energy = [&]() {
+        for (size_t i = 0; i < spn.getNumberOfParticles(); ++i)
+            spn.getParticle(i).resetForce();
+        spn.computeForces();
+        return spn.getHydrogenBondEnergy();
+    };
+
+    const float e0 = energy();
+    std::array<Vector3f, 3> analytic;
+    for (size_t i = 0; i < 3; ++i)
+        analytic[i] = spn.getParticle(i).getForce();
+
+    // The bond must actually exist, and the angular weight must be strictly
+    // between 0 and 1 -- otherwise this test would pass on a two-body force.
+    ASSERT_LT(e0, -1.0f);
+    ASSERT_GT(analytic[0].norm(), 1e-6f) << "the antecedent carries no force: the angular term is inert";
+
+    const float h = 1e-2f;
+    for (size_t i = 0; i < 3; ++i)
+    {
+        for (int dim = 0; dim < 3; ++dim)
+        {
+            const Vector3f saved = spn.getParticle(i).getPosition();
+            Vector3f displaced = saved;
+            auto set_dim = [&](Vector3f & v, float value) {
+                if (dim == 0) v.setX(value);
+                else if (dim == 1) v.setY(value);
+                else v.setZ(value);
+            };
+            auto get_dim = [&](const Vector3f & v) { return dim == 0 ? v.getX() : (dim == 1 ? v.getY() : v.getZ()); };
+
+            set_dim(displaced, get_dim(saved) + h);
+            spn.getParticle(i).setPosition(displaced);
+            const float e_plus = energy();
+
+            set_dim(displaced, get_dim(saved) - h);
+            spn.getParticle(i).setPosition(displaced);
+            const float e_minus = energy();
+
+            spn.getParticle(i).setPosition(saved);
+
+            const float fd = -(e_plus - e_minus) / (2.0f * h);
+            const float an = get_dim(analytic[i]) /
+                             static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+            EXPECT_NEAR(fd, an, 3e-2f * std::max(1.0f, std::abs(an)))
+                << "particle " << i << " dim " << dim;
+        }
+    }
+}

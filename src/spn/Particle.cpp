@@ -340,7 +340,6 @@ void Particle::addHydrogenBondCoreRepulsion(std::vector<DeferredNonbondedContrib
     {
         const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
         const float equilibrium = ff->getHydrogenBondEquilibrium();
-        const int my_partner = _springnetwork->getHydrogenBondPartner(static_cast<size_t>(getId()));
         const bool self_is_donor = isDonor();
         const bool self_is_acceptor = isAcceptor();
 
@@ -349,9 +348,11 @@ void Particle::addHydrogenBondCoreRepulsion(std::vector<DeferredNonbondedContrib
                 return;
 
             // Already fully handled (attraction and repulsion both) by
-            // computeHydrogenBondForces for this particle's own current
-            // exclusive partner -- applying this term too would double-count.
-            if (static_cast<int>(neighbor_index) == my_partner)
+            // computeHydrogenBondForces for a partner this particle is
+            // already bound to -- applying this term too would double-count.
+            // A particle can hold several bonds at once now, so this is a
+            // membership test rather than a comparison against one index.
+            if (_springnetwork->areHydrogenBonded(static_cast<size_t>(getId()), neighbor_index))
                 return;
 
             const Particle & p = _springnetwork->getParticle(neighbor_index);
