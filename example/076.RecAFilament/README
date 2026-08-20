@@ -105,12 +105,24 @@ per-axis energy validations that followed it both passed -- they rotate
 rigidly or evaluate one conformation, so neither can vary a bond length,
 and neither could have caught this.
 
-Where this does and does not matter: at thermally realistic geometry the
-artifact is small -- the input conformation above is 1.3 % from AMBER on
-ubiquitin (3009.46 against 3050.12). It becomes severe under minimisation,
-because a minimiser actively seeks the channel. Use the point energy at a
-thermalised conformation, as the table above does; do not read anything
-into a quenched one.
+Where this matters, stated carefully. The point energy above is measured on
+a conformation OpenMM prepared, and there it is 1.3 % from AMBER on
+ubiquitin (3009.46 against 3050.12). That says the reported energy is right
+for a structure handed to the model; it says nothing about the structure
+the model itself settles into.
+
+And there is no safe regime to retreat to: BioSpring has no thermostat. Its
+dynamics is viscosity-damped Newtonian motion with no random force -- a
+quench, as model.msp says in its own comment -- and the only temperature in
+the code, rigidbody.montecarlo_temperature, belongs to the rigid-body Monte
+Carlo instead. Every run therefore relaxes toward exactly the state that
+lets this artifact express itself fully.
+
+So the honest summary is neither "ignore it" nor "the model is broken". The
+model runs, keeps its fold, and reproduces AMBER's per-axis torques and its
+point energy. What is biased is the valence geometry it converges to: 636
+kJ/mol of bond strain where the same quench without the dihedral families
+reaches 1.39.
 
 
 ## The system, and what was done to it
