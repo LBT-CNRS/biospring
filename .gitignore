@@ -14,4 +14,9 @@ CMakeFiles
 # removes them again).
 example/*/*.nc
 example/*/*.nc.pdb
+#076 concatenates its parameter files at build time (see its Makefile)
+example/*/complex.grp
+example/*/complex.nbi.ff
+example/*/complex.rbody
+example/*/complex.bi.ff
 example/*/mddriver.log

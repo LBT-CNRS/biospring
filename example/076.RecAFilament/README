@@ -18,9 +18,63 @@ pdb2spn takes one --grp and one --nonbondedinteraction, so the Makefile
 concatenates them. That works only because the type names cannot collide:
 amber.grp prefixes every protein type with an UPPERCASE residue letter (ACA
 for ALA's CA) while amber.dna.grp uses lowercase and digits (dC5, 1C1).
-amber.dna.grp was built that way deliberately, for this case; before this
-example, nothing had ever checked it. The rigid-body and bonded rules
-concatenate too, their residue sets being disjoint.
+amber.dna.grp was built that way deliberately, for this case.
+
+Checked rather than assumed, on the union the Makefile actually builds: 417
+types used, 0 name shared between the two halves, 0 orphan (every type a
+.grp names exists in the .nbi.ff), 0 (residue,atom) key mapped twice, and
+the two .rbody files' residue sets disjoint. Note that amber.dna.grp and
+amber.rna.grp do NOT concatenate with each other -- they share 49 type
+names with different parameters, 1C1 being deoxyribose's C1' in one and
+ribose's in the other. A DNA/RNA hybrid would need one of them regenerated
+under a third prefix.
+
+
+## Point energy, against AMBER on the same conformation
+
+    term        BioSpring     AMBER        difference
+    stretch     28329.64      28330.09       -0.45 kJ/mol  (-0.002 %)
+    bend        40676.93      40206.46     +470.47 kJ/mol  (+1.17 %)
+    dihedral    72728.78      68136.13    +4592.65 kJ/mol  (+6.74 %)
+
+All in kJ/mol, at the input conformation, over 20088 stretching, 36732
+bending and 51360 dihedral springs (123967 ghost particles).
+
+AMBER's column excludes the terms whose atoms all sit inside a saturated
+ring -- 245 bonds, 245 angles and 297 torsions, worth 334.15, 676.60 and
+195.97 kJ/mol. --rigidbody freezes those rings and BioSpring emits no
+bonded spring inside them, so charging it for terms it deliberately does
+not model would be measuring the wrong thing (see 074's README for why the
+rings are frozen).
+
+Stretch agreeing to 0.45 kJ/mol out of 28330 is the expected result: a
+harmonic bond retuned in place IS AMBER's term. Bend at +1.17 % is the
+known ghost-particle residual. The dihedral's +6.7 % is the ghost rings'
+idealised-geometry limit, and it is spread over the protein rather than
+localised on the DNA: 3.5 kJ/mol per residue across all 1309, where the 13
+nucleotides are 1 % of the system.
+
+
+## The reported dihedral energy goes NEGATIVE, and that is not a bug
+
+Left to quench (make run, viscosity without a random force), 6 ps takes the
+system to a local minimum of BioSpring's own energy:
+
+    step        stretch     bend      dihedral    kinetic
+    0           28329.64  40676.93   72728.78          --
+    6 ps         9867.15  13691.26  -15281.81       12.79
+
+All kJ/mol. Nothing diverges and the kinetic energy decays to ~0, which is
+what a quench should do.
+
+The negative dihedral is the dc_offset convention showing through. Each
+ghost ring reports its energy as raw minus a per-spring constant that has
+no gradient (so forces are untouched), and for most families that constant
+is anchored at the ring's MEAN over the conformations it was calibrated on.
+A structure that relaxes below that mean therefore reports below zero. Only
+PLANARITY is anchored at its minimum instead. The number to compare against
+AMBER is the one at the input conformation, in the table above -- not the
+quenched one, which is measured against a different zero.
 
 
 ## The system, and what was done to it
@@ -55,6 +109,11 @@ atom is not a warning but a template error deep inside createSystem.
 Then minimised and run 5 ps at 300 K with GBn2 implicit solvent, like every
 other structure in these examples. A crystal is cold, packed and away from
 the force field's own equilibrium; it is never used as deposited.
+
+reca_dna_raw.pdb is what went INTO that preparation -- the filtered crystal,
+before hydrogens. It is kept because the preparation is expensive (hours of
+CPU at this size) and without its input it cannot be reproduced. Use
+reca_dna.pdb for everything else; that is what the Makefile builds from.
 
 
 ## Stiffness, deliberately 250 and not 3000
