@@ -55,26 +55,49 @@ localised on the DNA: 3.5 kJ/mol per residue across all 1309, where the 13
 nucleotides are 1 % of the system.
 
 
-## The reported dihedral energy goes NEGATIVE, and that is not a bug
+## Do NOT quench this model: the dihedral rings deform valence geometry
 
-Left to quench (make run, viscosity without a random force), 6 ps takes the
-system to a local minimum of BioSpring's own energy:
+Left to quench (make run, viscosity without a random force), 6 ps gives:
 
     step        stretch     bend      dihedral    kinetic
     0           28329.64  40676.93   72728.78          --
     6 ps         9867.15  13691.26  -15281.81       12.79
 
-All kJ/mol. Nothing diverges and the kinetic energy decays to ~0, which is
-what a quench should do.
+All kJ/mol. Nothing diverges -- but the negative dihedral is a real defect,
+not a convention, and it is worth knowing before trusting a minimised
+structure from this model.
 
-The negative dihedral is the dc_offset convention showing through. Each
-ghost ring reports its energy as raw minus a per-spring constant that has
-no gradient (so forces are untouched), and for most families that constant
-is anchored at the ring's MEAN over the conformations it was calibrated on.
-A structure that relaxes below that mean therefore reports below zero. Only
-PLANARITY is anchored at its minimum instead. The number to compare against
-AMBER is the one at the input conformation, in the table above -- not the
-quenched one, which is measured against a different zero.
+AMBER's torsion energy is a sum of k(1 + cos(n.phi - gamma)) with k > 0, so
+it is >= 0 by construction. A ring that reproduced its term faithfully
+would report >= 0 too. Below zero means the ring is no longer tracking the
+torsion it was calibrated for.
+
+What it tracks instead is bond length. Scale a structure uniformly and
+every angle and dihedral is preserved exactly, so AMBER's torsion energy
+cannot move -- measured on ubiquitin, it does not, staying at 3050.12
+kJ/mol to the digit. BioSpring's goes 3009.46 at scale 1.00, 9028.09 at
+0.94 and 12352.49 at 1.06. BEND is unaffected (262 kJ/mol throughout): this
+is the dihedral construction alone.
+
+And it is a FORCE artifact, not just a reported one. Quenching ubiquitin
+with the dihedral families off reaches stretch 1.39 and bend 96.54 kJ/mol;
+with them on, the same quench stops at 636.54 and 905.62. The rings buy
+their own relaxation by paying about 1500 kJ/mol of valence strain.
+
+Cause, and it is traceable rather than mysterious: ring radius and plane
+separation used to be scaled together by a constant (RING_SCALE = 4.0),
+which leaves the harmonic content invariant while shrinking exactly this
+bond-length sensitivity as 1/scale^2 -- a 16x reduction. Placing each ghost
+as the rotated image of a REAL atom (2026-08-14, which is what made the
+Jacobians unnecessary) fixed the radius to that atom's own and left the
+constant with nothing to act on; it was dropped as dead code shortly after.
+
+Where this does and does not matter: at thermally realistic geometry the
+artifact is small -- the input conformation above is 1.3 % from AMBER on
+ubiquitin (3009.46 against 3050.12). It becomes severe under minimisation,
+because a minimiser actively seeks the channel. Use the point energy at a
+thermalised conformation, as the table above does; do not read anything
+into a quenched one.
 
 
 ## The system, and what was done to it
