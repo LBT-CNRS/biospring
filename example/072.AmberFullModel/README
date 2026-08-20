@@ -6,7 +6,7 @@ cumulative stages you can run one after the other and feel the difference:
 
 | stage | `make` target      | adds                                              |
 |-------|--------------------|---------------------------------------------------|
-| 1     | `run-bonded`       | bonded only: stretching, bending, every dihedral  |
+| 1     | `run-bonded`       | bonded only: every dihedral family                |
 | 2     | `run-lj`           | + steric exclusion (Lennard-Jones 12-6)           |
 | 3     | `run-lj-coulomb`   | + Coulomb electrostatics on real partial charges  |
 | 4     | `run-full`         | + dynamic hydrogen bonds (`make run` default)     |
@@ -46,8 +46,9 @@ in closed form (see `doc/BondedForceFieldSprings.md`):
   because a freed 6-ring can fold ("boat") and an sp2 substituent can leave
   the plane, neither of which bonds and angles alone can prevent.
 
-Build output on this structure: 1839 stretching, 3004 bending and 6248
-dihedral springs, on 13964 ghost particles.
+Build output on this structure: 6248 dihedral springs on 6248 ghost
+particles. Bonds and angles are held by the rigid mesh at `--stiffness`,
+not by springs of their own -- see 073's README for why.
 
 **Omega is deliberately rigid.** `ProteinAtomRigidGroups.rbody`'s
 `_PHI`/`_PSI` cliques span the whole peptide plane, which freezes omega at
@@ -119,19 +120,17 @@ use.
   a real barrier needs thermal activation the model does not provide. Pull
   it interactively instead (MDDriver is wired in the Makefile, same as
   examples 070/071).
-* The per-family `.msp` switches (`bending.enable`, `dihedralphi.enable`,
+* The per-family `.msp` switches (`dihedralphi.enable`,
   `dihedralpsi.enable`, `dihedralomega.enable`, `dihedralchi.enable`,
   `dihedralplanarity.enable`) gate at runtime whichever families were built,
   which is handy for isolating one term's contribution to the reported energy
   channels without rebuilding.
 
   **They isolate, they do not undo.** Turning all of them off does not give
-  you a topology built without the corresponding `pdb2spn` flags: there is no
-  `stretching.enable`, and more fundamentally `--stretching`/`--bending`
-  *retune `--rigidbody`'s springs in place* rather than adding new ones, so
-  the uniform-stiffness model is overwritten at build time. On this structure
-  532 kJ/mol of stretch energy survives every runtime switch. To compare a
-  rigid-body model against progressively more realistic bonded ones, build
+  you a topology built without `--dihedral`: a family not requested at build
+  time never gets a spring, a ghost particle or a NetCDF entry, so what you
+  get instead is the rigid body still carrying its dead ghosts. To compare a
+  rigid-body model against a bonded one, build
   one `.nc` per stage -- see `example/073.BondedStages`.
 
 

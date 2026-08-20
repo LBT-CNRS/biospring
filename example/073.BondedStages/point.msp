@@ -22,7 +22,6 @@ spring.scale = 1.0
 #contribution inside a given build -- they do NOT turn stage 3 back into
 #stage 1, which is exactly why this example ships three .nc files. See
 #doc/MSP_Options.md.
-bending.enable = 1
 dihedralphi.enable = 1
 dihedralpsi.enable = 1
 dihedralomega.enable = 1

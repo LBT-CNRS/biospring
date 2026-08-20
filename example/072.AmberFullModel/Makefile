@@ -40,12 +40,11 @@ BONDED = $(BS_DATA_DIR)/reducerules/ProteinAtomBonded.bi.ff
 GRP = $(BS_DATA_DIR)/reducerules/amber.grp
 FF = $(BS_DATA_DIR)/forcefield/amber.nbi.ff
 
-# Rigid-body springs stand in for real bonds/valence angles, not a soft
-# elastic network: much stiffer than a cutoff-based model. Where a real
-# AMBER parameter exists, -stretching/-bending overwrite this value in
-# place; it survives only on the "extra" rigidifying pairs that have no
-# direct chemical counterpart.
-STIFFNESS = 250.0
+# Rigid-body springs stand in for real bonds and valence angles, not a soft
+# elastic network: much stiffer than a cutoff-based model. This value holds
+# every one of them -- the .bi.ff adds torsion wells on top and nothing
+# else. 8000 kJ/mol/A^2 is the validated setting (see 073's README).
+STIFFNESS = 8000.0
 
 # example/001_GKinase's own structure, copied here to keep this example
 # self-contained: 183 residues, 2814 atoms, and the only structure in the
@@ -78,7 +77,7 @@ prep : $(NC) $(NC_PDB)
 $(NC) : $(PDB)
 	$(PDB2SPN) -s $(PDB) -o $(NC) --grp $(GRP) --nonbondedinteraction $(FF) \
 	    --rigidbody $(RIGIDBODY) --bondedinteraction $(BONDED) \
-	    --stretching --bending --dihedral --stiffness $(STIFFNESS)
+	    --dihedral --stiffness $(STIFFNESS)
 
 # PDB of the network with CONECT records for every spring, for
 # visualization. Passing --stiffness again just restates the existing
@@ -95,7 +94,7 @@ $(NC_PDB) : $(NC)
 # the spring model (see the README's performance note).
 # ---------------------------------------------------------------------------
 
-# Stage 1: bonded only (stretching + bending + every dihedral family).
+# Stage 1: bonded only (every dihedral family).
 run-bonded : $(NC)
 	$(BIOSPRING) -nc $(NC) -msp model_bonded.msp $(IMDOPT)
 

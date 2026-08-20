@@ -7,16 +7,16 @@ Abstract
 BioSpring represents molecular mechanics entirely through springs: particles
 connected by distance restraints of the form `E = 0.5 * k * (r - r0)^2`. This
 document derives, stage by stage, how a model built purely from such springs
-can reproduce the mechanical behaviour of AMBER's four bonded interaction
-terms — bond stretching, angle bending, proper dihedral torsion, and improper
-dihedral torsion — starting from the simplest possible baseline (a uniform
-rigid-body mesh) and layering real, spring-only parameters on top of it.
-Bending and every dihedral family are represented using massless virtual
-sites (`spn::GhostParticle`) rather than springs between real atoms directly
-— both a real 1-3 angle and a real dihedral axis, represented on real atoms
-alone, were found to leak unrelated real motion (bond stretch for bending, a
-few degrees of ordinary thermal noise for backbone dihedrals) that a virtual
-site's free, calibration-time-only geometry avoids by construction. Every
+can reproduce the mechanical behaviour of AMBER's dihedral terms — proper
+and improper torsion — starting from the simplest possible baseline (a
+uniform rigid-body mesh) and layering real, spring-only parameters on top of
+it. Bond lengths and valence angles are deliberately NOT given springs of
+their own: they stay in the rigid mesh at `--stiffness`, for the reason
+Section 3.1 sets out. Every dihedral family is represented using massless
+virtual sites (`spn::GhostParticle`) rather than springs between real atoms
+directly — a real dihedral axis represented on real atoms alone was found to
+leak a few degrees of ordinary thermal noise that a virtual site's free,
+calibration-time-only geometry avoids by construction. Every
 derivation is closed-form or an exact algebraic identity, verified either
 symbolically or numerically (to machine precision where applicable); no step
 is a curve fit. A microbenchmark comparing per-evaluation computational cost
@@ -45,11 +45,14 @@ exclusively with the four bonded terms:
 | 3 | Proper dihedral | rotation about a real bond | `k (1 + cos(n*phi - phase))` |
 | 4 | Improper dihedral | planarity of a trigonal centre | `k (1 + cos(n*phi - phase))` |
 
-A spring can only restrain a *distance*. Term 1 needs no transformation at
-all. Term 2 needs a geometric substitute (a 1-3 distance can stand in for an
-angle) plus an argument for *why* that substitute is quantitatively correct,
-not just qualitatively similar. Terms 3 and 4 are harder still: a dihedral
-angle is not the distance between any single pair of atoms, so no direct
+**Terms 1 and 2 are deliberately not modelled as force-field terms.** They
+are held by the rigid-body mesh at a uniform `--stiffness` instead, for the
+reason Section 3.1 sets out — they cannot be given their physical stiffness
+while the dihedral rings are present. This document is therefore about
+Terms 3 and 4; Terms 1 and 2 appear only as the substrate.
+
+A spring can only restrain a *distance*. Terms 3 and 4 are the hard case: a
+dihedral angle is not the distance between any single pair of atoms, so no direct
 geometric substitute exists at all — a more elaborate construction ("ghost
 springs", introduced in Section 3.2) is required.
 
@@ -103,135 +106,69 @@ mechanism.
 3. Spring-network transformation of the four bonded terms
 --------------------------------------------------------------
 
-### 3.1 Stage 1 — real stretching and bending, layered on the rigid-body mesh
+### 3.1 Stage 1 — bonds and angles stay in the rigid-body mesh
 
-The first refinement retunes the rigid-body mesh's *existing* springs with
-real AMBER stiffness and equilibrium values, without changing which pairs of
-atoms have a spring at all. `--rigidbody` has already created a spring for
-every real 1-2 bond and every real 1-3 angle pair (they are simply two of
-the many pairs inside a rigid group) — Stage 1 finds those specific springs
-and replaces their uniform parameters with real ones.
+Bonds and valence angles are **not** given springs of their own. They keep
+the uniform `--stiffness` that `--rigidbody` gave them, and the only thing
+`-bondedinteraction` adds is the dihedral layer of Section 3.2.
 
-**Term 1 — bond stretching (no transformation needed).** AMBER's
-`HarmonicBondForce`, `E = 0.5 k (r-r0)^2`, already has the exact functional
-form of a spring, in the same units and the same `0.5`-prefactor convention
-BioSpring uses throughout (verified empirically against OpenMM's XML
-tables — see the unit-convention note at the end of this section). `r0` and
-`k` are copied directly: a stretching spring does not approximate a bond, it
-*is* the bond, expressed in BioSpring's native representation.
+This was not always so. Real AMBER `STRETCH` and `BEND` families existed,
+retuning the mesh's own springs to real `r0`/`k` (and, for angles, to a
+ghost-anchored 1-3 distance spring that avoided bond-stretch leakage). They
+were removed, because they cannot coexist with the dihedral rings.
 
-**Term 2 — angle bending.** The equilibrium/stiffness conversion below (law
-of cosines + curvature matching) is exact at `theta0` regardless of which
-two points the resulting spring connects — the derivation was originally
-applied directly to the two *real* 1-3 atoms, but that specific choice
-turned out to leak an unrelated error into the model, described after the
-derivation.
+**Why.** AMBER's torsion term is a function of the dihedral angle alone, so
+its gradient on a substituent atom is purely tangential about the axis —
+measured on ubiquitin's Arg42, the radial and axial components are zero to
+machine precision. A ghost ring is a set of *distance* springs pulling along
+lines that are not tangential. On the same atom it puts 77 kJ/mol/A radially
+and 21 axially against 8 tangentially: roughly ten times more parasitic
+force than useful torque, and the parasitic part never vanishes — not even
+where the torsion sits at its minimum and AMBER exerts nothing at all.
 
-For a real 1-2-3 valence angle with vertex atom 2, the distance between the
-two *outer* atoms, `r13`, is a monotonic function of `theta` for fixed real
-bond lengths `r12`, `r23` (already correct, from Term 1):
+Give bonds and angles their physical stiffness and that parasitic force is
+what deforms them. Measured on ubiquitin, quenched 6 ps, AMBER's own
+judgement of the resulting geometry (kJ/mol):
 
-    r13(theta)^2 = r12^2 + r23^2 - 2 * r12 * r23 * cos(theta)          (law of cosines)
+| bonds and angles held by | bonds | angles | dihedral |
+|---|---|---|---|
+| AMBER stiffnesses | 740.94 | 890.26 | **-955.08** |
+| the mesh at `--stiffness` | 447.81 | 344.91 | **+1272.25** |
+| *(the input structure itself)* | 443.69 | 278.83 | |
 
-At `theta = theta0` this fixes the spring's equilibrium directly:
-`r13_0^2 = r12^2 + r23^2 - 2 r12 r23 cos(theta0)`.
+The negative reported dihedral energy is the tell: a sum of
+`k (1 + cos(n phi - gamma))` with `k > 0` is non-negative by construction, so
+a term reproducing AMBER cannot go below zero. It does here because the
+rings are no longer tracking the torsion — they are tracking the geometry
+they themselves deformed.
 
-The stiffness is fixed by requiring the *curvature* of the spring's energy
-with respect to `theta` to match the real angle term's curvature at
-`theta0` — both energies already agree in value and slope there (both are
-stationary at equilibrium), so matching the second derivative as well is the
-natural next-order equivalence, not a fit. Since
-`E_spring(theta) = 0.5 k13 (r13(theta) - r13_0)^2`:
+Three independent ways of giving bonds and angles their physical values were
+measured, and all three land on the same side: the separate families
+(-955.08), per-pair stiffnesses transplanted into the mesh (-547.98), and a
+hardened mesh around AMBER-stiff 1-2/1-3 springs (-744.69). Freezing them in
+the mesh instead protects them, and the torsions still relax, which is what
+the model is for.
 
-    dE_spring/dtheta = k13 (r13(theta)-r13_0) dr13/dtheta        -> 0 at theta0 (as required)
-    d^2E_spring/dtheta^2 |_theta0 = k13 (dr13/dtheta |_theta0)^2  (the (r13-r13_0) term vanishes at theta0)
+**The cost is `--stiffness`.** The mesh is now the only thing holding bonds
+and angles, so 250 no longer works. Sweeping it on the same quench:
 
-Differentiating the law of cosines, `dr13/dtheta = r12 r23 sin(theta) / r13`,
-so at `theta0`: `dr13/dtheta|_theta0 = r12 r23 sin(theta0) / r13_0`. Matching
-this curvature to `K_theta` (the real angle term's own, constant, curvature)
-and solving for `k13`:
+| `--stiffness` | bonds | angles | max stable dt |
+|---|---|---|---|
+| 250 | 29211.52 | 26949.30 | 2.0 fs |
+| 2500 | 968.37 | 729.06 | 0.5 fs |
+| 8000 | 447.81 | 344.91 | 1.0 fs |
+| 25000 | 424.96 | 287.52 | 0.5 fs |
 
-    k13 = K_theta * r13_0^2 / (r12 * r23 * sin(theta0))^2
-
-This is a direct algebraic solve — no iteration, no fit. It is exact at
-`theta0` (value, slope, curvature all match) and only approximate away from
-it, since `r13(theta)` is not linear in `theta`; the deviation grows with
-distance from equilibrium, the same category of approximation used
-throughout the rest of this document.
-
-**Bond-stretch leakage (found and fixed): why the spring connects two
-*ghost* particles, not the real 1-3 atoms.** Connecting this spring
-directly between the two real outer atoms initially seemed like the
-obvious choice — but `r13`, the real 1-3 *distance*, depends on BOTH the
-real angle `theta` AND the two adjacent real bond lengths `r12`/`r23`,
-which independently flex via their own Term-1 springs during real
-dynamics. A distance spring on the real atoms cannot distinguish "the
-angle changed" from "a bond stretched" — both look identical as a change
-in `r13`. Quantified by direct comparison against an independent OpenMM
-(real MD frame) reference: **~60% systematic energy excess**, of which
-~95% (59 of the 60 percentage points) is bond-stretch leakage and only
-~5% is the genuine curvature-matching linearization error derived above.
-The sensitivity `d(r13)/d(r12) = (r12 - r23*cos(theta))/r13` is not small
-for realistic (obtuse, ~110-120deg) protein bond angles — confirmed both
-analytically and by finite difference on two independent real examples
-(0.81 and 0.87) — so bond stretch transmits almost 1:1 into the measured
-`r13`.
-
-Fix: for each real angle (vertex B, neighbours A, C), the spring connects
-two massless virtual sites (`spn::GhostParticle`, Section 3.2 introduces
-the mechanism in full) instead: `ghost_A = B + r0(bond BA) * normalize(A -
-B)`, `ghost_C = B + r0(bond BC) * normalize(C - B)` — each rescaled to the
-AMBER-ideal bond length but pointing along the REAL, current bond
-direction. This reproduces the bonds-fixed synthetic case exactly during
-real dynamics (leaving only the ~5% linearization error above), because
-the two ghosts' distance from B is now pinned to the ideal bond length by
-construction, immune to the real bonds' own independent stretching.
-Force redistribution reuses the ghost-particle mechanism's own transpose-
-Jacobian construction unchanged. **Validated end-to-end**: real AMBER
-reference (Fs-peptide, 20 real trajectory frames), stretch+bend combined,
-**mean relative error 1.03%, max 2.11%** — matching the theoretically
-expected ~1-5% pure-linearization residual once the leakage is removed.
-
-The real 1-2/1-3 pair that Term 1/Term 2 used to connect directly is never
-removed once superseded this way (needed for nonbonded-exclusion
-bookkeeping) — its stiffness is zeroed instead, and the real restraint
-lives entirely in the new ghost-anchored spring, in its own dedicated
-spring collection and energy channel (see the note on energy channels
-below).
-
-*Ring/planar-group caveat.* A rigid-body group with every pairwise distance
-constrained (Section 2) has no internal degrees of freedom left at all —
-this is stiffer than reality even after Stage 1, since bending alone does
-not restore ring pucker or out-of-plane flexibility. Real planarity is a
-distinct AMBER term (Term 4, Section 3.2) — bending is not meant to provide
-it.
-
-**Energy channels.** STRETCH, BEND, and DIHEDRAL each report their own
-separate energy (`Stretch energy`, `Bend energy`, `Dihedral energy`), in
-their own dedicated spring collection, independent of `--rigidbody`'s own
-mesh. `Spring energy` was redefined to mean *only* that untouched
-rigid-body/ENM baseline — it no longer includes the retuned/ghost-anchored
-contributions, since "spring energy" as a single lumped number only ever
-meant something for a plain elastic-network model in the first place.
-
-*Unit convention (applies to every stage below).* All figures in this
-document are sourced from `amber99sb.xml`'s `HarmonicBondForce`,
-`HarmonicAngleForce` and `PeriodicTorsionForce` tables (bundled with the
-`openmm` Python package), which already use BioSpring's own
-`0.5`-prefactor convention (verified: e.g. a `k = 259408.0` equals
-`2 * 4.184 * 31000` once converted from kcal — i.e. already in `0.5`-prefactor
-form). No extra factor of 2 is applied anywhere — that would only be needed
-if sourcing a raw AMBER `parm*.dat` file directly, which is not the case
-here.
+8000 kJ/mol/A^2 is what the examples use: the geometry is back to its input
+quality while a 1 fs step is still stable. `dt` scales as `1/sqrt(k)`,
+verified exactly.
 
 ### 3.2 Stage 2 — dihedral torsion (proper and improper), added as an intermediate layer
 
-Stage 1 retunes/extends springs anchored on real, existing atoms. Dihedral
-torsion needs something categorically different: a dihedral angle `phi` is
-not the distance between any single pair of real atoms, and — as Section
-3.1's bending fix already found the hard way — even a real 1-3 *angle* leaks
-unrelated bond-stretch noise when represented by a spring between the real
-outer atoms. Both problems share the same fix: place the spring between
+The rigid mesh restrains distances between real atoms. Dihedral torsion
+needs something categorically different: a dihedral angle `phi` is not the
+distance between any single pair of real atoms. The fix is to place the
+spring between
 massless **virtual sites** (`spn::GhostParticle`) instead of real atoms —
 points whose position is computed algebraically from 3 real anchor atoms
 each simulation step, never integrated themselves, carrying no mass, and
@@ -257,34 +194,23 @@ negative (unphysical) stiffness, or reproduced only 1 of several needed
 harmonics — a ghost particle's free geometry removes that constraint
 entirely (Steps 1-4 below).
 
-This intermediate configuration — rigid-body mesh, Stage 1's real
-stretching/bending, and now real dihedral wells layered on top — is already a
-complete, independently useful, and independently testable model: bond and
-angle vibration have real values, and side-chain/backbone rotation now has
-real energetic preferences, while the underlying topology (which pairs have
-springs at all) still traces back to the rigid-body mesh of Section 2.
+This configuration — rigid-body mesh plus real dihedral wells layered on
+top — is a complete, independently useful, and independently testable model:
+side-chain and backbone rotation have real energetic preferences, while the
+underlying topology (which pairs have springs at all) still traces back to
+the rigid-body mesh of Section 2, which is also what holds bonds and angles.
 
-In practice (`pdb2spn`), Stage 1 and Stage 2 are independent opt-in flags
-on top of `-rigidbody -bondedinteraction <file>`: `-stretching`, `-bending`
-(which requires `-stretching` too, since its conversion needs real bond
-lengths), and, for dihedral, `-dihedralbackbone`/`-dihedralsidechain`
-(one per proper-dihedral family — planarity has no flag yet, see Known
-Limitations) plus `-dihedral` as a pure convenience alias for both
-together. None is implied by the others or by `-bondedinteraction` alone —
-combining only a dihedral flag, without `-stretching`/`-bending`, is
-exactly this section's intermediate model. Once built, dihedral ghost
-springs are ordinary springs at simulation time, gated by the same
-`spring.enable` master switch as everything else in the network (the same
-is true of stretch/bend's own ghost-anchored springs — see the
-energy-channel note in Section 3.1) — on top of that, each proper family
-also has its own independent runtime debug toggle
+In practice (`pdb2spn`), the dihedral families are independent opt-in flags
+on top of `-rigidbody -bondedinteraction <file>`:
+`-dihedralbackbone`/`-dihedralsidechain`/`-dihedralplanarity`, plus
+`-dihedral` as a convenience alias for the three together. None is implied
+by `-bondedinteraction` alone. Once built, dihedral ghost springs are
+ordinary springs at simulation time, gated by the same `spring.enable`
+master switch as everything else in the network — on top of that, each
+family also has its own independent runtime debug toggle
 (`dihedralphi.enable`/`dihedralpsi.enable`/`dihedralomega.enable`/
-`dihedralchi.enable`, plus `bending.enable`), all defaulting to enabled so
-an `.msp` written before these existed keeps the same behaviour. There is
-deliberately no equivalent toggle for stretching: a STRETCH spring shares
-its real atom pair with the existing (zeroed) `-rigidbody` spring, so an
-independent runtime switch would need a live link back to that sibling
-spring, which does not exist today.
+`dihedralchi.enable`/`dihedralplanarity.enable`), all defaulting to enabled
+so an `.msp` written before these existed keeps the same behaviour.
 
 Both dihedral families — **proper** (side-chain chi1-4, backbone phi/psi,
 the cross-residue peptide-bond torsion omega) and **improper** (planarity
@@ -688,11 +614,11 @@ omega's real geometry turned out to have its own natural harmonic phase
 Ghost particles remove the constraint that geometry must equal real
 chemistry, at the cost of an extra virtual site per ring point — this is
 why every axis implemented today uses ghost particles, not real atoms
-directly (bending's own real-atom-to-real-atom leakage problem, Section
-3.1, is the same lesson applied to Term 2).
+directly.
 
-Stages 1–2 retune and extend the rigid-body mesh, but always keep it as the
-permanent substrate: the mesh's real 1-2/1-3 pairs are what Stage 1 retunes,
+The dihedral layer extends the rigid-body mesh but always keeps it as the
+permanent substrate: the mesh's real 1-2/1-3 pairs are what holds the
+geometry,
 and every *other* pairwise spring the mesh creates inside a rigid group
 (e.g. non-adjacent atoms inside a ring or a methyl group) stays at its
 uniform value, providing the same all-pairwise rigidity as today wherever
@@ -737,7 +663,6 @@ constant folding):**
 
 | Case | Traditional (trig) | Springs (allocation-free) | Result |
 |------|----------------------|-------------------------------|-----------|
-| Angle bending (1 angle vs 1 spring) | 10.5 ns | 3.2 ns | **springs 3.3x faster** |
 | Dihedral, single AMBER term (9 ghost springs, M=N=3) | 26.4 ns | 6.8 ns | **springs 3.9x faster** |
 | Dihedral, full Arg chi2 (12 ghost springs, 3 terms) | 29.5 ns | 9.6 ns | **springs 3.1x faster** |
 
@@ -787,10 +712,9 @@ present mechanism.
 3. **Independent energy cross-check against real AMBER (OpenMM,
    `amber99sb.xml`), not just self-consistency.** Extract real frames from
    a real MD trajectory (Fs-peptide), build a matching BioSpring `.nc` per
-   frame, and compare BioSpring's own reported energy (`Stretch energy`,
-   `Bend energy`, `Dihedral energy` — see Section 3.1's energy-channel
-   note) against an independent per-frame OpenMM computation. This is what
-   actually found bending's bond-stretch leakage (Section 3.1) and psi's
+   frame, and compare BioSpring's own reported `Dihedral energy` against
+   an independent per-frame OpenMM computation. This is what actually
+   found psi's
    per-owning-pair-anchoring gap (Section 3.2) — self-consistency checks
    alone (point 1) had missed both, since they only confirm a ring
    reproduces its OWN calibration target, not that the target itself
@@ -810,11 +734,12 @@ present mechanism.
    implemented): verify the real dihedral stays near-planar with realistic
    fluctuation amplitude (not perfectly rigid as with `--rigidbody` alone,
    not unrestrained either).
-7. **Intermediate-model check**, with `--dihedral` alone (Stage 2 without
-   Stage 1, i.e. `-bondedinteraction` without `-stretching`/`-bending`):
-   bonds/angles stay at the rigid-body uniform value, dihedral
-   energy/behaviour is identical to the fully-refined model — the two
-   concerns are independent by construction, confirmed experimentally.
+7. **Uniform-scaling check.** Multiply every coordinate by a constant: all
+   angles and dihedrals are preserved exactly, so AMBER's torsion energy
+   must be strictly constant. Anything BioSpring reports moving there is
+   pure artefact, with no comparison to interpret. This is the test that
+   found the rings' bond-length sensitivity (Section 3.1), and it costs
+   minutes.
 8. **Structural diff for any `--rigidbody` change**: an exact before/after
    diff of every spring `--rigidbody` creates, checking that only the
    intended pairs disappear (and none appear) — a more rigorous check than
@@ -826,11 +751,11 @@ present mechanism.
 6. Known limitations
 ------------------------
 
-* **Stretching:** none — a direct, exact representation.
-* **Bending:** ghost-anchored (Section 3.1) to remove real bond-stretch
-  leakage; the remaining residual is the curvature-matching
-  linearization error alone, validated at mean 1.03%/max 2.11% against
-  real AMBER (Fs-peptide, 20 frames, stretch+bend combined).
+* **Bonds and valence angles:** not modelled as force-field terms at all —
+  held by the rigid mesh at `--stiffness` (Section 3.1). Absolute
+  comparison against a force field's own bond/angle energy is therefore
+  meaningless for this model, and `--stiffness` has to be high (8000
+  kJ/mol/A^2 in the examples) for the mesh to hold them.
 * **Dihedral, all proper families (chi1-4, phi/psi, omega):** each ring's
   own shape-only residual is small (0.07-0.2% of peak-to-peak, Section
   3.2) — the dominant remaining error source is real thermal noise on
@@ -861,11 +786,8 @@ present mechanism.
 7. Conclusion
 ----------------
 
-All four of AMBER's bonded interaction terms can be expressed as ordinary
-distance springs, with every conversion either exact (stretching), a
-provable second-order match free of bond-stretch leakage (bending, via
-ghost particles anchored along the real, current bond directions), or an
-exact closed-form/Fourier ghost-particle-ring construction (every proper
+AMBER's dihedral terms can be expressed as ordinary distance springs,
+through an exact closed-form/Fourier ghost-particle-ring construction (every proper
 dihedral family implemented: chi1-4, phi/psi, and omega, the first axis
 whose own two axis atoms span a residue boundary) with quantified,
 now-small residual error — validated end-to-end against real,

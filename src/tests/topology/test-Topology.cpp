@@ -425,7 +425,7 @@ TEST(Topology, dihedral_ghost_spring_applies_force)
 
 // Global gradient/energy consistency check by central finite differences,
 // over a synthetic system exercising every spring type at once: a regular
-// spring, a STRETCH spring, a BEND ghost-ghost spring, and a DIHEDRAL
+// spring and a DIHEDRAL
 // ghost-ghost spring with a nonzero dc_offset. For every dynamic particle
 // and every coordinate, the force the network applies (after ghost-force
 // redistribution) must equal -dE/dx of the energy it reports, with the
@@ -469,8 +469,6 @@ TEST(Topology, forces_match_energy_gradient_by_finite_differences)
                                                           top.get_particle(4), top.get_particle(5), 1.1f, 75.0f, -20.0f, static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
 
     top.add_spring(top.get_particle(2), top.get_particle(5), 2.0, 4.0);
-    top.add_stretch_spring(top.get_particle(0), top.get_particle(1), 1.5, 6.0);
-    top.add_bend_spring(ghost1, ghost2, 3.0, 2.5);
     // d0 far from the actual ghost-ghost distance so the dihedral force is
     // large; dc_offset nonzero to prove it shifts reported energy only.
     top.add_dihedral_spring(spn::SpringNetwork::DIHEDRAL_SIDECHAIN, ghost1, ghost2, 0.5, 7.0).set_dc_offset(3.21);
@@ -493,7 +491,7 @@ TEST(Topology, forces_match_energy_gradient_by_finite_differences)
         reset_forces();
         spn.updateGhostPositions();   // ghosts are functions of the anchors
         spn.computeForces();
-        return spn.getSpringEnergy() + spn.getStretchEnergy() + spn.getBendEnergy() + spn.getDihedralEnergy();
+        return spn.getSpringEnergy() + spn.getDihedralEnergy();
     };
 
     // Analytic forces at the base configuration.

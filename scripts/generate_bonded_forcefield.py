@@ -350,6 +350,12 @@ def _pro_ring_internal(resname, *atoms):
     return resname == "PRO" and all(a in PRO_RING_ATOMS for a in atoms)
 
 def emit_stretch(rule_name, resname, atom1, atom2_display, r0_A, k_biospring):
+    # STRETCH and BEND are no longer part of the model: bonds and angles
+    # are held by the .rbody mesh at --stiffness, not by their own
+    # springs. The computation stays because the dihedral rings need
+    # the same AMBER bond lengths and angles for their geometry; only
+    # the emission is suppressed.
+    return
     global n_ok
     if _pro_ring_internal(resname, atom1, atom2_display):
         return
@@ -370,6 +376,12 @@ def emit_cterm_oxt_variants(resname, r0_A, k_biospring):
         emit_stretch(f"{resname}_C_{o_name}", resname, "C", o_name, r0_A, k_biospring)
 
 def emit_bend(rule_name, resname, atom1, atom2, atom3_display, theta0_deg, k_biospring):
+    # STRETCH and BEND are no longer part of the model: bonds and angles
+    # are held by the .rbody mesh at --stiffness, not by their own
+    # springs. The computation stays because the dihedral rings need
+    # the same AMBER bond lengths and angles for their geometry; only
+    # the emission is suppressed.
+    return
     global n_ok
     if _pro_ring_internal(resname, atom1, atom2, atom3_display):
         return

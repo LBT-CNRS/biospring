@@ -37,7 +37,7 @@ class Configuration
 
     // Runtime (.msp) enable/disable for the bonded-force-field families
     // that BondedForceFieldReader::buildSprings already decided (at
-    // -stretching/-bending/-dihedral* build time, see pdb2spn-cli.cpp) to
+    // -dihedral* build time, see pdb2spn-cli.cpp) to
     // actually create springs for. Unlike every EnergySetting above,
     // these default to enable=true (see defaultConfiguration()) -- built
     // springs are meant to be active by default, this is an opt-OUT
@@ -45,12 +45,7 @@ class Configuration
     // family's contribution), not an opt-in feature switch. dihedralchi
     // gates the same springs as the (SIDECHAIN family/chi1-4) collection;
     // "chi" is the name exposed here since that's the physically
-    // meaningful term. There is deliberately no per-axis stretching
-    // toggle: a STRETCH spring shares its real atom pair with the
-    // existing (zeroed) --rigidbody spring, so disabling it independently
-    // at runtime would need a live link back to that sibling spring,
-    // which does not exist today (see BondedForceFieldReader.h's
-    // buildSprings comment) -- a real, separate piece of design work.
+    // meaningful term.
     EnergySetting dihedralphi;
     EnergySetting dihedralpsi;
     EnergySetting dihedralomega;
@@ -69,7 +64,6 @@ class Configuration
     EnergySetting dihedralnucleicbackbone;
     EnergySetting dihedralnucleicchi;
     EnergySetting dihedralnucleicsugar;
-    EnergySetting bending;
 
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"), hbond("hbond"),
@@ -78,7 +72,7 @@ class Configuration
           densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody"), dihedralphi("dihedralphi"),
           dihedralpsi("dihedralpsi"), dihedralomega("dihedralomega"), dihedralchi("dihedralchi"),
           dihedralplanarity("dihedralplanarity"), dihedralnucleicbackbone("dihedralnucleicbackbone"),
-          dihedralnucleicchi("dihedralnucleicchi"), dihedralnucleicsugar("dihedralnucleicsugar"), bending("bending")
+          dihedralnucleicchi("dihedralnucleicchi"), dihedralnucleicsugar("dihedralnucleicsugar")
     {
         _register(sim);
         _register(steric);
@@ -104,7 +98,6 @@ class Configuration
         _register(dihedralnucleicbackbone);
         _register(dihedralnucleicchi);
         _register(dihedralnucleicsugar);
-        _register(bending);
     }
 
     void print(std::ostream & os = std::cout) const
@@ -153,7 +146,6 @@ class Configuration
         dihedralnucleicchi.print();
         dihedralnucleicsugar.print();
         os << "\n";
-        bending.print();
     }
 
     bool exists(const std::string & name) { return _allSettingNames.count(name); }
@@ -220,8 +212,6 @@ class Configuration
             dihedralnucleicchi.setFromString(name, value);
         else if (group == dihedralnucleicsugar.name)
             dihedralnucleicsugar.setFromString(name, value);
-        else if (group == bending.name)
-            bending.setFromString(name, value);
     }
 
   protected:
@@ -301,8 +291,8 @@ inline Configuration defaultConfiguration()
     config.imp.scale = 1.0;
 
     // Deliberately true, unlike every setting above: these only gate
-    // springs that -stretching/-bending/-dihedral* already decided to
-    // build (see Configuration.hpp's own comment on these 5 members) --
+    // springs that -dihedral* already decided to build (see
+    // Configuration.hpp's own comment on these members) --
     // an opt-OUT debugging knob, not an opt-in feature switch, so an .msp
     // written before these existed keeps exactly the same behaviour.
     config.dihedralphi.enable = true;
@@ -313,7 +303,6 @@ inline Configuration defaultConfiguration()
     config.dihedralnucleicbackbone.enable = true;
     config.dihedralnucleicchi.enable = true;
     config.dihedralnucleicsugar.enable = true;
-    config.bending.enable = true;
 
     return config;
 }

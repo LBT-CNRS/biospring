@@ -16,11 +16,11 @@ C-terminus.
 
 `--rigidbody` alone gives every one of these springs the same uniform
 "rigid" stiffness. `pdb2spn --bondedinteraction
-data/reducerules/ProteinAtomBonded.bi.ff` retunes them in place with real
-AMBER ff99SB parameters (stretching only for now -- bending is a documented,
-deferred follow-up) instead: real bonds get their real equilibrium
-distance/stiffness, translated straight from OpenMM's bundled amber99sb.xml
-(see `scripts/generate_bonded_forcefield.py`). This changes nothing about
+data/reducerules/ProteinAtomBonded.bi.ff --dihedral` adds real AMBER ff99SB
+torsion wells on top of that mesh, as ghost-particle rings translated
+straight from OpenMM's bundled amber99sb.xml (see
+`scripts/generate_bonded_forcefield.py`). Bonds and angles stay at the
+uniform `--stiffness` -- see 073's README for why. This changes nothing about
 which pairs are connected -- phi/psi/chi stay exactly as free as before,
 only the springs that were already there get realistic parameters.
 

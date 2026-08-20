@@ -33,96 +33,22 @@ under a third prefix.
 ## Point energy, against AMBER on the same conformation
 
     term        BioSpring     AMBER        difference
-    stretch     28329.64      28330.09       -0.45 kJ/mol  (-0.002 %)
-    bend        40676.93      40206.46     +470.47 kJ/mol  (+1.17 %)
     dihedral    72728.78      68136.13    +4592.65 kJ/mol  (+6.74 %)
 
-All in kJ/mol, at the input conformation, over 20088 stretching, 36732
-bending and 51360 dihedral springs (123967 ghost particles).
+In kJ/mol, at the input conformation, over 51360 dihedral springs on 50503
+ghost particles. Bonds and angles carry no springs of their own: they are
+held by the rigid mesh at --stiffness, so there is nothing to compare for
+them (see 073's README for why the model is built that way).
 
-AMBER's column excludes the terms whose atoms all sit inside a saturated
-ring -- 245 bonds, 245 angles and 297 torsions, worth 334.15, 676.60 and
-195.97 kJ/mol. --rigidbody freezes those rings and BioSpring emits no
-bonded spring inside them, so charging it for terms it deliberately does
-not model would be measuring the wrong thing (see 074's README for why the
-rings are frozen).
+AMBER's column excludes the torsions whose four atoms all sit inside a
+saturated ring -- 297 of them, worth 195.97 kJ/mol. --rigidbody freezes
+those rings and BioSpring emits no spring inside them, so charging it for
+terms it deliberately does not model would be measuring the wrong thing
+(see 074's README for why the rings are frozen).
 
-Stretch agreeing to 0.45 kJ/mol out of 28330 is the expected result: a
-harmonic bond retuned in place IS AMBER's term. Bend at +1.17 % is the
-known ghost-particle residual. The dihedral's +6.7 % is the ghost rings'
-idealised-geometry limit, and it is spread over the protein rather than
-localised on the DNA: 3.5 kJ/mol per residue across all 1309, where the 13
-nucleotides are 1 % of the system.
-
-
-## Do NOT quench this model: the dihedral rings deform valence geometry
-
-Left to quench (make run, viscosity without a random force), 6 ps gives:
-
-    step        stretch     bend      dihedral    kinetic
-    0           28329.64  40676.93   72728.78          --
-    6 ps         9867.15  13691.26  -15281.81       12.79
-
-All kJ/mol. Nothing diverges -- but the negative dihedral is a real defect,
-not a convention, and it is worth knowing before trusting a minimised
-structure from this model.
-
-AMBER's torsion energy is a sum of k(1 + cos(n.phi - gamma)) with k > 0, so
-it is >= 0 by construction. A ring that reproduced its term faithfully
-would report >= 0 too. Below zero means the ring is no longer tracking the
-torsion it was calibrated for.
-
-What it tracks instead is bond length. Scale a structure uniformly and
-every angle and dihedral is preserved exactly, so AMBER's torsion energy
-cannot move -- measured on ubiquitin, it does not, staying at 3050.12
-kJ/mol to the digit. BioSpring's goes 3009.46 at scale 1.00, 9028.09 at
-0.94 and 12352.49 at 1.06. BEND is unaffected (262 kJ/mol throughout): this
-is the dihedral construction alone.
-
-And it is a FORCE artifact, not just a reported one. Quenching ubiquitin
-with the dihedral families off reaches stretch 1.39 and bend 96.54 kJ/mol;
-with them on, the same quench stops at 636.54 and 905.62. The rings buy
-their own relaxation by paying about 1500 kJ/mol of valence strain.
-
-Cause, measured rather than argued: ring radius and plane separation used
-to be scaled together by a constant (RING_SCALE = 4.0), which leaves the
-harmonic content invariant while shrinking exactly this bond-length
-sensitivity as 1/scale^2. Placing each ghost as the rotated image of a REAL
-atom (49ffc1e, which is what made the Jacobians unnecessary) fixed the
-radius to that atom's own -- ghost radii fell from a median of 3.10 A to
-1.33 A -- and left the constant with nothing to act on, so it was dropped
-as dead code shortly after.
-
-Both versions were built and run through the same scaling test. Over the
-same +/-6 %, the pre-49ffc1e model's dihedral energy spans 623.75 kJ/mol
-and drifts monotonically; the current one spans 9343.03 and is a sharp V
-about the native scale. That is a measured 15x loss of scale insensitivity,
-which is what the constant was there to buy.
-
-Worth stating plainly: the trade was real in both directions. Placing
-ghosts by rotation is what removed the Jacobians, and the torque and
-per-axis energy validations that followed it both passed -- they rotate
-rigidly or evaluate one conformation, so neither can vary a bond length,
-and neither could have caught this.
-
-Where this matters, stated carefully. The point energy above is measured on
-a conformation OpenMM prepared, and there it is 1.3 % from AMBER on
-ubiquitin (3009.46 against 3050.12). That says the reported energy is right
-for a structure handed to the model; it says nothing about the structure
-the model itself settles into.
-
-And there is no safe regime to retreat to: BioSpring has no thermostat. Its
-dynamics is viscosity-damped Newtonian motion with no random force -- a
-quench, as model.msp says in its own comment -- and the only temperature in
-the code, rigidbody.montecarlo_temperature, belongs to the rigid-body Monte
-Carlo instead. Every run therefore relaxes toward exactly the state that
-lets this artifact express itself fully.
-
-So the honest summary is neither "ignore it" nor "the model is broken". The
-model runs, keeps its fold, and reproduces AMBER's per-axis torques and its
-point energy. What is biased is the valence geometry it converges to: 636
-kJ/mol of bond strain where the same quench without the dihedral families
-reaches 1.39.
+The +6.7 % is the ghost rings' idealised-geometry limit, and it is spread
+over the protein rather than localised on the DNA: 3.5 kJ/mol per residue
+across all 1309, where the 13 nucleotides are 1 % of the system.
 
 
 ## The system, and what was done to it
@@ -164,14 +90,10 @@ CPU at this size) and without its input it cannot be reproduced. Use
 reca_dna.pdb for everything else; that is what the Makefile builds from.
 
 
-## Stiffness, deliberately 250 and not 3000
+## Stiffness
 
-074.DNADuplex runs at 3000 kJ/mol/A^2 because the furanose rings carry no
-bonded rule of their own and are held by the mesh alone. Here the value is
-250, the protein examples' validated one, so those rings relax more than
-they do in 074.
-
-That is the right trade for this example: raising the stiffness for 13
-nucleotides would stiffen 1188 protein residues with them, and the pucker
-is already measured properly in 074 and 075. What this example is about is
-the two chemistries coexisting.
+8000 kJ/mol/A^2, the value 073 validates. The mesh is the only thing
+holding bonds and angles here, so it has to be stiff enough to hold them
+against the dihedral rings -- 073's README carries the sweep and the
+reasoning. The furanose rings are held by that same mesh, so they are as
+rigid as everything else, which is what 074 wanted its own 3000 for.

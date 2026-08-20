@@ -45,7 +45,6 @@ spring.scale = 1.0
 #that were actually BUILT (see the -dihedral* flags in the Makefile): a
 #family not built has no spring to enable either way. Handy to isolate one
 #term's contribution to the reported energy channels without rebuilding.
-bending.enable = 1
 dihedralphi.enable = 1
 dihedralpsi.enable = 1
 dihedralomega.enable = 1

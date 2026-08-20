@@ -15,7 +15,6 @@ spring.scale = 1.0
 
 #All bonded families on. The protein ones are listed too and simply have
 #nothing to act on here -- a DNA file resolves no PHI/PSI/OMEGA/chi rule.
-bending.enable = 1
 dihedralphi.enable = 1
 dihedralpsi.enable = 1
 dihedralomega.enable = 1

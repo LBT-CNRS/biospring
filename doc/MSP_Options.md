@@ -90,13 +90,11 @@ i.e. ~2.5 kJ.mol-1.A-2).
 time, by pdb2spn/editspn/mergespn's own `--cutoff` option (see there), not rebuilt at runtime from
 this value.
 ---
-* **bending.enable = 1** *(boolean)* Runtime debug on/off for BEND ghost springs (see
-`-bending`/`--bending` in pdb2spn). Only meaningful if the topology was actually built with
-`-bending` in the first place -- a family not built has no springs to enable/disable either way.
-Defaults to enabled so an `.msp` written before this setting existed keeps the same behaviour.
 * **dihedralphi.enable = 1** *(boolean)* Runtime debug on/off for phi (backbone) dihedral ghost
-springs, independently of psi/omega/chi. See `bending.enable` above for the same
-built-vs-enabled distinction and default rationale.
+springs, independently of psi/omega/chi. Only meaningful if the topology was actually built with
+`-dihedralbackbone` (or `-dihedral`) in the first place -- a family not built has no springs to
+enable/disable either way. Defaults to enabled so an `.msp` written before this setting existed
+keeps the same behaviour.
 * **dihedralpsi.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the psi axis.
 * **dihedralomega.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the omega
 (peptide-bond) axis.
@@ -105,22 +103,19 @@ chi1-4 dihedral (the SIDECHAIN family in the `.bi.ff`).
 * **dihedralplanarity.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the PLANARITY
 impropers that keep aromatic rings and the His hub flat.
 
-**These five settings isolate a family's contribution; they do not undo the model.** Turning
-every one of them off does *not* reproduce a topology built without the corresponding
-`pdb2spn` flags, for two reasons, and the difference is not small (measured on
-`example/072`'s GKinase: 532 kJ.mol-1 of stretch survives every runtime switch):
+**These settings isolate a family's contribution; they do not undo the model.** Turning every
+one of them off does *not* reproduce a topology built without the corresponding `pdb2spn`
+flags: a family not requested at build time never gets a spring, a ghost particle or a NetCDF
+entry, so nothing at runtime can bring it back -- and what you get instead is the rigid body
+still carrying every ghost particle the disabled families created.
 
-* there is deliberately no `stretching.enable`, and adding one would not help anyway --
-`--stretching` *retunes the `--rigidbody` springs in place* rather than adding new ones, so
-the uniform-stiffness model is overwritten at build time and cannot be recovered at runtime
-(see `Configuration.hpp`'s own comment for the design work that would be needed);
-* `--bending` likewise retunes in place, and additionally *requires* `--stretching` -- its
-1-3 conversion needs STRETCH's real bond lengths, so the two cannot be staged apart.
-
-To actually compare a rigid-body model against progressively more realistic bonded models,
-**build one `.nc` per stage** (`--rigidbody` alone, then `+ --dihedral`, then
-`+ --stretching --bending`) rather than toggling one `.nc` at runtime. See
+To compare a rigid-body model against a bonded one, **build one `.nc` per stage**
+(`--rigidbody` alone, then `+ --dihedral`) rather than toggling one `.nc` at runtime. See
 `example/073.BondedStages`, which does exactly that.
+
+Bonds and valence angles have no `.msp` switch and no `pdb2spn` flag of their own: they are
+held by the `--rigidbody` mesh at `--stiffness`. See `example/073.BondedStages`' README for
+why the model is built that way, and for the `--stiffness` value it needs.
 ---
 * **viscosity.enable = 0** *(boolean)* Enables a damping factor on the particles.
 * **viscosity.value = 1.0** *(Da.fs-1, float)* Damping factor.

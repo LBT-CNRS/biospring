@@ -1,7 +1,6 @@
 #072.AmberFullModel, stage 1/4 -- BONDED TERMS ONLY (no non-bonded at all)
 #
 #The complete AMBER ff99SB bonded model expressed purely as springs:
-#stretching (real bonds), bending (1-3 via ghost particles), and every
 #dihedral family -- phi, psi, omega, chi1-5, methyl/hydroxyl/ammonium
 #rotors, Asn/Gln amides, Arg guanidinium, the Pro ring, the aromatic rings,
 #and the PLANARITY impropers that keep those rings flat.
@@ -32,7 +31,6 @@ spring.scale = 1.0
 #that were actually BUILT (see the -dihedral* flags in the Makefile): a
 #family not built has no spring to enable either way. Handy to isolate one
 #term's contribution to the reported energy channels without rebuilding.
-bending.enable = 1
 dihedralphi.enable = 1
 dihedralpsi.enable = 1
 dihedralomega.enable = 1

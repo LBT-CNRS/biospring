@@ -169,6 +169,12 @@ def _aliases(name):
 
 
 def emit_stretch(resname, a1, a2, r0_A, k):
+    # STRETCH and BEND are no longer part of the model: bonds and angles
+    # are held by the .rbody mesh at --stiffness, not by their own
+    # springs. The computation stays because the dihedral rings need
+    # the same AMBER bond lengths and angles for their geometry; only
+    # the emission is suppressed.
+    return
     for n1 in _aliases(a1):
         for n2 in _aliases(a2):
             key = (resname, tuple(sorted((n1, n2.lstrip("+-")))), n2[:1] in "+-")
@@ -181,6 +187,12 @@ def emit_stretch(resname, a1, a2, r0_A, k):
 
 
 def emit_bend(resname, a1, vertex, a3, theta0, k):
+    # STRETCH and BEND are no longer part of the model: bonds and angles
+    # are held by the .rbody mesh at --stiffness, not by their own
+    # springs. The computation stays because the dihedral rings need
+    # the same AMBER bond lengths and angles for their geometry; only
+    # the emission is suppressed.
+    return
     for n1 in _aliases(a1):
         for n3 in _aliases(a3):
             key = (resname, vertex, tuple(sorted((n1, n3))), "bend")

@@ -37,7 +37,7 @@ FF = $(BS_DATA_DIR)/forcefield/amber.ff
 # Rigid-body springs represent real bonds/valence angles, not a soft elastic
 # network: a much higher stiffness than a cutoff-based model, validated
 # stable at the timestep set in model.msp (see that file's header).
-STIFFNESS = 250.0
+STIFFNESS = 8000.0
 
 # A synthetic 29-residue construct -- 10-residue helix + 10-residue loop +
 # 9-residue beta hairpin -- built from scratch (ideal secondary-structure

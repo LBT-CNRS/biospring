@@ -29,7 +29,7 @@ FF        = $(BS_DATA_DIR)/forcefield/amber.rna.nbi.ff
 # their own (see the README): the higher it is, the closer the pucker stays
 # to the input. A stiffer mesh needs a shorter timestep -- the two are tied,
 # dt scaling as 1/sqrt(stiffness) -- hence model.msp's 0.3 fs.
-STIFFNESS = 3000.0
+STIFFNESS = 8000.0
 
 COMMON = --grp $(GRP) --nonbondedinteraction $(FF) \
          --rigidbody $(RIGIDBODY) --stiffness $(STIFFNESS)
@@ -40,7 +40,7 @@ prep : rna.nc
 # top of the articulated rigid-body mesh.
 rna.nc : $(PDB)
 	$(PDB2SPN) -s $(PDB) -o $@ $(COMMON) --bondedinteraction $(BONDED) \
-	           --dihedral --stretching --bending
+	           --dihedral
 
 run : rna.nc
 	$(BIOSPRING) -nc rna.nc -msp model.msp $(IMDOPT)

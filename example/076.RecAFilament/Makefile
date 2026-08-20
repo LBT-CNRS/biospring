@@ -44,7 +44,7 @@ BONDED    = complex.bi.ff
 # example is about the two chemistries coexisting, and raising the
 # stiffness for 13 nucleotides would stiffen 1188 protein residues with
 # them.
-STIFFNESS = 250.0
+STIFFNESS = 8000.0
 
 IMDLOG = mddriver.log
 IMDOPT = -wait -port 3000 -debug 0 -log $(IMDLOG)
@@ -66,7 +66,7 @@ $(BONDED) : $(BONDED_PARTS)
 reca.nc : $(PDB) $(GRP) $(FF) $(RIGIDBODY) $(BONDED)
 	$(PDB2SPN) -s $(PDB) -o $@ --grp $(GRP) --nonbondedinteraction $(FF) \
 	           --rigidbody $(RIGIDBODY) --stiffness $(STIFFNESS) \
-	           --bondedinteraction $(BONDED) --dihedral --stretching --bending
+	           --bondedinteraction $(BONDED) --dihedral
 
 run : reca.nc
 	$(BIOSPRING) -nc reca.nc -msp model.msp $(IMDOPT)

@@ -156,7 +156,7 @@ static void writeGhostParticleGroupBinary(NcFile * nc,
     NcVar placements = nc->addVar("ghostparticleplacement", ncInt, gndim);
     placements.putAtt("long_name", "Ghost particle placement mode (see spn::GhostPlacement): "
                                     "0 = rotated image of the reference atom about the axis (DIHEDRAL rings), "
-                                    "1 = on the axis at distance r from B (BEND)");
+                                    "1 = on the axis at distance r from B");
 
     GhostParticleBuffer buffer(n);
     buffer.bufferize(source);
@@ -390,15 +390,6 @@ void NetCDFWriter::writeBinary()
         nbofsprings.putVar(sbuffer.nbofspringsperparticle);
     }
 
-    // Reuses the exact same buffer/variable layout as the dihedral ghost
-    // spring families (including the unused springsdcoffset column, always
-    // zero for these -- see SpringNetwork::addStretchSpring/addBendSpring):
-    // STRETCH/BEND springs are structurally identical (particle pair +
-    // equilibrium + stiffness), just living in their own vectors/energy
-    // channel (see Topology's _stretch_springs/_bend_springs comments).
-    writeDihedralSpringGroupBinary(nc, "stretch", _spn->getStretchSprings());
-    writeDihedralSpringGroupBinary(nc, "bend", _spn->getBendSprings());
-
     for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
         writeDihedralSpringGroupBinary(nc, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
             _spn->getDihedralSprings(family));
@@ -437,8 +428,6 @@ void NetCDFWriter::_writeHeaderCDL()
         _ostream << std::endl;
     }
 
-    writeDihedralHeaderCDL(_ostream, "stretch", _spn->getStretchSprings().size());
-    writeDihedralHeaderCDL(_ostream, "bend", _spn->getBendSprings().size());
 
     for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
         writeDihedralHeaderCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
@@ -522,8 +511,6 @@ void NetCDFWriter::_writeHeaderCDL()
         _ostream << std::endl;
     }
 
-    writeDihedralVariablesCDL(_ostream, "stretch", _spn->getStretchSprings().size());
-    writeDihedralVariablesCDL(_ostream, "bend", _spn->getBendSprings().size());
 
     for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
         writeDihedralVariablesCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
@@ -743,8 +730,6 @@ void NetCDFWriter::_writeSpringDataCDL()
         }
     }
 
-    writeDihedralDataCDL(_ostream, "stretch", _spn->getStretchSprings());
-    writeDihedralDataCDL(_ostream, "bend", _spn->getBendSprings());
 
     for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
         writeDihedralDataCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],

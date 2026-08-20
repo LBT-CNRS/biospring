@@ -1,7 +1,7 @@
 #!/usr/local/bin/vmd
-# 073.BondedStages - visualization of stage 3 (the fully refined model)
+# 073.BondedStages - visualization of stage 2 (the fully refined model)
 #
-# stage3.nc.pdb carries CONECT records for every spring (see --pdbconect in
+# stage2.nc.pdb carries CONECT records for every spring (see --pdbconect in
 # the Makefile). Stage 3 is shown because it has the most to look at; swap
 # the filename for stage1/stage2 to see how little the drawn network itself
 # changes between stages -- what changes is each spring's equilibrium and
@@ -17,7 +17,7 @@
 #     N...C distance inside a residue's CA tetrahedron) that a plain
 #     ball-and-stick rendering of real chemistry would not show.
 
-mol new stage3.nc.pdb type pdb first 0 last -1 step 1 filebonds 1 autobonds 0 waitfor all
+mol new stage2.nc.pdb type pdb first 0 last -1 step 1 filebonds 1 autobonds 0 waitfor all
 mol delrep 0 top
 
 mol representation CPK 0.6 0.2 12.0 12.0

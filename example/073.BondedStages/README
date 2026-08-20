@@ -1,85 +1,123 @@
-# 073.BondedStages - the three bonded models, side by side
+# 073.BondedStages - the two bonded models, side by side
 
 The normal way to work up a BioSpring model: start from an articulated rigid
-body, add real torsion wells when you want realism, add real bonds and angles
-when you want to compare against a force field. This example builds all three
-so you can look at them together.
+body, then add real torsion wells when you want realism. This example builds
+both so you can look at them together.
 
 ```bash
-make prep       # builds stage1.nc, stage2.nc, stage3.nc
-make compare    # point energies of the three, side by side
-make run-stage2 # interactive session on any one of them
+make prep       # builds stage1.nc, stage2.nc
+make compare    # point energies of the two, side by side
+make run-stage2 # interactive session on either one
 ```
 
 | stage | `pdb2spn` options added | what becomes real |
 |-------|------------------------|-------------------|
 | 1 | `--rigidbody` | nothing -- every spring is the uniform `--stiffness` |
 | 2 | `--bondedinteraction --dihedral` | torsions (phi/psi/omega, chi1-5, rotors, impropers) |
-| 3 | `--stretching --bending` | bond lengths and valence angles |
 
-`make compare` on ubiquitin, all three at the same input conformation:
+`make compare` on ubiquitin, both at the same input conformation:
 
 ```
-stage            spring      stretch         bend     dihedral
-1                  0.00         0.00         0.00         0.00
-2                  0.00         0.00         0.00      3009.46
-3                  0.00       425.85       256.87      3009.46
+stage            spring     dihedral
+1                  0.00         0.00
+2                  0.00      3009.46
 ```
 
-Stage 1 reads zero everywhere because a rigid-body spring's equilibrium *is*
-the distance measured when the structure was loaded -- the input conformation
-is the model's own minimum, by construction. Each later stage adds one
-channel and leaves the earlier ones untouched, which is the point: the
-difference between two rows is exactly what that family contributes.
+Stage 1 reads zero because a rigid-body spring's equilibrium *is* the
+distance measured when the structure was loaded -- the input conformation is
+the model's own minimum, by construction. Stage 2 adds one channel and
+leaves that one untouched, which is the point: the difference between the
+two rows is exactly what the dihedral model contributes.
 
 
-## The one thing worth knowing: stages are a BUILD-time choice
+## Bonds and angles are the mesh's business, not a force field's
 
-Three `.nc` files, not one `.nc` and three `.msp` files. That is not
-laziness, and it is worth being explicit about because the `.msp` has
-`bending.enable` / `dihedralphi.enable` / … switches that suggest otherwise.
+There is no third stage. Real bond and angle springs used to exist as their
+own families (`--stretching` / `--bending`) and were removed, because they
+cannot coexist with the dihedral rings: give a bond its physical AMBER
+stiffness and the rings deform it.
+
+The reason is in the rings' forces. AMBER's torsion term is a function of
+the dihedral angle alone, so its gradient on a substituent atom is purely
+tangential -- measured on ubiquitin's Arg42, radial and axial components are
+zero to machine precision. A ghost ring is a set of distance springs pulling
+along lines that are not tangential, so on the same atom it puts 77 kJ/mol/A
+radially and 21 axially against 8 tangentially: about ten times more
+parasitic force than useful torque, and the parasitic part never vanishes,
+not even where the torsion is at its minimum and AMBER exerts nothing at
+all.
+
+The consequence, quenched 6 ps on this same ubiquitin, AMBER's own judgement
+of the resulting geometry:
+
+```
+    bonds and angles held by       bonds     angles    dihedral
+    AMBER stiffnesses             740.94     890.26     -955.08
+    the mesh at --stiffness       447.81     344.91    +1272.25
+    (the input structure itself)  443.69     278.83
+```
+
+in kJ/mol. With physical valence stiffness the geometry ends up strained and
+the reported dihedral energy goes negative -- which cannot happen for a term
+that reproduces AMBER, since a sum of k(1 + cos(n.phi - gamma)) with k > 0 is
+non-negative by construction. Holding bonds and angles in the rigid mesh
+instead protects them, and the torsions still relax, which is what the model
+is for.
+
+
+## --stiffness has to be high now
+
+The mesh is the only thing holding bonds and angles, so 250 no longer works.
+Same quench, sweeping it:
+
+```
+    --stiffness     bonds    angles   dt max
+    250          29211.52  26949.30   2.0 fs
+    2500           968.37    729.06   0.5 fs
+    8000           447.81    344.91   1.0 fs
+    25000          424.96    287.52   0.5 fs
+```
+
+8000 is what this example uses: the geometry is back to its input quality
+(447.81 against 443.69) while a 1 fs step is still stable. dt scales as
+1/sqrt(k) -- verified exactly, sqrt(25000/2800) = 2.99 against a measured
+ratio of 3.0 -- so nothing surprising happens between those rows.
+
+
+## Stages are a BUILD-time choice
+
+Two `.nc` files, not one `.nc` and two `.msp` files. That is not laziness,
+and it is worth being explicit about because the `.msp` has
+`dihedralphi.enable` / … switches that suggest otherwise.
 
 Those switches **isolate a family's contribution inside a given build; they
-do not undo the model.** Turning every one of them off on `stage3.nc` still
-leaves 443 kJ/mol of stretch energy, and it will never give you `stage1.nc`,
-for two reasons:
-
-* `--stretching` and `--bending` **retune `--rigidbody`'s springs in place**
-  rather than adding new ones. The uniform-stiffness value is overwritten
-  when the `.nc` is written; nothing at runtime can recover it. (This is also
-  why there is deliberately no `stretching.enable` -- see
-  `Configuration.hpp`'s own comment for the design work one would need.)
-* `--bending` additionally *requires* `--stretching`: its 1-3 distance
-  conversion needs STRETCH's real bond lengths. `pdb2spn` refuses `--bending`
-  alone with an explicit error rather than ignoring it, so stages 3a/3b do
-  not exist -- bonds and angles arrive together.
+do not undo the model.** A family not requested at build time never gets a
+spring, a ghost particle or a NetCDF entry, so no `.msp` key can bring it
+back -- and turning every switch off on `stage2.nc` gives you a rigid body
+carrying 2999 dead ghost particles, not `stage1.nc`.
 
 Use the `.msp` switches for what they are good at instead: measuring what one
 family costs inside one model, e.g. `dihedralchi.enable = 0` on stage 2 to
 see the side chains' share of the 3009.46 above.
 
 
-## What stage 2 is actually for
+## What stage 2 buys
 
-Stage 2 is a genuinely useful working model, not just a step on the way to
-stage 3. Bonds and angles stay stiff and uniform -- so the geometry cannot
-drift and the timestep stays comfortable -- while the torsions carry real
-AMBER wells, which is where the conformational energy actually lives: on a
-folded protein the torsion term is ~80% of the bonded energy above the
-minimum, against ~14% for angles and ~6% for bonds. Stage 2 buys most of the
-realism for none of the softening.
-
-Stage 3 is what you want when the comparison against a real force field has
-to hold in absolute kJ/mol.
+Bonds and angles stay stiff and uniform -- so the geometry cannot drift and
+the timestep stays comfortable -- while the torsions carry real AMBER wells,
+which is where the conformational energy actually lives. Against AMBER on
+the same conformation: 3009.46 kJ/mol here against 3048.83, 1.3 % apart; and
+per-axis torque agreement is 0.993 with a 0.69 kJ/mol/rad mean error against
+a 9.03 RMS, with zero sign flips across 282 significant axes.
 
 
 ## Files
 
 * `ubiquitin.pdb` -- the structure (1D3Z, NMR, all-atom with hydrogens; 18 of
   the 20 standard residues, Cys and Trp missing).
-* `model.msp` -- shared by all three stages, deliberately: any difference in
-  the reported energies then comes from the model and never from the run
+* `model.msp` -- shared by both stages, deliberately: any difference in the
+  reported energies then comes from the model and never from the run
   settings.
 * `point.msp` -- same, with `timestep = 0` and one step, so `make compare`
   reads a point energy on the input conformation rather than a relaxed one.
-* `model.vmd` -- visualization of stage 3's spring network.
+* `model.vmd` -- visualization of stage 2's spring network.

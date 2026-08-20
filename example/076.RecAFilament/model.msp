@@ -18,7 +18,6 @@ spring.scale = 1.0
 
 #Both chemistries' bonded families, on together. This is the only example
 #where the protein and nucleic families are populated at the same time.
-bending.enable = 1
 dihedralphi.enable = 1
 dihedralpsi.enable = 1
 dihedralomega.enable = 1

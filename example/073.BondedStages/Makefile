@@ -17,20 +17,34 @@ BONDED    = $(BS_DATA_DIR)/reducerules/ProteinAtomBonded.bi.ff
 GRP       = $(BS_DATA_DIR)/reducerules/amber.grp
 FF        = $(BS_DATA_DIR)/forcefield/amber.nbi.ff
 
-STIFFNESS = 250.0
+# 8000 kJ/mol/A^2, not the 250 this example used to carry. The mesh is now
+# the ONLY thing holding bonds and angles, so it has to be stiff enough to
+# hold them against the dihedral rings: measured on this same ubiquitin,
+# quenched 6 ps, AMBER's own judgement of the resulting geometry --
+#
+#     --stiffness     bonds    angles      dt max
+#     250          29211.52  26949.30      2.0 fs
+#     2500           968.37    729.06      0.5 fs
+#     8000           447.81    344.91      1.0 fs
+#     25000          424.96    287.52      0.5 fs
+#
+# in kJ/mol, against 443.69 and 278.83 for the input structure itself.
+# 8000 is where the geometry is back to its input quality while a 1 fs step
+# is still stable (dt scales as 1/sqrt(k), verified exactly).
+STIFFNESS = 8000.0
 PDB = ubiquitin.pdb
 
-# One .nc PER STAGE -- and that is the whole point of this example. The
-# stages CANNOT be reproduced by toggling one .nc at runtime, because
-# --stretching and --bending retune --rigidbody's springs IN PLACE: the
-# uniform-stiffness model is overwritten at build time and no .msp key can
-# bring it back. See the README, and doc/MSP_Options.md.
+# One .nc PER STAGE -- and that is the whole point of this example. The two
+# stages CANNOT be reproduced by toggling one .nc at runtime: a dihedral
+# family not requested at build time never gets a spring, a particle or a
+# NetCDF entry, so no .msp key can bring it back. See the README, and
+# doc/MSP_Options.md.
 COMMON = --grp $(GRP) --nonbondedinteraction $(FF) --rigidbody $(RIGIDBODY) --stiffness $(STIFFNESS)
 
 IMDLOG = mddriver.log
 IMDOPT = -wait -port 3000 -debug 0 -log $(IMDLOG)
 
-prep : stage1.nc stage2.nc stage3.nc
+prep : stage1.nc stage2.nc
 
 # Stage 1 -- articulated rigid body only. Every spring is the uniform
 # --stiffness value; the .rbody cliques decide what is rigid and what stays
@@ -44,46 +58,36 @@ stage1.nc : $(PDB)
 stage2.nc : $(PDB)
 	$(PDB2SPN) -s $(PDB) -o $@ $(COMMON) --bondedinteraction $(BONDED) --dihedral
 
-# Stage 3 -- + real bonds and angles. --bending REQUIRES --stretching (its
-# 1-3 conversion needs STRETCH's real bond lengths), so these two arrive
-# together; pdb2spn refuses --bending alone rather than silently ignoring it.
-stage3.nc : $(PDB)
-	$(PDB2SPN) -s $(PDB) -o $@ $(COMMON) --bondedinteraction $(BONDED) --dihedral --stretching --bending
-
 run-stage1 : stage1.nc
 	$(BIOSPRING) -nc stage1.nc -msp model.msp $(IMDOPT)
 
 run-stage2 : stage2.nc
 	$(BIOSPRING) -nc stage2.nc -msp model.msp $(IMDOPT)
 
-run-stage3 : stage3.nc
-	$(BIOSPRING) -nc stage3.nc -msp model.msp $(IMDOPT)
+run : run-stage2
 
-run : run-stage3
-
-# Point energies of the three stages side by side, on the SAME input
-# conformation (timestep 0, one step: nothing moves, so the three numbers
-# are directly comparable). This is the table the README quotes.
+# Point energies of the two stages side by side, on the SAME input
+# conformation (timestep 0, one step: nothing moves, so the numbers are
+# directly comparable). This is the table the README quotes.
 compare : prep
-	@printf "%-10s %12s %12s %12s %12s\n" stage spring stretch bend dihedral
-	@for s in 1 2 3; do \
+	@printf "%-10s %12s %12s\n" stage spring dihedral
+	@for s in 1 2; do \
 	    $(BIOSPRING) -nc stage$$s.nc -msp point.msp 2>&1 \
 	      | sed 's/\x1b\[[0-9;]*m//g' \
-	      | awk -v s=$$s '/Spring energy/{sp=$$4} /Stretch energy/{st=$$4} \
-	                      /Bend energy/{be=$$4} /Dihedral energy/{di=$$4} \
-	                      END{printf "%-10s %12s %12s %12s %12s\n", s, sp, st, be, di}'; \
+	      | awk -v s=$$s '/Spring energy/{sp=$$4} /Dihedral energy/{di=$$4} \
+	                      END{printf "%-10s %12s %12s\n", s, sp, di}'; \
 	done
 
-# PDB of stage 3's network with CONECT records for every spring, for
+# PDB of stage 2's network with CONECT records for every spring, for
 # visualization. No cutoff/rigidbody is given here, so no new spring is
-# created at this step -- it only re-emits what stage3.nc already holds.
-stage3.nc.pdb : stage3.nc
-	$(PDB2SPN) -s stage3.nc -o $@ --pdbconect --stiffness $(STIFFNESS)
+# created at this step -- it only re-emits what stage2.nc already holds.
+stage2.nc.pdb : stage2.nc
+	$(PDB2SPN) -s stage2.nc -o $@ --pdbconect --stiffness $(STIFFNESS)
 
-vis : stage3.nc.pdb
+vis : stage2.nc.pdb
 	vmd -e model.vmd
 
 clean :
-	rm -rf stage1.nc stage2.nc stage3.nc stage3.nc.pdb $(IMDLOG)
+	rm -rf stage1.nc stage2.nc stage2.nc.pdb $(IMDLOG)
 
-.PHONY : prep run run-stage1 run-stage2 run-stage3 compare vis clean
+.PHONY : prep run run-stage1 run-stage2 compare vis clean

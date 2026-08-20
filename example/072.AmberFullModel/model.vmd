@@ -5,7 +5,7 @@
 # pdb2spn --pdbconect in the Makefile). Loaded with filebonds 1, autobonds 0
 # so every bond drawn is exactly one of those springs -- nothing guessed
 # from interatomic distances, nothing missing. NOTE this includes the ghost
-# particles' own dihedral/bending springs, so the picture is denser than a
+# particles' own dihedral springs, so the picture is denser than a
 # chemical bond diagram: that IS the model.
 #
 # Atom names here are amber.grp's renamed types (e.g. glutamate's backbone N
@@ -42,7 +42,7 @@ mol selection {not name N CA C O and not name "GH.*"}
 mol color ResName
 mol addrep top
 
-# Ghost particles (massless virtual sites carrying the bending and dihedral
+# Ghost particles (massless virtual sites carrying the dihedral
 # springs). Hidden by default -- enable this representation in the GUI to
 # see the machinery, but expect a lot of points: ~18000 on this structure.
 mol representation Points 4.000000

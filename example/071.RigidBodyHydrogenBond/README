@@ -72,11 +72,11 @@ anything into a run:
   the documented (-120, 140) by rotating about the phi/psi bonds, which
   leaves every bond length, valence angle and stereocentre untouched.
 * The NeRF construction uses *ideal* valence angles, which are not AMBER's
-  equilibrium angles. Built with `--bending`, this structure therefore
-  starts with ~960 kJ/mol per residue of bending strain, against ~3 for a
-  real crystal structure. The first few thousand steps of any run relieve
-  that strain, and it dwarfs everything the fold itself is worth -- so do
-  not read the early trajectory as folding behaviour.
+  equilibrium angles. That no longer costs anything here -- the rigid mesh
+  takes each angle's equilibrium from the structure as loaded, so an ideal
+  geometry is simply the model's own minimum -- but it does mean this
+  structure is not a substitute for a real one if you ever compare absolute
+  valence energies against a force field.
 
 ### What to actually expect when you pull on this
 

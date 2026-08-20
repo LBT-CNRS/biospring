@@ -32,8 +32,6 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     bool ignoreDuplicates;
     bool ignoreMissing;
     bool writePdbConect;
-    bool stretching;
-    bool bending;
     bool dihedral;
     bool dihedralBackbone;
     bool dihedralSidechain;
