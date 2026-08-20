@@ -604,7 +604,7 @@ class SpringNetwork
     // One anchor-force triple per ghost, filled in parallel by
     // redistributeGhostForces' Jacobian pass, then accumulated serially
     // (anchors are heavily shared -- up to 62 ghosts per anchor on
-    // example/072 -- so they must not be written concurrently). Same
+    // example 072 -- so they must not be written concurrently). Same
     // parallel-compute/serial-accumulate split as _springForceScratch.
     struct GhostForceContribution
     {

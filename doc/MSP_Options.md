@@ -111,10 +111,11 @@ still carrying every ghost particle the disabled families created.
 
 To compare a rigid-body model against a bonded one, **build one `.nc` per stage**
 (`--rigidbody` alone, then `+ --dihedral`) rather than toggling one `.nc` at runtime. See
-`example/073.BondedStages`, which does exactly that.
+`073.BondedStages` in the Biospring-Example repository, which does exactly that.
 
 Bonds and valence angles have no `.msp` switch and no `pdb2spn` flag of their own: they are
-held by the `--rigidbody` mesh at `--stiffness`. See `example/073.BondedStages`' README for
+held by the `--rigidbody` mesh at `--stiffness`. See `073.BondedStages`' README in the
+Biospring-Example repository for
 why the model is built that way, and for the `--stiffness` value it needs.
 ---
 * **viscosity.enable = 0** *(boolean)* Enables a damping factor on the particles.

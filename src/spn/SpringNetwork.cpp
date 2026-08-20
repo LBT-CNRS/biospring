@@ -723,7 +723,7 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
     // Every ghost of one ring hangs off the same axis; find or create that
     // axis's accumulator (see GhostAxis). Linear search is fine: this runs
     // once at build time, and the number of distinct axes is small next to
-    // the number of ghosts (example/072: 13964 ghosts, a few hundred axes).
+    // the number of ghosts (example 072: 6484 ghosts, a few hundred axes).
     unsigned axisIndex = 0;
     for (; axisIndex < _ghostaxes.size(); ++axisIndex)
         if (_ghostaxes[axisIndex].anchorBIndex == anchorBIndex && _ghostaxes[axisIndex].anchorCIndex == anchorCIndex)
@@ -738,8 +738,8 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
     return ownIndex;
 }
 
-// Anchors are heavily shared -- on example/072, 13964 ghosts hang off only
-// 1875 distinct anchors, up to 62 ghosts on a single one -- so the anchors
+// Anchors are heavily shared -- on example 072, 6484 ghosts hang off well
+// under 2000 distinct anchors, dozens on a single one -- so the anchors
 // cannot be written concurrently. Same split as computeSpringForces: the
 // expensive part (the placement Jacobian, one per ghost) runs in parallel
 // into a scratch buffer, then a deterministic serial pass accumulates,
@@ -812,7 +812,7 @@ void SpringNetwork::redistributeGhostForces()
 
 // Embarrassingly parallel, unlike redistributeGhostForces: each iteration
 // writes only its own ghost, and a ghost is never itself an anchor (checked
-// on example/072: 0 of 41892 anchor slots point at a ghost), so no
+// on example 072: no anchor slot points at a ghost), so no
 // iteration can depend on another's result and no write is shared.
 void SpringNetwork::updateGhostPositions()
 {

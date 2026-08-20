@@ -482,7 +482,7 @@ class Topology
             // and every Lennard-Jones form is proportional to epsilon_ij, so
             // both the steric energy AND force came out exactly zero on any
             // topology built this way (found 2026-08-13 while writing
-            // example/072: "Steric energy: 0.00" with correct radii/charges
+            // example 072 (Biospring-Example): "Steric energy: 0.00" with correct radii/charges
             // in the same .nc). Every other link in the chain was already
             // correct -- ForceFieldReader parses it, Reducer sets it on the
             // grain, SpnBuffer writes it, NetCDFReader restores it -- only
