@@ -128,7 +128,8 @@ class SpringNetwork
           _dynamicsprings(), _dihedralsprings(), _stretchsprings(), _bendsprings(),
           _ghostparticles(),
           _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
-          _hydrophobicPairScratch(), _hydrogenBondCoreRepulsionPairScratch(), _hydrogenBondPartner(),
+          _hydrophobicPairScratch(), _hydrogenBondCoreRepulsionPairScratch(), _hbDonorSlot(),
+          _hbDonorOffset(), _hbAcceptorSlot(), _hbAcceptorOffset(),
           _hydrogenBondForceScratch(), _energies(), _nsearch(),
           _neighborSearchesDirty(false),
           _nbiter(0), _end(false), _pause(false), _grids(), _constraintenabled(false), _framerate(0.0),
@@ -421,13 +422,15 @@ class SpringNetwork
     float getHydrogenBondCutoff() const { return _config.hbond.cutoff; }
     float getNeighborSkin() const { return _config.sim.neighborskin; }
 
-    // -1 if particle `index` is not currently engaged in an exclusive
-    // hydrogen bond, otherwise the index of its current partner. See
-    // _assignHydrogenBondPairs / Particle::addHydrogenBondCoreRepulsion.
-    int getHydrogenBondPartner(size_t index) const
-    {
-        return index < _hydrogenBondPartner.size() ? _hydrogenBondPartner[index] : -1;
-    }
+    // -1 if particle `index` currently holds no hydrogen bond at all,
+    // otherwise the index of one of its partners. Used by the core-repulsion
+    // term, which only needs to know whether two particles are already bound
+    // to each other -- see Particle::addHydrogenBondCoreRepulsion.
+    int getHydrogenBondPartner(size_t index) const { return _anyHydrogenBondPartner(index); }
+
+    // True when `a` and `b` currently hold a bond together, in either
+    // direction.
+    bool areHydrogenBonded(size_t a, size_t b) const;
 
     bool isSpringEnabled() const { return _config.spring.enable; }
     // Per-family runtime debug toggles for the bonded-force-field springs
@@ -573,6 +576,10 @@ class SpringNetwork
     // hit criterion used to detect orthologs between two gene sets). Already-
     // engaged particles are excluded from this matching entirely.
     void _assignHydrogenBondPairs();
+
+    // Any partner of `index`, in either role, or -1. Cheap: capacities are
+    // 1 or 2 in practice.
+    int _anyHydrogenBondPartner(size_t index) const;
 
     void _excludeProbeFromNeighborSearch(NeighborSearch::Searcher & searcher);
     void _updateNeighborSearches();
@@ -757,16 +764,28 @@ class SpringNetwork
     // at once regardless of its own engagement status.
     std::vector<std::vector<spn::DeferredNonbondedContribution>> _hydrogenBondCoreRepulsionPairScratch;
 
-    // Hydrogen bonds are exclusive pairs, not a neighbor-summed interaction:
-    // each particle (donor or acceptor) may be engaged with at most one
-    // partner at a time (see _assignHydrogenBondPairs). _hydrogenBondPartner
-    // is indexed by particle index and persists across steps: -1 means free,
-    // otherwise the index of the current partner. A bonded particle is not
-    // even considered as a candidate for re-matching until its bond breaks
-    // (current distance exceeds the hbond cutoff), so bonds do not flicker
-    // toward a momentarily closer alternative. One force contribution per
-    // active pair, reused between steps like _springForceScratch.
-    std::vector<int> _hydrogenBondPartner;
+    // Hydrogen bonds are counted pairs, not a neighbor-summed interaction.
+    // Each particle has as many donor slots as it has donatable hydrogens
+    // and as many acceptor slots as it has lone pairs (see
+    // ParticleProperties::donorCapacity) -- an amino nitrogen donates twice,
+    // a carbonyl oxygen accepts twice, a hydroxyl does one of each. A bond
+    // consumes one DONOR slot on one side and one ACCEPTOR slot on the
+    // other, so iterating the donor slots walks every bond exactly once and
+    // knows which side donated, which is what the angular weight needs.
+    //
+    // Both are CSR: slots for particle i live in
+    // [offset[i], offset[i+1]), -1 meaning free. They persist across steps
+    // -- an engaged slot is not offered again until its own bond breaks
+    // (distance beyond the hbond cutoff), so bonds do not flicker toward a
+    // momentarily closer alternative -- and a particle with one slot behaves
+    // exactly as the old single-partner array did.
+    std::vector<int> _hbDonorSlot;
+    std::vector<size_t> _hbDonorOffset;
+    std::vector<int> _hbAcceptorSlot;
+    std::vector<size_t> _hbAcceptorOffset;
+    // One force contribution per active bond, reused between steps like
+    // _springForceScratch. Three entries per bond: antecedent, donor,
+    // acceptor -- the angular weight makes the antecedent a third body.
     std::vector<Vector3f> _hydrogenBondForceScratch;
 
     Energies _energies;

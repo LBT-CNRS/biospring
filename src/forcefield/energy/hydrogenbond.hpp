@@ -48,6 +48,42 @@ inline float hydrogen_bond_force_module(float distance, float wellDepth, float e
     return force_module;
 }
 
+// ---- Angular weight -----------------------------------------------------
+//
+// A hydrogen bond is directional, and a distance-only Morse is not: on a
+// B-DNA duplex it happily pairs two stacked same-strand groups sitting 2.75 A
+// apart, closer to each other than to their real Watson-Crick partners at
+// 2.90 and 2.94 A. Without an explicit hydrogen the direction still exists,
+// carried by the donor's ANTECEDENT: the heavy atom it hangs off. The
+// antecedent->donor vector stands in for where the H (or the lone pair)
+// points, and how far the acceptor sits off that direction is what weights
+// the well.
+//
+// w = max(cos(theta), 0)^2, theta the angle at the donor between
+// (donor - antecedent) and (acceptor - donor). Measured over 48 real
+// Watson-Crick bonds it runs 0.036 to 0.48, median 0.25; the stacked pair
+// above gets 0.003. It does not need to separate them on its own -- donor
+// and acceptor capacities let the parasitic pair form alongside the real one
+// instead of starving it -- it only has to make it weigh nothing, and 0.003
+// against 0.25 does.
+//
+// Clamped at zero rather than squared through: an acceptor BEHIND the donor
+// (theta > 90 deg) is not a weak hydrogen bond, it is not one at all, and
+// cos^2 alone would revive it.
+
+/// @param cos_theta Cosine of the angle at the donor.
+/// @return Dimensionless weight in [0, 1].
+inline float hydrogen_bond_angular_factor(float cos_theta)
+{
+    return cos_theta > 0.0f ? cos_theta * cos_theta : 0.0f;
+}
+
+/// d(weight)/d(cos theta), for the force.
+inline float hydrogen_bond_angular_derivative(float cos_theta)
+{
+    return cos_theta > 0.0f ? 2.0f * cos_theta : 0.0f;
+}
+
 } // namespace forcefield
 } // namespace biospring
 

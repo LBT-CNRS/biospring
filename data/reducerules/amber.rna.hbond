@@ -29,81 +29,81 @@
 #bonds: two stacked same-strand groups sit closer to each other
 #(2.75 A) than to their real partners (2.90 and 2.94 A).
 #
-A    rOP1   0 1
-RA   rOP1   0 1
-A    rOP2   0 1
-RA   rOP2   0 1
-A    rO5    0 1
-RA   rO5    0 1
-A    rO4    0 1
-RA   rO4    0 1
-A    aN7    0 1
-RA   aN7    0 1
-A    aN6    1 0
-RA   aN6    1 0
-A    aN1    0 1
-RA   aN1    0 1
-A    aN3    0 1
-RA   aN3    0 1
-A    rO2    1 1
-RA   rO2    1 1
-A    rO3    0 1
-RA   rO3    0 1
-C    rOP1   0 1
-RC   rOP1   0 1
-C    rOP2   0 1
-RC   rOP2   0 1
-C    rO5    0 1
-RC   rO5    0 1
-C    rO4    0 1
-RC   rO4    0 1
-C    cN4    1 0
-RC   cN4    1 0
-C    cN3    0 1
-RC   cN3    0 1
-C    cO2    0 1
-RC   cO2    0 1
-C    rO2    1 1
-RC   rO2    1 1
-C    rO3    0 1
-RC   rO3    0 1
-G    rOP1   0 1
-RG   rOP1   0 1
-G    rOP2   0 1
-RG   rOP2   0 1
-G    rO5    0 1
-RG   rO5    0 1
-G    rO4    0 1
-RG   rO4    0 1
-G    gN7    0 1
-RG   gN7    0 1
-G    gO6    0 1
-RG   gO6    0 1
-G    gN1    1 0
-RG   gN1    1 0
-G    gN2    1 0
-RG   gN2    1 0
-G    gN3    0 1
-RG   gN3    0 1
-G    rO2    1 1
-RG   rO2    1 1
-G    rO3    0 1
-RG   rO3    0 1
-U    rOP1   0 1
-RU   rOP1   0 1
-U    rOP2   0 1
-RU   rOP2   0 1
-U    rO5    0 1
-RU   rO5    0 1
-U    rO4    0 1
-RU   rO4    0 1
-U    uO4    0 1
-RU   uO4    0 1
-U    uN3    1 0
-RU   uN3    1 0
-U    uO2    0 1
-RU   uO2    0 1
-U    rO2    1 1
-RU   rO2    1 1
-U    rO3    0 1
-RU   rO3    0 1
+A    rOP1   0 2 rP
+RA   rOP1   0 2 rP
+A    rOP2   0 2 rP
+RA   rOP2   0 2 rP
+A    rO5    0 2 rC5
+RA   rO5    0 2 rC5
+A    rO4    0 2 rC4
+RA   rO4    0 2 rC4
+A    aN7    0 1 aC5
+RA   aN7    0 1 aC5
+A    aN6    2 0 aC6
+RA   aN6    2 0 aC6
+A    aN1    0 1 aC2
+RA   aN1    0 1 aC2
+A    aN3    0 1 aC2
+RA   aN3    0 1 aC2
+A    rO2    1 2 rC2
+RA   rO2    1 2 rC2
+A    rO3    0 2 rC3
+RA   rO3    0 2 rC3
+C    rOP1   0 2 rP
+RC   rOP1   0 2 rP
+C    rOP2   0 2 rP
+RC   rOP2   0 2 rP
+C    rO5    0 2 rC5
+RC   rO5    0 2 rC5
+C    rO4    0 2 rC4
+RC   rO4    0 2 rC4
+C    cN4    2 0 cC4
+RC   cN4    2 0 cC4
+C    cN3    0 1 cC2
+RC   cN3    0 1 cC2
+C    cO2    0 2 cC2
+RC   cO2    0 2 cC2
+C    rO2    1 2 rC2
+RC   rO2    1 2 rC2
+C    rO3    0 2 rC3
+RC   rO3    0 2 rC3
+G    rOP1   0 2 rP
+RG   rOP1   0 2 rP
+G    rOP2   0 2 rP
+RG   rOP2   0 2 rP
+G    rO5    0 2 rC5
+RG   rO5    0 2 rC5
+G    rO4    0 2 rC4
+RG   rO4    0 2 rC4
+G    gN7    0 1 gC5
+RG   gN7    0 1 gC5
+G    gO6    0 2 gC6
+RG   gO6    0 2 gC6
+G    gN1    1 0 gC2
+RG   gN1    1 0 gC2
+G    gN2    2 0 gC2
+RG   gN2    2 0 gC2
+G    gN3    0 1 gC2
+RG   gN3    0 1 gC2
+G    rO2    1 2 rC2
+RG   rO2    1 2 rC2
+G    rO3    0 2 rC3
+RG   rO3    0 2 rC3
+U    rOP1   0 2 rP
+RU   rOP1   0 2 rP
+U    rOP2   0 2 rP
+RU   rOP2   0 2 rP
+U    rO5    0 2 rC5
+RU   rO5    0 2 rC5
+U    rO4    0 2 rC4
+RU   rO4    0 2 rC4
+U    uO4    0 2 uC4
+RU   uO4    0 2 uC4
+U    uN3    1 0 uC2
+RU   uN3    1 0 uC2
+U    uO2    0 2 uC2
+RU   uO2    0 2 uC2
+U    rO2    1 2 rC2
+RU   rO2    1 2 rC2
+U    rO3    0 2 rC3
+RU   rO3    0 2 rC3

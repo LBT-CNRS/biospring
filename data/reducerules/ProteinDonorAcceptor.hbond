@@ -28,84 +28,84 @@
 #than N/O) -- included for completeness, matching HBPLUS, but expect it to
 #contribute far less than a N/O-mediated hydrogen bond.
 
-ACE O 0 1
+ACE  O     0 2 C
 
-ALA N 1 0
-ALA O 0 1
+ALA  N     1 0 CA
+ALA  O     0 2 C
 
-ARG N 1 0
-ARG O 0 1
-ARG NE 1 0
-ARG NH1 1 0
-ARG NH2 1 0
+ARG  N     1 0 CA
+ARG  O     0 2 C
+ARG  NE    1 0 CD
+ARG  NH1   2 0 CZ
+ARG  NH2   2 0 CZ
 
-ASN N 1 0
-ASN O 0 1
-ASN ND2 1 0
-ASN OD1 0 1
+ASN  N     1 0 CA
+ASN  O     0 2 C
+ASN  ND2   2 0 CG
+ASN  OD1   0 2 CG
 
-ASP N 1 0
-ASP O 0 1
-ASP OD1 0 1
-ASP OD2 0 1
+ASP  N     1 0 CA
+ASP  O     0 2 C
+ASP  OD1   0 2 CG
+ASP  OD2   0 2 CG
 
-CYS N 1 0
-CYS O 0 1
-CYS SG 1 1
+CYS  N     1 0 CA
+CYS  O     0 2 C
+CYS  SG    1 1 CB
 
-GLN N 1 0
-GLN O 0 1
-GLN NE2 1 0
-GLN OE1 0 1
+GLN  N     1 0 CA
+GLN  O     0 2 C
+GLN  NE2   2 0 CD
+GLN  OE1   0 2 CD
 
-GLU N 1 0
-GLU O 0 1
-GLU OE1 0 1
-GLU OE2 0 1
+GLU  N     1 0 CA
+GLU  O     0 2 C
+GLU  OE1   0 2 CD
+GLU  OE2   0 2 CD
 
-GLY N 1 0
-GLY O 0 1
+GLY  N     1 0 CA
+GLY  O     0 2 C
 
-HIS N 1 0
-HIS O 0 1
-HIS ND1 1 1
-HIS NE2 1 1
+HIS  N     1 0 CA
+HIS  O     0 2 C
+HIS  ND1   1 1 CE1
+HIS  NE2   1 1 CE1
 
-ILE N 1 0
-ILE O 0 1
+ILE  N     1 0 CA
+ILE  O     0 2 C
 
-LEU N 1 0
-LEU O 0 1
+LEU  N     1 0 CA
+LEU  O     0 2 C
 
-LYS N 1 0
-LYS O 0 1
-LYS NZ 1 0
+LYS  N     1 0 CA
+LYS  O     0 2 C
+LYS  NZ    3 0 CE
 
-MET N 1 0
-MET O 0 1
+MET  N     1 0 CA
+MET  O     0 2 C
 
-NME N 1 0
+NME  N     1 0 CH3
 
-PHE N 1 0
-PHE O 0 1
+PHE  N     1 0 CA
+PHE  O     0 2 C
 
-PRO O 0 1
+PRO  O     0 2 C
 
-SER N 1 0
-SER O 0 1
-SER OG 1 1
+SER  N     1 0 CA
+SER  O     0 2 C
+SER  OG    1 2 CB
 
-THR N 1 0
-THR O 0 1
-THR OG1 1 1
+THR  N     1 0 CA
+THR  O     0 2 C
+THR  OG1   1 2 CB
 
-TRP N 1 0
-TRP O 0 1
-TRP NE1 1 0
+TRP  N     1 0 CA
+TRP  O     0 2 C
+TRP  NE1   1 0 CD1
 
-TYR N 1 0
-TYR O 0 1
-TYR OH 1 1
+TYR  N     1 0 CA
+TYR  O     0 2 C
+TYR  OH    1 2 CZ
 
-VAL N 1 0
-VAL O 0 1
+VAL  N     1 0 CA
+VAL  O     0 2 C
