@@ -84,13 +84,26 @@ with the dihedral families off reaches stretch 1.39 and bend 96.54 kJ/mol;
 with them on, the same quench stops at 636.54 and 905.62. The rings buy
 their own relaxation by paying about 1500 kJ/mol of valence strain.
 
-Cause, and it is traceable rather than mysterious: ring radius and plane
-separation used to be scaled together by a constant (RING_SCALE = 4.0),
-which leaves the harmonic content invariant while shrinking exactly this
-bond-length sensitivity as 1/scale^2 -- a 16x reduction. Placing each ghost
-as the rotated image of a REAL atom (2026-08-14, which is what made the
-Jacobians unnecessary) fixed the radius to that atom's own and left the
-constant with nothing to act on; it was dropped as dead code shortly after.
+Cause, measured rather than argued: ring radius and plane separation used
+to be scaled together by a constant (RING_SCALE = 4.0), which leaves the
+harmonic content invariant while shrinking exactly this bond-length
+sensitivity as 1/scale^2. Placing each ghost as the rotated image of a REAL
+atom (49ffc1e, which is what made the Jacobians unnecessary) fixed the
+radius to that atom's own -- ghost radii fell from a median of 3.10 A to
+1.33 A -- and left the constant with nothing to act on, so it was dropped
+as dead code shortly after.
+
+Both versions were built and run through the same scaling test. Over the
+same +/-6 %, the pre-49ffc1e model's dihedral energy spans 623.75 kJ/mol
+and drifts monotonically; the current one spans 9343.03 and is a sharp V
+about the native scale. That is a measured 15x loss of scale insensitivity,
+which is what the constant was there to buy.
+
+Worth stating plainly: the trade was real in both directions. Placing
+ghosts by rotation is what removed the Jacobians, and the torque and
+per-axis energy validations that followed it both passed -- they rotate
+rigidly or evaluate one conformation, so neither can vary a bond length,
+and neither could have caught this.
 
 Where this does and does not matter: at thermally realistic geometry the
 artifact is small -- the input conformation above is 1.3 % from AMBER on
