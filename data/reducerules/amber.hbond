@@ -13,6 +13,8 @@
 #
 #Format: <resname> <type> <donor> <acceptor>, donor/acceptor are 0 or 1.
 
+ACE XO 0 1
+
 ALA AN 1 0
 ALA AO 0 1
 
@@ -66,6 +68,8 @@ LYS KNZ 1 0
 
 MET MN 1 0
 MET MO 0 1
+
+NME ZN 1 0
 
 PHE FN 1 0
 PHE FO 0 1

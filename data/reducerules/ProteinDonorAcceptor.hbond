@@ -28,6 +28,8 @@
 #than N/O) -- included for completeness, matching HBPLUS, but expect it to
 #contribute far less than a N/O-mediated hydrogen bond.
 
+ACE O 0 1
+
 ALA N 1 0
 ALA O 0 1
 
@@ -81,6 +83,8 @@ LYS NZ 1 0
 
 MET N 1 0
 MET O 0 1
+
+NME N 1 0
 
 PHE N 1 0
 PHE O 0 1
