@@ -98,7 +98,7 @@ struct TestStericEnergyAmber : public TestStericEnergy
     void SetUp() override
     {
         TestStericEnergy::SetUp();
-        config.steric.mode = "lennard-jones-8-6Amber";
+        config.steric.mode = "lennard-jones-12-6Amber";
         SetUpSpn();
     }
 };
