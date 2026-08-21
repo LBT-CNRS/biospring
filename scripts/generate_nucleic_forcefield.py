@@ -782,8 +782,12 @@ def main():
         "#nucleic-acid-specific AMBER force fields (see the script's docstring",
         "#for why amber99sb.xml's own nucleic templates are the wrong choice).",
         "#",
-        "#STRETCH <name> <resname> <atom1> <atom2> <r0_A> <k_kJ.mol-1.A-2>",
-        "#BEND    <name> <resname> <atom1> <vertex> <atom3> <theta0_deg> <k>",
+        "#This file carries DIHEDRAL records only -- see the format further",
+        "#down. Bonds and valence angles used to be emitted here as STRETCH",
+        "#and BEND; both families were removed and now live in the rigid-body",
+        "#mesh (DNAAtomRigidGroups.rbody / RNAAtomRigidGroups.rbody). AMBER",
+        "#bond lengths and angles are still read, because the ghost rings'",
+        "#geometry is built from them.",
         "#",
         "#'+X' is atom X of the NEXT residue: the only cross-residue bond in a",
         "#nucleic acid is O3'(i)-P(i+1), the phosphodiester link.",
@@ -809,12 +813,13 @@ def main():
         "#RNAAtomRigidGroups.rbody. Measured on a real build, their per-vertex",
         "#groups cover all 10 pairs of the 5 furanose atoms -- a 5-cycle puts",
         "#every pair at graph distance <= 2, so 'vertex + its 2 ring",
-        "#neighbours' leaves nothing out. Under --rigidbody alone that is a",
-        "#complete clique at uniform stiffness and the pucker is FROZEN, which",
-        "#is why NUCLEIC_SUGAR exists as its own family. Add --stretching",
-        "#--bending and those same 10 pairs become real AMBER bonds and angles:",
-        "#a soft ring, the way AMBER itself has no pucker term either and lets",
-        "#the state emerge from bonds, angles, torsions and 1-4 together.",
+        "#neighbours' leaves nothing out. Under --rigidbody that is a complete",
+        "#clique at uniform stiffness, so the ring itself is rigid and the",
+        "#pucker would be FROZEN -- which is why NUCLEIC_SUGAR exists as its",
+        "#own family, torsions being what lets the pucker move at all here.",
+        "#AMBER has no pucker term either and lets the state emerge from bonds,",
+        "#angles, torsions and 1-4 together; this model keeps the bonds and",
+        "#angles rigid and carries only the torsions.",
         "",
     ]
 
@@ -882,9 +887,9 @@ def main():
     ] + axes.dihedral_lines
     with open(out, "w") as f:
         f.write("\n".join(header + body) + "\n")
-    print(f"\nWrote {counters['stretch']} STRETCH, {counters['bend']} BEND "
-          f"({counters['skip']} skipped), {axes.n_ghost_particles} GHOSTPARTICLE and "
-          f"{axes.n_dihedral_ok} DIHEDRAL entries ({axes.n_dihedral_skip} axes skipped) to {out}")
+    print(f"\nWrote {axes.n_ghost_particles} GHOSTPARTICLE and {axes.n_dihedral_ok} DIHEDRAL "
+          f"entries ({axes.n_dihedral_skip} axes skipped) to {out}. Bonds and valence angles "
+          f"are not emitted: the rigid-body mesh carries them.")
 
 
 if __name__ == "__main__":
