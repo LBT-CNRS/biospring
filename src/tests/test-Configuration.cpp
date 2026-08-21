@@ -88,6 +88,24 @@ TEST(Configuration, assignement_operator)
     EXPECT_FLOAT_EQ(source.probe.radius, target.probe.radius);
 }
 
+// The Amber steric mode was renamed when its exponents were corrected, but
+// .msp files still carry the old spelling. It must keep working AND must
+// resolve to the Amber force field: SpringNetwork dispatches on this string
+// and silently falls back to "linear" for anything unrecognised, so a mode
+// that parses but does not map would run the wrong physics without a word.
+TEST(Configuration, deprecated_amber_steric_mode_maps_to_the_current_name)
+{
+    Configuration config;
+    config.steric.setFromString("mode", "lennard-jones-8-6Amber");
+    EXPECT_EQ(std::string(config.steric.mode), "lennard-jones-12-6Amber");
+
+    config.steric.setFromString("mode", "lennard-jones-12-6Amber");
+    EXPECT_EQ(std::string(config.steric.mode), "lennard-jones-12-6Amber");
+
+    config.steric.setFromString("mode", "linear");
+    EXPECT_EQ(std::string(config.steric.mode), "linear");
+}
+
 // -- Main function  ----------------------------------------------------------
 int main(int argc, char * argv[])
 {

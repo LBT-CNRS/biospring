@@ -107,7 +107,10 @@ for these features are given in the appropriate examples. **(TODO: define
 which examples)**
 
 * **steric.enable = 0** *(boolean)* Enable steric interaction.
-* **steric.mode = linear** *(string)* Type of steric interaction Can be *linear, lennard-jones-8-6Lewitt, lennard-jones-8-6Zacharias, lennard-jones-12-6Amber*
+* **steric.mode = linear** *(string)* Type of steric interaction Can be *linear, lennard-jones-8-6Lewitt, lennard-jones-8-6Zacharias, lennard-jones-12-6Amber*.
+  `lennard-jones-8-6Amber` is the former spelling of `lennard-jones-12-6Amber`, still
+  accepted: it is translated to the current name with a warning, so existing `.msp`
+  files keep running the force field they ask for. Prefer the current name in new files.
 * **steric.gridscale = 1** *(dimensionless factor, float)* Multiplier applied to steric forces
 (steric stiffness in the *linear* mode is a fixed kJ.mol-1.A-2 constant in the code; the
 Lennard-Jones modes use each particle's `epsilon`, in kJ.mol-1, from the .ff file).

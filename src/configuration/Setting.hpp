@@ -296,8 +296,25 @@ class StericSetting : public SettingBase
     }
 
   protected:
+    // Former spelling of lennard-jones-12-6Amber, still carried by .msp files
+    // in the wild. Translated to the current name rather than merely added to
+    // the choice set: SpringNetwork::_setupForceField dispatches on the
+    // string and falls back to "linear" for anything it does not recognise,
+    // without complaining, so accepting the old spelling without mapping it
+    // would silently run a different force field than the file asks for.
+    static constexpr const char * _DEPRECATED_AMBER_MODE = "lennard-jones-8-6Amber";
+    static constexpr const char * _AMBER_MODE = "lennard-jones-12-6Amber";
+
     void _parse_mode(const std::string & value)
     {
+        if (value == _DEPRECATED_AMBER_MODE)
+        {
+            logging::warning("Configuration: %s.mode: '%s' was renamed '%s'; using the latter. "
+                             "Update the .msp -- the old name will stop being accepted.",
+                             name.c_str(), _DEPRECATED_AMBER_MODE, _AMBER_MODE);
+            mode = _AMBER_MODE;
+            return;
+        }
         try
         {
             mode = value;
