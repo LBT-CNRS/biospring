@@ -243,16 +243,25 @@ class HydrogenBondSetting : public EnergySetting
 {
   public:
     std::string path;
+    // Where to write the list of bonds actually held, one line each, at every
+    // sample step. Empty (the default) writes nothing. A total energy and a
+    // bond count cannot say WHICH bonds are held, and that is the only thing
+    // that settles a disagreement about pairing: a fully extended chain
+    // reports a perfectly healthy count made entirely of contacts between
+    // neighbouring residues.
+    std::string log;
 
-    HydrogenBondSetting(const std::string & name) : EnergySetting(name), path()
+    HydrogenBondSetting(const std::string & name) : EnergySetting(name), path(), log()
     {
-        _parameterNames = {"enable", "scale", "cutoff", "path"};
+        _parameterNames = {"enable", "scale", "cutoff", "path", "log"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
     {
         if (param == "path")
             path = s;
+        else if (param == "log")
+            log = s;
         else
             EnergySetting::setFromString(param, s);
     }
@@ -261,6 +270,7 @@ class HydrogenBondSetting : public EnergySetting
     {
         EnergySetting::print(os);
         _mspFormatter.print("path", path, os);
+        _mspFormatter.print("log", log, os);
     }
 };
 class TrajectorySetting : public SettingBase
