@@ -64,6 +64,9 @@ class Configuration
     EnergySetting dihedralnucleicchi;
     EnergySetting dihedralnucleicsugar;
 
+    // Global to every family: how their forces reach the real atoms.
+    DihedralSetting dihedral;
+
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"),
           electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"),
@@ -71,7 +74,8 @@ class Configuration
           densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody"), dihedralphi("dihedralphi"),
           dihedralpsi("dihedralpsi"), dihedralomega("dihedralomega"), dihedralchi("dihedralchi"),
           dihedralplanarity("dihedralplanarity"), dihedralnucleicbackbone("dihedralnucleicbackbone"),
-          dihedralnucleicchi("dihedralnucleicchi"), dihedralnucleicsugar("dihedralnucleicsugar")
+          dihedralnucleicchi("dihedralnucleicchi"), dihedralnucleicsugar("dihedralnucleicsugar"),
+          dihedral("dihedral")
     {
         _register(sim);
         _register(steric);
@@ -88,6 +92,7 @@ class Configuration
         _register(densitygrid);
         _register(probe);
         _register(rigidbody);
+        _register(dihedral);
         _register(dihedralphi);
         _register(dihedralpsi);
         _register(dihedralomega);
@@ -191,6 +196,8 @@ class Configuration
             probe.setFromString(name, value);
         else if (group == rigidbody.name)
             rigidbody.setFromString(name, value);
+        else if (group == dihedral.name)
+            dihedral.setFromString(name, value);
         else if (group == dihedralphi.name)
             dihedralphi.setFromString(name, value);
         else if (group == dihedralpsi.name)
