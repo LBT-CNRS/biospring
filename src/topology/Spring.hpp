@@ -37,6 +37,16 @@ class Spring
     // The spring constant of the spring.
     double _stiffness;
 
+    // Only meaningful for a dihedral ghost-ghost spring (see
+    // BioSpring's DihedralEntry/generate_bonded_forcefield.py): this
+    // spring's share of its axis's exact dihedral-energy correction (ring
+    // construction artifact minus AMBER's own real DC), in kJ.mol-1. Zero
+    // for every other spring. Never affects forces (a constant has zero
+    // gradient) -- see spn::SpringNetwork::computeDihedralForces, which
+    // subtracts it from each dihedral spring's own energy when reporting
+    // the total.
+    double _dc_offset = 0.0;
+
     // The spring identifier is made of the two unique ids of its particles.
     sid_t _uid;
 
@@ -75,6 +85,14 @@ class Spring
     // Gets/Sets the spring constant.
     double stiffness() const { return _stiffness; }
     void set_stiffness(double stiffness) { _stiffness = stiffness; }
+
+    // Gets/Sets the dihedral-energy correction (see _dc_offset's own comment).
+    double dc_offset() const { return _dc_offset; }
+    Spring & set_dc_offset(double dc_offset)
+    {
+        _dc_offset = dc_offset;
+        return *this;
+    }
 
 
     // ================================================================================

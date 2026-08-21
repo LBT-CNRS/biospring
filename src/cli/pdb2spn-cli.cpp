@@ -3,6 +3,7 @@
 #include "pdb2spn-cli.h"
 #include "IO/ForceFieldReader.h"
 #include "IO/ReduceRuleReader.h"
+#include "IO/BondedForceFieldReader.h"
 #include "IO/RigidBodyRuleReader.h"
 #include "IO/io.h"
 #include "logging.h"
@@ -10,6 +11,7 @@
 #include "rigidbodygroup/RigidBodyBuilder.h"
 #include "utils.hpp"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -40,6 +42,15 @@ const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "back to their original name (it must be an all-atom identity mapping,",
     "one atom per rule, like amber.grp -- not a real coarse-grain reduction).",
     "",
+    "-bondedinteraction/--bondedinteraction reads a .bi.ff file (real or",
+    "ghost-spring parameters translated from a real force field, e.g. AMBER)",
+    "on top of -rigidbody/--rigidbody's springs, but applies none of it by",
+    "itself: -dihedralbackbone/--dihedralbackbone and",
+    "-dihedralsidechain/--dihedralsidechain (dihedral ghost springs added on",
+    "top, one flag per proper-dihedral family) each independently opt in;",
+    "-dihedral/--dihedral is a shorthand for both dihedral flags together.",
+    "The rigid mesh keeps bonds and angles at the uniform -stiffness value;",
+    "the dihedral wells are what -bondedinteraction adds on top.",
 };
 
 namespace biospring
@@ -81,6 +92,26 @@ int main(int argc, char ** argv)
         }
     }
 
+    // Reads the .bi.ff file (parsing only, no Spring/particle interaction
+    // yet) and reserves enough particle capacity for every ghost particle
+    // it might create, BEFORE any Spring exists anywhere in `topology`
+    // (cutoff-, CONECT-, or --rigidbody-created -- all of those hold a
+    // real Particle& reference, not an index; see
+    // Topology::reserve_particles's own comment). Building ghost particles
+    // this early would be wrong (their anchors need --rigidbody/--grp
+    // resolution first), but reserving capacity only needs to know an
+    // upper bound on how many will eventually be added, which the parsed
+    // (not yet applied) file already tells us.
+    std::optional<biospring::rigidbodygroup::BondedForceFieldReader> bondedReader;
+    if (!args.pathBondedInteraction.empty())
+    {
+        bondedReader.emplace(args.pathBondedInteraction);
+        bondedReader->read();
+        size_t expected_ghosts = bondedReader->countExpectedGhostParticles(topology);
+        topology.reserve_particles(topology.number_of_particles() + expected_ghosts);
+        logging::info("Reserved capacity for up to %zu ghost particle(s) before any spring is created.",
+                      expected_ghosts);
+    }
 
     if (args.cutoff > 0)
     {
@@ -115,6 +146,30 @@ int main(int argc, char ** argv)
         logging::info("Created %d spring(s).", topology.number_of_springs());
     }
 
+    if (!args.pathBondedInteraction.empty())
+    {
+        logging::status("Applying bonded interaction parameters from %s (dihedralbackbone=%s, "
+                        "dihedralsidechain=%s, dihedralplanarity=%s).",
+                         args.pathBondedInteraction.c_str(), args.dihedralBackbone ? "on" : "off",
+                         args.dihedralSidechain ? "on" : "off", args.dihedralPlanarity ? "on" : "off");
+        // Already constructed and read() above (before any spring existed,
+        // see that call site) -- reused here, not re-read.
+
+        // Same naming-translation table as --rigidbody above (see there):
+        // the .bi.ff file uses original atom names even if --grp renamed
+        // the particles.
+        biospring::reduce::ReduceRuleReader naming_reader;
+        biospring::reduce::ReduceRuleReader * naming_reader_ptr = nullptr;
+        if (!args.pathGroup.empty())
+        {
+            naming_reader.setFileName(args.pathGroup);
+            naming_reader.read();
+            naming_reader_ptr = &naming_reader;
+        }
+
+        bondedReader->buildSprings(topology, naming_reader_ptr != nullptr ? &naming_reader_ptr->rules() : nullptr,
+                                  args.dihedralBackbone, args.dihedralSidechain, args.dihedralPlanarity);
+    }
 
     // Sets the particle charge to user-defined value.
     if (args.useUserCharge())
@@ -139,8 +194,9 @@ int main(int argc, char ** argv)
 CommandLineArguments::CommandLineArguments(const std::string & name, const argparse::description_t & description,
                                            const std::string & version)
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
-      pathRigidBody(""), pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0),
-      isStatic(false), ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false)
+      pathRigidBody(""), pathBondedInteraction(""), pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0),
+      isStatic(false), ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false), dihedral(false),
+      dihedralBackbone(false), dihedralSidechain(false), dihedralPlanarity(false)
 {
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
@@ -164,9 +220,22 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
                                         .name_long("--ff")
                                         .description("non-bonded interaction parameter file: per-atom-type charge/"
                                                       "radius/epsilon/mass (steric, electrostatic, hydrophobicity, "
-                                                      "IMP), a .ff file")
+                                                      "IMP), a .ff or .nbi.ff file (synonym: -nonbondedinteraction/"
+                                                      "--nonbondedinteraction)")
                                         .metavar("INPUT_FILE")
                                         .argument_type(argparse::ArgumentType::PATH_INPUT);
+
+    // Synonym for --ff, spelled out for clarity against --bondedinteraction:
+    // both write to pathForceField (see parseCommandLine), specifying both
+    // at once is a conflict.
+    argparse::Argument nonbondedinteraction =
+        argparse::Argument()
+            .name_short("-nonbondedinteraction")
+            .name_long("--nonbondedinteraction")
+            .description("synonym for -ff/--ff: a .ff or .nbi.ff file with non-bonded interaction parameters "
+                          "(charge/radius/epsilon/mass -- steric, electrostatic, hydrophobicity, IMP)")
+            .metavar("INPUT_FILE")
+            .argument_type(argparse::ArgumentType::PATH_INPUT);
 
     argparse::Argument grp = argparse::Argument()
                                  .name_short("-grp")
@@ -190,6 +259,39 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
                                        .metavar("INPUT_FILE")
                                        .argument_type(argparse::ArgumentType::PATH_INPUT);
 
+    argparse::Argument bondedinteraction =
+        argparse::Argument()
+            .name_short("-bondedinteraction")
+            .name_long("--bondedinteraction")
+            .description("bonded interaction parameter file: virtual/ghost dihedral spring parameters "
+                          "translated from a real force field (e.g. AMBER), a .bi.ff file. "
+                          "Applies none of it by itself -- see -dihedralbackbone/"
+                          "-dihedralsidechain (or -dihedral, a shorthand for both dihedral flags), each an "
+                          "independent opt-in; requires -rigidbody/--rigidbody")
+            .metavar("INPUT_FILE")
+            .argument_type(argparse::ArgumentType::PATH_INPUT);
+
+    argparse::Argument dihedral_ = argparse::StoreTrueArgument(
+        "-dihedral", "--dihedral",
+        "with -bondedinteraction, add all dihedral ghost springs on top of -rigidbody's mesh -- shorthand for "
+        "-dihedralbackbone, -dihedralsidechain and -dihedralplanarity together. Bonds and angles stay at "
+        "-rigidbody's uniform value; only the dihedral wells become real. Has no effect without "
+        "-bondedinteraction");
+
+    argparse::Argument dihedralbackbone_ = argparse::StoreTrueArgument(
+        "-dihedralbackbone", "--dihedralbackbone",
+        "with -bondedinteraction, add backbone (phi/psi/omega) dihedral ghost springs only; has no effect without "
+        "-bondedinteraction");
+
+    argparse::Argument dihedralsidechain_ = argparse::StoreTrueArgument(
+        "-dihedralsidechain", "--dihedralsidechain",
+        "with -bondedinteraction, add side-chain (chi1-4) dihedral ghost springs only; has no effect without "
+        "-bondedinteraction");
+
+    argparse::Argument dihedralplanarity_ = argparse::StoreTrueArgument(
+        "-dihedralplanarity", "--dihedralplanarity",
+        "with -bondedinteraction, add PLANARITY improper ghost springs (aromatic-ring/His hub planarity) only; "
+        "has no effect without -bondedinteraction");
 
     argparse::Argument stiffness = argparse::Argument()
                                        .name_short("-stiffness")
@@ -221,9 +323,15 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(topology);
     _parser.add_argument(output);
     _parser.add_argument(forcefield);
+    _parser.add_argument(nonbondedinteraction);
     _parser.add_argument(grp);
     _parser.add_argument(cutoff);
     _parser.add_argument(rigidbody);
+    _parser.add_argument(bondedinteraction);
+    _parser.add_argument(dihedral_);
+    _parser.add_argument(dihedralbackbone_);
+    _parser.add_argument(dihedralsidechain_);
+    _parser.add_argument(dihedralplanarity_);
     _parser.add_argument(stiffness);
     _parser.add_argument(charge);
     _parser.add_argument(static_);
@@ -238,8 +346,25 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     pathTopology = _parser.get_option_value<std::string>("--topology");
     pathOutputList = _parser.get_option_value<std::vector<std::string>>("--output");
     pathForceField = _parser.get_option_value<std::string>("--ff");
+    {
+        // --nonbondedinteraction is a plain synonym for --ff (see argument
+        // definitions above): merge it in, dying on a conflict rather than
+        // silently picking one.
+        const std::string synonym = _parser.get_option_value<std::string>("--nonbondedinteraction");
+        if (!synonym.empty())
+        {
+            if (!pathForceField.empty())
+            {
+                _parser.print_help();
+                _parser.die("-ff/--ff and -nonbondedinteraction/--nonbondedinteraction are synonyms -- specify "
+                            "only one");
+            }
+            pathForceField = synonym;
+        }
+    }
     pathGroup = _parser.get_option_value<std::string>("--grp");
     pathRigidBody = _parser.get_option_value<std::string>("--rigidbody");
+    pathBondedInteraction = _parser.get_option_value<std::string>("--bondedinteraction");
 
     try
     {
@@ -278,6 +403,10 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     ignoreDuplicates = _parser.get_option("--ignore-duplicate").is_set();
     ignoreMissing = _parser.get_option("--ignore-missing").is_set();
     writePdbConect = _parser.get_option("--pdbconect").is_set();
+    dihedral = _parser.get_option("--dihedral").is_set();
+    dihedralBackbone = _parser.get_option("--dihedralbackbone").is_set();
+    dihedralSidechain = _parser.get_option("--dihedralsidechain").is_set();
+    dihedralPlanarity = _parser.get_option("--dihedralplanarity").is_set();
 
     // --rigidbody and --cutoff are two incompatible strategies for building
     // the spring network: dies if both are given.
@@ -287,7 +416,33 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
         _parser.die("-rigidbody/--rigidbody is exclusive with -cutoff/--cutoff");
     }
 
+    // -bondedinteraction only retunes/extends -rigidbody's springs in place;
+    // it does not build an independent spring network, so it cannot be used
+    // without it.
+    if (!pathBondedInteraction.empty() && pathRigidBody.empty())
+    {
+        _parser.print_help();
+        _parser.die("-bondedinteraction/--bondedinteraction requires -rigidbody/--rigidbody");
+    }
 
+    // -dihedral[backbone|sidechain|planarity] only mean something
+    // alongside -bondedinteraction, and apply nothing unless at least one is
+    // given. -dihedral is a pure convenience alias, resolved here rather
+    // than passed down as its own concept: BondedForceFieldReader only ever
+    // sees the two resolved per-family booleans.
+    dihedralBackbone = dihedralBackbone || dihedral;
+    dihedralSidechain = dihedralSidechain || dihedral;
+    dihedralPlanarity = dihedralPlanarity || dihedral;
+
+    if ((dihedralBackbone || dihedralSidechain || dihedralPlanarity) && pathBondedInteraction.empty())
+    {
+        _parser.print_help();
+        _parser.die("-dihedral/-dihedralbackbone/-dihedralsidechain/-dihedralplanarity require "
+                    "-bondedinteraction/--bondedinteraction");
+    }
+    if (!pathBondedInteraction.empty() && !dihedralBackbone && !dihedralSidechain && !dihedralPlanarity)
+        logging::warning("-bondedinteraction/--bondedinteraction given without -dihedral* -- "
+                         "nothing from the .bi.ff file will actually be applied.");
 
     // Reduce file and force field should be provided together.
     // Dies if not the case.
@@ -341,6 +496,14 @@ void biospring::pdb2spn::CommandLineArguments::printArgumentValues() const
     if (!pathRigidBody.empty())
     {
         logging::info("    rigid-body groups: %s", pathRigidBody.c_str());
+        if (!pathBondedInteraction.empty())
+        {
+            logging::info("    bonded interaction (dihedral ghost springs): %s",
+                          pathBondedInteraction.c_str());
+            logging::info("        dihedral backbone: %s", dihedralBackbone ? "enabled" : "disabled");
+            logging::info("        dihedral sidechain: %s", dihedralSidechain ? "enabled" : "disabled");
+            logging::info("        dihedral planarity: %s", dihedralPlanarity ? "enabled" : "disabled");
+        }
     }
     else if (cutoff < 0)
         logging::info("    cutoff: %.1f (no spring will be created)", cutoff);

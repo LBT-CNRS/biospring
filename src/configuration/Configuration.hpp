@@ -34,11 +34,44 @@ class Configuration
     ProbeSetting probe;
     RigidBodySetting rigidbody;
 
+    // Runtime (.msp) enable/disable for the bonded-force-field families
+    // that BondedForceFieldReader::buildSprings already decided (at
+    // -dihedral* build time, see pdb2spn-cli.cpp) to
+    // actually create springs for. Unlike every EnergySetting above,
+    // these default to enable=true (see defaultConfiguration()) -- built
+    // springs are meant to be active by default, this is an opt-OUT
+    // debugging knob (e.g. "dihedralomega.enable = 0" to isolate a
+    // family's contribution), not an opt-in feature switch. dihedralchi
+    // gates the same springs as the (SIDECHAIN family/chi1-4) collection;
+    // "chi" is the name exposed here since that's the physically
+    // meaningful term.
+    EnergySetting dihedralphi;
+    EnergySetting dihedralpsi;
+    EnergySetting dihedralomega;
+    EnergySetting dihedralchi;
+    // The improper (aromatic-ring/His hub planarity) family. Gated like
+    // the four proper ones above -- it was the only built dihedral family
+    // with no toggle, which made "turn every dihedral off" quietly leave
+    // ~40 kJ/mol of improper energy behind on GKinase.
+    EnergySetting dihedralplanarity;
+    // The nucleic-acid families (see
+    // spn::SpringNetwork::DihedralFamilyIndex for why they are separate
+    // families rather than SIDECHAIN). dihedralnucleicsugar gates the four
+    // furanose ring bonds on their own: the sugar pucker is what selects
+    // the A or B helical form, so being able to read -- and remove -- just
+    // that contribution is the point of giving it its own family.
+    EnergySetting dihedralnucleicbackbone;
+    EnergySetting dihedralnucleicchi;
+    EnergySetting dihedralnucleicsugar;
+
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"),
           electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"),
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), potentialgrid("potentialgrid"),
-          densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody")
+          densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody"), dihedralphi("dihedralphi"),
+          dihedralpsi("dihedralpsi"), dihedralomega("dihedralomega"), dihedralchi("dihedralchi"),
+          dihedralplanarity("dihedralplanarity"), dihedralnucleicbackbone("dihedralnucleicbackbone"),
+          dihedralnucleicchi("dihedralnucleicchi"), dihedralnucleicsugar("dihedralnucleicsugar")
     {
         _register(sim);
         _register(steric);
@@ -55,6 +88,14 @@ class Configuration
         _register(densitygrid);
         _register(probe);
         _register(rigidbody);
+        _register(dihedralphi);
+        _register(dihedralpsi);
+        _register(dihedralomega);
+        _register(dihedralchi);
+        _register(dihedralplanarity);
+        _register(dihedralnucleicbackbone);
+        _register(dihedralnucleicchi);
+        _register(dihedralnucleicsugar);
     }
 
     void print(std::ostream & os = std::cout) const
@@ -66,6 +107,7 @@ class Configuration
         spring.print();
         os << "\n";
         hydrophobicity.print();
+        os << "\n";
         os << "\n";
         electrostatic.print();
         os << "\n";
@@ -88,6 +130,19 @@ class Configuration
         probe.print();
         os << "\n";
         rigidbody.print();
+        os << "\n";
+        dihedralphi.print();
+        os << "\n";
+        dihedralpsi.print();
+        os << "\n";
+        dihedralomega.print();
+        os << "\n";
+        dihedralchi.print();
+        dihedralplanarity.print();
+        dihedralnucleicbackbone.print();
+        dihedralnucleicchi.print();
+        dihedralnucleicsugar.print();
+        os << "\n";
     }
 
     bool exists(const std::string & name) { return _allSettingNames.count(name); }
@@ -136,6 +191,22 @@ class Configuration
             probe.setFromString(name, value);
         else if (group == rigidbody.name)
             rigidbody.setFromString(name, value);
+        else if (group == dihedralphi.name)
+            dihedralphi.setFromString(name, value);
+        else if (group == dihedralpsi.name)
+            dihedralpsi.setFromString(name, value);
+        else if (group == dihedralomega.name)
+            dihedralomega.setFromString(name, value);
+        else if (group == dihedralchi.name)
+            dihedralchi.setFromString(name, value);
+        else if (group == dihedralplanarity.name)
+            dihedralplanarity.setFromString(name, value);
+        else if (group == dihedralnucleicbackbone.name)
+            dihedralnucleicbackbone.setFromString(name, value);
+        else if (group == dihedralnucleicchi.name)
+            dihedralnucleicchi.setFromString(name, value);
+        else if (group == dihedralnucleicsugar.name)
+            dihedralnucleicsugar.setFromString(name, value);
     }
 
   protected:
@@ -204,6 +275,20 @@ inline Configuration defaultConfiguration()
 
     config.imp.enable = false;
     config.imp.scale = 1.0;
+
+    // Deliberately true, unlike every setting above: these only gate
+    // springs that -dihedral* already decided to build (see
+    // Configuration.hpp's own comment on these members) --
+    // an opt-OUT debugging knob, not an opt-in feature switch, so an .msp
+    // written before these existed keeps exactly the same behaviour.
+    config.dihedralphi.enable = true;
+    config.dihedralpsi.enable = true;
+    config.dihedralomega.enable = true;
+    config.dihedralchi.enable = true;
+    config.dihedralplanarity.enable = true;
+    config.dihedralnucleicbackbone.enable = true;
+    config.dihedralnucleicchi.enable = true;
+    config.dihedralnucleicsugar.enable = true;
 
     return config;
 }

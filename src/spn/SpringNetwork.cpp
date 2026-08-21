@@ -1,4 +1,6 @@
 #include "SpringNetwork.h"
+
+#include <fstream>
 #include "logging.h"
 #include "measure.hpp"
 
@@ -22,10 +24,12 @@
 
 #include <algorithm>
 #include <iostream>
+#include <limits>
 #include <math.h>
 #include <memory>
 #include <stdlib.h>
 #include <string.h>
+#include <utility>
 #include <chrono>
 #include <thread>
 
@@ -89,6 +93,77 @@ void SpringNetwork::computeSpringForces()
     _energies.spring = springenergy;
 }
 
+// Shared parallel-compute/serial-accumulate loop for the DIHEDRAL
+// spring collections -- the exact pattern computeSpringForces
+// established: the spring evaluation (the expensive part) runs in parallel
+// into _springForceScratch, then a deterministic serial pass applies the
+// forces (particles are shared between springs, so they must not be
+// written concurrently) and accumulates the energy in a fixed order,
+// keeping the result independent of the thread count. Returns the summed
+// energy. The scratch buffer is shared with computeSpringForces: the four
+// loops run sequentially within one step, and resize never shrinks
+// capacity, so no per-step allocation happens either way.
+float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
+                                                    bool subtractDcOffset)
+{
+    _springForceScratch.resize(springs.size());
+
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t i = 0; i < springs.size(); ++i)
+        _springForceScratch[i] = springs[i].computeForce(*_ff, ignoreDynamicState);
+
+    float energy = 0.0f;
+    for (size_t i = 0; i < springs.size(); ++i)
+    {
+        Spring & spring = springs[i];
+        const Vector3f & force = _springForceScratch[i];
+        spring.getParticle1().addForce(force);
+        spring.getParticle2().addForce(-force);
+        energy += subtractDcOffset ? spring.getEnergy() - spring.getDcOffset() : spring.getEnergy();
+    }
+    return energy;
+}
+
+// Calculates dihedral ghost-spring forces and applies them to the
+// particles. Updates global `_energies.dihedral`. Which families were
+// actually BUILT is a build-time decision (see -dihedral/--dihedral in
+// pdb2spn-cli.cpp); which of the built ones are actually APPLIED here is
+// independently gated per-family (isDihedralPhi/Psi/Omega/ChiEnabled(),
+// see Configuration.hpp's own comment) on top of the isSpringEnabled()
+// master switch the caller (computeForces) already applies -- same
+// when a family is disabled BOTH force and energy are skipped (a pure
+// reporting-only toggle would leave the dynamics unchanged, defeating the
+// point of isolating a family's contribution).
+//
+// ignoreDynamicState=true: both endpoints of a dihedral ghost spring are
+// always static virtual sites (see Spring::computeForce's own doc) --
+// without this, the force/energy here would silently stay zero for every
+// single one of these springs. subtractDcOffset=true: each spring's own
+// share of its axis's exact dihedral-energy correction (see
+// Spring::getDcOffset's own comment) is subtracted from the reported
+// total; it never affects the forces.
+void SpringNetwork::computeDihedralForces()
+{
+    float dihedralenergy = 0.0f;
+
+    auto accumulate = [&](std::vector<Spring> & springs) {
+        dihedralenergy += _computeSpringCollectionForces(springs, /*ignoreDynamicState=*/true,
+                                                         /*subtractDcOffset=*/true);
+    };
+
+    const bool enabled[DIHEDRAL_FAMILY_COUNT] = {
+        isDihedralPhiEnabled(),             isDihedralPsiEnabled(),        isDihedralOmegaEnabled(),
+        isDihedralChiEnabled(),             isDihedralPlanarityEnabled(),  isDihedralNucleicBackboneEnabled(),
+        isDihedralNucleicChiEnabled(),      isDihedralNucleicSugarEnabled()};
+    for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
+        if (enabled[family])
+            accumulate(_dihedralsprings[family]);
+
+    _energies.dihedral = dihedralenergy;
+}
+
 // Calculate forces that apply on dynamic particles.
 void SpringNetwork::computeParticleForces()
 {
@@ -128,7 +203,6 @@ void SpringNetwork::computeParticleForces()
 
         if (isHydrophobicityEnabled() && p.isHydrophobic() && _nsearch.hydrophobic)
             p.addHydrophobicityForce(_hydrophobicPairScratch[i]);
-
     }
 
     // Applies the deferred "other side" of each unique nonbonded pair
@@ -244,7 +318,10 @@ void SpringNetwork::updateParticlePositions()
 void SpringNetwork::computeForces()
 {
     if (isSpringEnabled())
+    {
         computeSpringForces();
+        computeDihedralForces();
+    }
     computeParticleForces();
 }
 
@@ -254,14 +331,16 @@ void SpringNetwork::computeStep()
     _meanConstraintsDistances = 0.0;
 
     computeForces();
+    redistributeGhostForces();
 
     if (isConstraintEnabled())
         applyConstraints();
 
     if (isRigidBodyEnabled())
-        rigidbody::RigidBodiesManager::SolveRigidBodiesDynamic(); 
+        rigidbody::RigidBodiesManager::SolveRigidBodiesDynamic();
 
     updateParticlePositions();
+    updateGhostPositions();
 
     if (isInsertionVectorEnabled())
         _updateInsertionVector();
@@ -376,7 +455,10 @@ void SpringNetwork::_displayFrameData()
     logging::info("Framerate: %5.2f", _framerate);
     logging::info("Kinetic energy: %5.2f kJ.mol-1", _energies.kinetic);
     if (isSpringEnabled())
+    {
         logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
+        logging::info("Dihedral energy: %5.2f kJ.mol-1", _energies.dihedral);
+    }
     if (isElectrostaticEnabled())
         logging::info("Electrostatic energy: %5.2f kJ.mol-1", _energies.electrostatic);
     if (isStericEnabled())
@@ -485,6 +567,33 @@ void SpringNetwork::addSpring(unsigned id1, unsigned id2, float equilibrium, flo
     }
 }
 
+// Shared implementation behind addDihedralSpring:
+// unlike addSpring, a ghost spring is always a new addition (no
+// spring-neighbour check), never registered in the particles'
+// spring-neighbour map (see the header comment on addDihedralSpring for
+// why), and not split into static/dynamic subsets (always fully iterated in
+// computeDihedralForces).
+static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Particle> & particles, unsigned id1,
+                                unsigned id2, float equilibrium, float stiffness, float dcOffset)
+{
+    if (id1 >= particles.size() || id2 >= particles.size())
+        throw std::out_of_range("SpringNetwork::addDihedral*Spring: particle index out of range");
+    if (id1 == id2)
+        throw std::invalid_argument("SpringNetwork::addDihedral*Spring: a spring requires two distinct particles");
+
+    collection.emplace_back(particles[id1], particles[id2], equilibrium, stiffness);
+    collection.back().setId(static_cast<unsigned>(collection.size() - 1));
+    collection.back().setDcOffset(dcOffset);
+}
+
+void SpringNetwork::addDihedralSpring(unsigned family, unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                                      float dcOffset)
+{
+    if (family >= DIHEDRAL_FAMILY_COUNT)
+        throw std::out_of_range("SpringNetwork::addDihedralSpring: dihedral family index out of range");
+    addDihedralSpringTo(_dihedralsprings[family], _particles, id1, id2, equilibrium, stiffness, dcOffset);
+}
+
 void SpringNetwork::updateSpringState(unsigned id, bool isStatic) {
     if (isStatic) {
         removeDynamicSpring(id);
@@ -526,6 +635,135 @@ void SpringNetwork::addParticle(const Particle & source)
     _markNeighborSearchesDirty();
 }
 
+unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned anchorBIndex, unsigned anchorCIndex,
+                                         unsigned anchorRefIndex, float r, float theta_deg, float delta_deg)
+{
+    const GhostPlacement placement = static_cast<GhostPlacement>(placementValue);
+
+    const float delta_rad_init = delta_deg * static_cast<float>(M_PI) / 180.0f;
+    const Vector3f position =
+        GhostParticle::computePositionByRotation(
+                  getParticle(anchorBIndex).getPosition(), getParticle(anchorCIndex).getPosition(),
+                  getParticle(anchorRefIndex).getPosition(), std::cos(delta_rad_init), std::sin(delta_rad_init));
+
+    Particle p;
+    p.setPosition(position);
+    p.setStatic(true);
+    p.setMass(0.0f);
+    addParticle(p);
+
+    const unsigned ownIndex = static_cast<unsigned>(_particles.size() - 1);
+
+    // Every ghost of one ring hangs off the same axis; find or create that
+    // axis's accumulator (see GhostAxis). Linear search is fine: this runs
+    // once at build time, and the number of distinct axes is small next to
+    // the number of ghosts (example 072: 6484 ghosts, a few hundred axes).
+    unsigned axisIndex = 0;
+    for (; axisIndex < _ghostaxes.size(); ++axisIndex)
+        if (_ghostaxes[axisIndex].anchorBIndex == anchorBIndex && _ghostaxes[axisIndex].anchorCIndex == anchorCIndex)
+            break;
+    if (axisIndex == _ghostaxes.size())
+        _ghostaxes.push_back(GhostAxis{anchorBIndex, anchorCIndex, Vector3f(), Vector3f(), Vector3f(), Vector3f()});
+
+    const float delta_rad = delta_deg * static_cast<float>(M_PI) / 180.0f;
+    _ghostparticles.push_back(GhostParticleBinding{ownIndex, anchorBIndex, anchorCIndex, anchorRefIndex, r, theta_deg,
+                                                   delta_deg, std::cos(delta_rad), std::sin(delta_rad), axisIndex,
+                                                   placement});
+    return ownIndex;
+}
+
+// Anchors are heavily shared -- on example 072, 6484 ghosts hang off well
+// under 2000 distinct anchors, dozens on a single one -- so the anchors
+// cannot be written concurrently. Same split as computeSpringForces: the
+// expensive part (the placement Jacobian, one per ghost) runs in parallel
+// into a scratch buffer, then a deterministic serial pass accumulates,
+// which also keeps the result independent of the thread count.
+void SpringNetwork::redistributeGhostForces()
+{
+    _ghostForceScratch.resize(_ghostparticles.size());
+
+    // Pass 1, parallel: rotate each ghost's force back onto the real atom
+    // it images. That single Rodrigues application IS the exact Jacobian
+    // transpose for this placement (see GhostParticle.h), so nothing is
+    // approximated and no frame is built.
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t i = 0; i < _ghostparticles.size(); ++i)
+    {
+        const GhostParticleBinding & binding = _ghostparticles[i];
+        const Vector3f & B = getParticle(binding.anchorBIndex).getPosition();
+        const Vector3f & C = getParticle(binding.anchorCIndex).getPosition();
+        GhostForceContribution & out = _ghostForceScratch[i];
+        out.F_Ref = GhostParticle::rotateForceToAtom(B, C, getParticle(binding.ownIndex).getForce(),
+                                                     binding.cos_delta, binding.sin_delta);
+    }
+
+    // Pass 2, serial: apply to the real atoms (heavily shared, so not
+    // concurrently writable) while accumulating each axis's force and
+    // torque totals.
+    for (GhostAxis & axis : _ghostaxes)
+    {
+        axis.sumGhostForces = Vector3f();
+        axis.sumGhostTorquesAboutB = Vector3f();
+        axis.sumAtomForces = Vector3f();
+        axis.sumAtomTorquesAboutB = Vector3f();
+    }
+    for (size_t i = 0; i < _ghostparticles.size(); ++i)
+    {
+        const GhostParticleBinding & binding = _ghostparticles[i];
+        const GhostForceContribution & in = _ghostForceScratch[i];
+        Particle & ghost = getParticle(binding.ownIndex);
+
+        Particle & ref = getParticle(binding.anchorRefIndex);
+        GhostAxis & axis = _ghostaxes[binding.axisIndex];
+        const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
+
+        // What acted on the ghost has to be transferred, not cancelled, so
+        // both sides of the balance are accumulated.
+        axis.sumGhostForces += ghost.getForce();
+        axis.sumGhostTorquesAboutB += (ghost.getPosition() - B) ^ ghost.getForce();
+
+        ref.addForce(in.F_Ref);
+        axis.sumAtomForces += in.F_Ref;
+        axis.sumAtomTorquesAboutB += (ref.getPosition() - B) ^ in.F_Ref;
+
+        ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
+    }
+
+    // Pass 3: one closed-form reaction per axis, restoring global force and
+    // torque balance without ever differentiating the placement.
+    for (const GhostAxis & axis : _ghostaxes)
+    {
+        Vector3f F_B, F_C;
+        GhostParticle::redistributeAxisReaction(
+            getParticle(axis.anchorBIndex).getPosition(), getParticle(axis.anchorCIndex).getPosition(),
+            axis.sumGhostForces, axis.sumGhostTorquesAboutB, axis.sumAtomForces, axis.sumAtomTorquesAboutB, F_B, F_C);
+        getParticle(axis.anchorBIndex).addForce(F_B);
+        getParticle(axis.anchorCIndex).addForce(F_C);
+    }
+}
+
+// Embarrassingly parallel, unlike redistributeGhostForces: each iteration
+// writes only its own ghost, and a ghost is never itself an anchor (checked
+// on example 072: no anchor slot points at a ghost), so no
+// iteration can depend on another's result and no write is shared.
+void SpringNetwork::updateGhostPositions()
+{
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t i = 0; i < _ghostparticles.size(); ++i)
+    {
+        const GhostParticleBinding & binding = _ghostparticles[i];
+        const Vector3f & B = getParticle(binding.anchorBIndex).getPosition();
+        const Vector3f & C = getParticle(binding.anchorCIndex).getPosition();
+        getParticle(binding.ownIndex)
+            .setPosition(GhostParticle::computePositionByRotation(
+                B, C, getParticle(binding.anchorRefIndex).getPosition(), binding.cos_delta, binding.sin_delta));
+    }
+}
+
 void SpringNetwork::updateParticleState(unsigned id, bool isStatic) {
     if (isStatic) {
         removeDynamicParticle(id);
@@ -548,6 +786,9 @@ void SpringNetwork::clear()
     _springs.clear();
     _staticsprings.clear();
     _dynamicsprings.clear();
+    for (auto & family : _dihedralsprings)
+        family.clear();
+    _ghostparticles.clear();
     _springForceScratch.clear();
     _nsearch.steric.reset();
     _nsearch.electrostatic.reset();

@@ -4,6 +4,7 @@
 #include "IO/ReaderBase.h"
 #include "IO/SpnBuffer.h"
 
+#include <array>
 #include <memory>
 #include <netcdf>
 
@@ -19,6 +20,12 @@ class NetCDFReader : public TopologyReaderBase
   protected:
     SpringBuffer _sbuffer;
     ParticleBuffer _pbuffer;
+    // One buffer per dihedral family, indexed by the family itself (see
+    // spn::SpringNetwork::DihedralFamilyIndex) -- read back under the .nc
+    // variable prefix that same index names, so reader and writer walk the
+    // families in one shared order instead of two hand-kept lists.
+    std::array<DihedralSpringBuffer, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT> _dihedralbuffers;
+    GhostParticleBuffer _ghostparticlebuffer;
 
     std::unique_ptr<netCDF::NcFile> _file;
     int _filec = -1;
@@ -26,11 +33,23 @@ class NetCDFReader : public TopologyReaderBase
     void readSprings();
     void readNumberOfSprings();
 
+    // Reads one dihedral ghost-spring family (optional -- old .nc files, or
+    // families that were empty at write time, simply have none of these
+    // variables; see readDihedralSpringGroup's own dimension check).
+    void readDihedralSpringGroup(const char * prefix, DihedralSpringBuffer & buffer);
+
+    // Reads ghost-particle anchor bindings (optional, same convention as
+    // readDihedralSpringGroup: an old .nc file, or one with no ghost
+    // particles, simply has none of these variables).
+    void readGhostParticles();
+
     void readParticles();
     void readNumberOfParticles();
 
     void addParticlesToSpn();
     void addSpringsToSpn();
+    void addDihedralSpringsToSpn(unsigned family);
+    void addGhostParticlesToSpn();
 
     void checkNDims(const netCDF::NcVar & var, int ref);
     void checkDim(const netCDF::NcVar & var, int dimid, size_t size);
