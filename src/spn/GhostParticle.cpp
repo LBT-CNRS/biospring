@@ -58,5 +58,22 @@ void GhostParticle::redistributeAxisReaction(const Vector3f & B, const Vector3f 
     F_B = (sum_ghost_forces - sum_atom_forces) - F_C;
 }
 
+Vector3f GhostParticle::computePositionAxial(const Vector3f & B, const Vector3f & C, float r)
+{
+    Vector3f d = C - B;
+    return B + d * (r / d.norm());
+}
+
+void GhostParticle::redistributeForceAxial(const Vector3f & B, const Vector3f & C, float r, const Vector3f & f,
+                                           Vector3f & F_B, Vector3f & F_C)
+{
+    Vector3f d = C - B;
+    const float L = d.norm();
+    const Vector3f u = d / L;
+    // (r/L) * P f, with P f = f - u (u.f) the component across the axis.
+    F_C = (f - u * u.dot(f)) * (r / L);
+    F_B = f - F_C;
+}
+
 } // namespace spn
 } // namespace biospring

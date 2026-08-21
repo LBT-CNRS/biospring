@@ -93,8 +93,22 @@ void SpringNetwork::computeSpringForces()
     _energies.spring = springenergy;
 }
 
-// Shared parallel-compute/serial-accumulate loop for the DIHEDRAL
-// spring collections -- the exact pattern computeSpringForces
+// Calculates STRETCH spring forces and applies them to the particles.
+// Updates global `_energies.stretch`. A plain real-atom spring (no ghosts,
+// unlike BEND/DIHEDRAL: a 1-2 bond length has no 3-body conflation to
+// avoid), so no ignoreDynamicState override -- a stretch spring between two
+// particles the user froze with --static correctly contributes nothing,
+// same as it did before this spring lived in its own collection. Not
+// parallelised, like computeDihedralForces: kept simple until profiling
+// ever shows a need otherwise.
+void SpringNetwork::computeStretchForces()
+{
+    _energies.stretch = _computeSpringCollectionForces(_stretchsprings, /*ignoreDynamicState=*/false,
+                                                       /*subtractDcOffset=*/false);
+}
+
+// Shared parallel-compute/serial-accumulate loop for the STRETCH, BEND and
+// DIHEDRAL spring collections -- the exact pattern computeSpringForces
 // established: the spring evaluation (the expensive part) runs in parallel
 // into _springForceScratch, then a deterministic serial pass applies the
 // forces (particles are shared between springs, so they must not be
@@ -126,6 +140,23 @@ float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & spring
     return energy;
 }
 
+// Calculates BEND ghost-ghost spring forces and applies them to the
+// particles. Updates global `_energies.bend`. ignoreDynamicState=true for
+// the same reason as computeDihedralForces: both ghosts are always static.
+// Gated by isBendingEnabled() (a runtime debug on/off for a family that
+// -bending already decided, at build time, to actually create springs
+// for -- see Configuration.hpp's own comment) on top of the isSpringEnabled()
+// master switch the caller (computeForces) already applies: when disabled,
+// BOTH force and energy are skipped (a pure reporting-only toggle would
+// leave the dynamics unchanged, defeating the point of isolating this
+// family's contribution).
+void SpringNetwork::computeBendForces()
+{
+    _energies.bend = isBendingEnabled() ? _computeSpringCollectionForces(_bendsprings, /*ignoreDynamicState=*/true,
+                                                                         /*subtractDcOffset=*/false)
+                                        : 0.0f;
+}
+
 // Calculates dihedral ghost-spring forces and applies them to the
 // particles. Updates global `_energies.dihedral`. Which families were
 // actually BUILT is a build-time decision (see -dihedral/--dihedral in
@@ -133,9 +164,8 @@ float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & spring
 // independently gated per-family (isDihedralPhi/Psi/Omega/ChiEnabled(),
 // see Configuration.hpp's own comment) on top of the isSpringEnabled()
 // master switch the caller (computeForces) already applies -- same
-// when a family is disabled BOTH force and energy are skipped (a pure
-// reporting-only toggle would leave the dynamics unchanged, defeating the
-// point of isolating a family's contribution).
+// both-force-and-energy-skipped reasoning as computeBendForces above (a
+// disabled family must not silently keep influencing the dynamics).
 //
 // ignoreDynamicState=true: both endpoints of a dihedral ghost spring are
 // always static virtual sites (see Spring::computeForce's own doc) --
@@ -320,6 +350,8 @@ void SpringNetwork::computeForces()
     if (isSpringEnabled())
     {
         computeSpringForces();
+        computeStretchForces();
+        computeBendForces();
         computeDihedralForces();
     }
     computeParticleForces();
@@ -457,6 +489,8 @@ void SpringNetwork::_displayFrameData()
     if (isSpringEnabled())
     {
         logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
+        logging::info("Stretch energy: %5.2f kJ.mol-1", _energies.stretch);
+        logging::info("Bend energy: %5.2f kJ.mol-1", _energies.bend);
         logging::info("Dihedral energy: %5.2f kJ.mol-1", _energies.dihedral);
     }
     if (isElectrostaticEnabled())
@@ -567,7 +601,7 @@ void SpringNetwork::addSpring(unsigned id1, unsigned id2, float equilibrium, flo
     }
 }
 
-// Shared implementation behind addDihedralSpring:
+// Shared implementation for addDihedralSpring and the STRETCH/BEND adds:
 // unlike addSpring, a ghost spring is always a new addition (no
 // spring-neighbour check), never registered in the particles'
 // spring-neighbour map (see the header comment on addDihedralSpring for
@@ -592,6 +626,16 @@ void SpringNetwork::addDihedralSpring(unsigned family, unsigned id1, unsigned id
     if (family >= DIHEDRAL_FAMILY_COUNT)
         throw std::out_of_range("SpringNetwork::addDihedralSpring: dihedral family index out of range");
     addDihedralSpringTo(_dihedralsprings[family], _particles, id1, id2, equilibrium, stiffness, dcOffset);
+}
+
+void SpringNetwork::addStretchSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+{
+    addDihedralSpringTo(_stretchsprings, _particles, id1, id2, equilibrium, stiffness, /*dcOffset=*/0.0f);
+}
+
+void SpringNetwork::addBendSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+{
+    addDihedralSpringTo(_bendsprings, _particles, id1, id2, equilibrium, stiffness, /*dcOffset=*/0.0f);
 }
 
 void SpringNetwork::updateSpringState(unsigned id, bool isStatic) {
@@ -642,7 +686,10 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
 
     const float delta_rad_init = delta_deg * static_cast<float>(M_PI) / 180.0f;
     const Vector3f position =
-        GhostParticle::computePositionByRotation(
+        (placement == GhostPlacement::AxialOffset)
+            ? GhostParticle::computePositionAxial(getParticle(anchorBIndex).getPosition(),
+                                                  getParticle(anchorCIndex).getPosition(), r)
+            : GhostParticle::computePositionByRotation(
                   getParticle(anchorBIndex).getPosition(), getParticle(anchorCIndex).getPosition(),
                   getParticle(anchorRefIndex).getPosition(), std::cos(delta_rad_init), std::sin(delta_rad_init));
 
@@ -695,8 +742,18 @@ void SpringNetwork::redistributeGhostForces()
         const Vector3f & B = getParticle(binding.anchorBIndex).getPosition();
         const Vector3f & C = getParticle(binding.anchorCIndex).getPosition();
         GhostForceContribution & out = _ghostForceScratch[i];
-        out.F_Ref = GhostParticle::rotateForceToAtom(B, C, getParticle(binding.ownIndex).getForce(),
-                                                     binding.cos_delta, binding.sin_delta);
+        if (binding.placement == GhostPlacement::AxialOffset)
+        {
+            // Self-balancing, no reference atom involved, no accumulation.
+            GhostParticle::redistributeForceAxial(B, C, binding.r, getParticle(binding.ownIndex).getForce(), out.F_B,
+                                                  out.F_C);
+            out.F_Ref = Vector3f();
+        }
+        else
+        {
+            out.F_Ref = GhostParticle::rotateForceToAtom(B, C, getParticle(binding.ownIndex).getForce(),
+                                                         binding.cos_delta, binding.sin_delta);
+        }
     }
 
     // Pass 2, serial: apply to the real atoms (heavily shared, so not
@@ -714,6 +771,14 @@ void SpringNetwork::redistributeGhostForces()
         const GhostParticleBinding & binding = _ghostparticles[i];
         const GhostForceContribution & in = _ghostForceScratch[i];
         Particle & ghost = getParticle(binding.ownIndex);
+
+        if (binding.placement == GhostPlacement::AxialOffset)
+        {
+            getParticle(binding.anchorBIndex).addForce(in.F_B);
+            getParticle(binding.anchorCIndex).addForce(in.F_C);
+            ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
+            continue;
+        }
 
         Particle & ref = getParticle(binding.anchorRefIndex);
         GhostAxis & axis = _ghostaxes[binding.axisIndex];
@@ -799,8 +864,11 @@ void SpringNetwork::updateGhostPositions()
         const Vector3f & B = getParticle(binding.anchorBIndex).getPosition();
         const Vector3f & C = getParticle(binding.anchorCIndex).getPosition();
         getParticle(binding.ownIndex)
-            .setPosition(GhostParticle::computePositionByRotation(
-                B, C, getParticle(binding.anchorRefIndex).getPosition(), binding.cos_delta, binding.sin_delta));
+            .setPosition(binding.placement == GhostPlacement::AxialOffset
+                             ? GhostParticle::computePositionAxial(B, C, binding.r)
+                             : GhostParticle::computePositionByRotation(
+                                   B, C, getParticle(binding.anchorRefIndex).getPosition(), binding.cos_delta,
+                                   binding.sin_delta));
     }
 }
 
@@ -828,6 +896,8 @@ void SpringNetwork::clear()
     _dynamicsprings.clear();
     for (auto & family : _dihedralsprings)
         family.clear();
+    _stretchsprings.clear();
+    _bendsprings.clear();
     _ghostparticles.clear();
     _springForceScratch.clear();
     _nsearch.steric.reset();

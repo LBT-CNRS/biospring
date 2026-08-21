@@ -16,6 +16,22 @@ void NetCDFReader::addSpringsToSpn()
     }
 }
 
+void NetCDFReader::addStretchSpringsToSpn()
+{
+    for (size_t i = 0; i < _stretchbuffer.number_of_springs; ++i)
+        _topology.add_stretch_spring(_topology.get_particle(static_cast<size_t>(_stretchbuffer.springs[i][0])),
+                                     _topology.get_particle(static_cast<size_t>(_stretchbuffer.springs[i][1])),
+                                     _stretchbuffer.springsequilibriums[i], _stretchbuffer.springsstiffnesses[i]);
+}
+
+void NetCDFReader::addBendSpringsToSpn()
+{
+    for (size_t i = 0; i < _bendbuffer.number_of_springs; ++i)
+        _topology.add_bend_spring(_topology.get_particle(static_cast<size_t>(_bendbuffer.springs[i][0])),
+                                  _topology.get_particle(static_cast<size_t>(_bendbuffer.springs[i][1])),
+                                  _bendbuffer.springsequilibriums[i], _bendbuffer.springsstiffnesses[i]);
+}
+
 void NetCDFReader::addDihedralSpringsToSpn(unsigned family)
 {
     const DihedralSpringBuffer & buffer = _dihedralbuffers[family];
@@ -106,6 +122,11 @@ void NetCDFReader::read()
 
         readSprings();
         addSpringsToSpn();
+
+        readDihedralSpringGroup("stretch", _stretchbuffer);
+        addStretchSpringsToSpn();
+        readDihedralSpringGroup("bend", _bendbuffer);
+        addBendSpringsToSpn();
 
         for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
         {

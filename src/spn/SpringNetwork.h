@@ -52,11 +52,15 @@ class SpringNetwork
 
     struct Energies
     {
-        // The --rigidbody/ENM mesh's own energy. The dihedral ghost rings
-        // keep a dedicated channel instead of being folded in here, since
-        // "spring energy" is only a meaningful, self-contained quantity for
-        // a plain ENM/rigid-body network.
+        // Only ever the untouched --rigidbody/ENM mesh's own energy now:
+        // stretch/bend/dihedral each have their own dedicated channel below
+        // instead of being folded in here, since "spring energy" is only a
+        // meaningful, self-contained quantity for a plain ENM/rigid-body
+        // network -- inflating it with the real force-field corrections
+        // made it impossible to read any of the three back out again.
         float spring = 0.0f;
+        float stretch = 0.0f;
+        float bend = 0.0f;
         float dihedral = 0.0f;
         float electrostatic = 0.0f;
         float steric = 0.0f;
@@ -67,6 +71,8 @@ class SpringNetwork
         void reset()
         {
             spring = 0.0;
+            stretch = 0.0;
+            bend = 0.0;
             dihedral = 0.0;
             electrostatic = 0.0;
             steric = 0.0;
@@ -113,7 +119,7 @@ class SpringNetwork
     SpringNetwork()
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
-          _dynamicsprings(), _dihedralsprings(),
+          _dynamicsprings(), _dihedralsprings(), _stretchsprings(), _bendsprings(),
           _ghostparticles(),
           _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
           _hydrophobicPairScratch(), _energies(), _nsearch(),
@@ -170,6 +176,8 @@ class SpringNetwork
     float getKineticEnergy() const { return _energies.kinetic; }
     // The untouched --rigidbody/ENM mesh only -- see Energies' own comment.
     float getSpringEnergy() const { return _energies.spring; }
+    float getStretchEnergy() const { return _energies.stretch; }
+    float getBendEnergy() const { return _energies.bend; }
     // The dihedral families, used as the index of _dihedralsprings and of
     // anything that has to walk them in a fixed order (NetCDF I/O, the
     // per-family runtime gates, Topology's own collections and
@@ -260,6 +268,21 @@ class SpringNetwork
     void addDihedralSpring(unsigned family, unsigned id1, unsigned id2, float equilibrium, float stiffness,
                            float dcOffset = 0.0f);
 
+    // Adds a STRETCH spring (see _stretchsprings' own comment) -- a new
+    // spring between the same 2 real atoms as the existing (now-zeroed)
+    // --rigidbody spring, so also not registered as a spring-neighbour
+    // itself: that role stays with the original --rigidbody spring, which
+    // is kept (just zeroed) specifically so nonbonded exclusion is
+    // unaffected by this split.
+    void addStretchSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
+
+    // Adds a BEND ghost-ghost spring (see _bendsprings' own comment) --
+    // always new, like the dihedral springs, never a spring-neighbour
+    // either (the ghosts are virtual sites, not real 1-3 atoms; nonbonded
+    // exclusion for the real 1-3 pair is still handled by the existing,
+    // now-zeroed --rigidbody spring between the real atoms themselves).
+    void addBendSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
+
     void updateSpringState(unsigned id, bool isStatic);
     void addStaticSpring(unsigned id) { _staticsprings.push_back(id); }
     void addDynamicSpring(unsigned id) { _dynamicsprings.push_back(id); }
@@ -320,6 +343,8 @@ class SpringNetwork
 
     // One dihedral ghost-spring family's list is reached by index only, via
     // getDihedralSprings(family) above.
+    const std::vector<Spring> & getStretchSprings() const { return _stretchsprings; }
+    const std::vector<Spring> & getBendSprings() const { return _bendsprings; }
 
     // Returns ith spring in spring list.
     std::vector<Spring>::const_reference getSpring(unsigned index) const { return _springs[index]; }
@@ -360,9 +385,10 @@ class SpringNetwork
     float getNeighborSkin() const { return _config.sim.neighborskin; }
 
     bool isSpringEnabled() const { return _config.spring.enable; }
-    // Per-family runtime debug toggles for the dihedral ghost springs that
-    // -dihedral* already decided, at build time, to create (see
-    // Configuration.hpp's own comment on these settings).
+    // Per-family runtime debug toggles for the bonded-force-field springs
+    // -stretching/-bending/-dihedral* already decided, at build time, to
+    // create (see Configuration.hpp's own comment on these 5 settings).
+    bool isBendingEnabled() const { return _config.bending.enable; }
     bool isDihedralPhiEnabled() const { return _config.dihedralphi.enable; }
     bool isDihedralPsiEnabled() const { return _config.dihedralpsi.enable; }
     bool isDihedralOmegaEnabled() const { return _config.dihedralomega.enable; }
@@ -419,13 +445,15 @@ class SpringNetwork
     virtual void computeStep();
     virtual void computeForces();
     virtual void computeSpringForces();
+    virtual void computeStretchForces();
+    virtual void computeBendForces();
     virtual void computeDihedralForces();
     virtual void computeParticleForces();
     virtual void updateParticlePositions();
 
   private:
     // Shared parallel-compute/serial-accumulate loop behind
-    // computeDihedralForces -- see its definition for the
+    // computeStretch/Bend/DihedralForces -- see its definition for the
     // pattern and why the accumulation stays serial. Returns the summed
     // energy of the collection.
     float _computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
@@ -561,6 +589,21 @@ class SpringNetwork
     // reason topology::Topology is: a new family used to mean repeating the
     // same declaration, clear, accumulate, add and clear-all lines here too.
     std::array<std::vector<Spring>, DIHEDRAL_FAMILY_COUNT> _dihedralsprings;
+
+    // STRETCH springs: a real 1-2 bond, retuned to real AMBER r0/k -- a new
+    // spring between the SAME two real atoms as the (now-zeroed, kept only
+    // for nonbonded exclusion) --rigidbody spring, in its own collection
+    // rather than retuned in place, so it has its own energy channel
+    // (_energies.stretch) separate from the plain ENM/rigidbody baseline
+    // (_energies.spring) -- see Energies' own comment.
+    std::vector<Spring> _stretchsprings;
+
+    // BEND ghost-ghost springs, standing in for a real valence-angle
+    // restraint (see topology::Topology::_bend_springs' own comment for
+    // why they connect two vertex-anchored ghosts instead of the two real
+    // 1-3 atoms directly). Own energy channel (_energies.bend), same
+    // reasoning as _stretchsprings above.
+    std::vector<Spring> _bendsprings;
 
     // Ghost (massless virtual-site) particle bindings -- see
     // GhostParticle.h. Each entry's own Particle lives in _particles like

@@ -45,12 +45,15 @@ const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "-bondedinteraction/--bondedinteraction reads a .bi.ff file (real or",
     "ghost-spring parameters translated from a real force field, e.g. AMBER)",
     "on top of -rigidbody/--rigidbody's springs, but applies none of it by",
-    "itself: -dihedralbackbone/--dihedralbackbone and",
+    "itself: -stretching/--stretching (real 1-2 bonds retuned in place),",
+    "-bending/--bending (real 1-3 angles retuned in place, requires",
+    "-stretching too), -dihedralbackbone/--dihedralbackbone and",
     "-dihedralsidechain/--dihedralsidechain (dihedral ghost springs added on",
     "top, one flag per proper-dihedral family) each independently opt in;",
     "-dihedral/--dihedral is a shorthand for both dihedral flags together.",
-    "The rigid mesh keeps bonds and angles at the uniform -stiffness value;",
-    "the dihedral wells are what -bondedinteraction adds on top.",
+    "Combine only the ones you want -- e.g. -dihedral alone on top of plain",
+    "-rigidbody keeps bonds/angles at the uniform -stiffness value while",
+    "still adding real dihedral wells.",
 };
 
 namespace biospring
@@ -148,9 +151,10 @@ int main(int argc, char ** argv)
 
     if (!args.pathBondedInteraction.empty())
     {
-        logging::status("Applying bonded interaction parameters from %s (dihedralbackbone=%s, "
-                        "dihedralsidechain=%s, dihedralplanarity=%s).",
-                         args.pathBondedInteraction.c_str(), args.dihedralBackbone ? "on" : "off",
+        logging::status("Applying bonded interaction parameters from %s (stretching=%s, bending=%s, "
+                        "dihedralbackbone=%s, dihedralsidechain=%s, dihedralplanarity=%s).",
+                         args.pathBondedInteraction.c_str(), args.stretching ? "on" : "off",
+                         args.bending ? "on" : "off", args.dihedralBackbone ? "on" : "off",
                          args.dihedralSidechain ? "on" : "off", args.dihedralPlanarity ? "on" : "off");
         // Already constructed and read() above (before any spring existed,
         // see that call site) -- reused here, not re-read.
@@ -168,7 +172,8 @@ int main(int argc, char ** argv)
         }
 
         bondedReader->buildSprings(topology, naming_reader_ptr != nullptr ? &naming_reader_ptr->rules() : nullptr,
-                                  args.dihedralBackbone, args.dihedralSidechain, args.dihedralPlanarity);
+                                  args.stretching, args.bending, args.dihedralBackbone, args.dihedralSidechain,
+                                  args.dihedralPlanarity);
     }
 
     // Sets the particle charge to user-defined value.
@@ -195,8 +200,9 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
                                            const std::string & version)
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
       pathRigidBody(""), pathBondedInteraction(""), pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0),
-      isStatic(false), ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false), dihedral(false),
-      dihedralBackbone(false), dihedralSidechain(false), dihedralPlanarity(false)
+      isStatic(false), ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false), stretching(false),
+      bending(false), dihedral(false), dihedralBackbone(false), dihedralSidechain(false),
+      dihedralPlanarity(false)
 {
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
@@ -263,20 +269,31 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
         argparse::Argument()
             .name_short("-bondedinteraction")
             .name_long("--bondedinteraction")
-            .description("bonded interaction parameter file: virtual/ghost dihedral spring parameters "
-                          "translated from a real force field (e.g. AMBER), a .bi.ff file. "
-                          "Applies none of it by itself -- see -dihedralbackbone/"
+            .description("bonded interaction parameter file: real or virtual/ghost spring parameters (stretching, "
+                          "bending, dihedral) translated from a real force field (e.g. AMBER), a .bi.ff file. "
+                          "Applies none of it by itself -- see -stretching/-bending/-dihedralbackbone/"
                           "-dihedralsidechain (or -dihedral, a shorthand for both dihedral flags), each an "
                           "independent opt-in; requires -rigidbody/--rigidbody")
             .metavar("INPUT_FILE")
             .argument_type(argparse::ArgumentType::PATH_INPUT);
 
+    argparse::Argument stretching_ = argparse::StoreTrueArgument(
+        "-stretching", "--stretching",
+        "with -bondedinteraction, retune STRETCH springs (real 1-2 bond lengths/stiffness) in place; has no effect "
+        "without -bondedinteraction");
+
+    argparse::Argument bending_ = argparse::StoreTrueArgument(
+        "-bending", "--bending",
+        "with -bondedinteraction, retune BEND springs (real 1-3 distance-spring equivalent) in place; requires "
+        "-stretching too (bending's conversion needs STRETCH's real bond lengths); has no effect without "
+        "-bondedinteraction");
+
     argparse::Argument dihedral_ = argparse::StoreTrueArgument(
         "-dihedral", "--dihedral",
         "with -bondedinteraction, add all dihedral ghost springs on top of -rigidbody's mesh -- shorthand for "
-        "-dihedralbackbone, -dihedralsidechain and -dihedralplanarity together. Bonds and angles stay at "
-        "-rigidbody's uniform value; only the dihedral wells become real. Has no effect without "
-        "-bondedinteraction");
+        "-dihedralbackbone, -dihedralsidechain and -dihedralplanarity together; independent of -stretching/-bending -- can be combined "
+        "alone for the intermediate model (bonds/angles stay at -rigidbody's uniform value, only dihedral wells "
+        "become real); has no effect without -bondedinteraction");
 
     argparse::Argument dihedralbackbone_ = argparse::StoreTrueArgument(
         "-dihedralbackbone", "--dihedralbackbone",
@@ -328,6 +345,8 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(cutoff);
     _parser.add_argument(rigidbody);
     _parser.add_argument(bondedinteraction);
+    _parser.add_argument(stretching_);
+    _parser.add_argument(bending_);
     _parser.add_argument(dihedral_);
     _parser.add_argument(dihedralbackbone_);
     _parser.add_argument(dihedralsidechain_);
@@ -403,6 +422,8 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     ignoreDuplicates = _parser.get_option("--ignore-duplicate").is_set();
     ignoreMissing = _parser.get_option("--ignore-missing").is_set();
     writePdbConect = _parser.get_option("--pdbconect").is_set();
+    stretching = _parser.get_option("--stretching").is_set();
+    bending = _parser.get_option("--bending").is_set();
     dihedral = _parser.get_option("--dihedral").is_set();
     dihedralBackbone = _parser.get_option("--dihedralbackbone").is_set();
     dihedralSidechain = _parser.get_option("--dihedralsidechain").is_set();
@@ -425,7 +446,7 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
         _parser.die("-bondedinteraction/--bondedinteraction requires -rigidbody/--rigidbody");
     }
 
-    // -dihedral[backbone|sidechain|planarity] only mean something
+    // -stretching/-bending/-dihedral[backbone|sidechain] only mean something
     // alongside -bondedinteraction, and apply nothing unless at least one is
     // given. -dihedral is a pure convenience alias, resolved here rather
     // than passed down as its own concept: BondedForceFieldReader only ever
@@ -434,15 +455,25 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     dihedralSidechain = dihedralSidechain || dihedral;
     dihedralPlanarity = dihedralPlanarity || dihedral;
 
-    if ((dihedralBackbone || dihedralSidechain || dihedralPlanarity) && pathBondedInteraction.empty())
+    if ((stretching || bending || dihedralBackbone || dihedralSidechain || dihedralPlanarity) && pathBondedInteraction.empty())
     {
         _parser.print_help();
-        _parser.die("-dihedral/-dihedralbackbone/-dihedralsidechain/-dihedralplanarity require "
+        _parser.die("-stretching/-bending/-dihedral/-dihedralbackbone/-dihedralsidechain require "
                     "-bondedinteraction/--bondedinteraction");
     }
-    if (!pathBondedInteraction.empty() && !dihedralBackbone && !dihedralSidechain && !dihedralPlanarity)
-        logging::warning("-bondedinteraction/--bondedinteraction given without -dihedral* -- "
+    if (!pathBondedInteraction.empty() && !stretching && !bending && !dihedralBackbone && !dihedralSidechain && !dihedralPlanarity)
+        logging::warning("-bondedinteraction/--bondedinteraction given without -stretching/-bending/-dihedral* -- "
                          "nothing from the .bi.ff file will actually be applied.");
+
+    // Bending's 1-3 conversion needs STRETCH's real bond lengths (see
+    // BondedForceFieldReader::buildSprings) -- requesting BEND alone is not
+    // a valid configuration.
+    if (bending && !stretching)
+    {
+        _parser.print_help();
+        _parser.die("-bending/--bending requires -stretching/--stretching too (bending's conversion needs "
+                    "stretching's real bond lengths)");
+    }
 
     // Reduce file and force field should be provided together.
     // Dies if not the case.
@@ -498,8 +529,10 @@ void biospring::pdb2spn::CommandLineArguments::printArgumentValues() const
         logging::info("    rigid-body groups: %s", pathRigidBody.c_str());
         if (!pathBondedInteraction.empty())
         {
-            logging::info("    bonded interaction (dihedral ghost springs): %s",
+            logging::info("    bonded interaction (stretching/bending retune, dihedral ghost springs): %s",
                           pathBondedInteraction.c_str());
+            logging::info("        stretching: %s", stretching ? "enabled" : "disabled");
+            logging::info("        bending: %s", bending ? "enabled" : "disabled");
             logging::info("        dihedral backbone: %s", dihedralBackbone ? "enabled" : "disabled");
             logging::info("        dihedral sidechain: %s", dihedralSidechain ? "enabled" : "disabled");
             logging::info("        dihedral planarity: %s", dihedralPlanarity ? "enabled" : "disabled");

@@ -70,7 +70,46 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
 
     const std::string & type = tokens[0];
 
-        if (type == "DIHEDRAL")
+    if (type == "STRETCH")
+    {
+        if (tokens.size() != 7)
+            logging::die("BondedForceFieldReader: line %d: STRETCH expects 7 tokens (type name resname atom1 atom2 "
+                         "r0 k), found %d",
+                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
+
+        StretchEntry entry;
+        entry.resname = tokens[2];
+        entry.atom1 = tokens[3];
+        entry.atom2 = tokens[4];
+        if (!utils::string::from_string(entry.r0, tokens[5]))
+            logging::die("BondedForceFieldReader: line %d: invalid r0 '%s'", static_cast<int>(line_id),
+                         tokens[5].c_str());
+        if (!utils::string::from_string(entry.k, tokens[6]))
+            logging::die("BondedForceFieldReader: line %d: invalid k '%s'", static_cast<int>(line_id),
+                         tokens[6].c_str());
+        _stretch.push_back(entry);
+    }
+    else if (type == "BEND")
+    {
+        if (tokens.size() != 8)
+            logging::die("BondedForceFieldReader: line %d: BEND expects 8 tokens (type name resname atom1 atom2 "
+                         "atom3 theta0 k), found %d",
+                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
+
+        BendEntry entry;
+        entry.resname = tokens[2];
+        entry.atom1 = tokens[3];
+        entry.atom2 = tokens[4];
+        entry.atom3 = tokens[5];
+        if (!utils::string::from_string(entry.theta0_deg, tokens[6]))
+            logging::die("BondedForceFieldReader: line %d: invalid theta0 '%s'", static_cast<int>(line_id),
+                         tokens[6].c_str());
+        if (!utils::string::from_string(entry.k, tokens[7]))
+            logging::die("BondedForceFieldReader: line %d: invalid k '%s'", static_cast<int>(line_id),
+                         tokens[7].c_str());
+        _bend.push_back(entry);
+    }
+    else if (type == "DIHEDRAL")
     {
         if (tokens.size() != 9)
             logging::die("BondedForceFieldReader: line %d: DIHEDRAL expects 9 tokens (type name resname family "
@@ -135,7 +174,7 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
     }
     else
     {
-        logging::die("BondedForceFieldReader: line %d: unknown entry type '%s' (expected "
+        logging::die("BondedForceFieldReader: line %d: unknown entry type '%s' (expected STRETCH, BEND, "
                      "GHOSTPARTICLE or DIHEDRAL)",
                      static_cast<int>(line_id), type.c_str());
     }
@@ -157,8 +196,9 @@ void BondedForceFieldReader::read()
     }
     close();
 
-    logging::info("BondedForceFieldReader: read %zu ghost particle and %zu dihedral rule(s).",
-                 _ghostparticles.size(), _dihedral.size());
+    logging::info("BondedForceFieldReader: read %zu stretching, %zu bending, %zu ghost particle and %zu dihedral "
+                 "rule(s).",
+                 _stretch.size(), _bend.size(), _ghostparticles.size(), _dihedral.size());
 }
 
 std::vector<BondedForceFieldReader::ResidueParticleIndices>
@@ -335,7 +375,8 @@ unsigned BondedForceFieldReader::_create_ghost_particles(topology::Topology & to
 
         topology::Particle ghost_template(properties);
         // Every GHOSTPARTICLE line in a .bi.ff is a dihedral-ring ghost:
-        // the rotated image of its reference atom.
+        // the rotated image of its reference atom. BEND's axial ghosts are
+        // never written to file, they are built below.
         topology.add_ghost_particle(ghost_template, *anchor_b, *anchor_c, *anchor_ref, entry.r, entry.theta_deg,
                                     entry.delta_deg,
                                     static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
@@ -421,17 +462,29 @@ size_t BondedForceFieldReader::countExpectedGhostParticles(const topology::Topol
         for (const GhostParticleEntry & entry : _ghostparticles)
             if (entry.resname == resname)
                 count++;
+        // Every applied BEND entry creates exactly 2 vertex-anchored ghosts
+        // (see buildSprings) -- counted here too (a safe overcount, same as
+        // the dihedral entries above: this doesn't know or care whether
+        // -bending is actually enabled for this run).
+        for (const BendEntry & entry : _bend)
+            if (entry.resname == resname)
+                count += 2;
     }
     return count;
 }
 
 void BondedForceFieldReader::buildSprings(topology::Topology & topology,
-                                          const reduce::ReduceRuleContainer * translation,
-                                          bool enableDihedralBackbone, bool enableDihedralSidechain,
-                                          bool enableDihedralPlanarity) const
+                                          const reduce::ReduceRuleContainer * translation, bool enableStretch,
+                                          bool enableBend, bool enableDihedralBackbone,
+                                          bool enableDihedralSidechain, bool enableDihedralPlanarity) const
 {
     if (translation != nullptr)
         _check_translation_is_one_atom_per_rule(*translation);
+
+    if (enableBend && !enableStretch)
+        logging::die("BondedForceFieldReader: BEND requires STRETCH to be enabled too -- bending's 1-3 conversion "
+                     "needs the real (AMBER) 1-2 bond lengths STRETCH provides; without them it would silently use "
+                     "whichever arbitrary equilibrium --rigidbody happened to set instead, an inconsistent result.");
 
     // Non-const: _create_ghost_particles appends each newly-created ghost's
     // index to residues[index] so later DIHEDRAL entries in the same
@@ -439,6 +492,9 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
     // comment in the header).
     std::vector<ResidueParticleIndices> residues = _group_particles_by_residue(topology);
 
+    unsigned nb_stretch_applied = 0;
+    unsigned nb_bend_applied = 0;
+    unsigned nb_bend_skipped = 0;
     unsigned nb_dihedral_applied = 0;
     unsigned nb_ghostparticles_created = 0;
 
@@ -454,6 +510,161 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
 
         if (enableGhostParticles)
             nb_ghostparticles_created += _create_ghost_particles(topology, residues, index, resname, translation);
+
+        if (enableStretch)
+            for (const StretchEntry & entry : _stretch)
+            {
+                if (entry.resname != resname)
+                    continue;
+
+                topology::Particle * p1 = _resolve_atom(entry.atom1, residues, index, topology, translation);
+                topology::Particle * p2 = _resolve_atom(entry.atom2, residues, index, topology, translation);
+                if (p1 == nullptr || p2 == nullptr)
+                    continue;
+
+                // Zeroes (never removes) the existing --rigidbody spring's
+                // stiffness for this real pair, but keeps its equilibrium
+                // at the real AMBER r0: BEND's own _existing_equilibrium
+                // lookup below still finds it there (only topology.springs()
+                // is ever searched), and the real 1-2 pair stays a
+                // spring-neighbour (nonbonded exclusion unaffected) even
+                // though it no longer contributes any energy on its own.
+                _retune_or_add_spring(topology, *p1, *p2, entry.r0, 0.0, "stretching");
+                // The actual physics: a brand new spring, in its own
+                // collection, between the same two real atoms -- see
+                // _stretch_springs' own comment for why this is no longer a
+                // plain in-place retune.
+                // A real 1-2 bond at a chain boundary can legitimately be
+                // described twice -- once by each flanking residue's own
+                // STRETCH entries (e.g. a residue's own "C +N" rule and the
+                // next residue's/cap's own "N -C" rule for that exact same
+                // peptide bond, see ProteinAtomBonded.bi.ff's NME_N_C entry).
+                // Both describe the same real AMBER bond with the same real
+                // parameters, so the second occurrence is a genuine, expected
+                // duplicate (unlike a plain naming collision) -- skipped here
+                // rather than added again, which would otherwise either
+                // throw (SpringCollection::add_spring forbids a duplicate
+                // pair) or, if that check were bypassed, silently double the
+                // effective stiffness for that one bond.
+                if (_find_spring(topology.stretch_springs(), *p1, *p2) == nullptr)
+                {
+                    topology.add_stretch_spring(*p1, *p2, entry.r0, entry.k);
+                    nb_stretch_applied++;
+                }
+            }
+
+        if (enableBend)
+        {
+            // (vertex, lower outer, upper outer) unique ids of every angle
+            // already restrained in THIS residue -- see the guard below.
+            std::set<std::array<topology::pid_t, 3>> bend_done;
+            for (const BendEntry & entry : _bend)
+            {
+                if (entry.resname != resname)
+                    continue;
+
+                topology::Particle * p1 = _resolve_atom(entry.atom1, residues, index, topology, translation);
+                topology::Particle * p2 = _resolve_atom(entry.atom2, residues, index, topology, translation);
+                topology::Particle * p3 = _resolve_atom(entry.atom3, residues, index, topology, translation);
+                if (p1 == nullptr || p2 == nullptr || p3 == nullptr)
+                    continue;
+
+                // One BEND per real angle, whatever spelling reached it. A
+                // .bi.ff lists every known spelling of an atom (OP1 and
+                // O1P, H5'' and H5'2) so it matches a file written either
+                // way; with a --grp that maps both onto ONE particle type,
+                // both rules then resolve to the same three atoms and the
+                // angle would be restrained twice. STRETCH cannot hit this
+                // (it retunes the existing 1-2 spring) and neither can
+                // DIHEDRAL (its ghosts deduplicate by name), but BEND
+                // creates its two ghosts unconditionally -- measured on a
+                // DNA duplex with amber.dna.grp: 3268 springs for 2400 real
+                // angles, 868 of them doubled. Never seen before because
+                // amber.grp is strictly one type per atom.
+                const auto outer = std::minmax(p1->unique_id(), p3->unique_id());
+                if (!bend_done.insert({p2->unique_id(), outer.first, outer.second}).second)
+                    continue;
+
+                double r12 = 0.0;
+                double r23 = 0.0;
+                const bool has12 = _existing_equilibrium(topology, *p1, *p2, r12);
+                const bool has23 = _existing_equilibrium(topology, *p2, *p3, r23);
+                if (!has12 || !has23)
+                {
+                    logging::warning("BondedForceFieldReader: BEND %s %s-%s-%s has no existing 1-2 spring for "
+                                     "r12/r23 (STRETCH must cover both real bonds first), skipped.",
+                                     resname.c_str(), entry.atom1.c_str(), entry.atom2.c_str(), entry.atom3.c_str());
+                    nb_bend_skipped++;
+                    continue;
+                }
+
+                const double theta0 = entry.theta0_deg * M_PI / 180.0;
+
+                const double r13sq = r12 * r12 + r23 * r23 - 2.0 * r12 * r23 * std::cos(theta0);
+                const double r13 = std::sqrt(r13sq);
+
+                // k13 = K_theta * r13^2 / (r12 * r23 * sin(theta0))^2 --
+                // matching curvatures (d^2E/dtheta^2) at equilibrium between
+                // topology/Spring.hpp's 0.5*k13*(r13-r13_0)^2 and
+                // 0.5*K_theta*(theta-theta0)^2, both already in the same
+                // 0.5-prefactor convention (entry.k is meant to be sourced
+                // directly from OpenMM's HarmonicAngleForce, which already
+                // uses this convention -- same as STRETCH's k. No extra
+                // factor of 2 here: that would only apply if entry.k were
+                // instead sourced from a raw AMBER parm*.dat file, whose K
+                // has no 1/2 baked in).
+                //
+                // This formula assumes r12/r23 stay fixed at their AMBER r0
+                // -- true only at the calibration point, not during real
+                // dynamics, where the real 1-2 bonds independently flex via
+                // their own STRETCH springs. Connecting this spring directly
+                // between the two real 1-3 atoms would let that real
+                // bond-stretch leak into the measured r13 (found and
+                // quantified via a real MD-trajectory validation: ~60%
+                // systematic energy excess, ~95% of it from exactly this
+                // leakage, only ~5% genuine linearization error) -- see
+                // _bend_springs' own comment. Anchoring two ghosts at the
+                // FIXED r12/r23 instead, each along the REAL, current bond
+                // *direction*, removes it: this spring's own d0/k13 stay
+                // exactly this formula, only what it connects to changes.
+                const double denom = r12 * r23 * std::sin(theta0);
+                const double k13 = entry.k * r13sq / (denom * denom);
+
+                const topology::ParticleProperties & residue_properties =
+                    topology.get_particle(residues[index][0]).properties();
+                topology::ParticleProperties ghost_properties;
+                ghost_properties.set_residue_name(residue_properties.residue_name());
+                ghost_properties.set_chain_name(residue_properties.chain_name());
+                ghost_properties.set_residue_id(residue_properties.residue_id());
+                ghost_properties.set_static(true);
+                ghost_properties.set_mass(0.0f);
+
+                ghost_properties.set_name("GB" + entry.atom1);
+                topology::Particle ghost_a_template(ghost_properties);
+                // theta_deg=0: places the ghost exactly at B + r*normalize(C-B)
+                // (the Ref-dependent azimuthal term is multiplied by
+                // sin(0)=0, so p3 here only needs to be non-degenerate, not
+                // meaningful on its own -- see spn::GhostParticle::computePosition).
+                topology::Particle & ghost_a =
+                    topology.add_ghost_particle(ghost_a_template, *p2, *p1, *p3, r12, 0.0, 0.0,
+                                                static_cast<unsigned>(spn::GhostPlacement::AxialOffset));
+
+                ghost_properties.set_name("GB" + entry.atom3);
+                topology::Particle ghost_c_template(ghost_properties);
+                topology::Particle & ghost_c =
+                    topology.add_ghost_particle(ghost_c_template, *p2, *p3, *p1, r23, 0.0, 0.0,
+                                                static_cast<unsigned>(spn::GhostPlacement::AxialOffset));
+
+                // Same zero-out-but-keep treatment as STRETCH above, for the
+                // same reason (nonbonded exclusion for the real 1-3 pair
+                // must survive even though the real spring no longer carries
+                // any of the actual restraint).
+                _retune_or_add_spring(topology, *p1, *p3, r13, 0.0, "bending");
+                topology.add_bend_spring(ghost_a, ghost_c, r13, k13);
+                nb_bend_applied++;
+                nb_ghostparticles_created += 2;
+            }
+        }
 
         for (const DihedralEntry & entry : _dihedral)
         {
@@ -489,8 +700,9 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
         }
     }
 
-    logging::info("BondedForceFieldReader: applied %u dihedral spring(s), created %u ghost particle(s).",
-                 nb_dihedral_applied, nb_ghostparticles_created);
+    logging::info("BondedForceFieldReader: applied %u stretching, %u bending and %u dihedral spring(s), created %u "
+                 "ghost particle(s) (%u bending rule(s) skipped for missing STRETCH cross-reference).",
+                 nb_stretch_applied, nb_bend_applied, nb_dihedral_applied, nb_ghostparticles_created, nb_bend_skipped);
 }
 
 } // namespace rigidbodygroup

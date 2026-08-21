@@ -34,6 +34,12 @@ enum class GhostPlacement : unsigned
     // a rotation of delta about the B->C axis, at that atom's own distance
     // from the axis and its own position along it.
     AxisRotation = 0,
+    // BEND: the ghost sits ON the axis, at distance r from B along B->C.
+    // No azimuth, no reference atom (r/theta/delta's azimuthal term is
+    // multiplied by sin(theta=0)). Models a 1-3 distance without letting
+    // the real 1-2 bond stretch leak into it -- see
+    // BondedForceFieldReader's own comment.
+    AxialOffset = 1,
 };
 
 struct GhostParticleBinding
@@ -55,7 +61,8 @@ struct GhostParticleBinding
     // Index into SpringNetwork's per-axis accumulators: every ghost of a
     // ring shares one axis, and the closed-form axis reaction is computed
     // once per axis rather than once per ghost (it is only valid over
-    // complete spring pairs -- see redistributeAxisReaction).
+    // complete spring pairs -- see redistributeAxisReaction). Unused for
+    // AxialOffset ghosts, whose redistribution balances on its own.
     unsigned axisIndex;
     GhostPlacement placement;
 };
@@ -128,6 +135,21 @@ class GhostParticle
     static void redistributeAxisReaction(const Vector3f & B, const Vector3f & C, const Vector3f & sum_ghost_forces,
                                           const Vector3f & sum_ghost_torques_about_B, const Vector3f & sum_atom_forces,
                                           const Vector3f & sum_atom_torques_about_B, Vector3f & F_B, Vector3f & F_C);
+
+    // ---- Axial placement (BEND) --------------------------------------
+    //
+    // X = B + r * u, u = (C-B)/|C-B|. Its Jacobian is closed form and
+    // needs no frame either: with P = I - u u^T the projector across the
+    // axis, dX/dC = (r/L) P and dX/dB = I - (r/L) P, so
+    //     F_C = (r/L) * (f - u (u.f)),   F_B = f - F_C
+    // which transfers the force exactly and conserves the torque about B
+    // by construction ((C-B) x F_C = r u x f, the ghost's own torque).
+    // Nothing accumulates across ghosts here: each is already balanced on
+    // its own, unlike the rotation placement.
+    static Vector3f computePositionAxial(const Vector3f & B, const Vector3f & C, float r);
+
+    static void redistributeForceAxial(const Vector3f & B, const Vector3f & C, float r, const Vector3f & f,
+                                        Vector3f & F_B, Vector3f & F_C);
 };
 
 } // namespace spn

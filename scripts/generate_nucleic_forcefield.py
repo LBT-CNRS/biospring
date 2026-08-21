@@ -169,12 +169,6 @@ def _aliases(name):
 
 
 def emit_stretch(resname, a1, a2, r0_A, k):
-    # STRETCH and BEND are no longer part of the model: bonds and angles
-    # are held by the .rbody mesh at --stiffness, not by their own
-    # springs. The computation stays because the dihedral rings need
-    # the same AMBER bond lengths and angles for their geometry; only
-    # the emission is suppressed.
-    return
     for n1 in _aliases(a1):
         for n2 in _aliases(a2):
             key = (resname, tuple(sorted((n1, n2.lstrip("+-")))), n2[:1] in "+-")
@@ -187,12 +181,6 @@ def emit_stretch(resname, a1, a2, r0_A, k):
 
 
 def emit_bend(resname, a1, vertex, a3, theta0, k):
-    # STRETCH and BEND are no longer part of the model: bonds and angles
-    # are held by the .rbody mesh at --stiffness, not by their own
-    # springs. The computation stays because the dihedral rings need
-    # the same AMBER bond lengths and angles for their geometry; only
-    # the emission is suppressed.
-    return
     for n1 in _aliases(a1):
         for n3 in _aliases(a3):
             key = (resname, vertex, tuple(sorted((n1, n3))), "bend")
@@ -782,12 +770,8 @@ def main():
         "#nucleic-acid-specific AMBER force fields (see the script's docstring",
         "#for why amber99sb.xml's own nucleic templates are the wrong choice).",
         "#",
-        "#This file carries DIHEDRAL records only -- see the format further",
-        "#down. Bonds and valence angles used to be emitted here as STRETCH",
-        "#and BEND; both families were removed and now live in the rigid-body",
-        "#mesh (DNAAtomRigidGroups.rbody / RNAAtomRigidGroups.rbody). AMBER",
-        "#bond lengths and angles are still read, because the ghost rings'",
-        "#geometry is built from them.",
+        "#STRETCH <name> <resname> <atom1> <atom2> <r0_A> <k_kJ.mol-1.A-2>",
+        "#BEND    <name> <resname> <atom1> <vertex> <atom3> <theta0_deg> <k>",
         "#",
         "#'+X' is atom X of the NEXT residue: the only cross-residue bond in a",
         "#nucleic acid is O3'(i)-P(i+1), the phosphodiester link.",
@@ -888,8 +872,8 @@ def main():
     with open(out, "w") as f:
         f.write("\n".join(header + body) + "\n")
     print(f"\nWrote {axes.n_ghost_particles} GHOSTPARTICLE and {axes.n_dihedral_ok} DIHEDRAL "
-          f"entries ({axes.n_dihedral_skip} axes skipped) to {out}. Bonds and valence angles "
-          f"are not emitted: the rigid-body mesh carries them.")
+          f"entries ({axes.n_dihedral_skip} axes skipped), {counters['stretch']} STRETCH and "
+          f"{counters['bend']} BEND ({counters['skip']} skipped) to {out}")
 
 
 if __name__ == "__main__":
