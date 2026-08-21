@@ -22,11 +22,17 @@ static std::string atom_record(const biospring::spn::Particle & p)
 
     // Particle name formatting.
     // If the name has less than 4 letters, it is left aligned on column 14, else it's left align on column 13.
+    // Names of 5+ characters (e.g. a renamed particle from a coarse-grain
+    // .grp file) are truncated to the standard PDB 4-character atom-name
+    // field ("%-4.4s": width 4, precision 4) -- without this, a longer name
+    // pushes every following column (resname, chain, resid, coordinates) one
+    // character to the right, which PDBReader's fixed-column parsing cannot
+    // recover from (it throws trying to parse a shifted, non-numeric resid).
     std::string name;
     if (p.getName().size() < 4)
-        name = biospring::utils::string::format(" %-3s", p.getName().c_str());
+        name = biospring::utils::string::format(" %-3.3s", p.getName().c_str());
     else
-        name = biospring::utils::string::format("%-4s", p.getName().c_str());
+        name = biospring::utils::string::format("%-4.4s", p.getName().c_str());
 
     // Charge formatting.
     std::string charge = "";

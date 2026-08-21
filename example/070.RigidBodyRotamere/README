@@ -1,0 +1,27 @@
+# Springs-only rotamer/hinge mechanism (ubiquitin, 1D3Z)
+
+Instead of a distance cutoff, the spring network is built directly from
+`data/reducerules/ProteinAtomRigidGroups.rbody` (`pdb2spn --rigidbody`): every
+pairwise spring within a named rigid-body group (CA tetrahedron, peptide
+plane, chi1..4 pivots, aromatic/imidazole rings, guanidinium, hydroxyl/thiol
+rotations), and nothing else. Backbone phi/psi and every side-chain chi
+remain genuine, free rotational degrees of freedom -- not frozen the way a
+plain cutoff-based elastic network would freeze them.
+
+Ubiquitin (NMR, all-atom + hydrogens) was picked for amino-acid variety: 18
+of the 20 standard residues are present (only Cys and Trp are missing),
+including a real Pro (whole side chain treated as one rigid ring closing
+back onto the backbone N, no free chi) and both a free N-terminus and
+C-terminus.
+
+This example needs a local BioSpring build with `--rigidbody` and
+`data/reducerules/ProteinAtomRigidGroups.rbody` -- see the Makefile.
+
+### Build and visualize
+
+    make prep
+    make vis   (VMD: ball-and-stick + spring-network overlay)
+
+### Launch the simulation
+
+    make run / make run_now

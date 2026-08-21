@@ -150,6 +150,7 @@ set(BIOSPRING_CORE_SOURCES
     src/IO/PQRReader.cpp
     src/IO/PQRWriter.cpp
     src/IO/ReduceRuleReader.cpp
+    src/IO/RigidBodyRuleReader.cpp
     src/IO/XTCTrajWriter.cpp
     src/IO/modern/CSVTrajectoryWriter.cpp
     src/IO/modern/PDBTrajectoryWriter.cpp
@@ -172,6 +173,8 @@ set(BIOSPRING_CORE_SOURCES
     src/rigidbody/matrix.cpp
     src/rigidbody/Quaternion.cpp
     src/rigidbody/RigidBodiesManager.cpp
+    src/rigidbodygroup/RigidBodyRule.cpp
+    src/rigidbodygroup/RigidBodyBuilder.cpp
 )
 
 if(MDDRIVER_SUPPORT)
