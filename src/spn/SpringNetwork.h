@@ -616,6 +616,8 @@ class SpringNetwork
     NeighborSearch _nsearch;
     bool _neighborSearchesDirty;
 
+
+
     int _nbiter;
     bool _end;
     bool _pause;

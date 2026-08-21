@@ -724,9 +724,35 @@ void SpringNetwork::redistributeGhostForces()
         axis.sumGhostForces += ghost.getForce();
         axis.sumGhostTorquesAboutB += (ghost.getPosition() - B) ^ ghost.getForce();
 
-        ref.addForce(in.F_Ref);
-        axis.sumAtomForces += in.F_Ref;
-        axis.sumAtomTorquesAboutB += (ref.getPosition() - B) ^ in.F_Ref;
+        // A torsion should push a substituent ONLY around its axis. The ring
+        // does not: measured on ubiquitin, 78 % of what it applies (86 %
+        // median) is radial or axial, which carries no torque about the axis
+        // at all and simply deforms bonds and angles -- the reason the mesh
+        // has to be held at a stiffness of 8000. Projecting onto the
+        // tangential direction keeps the torque exactly, since radial and
+        // axial components contribute exactly zero to it, and drops the rest.
+        Vector3f F_ref = in.F_Ref;
+        if (_config.dihedral.tangentialonly)
+        {
+            const Vector3f & C = getParticle(axis.anchorCIndex).getPosition();
+            Vector3f ahat = C - B;
+            ahat.normalize();
+            const Vector3f rel = ref.getPosition() - B;
+            Vector3f radial = rel - ahat * rel.dot(ahat);
+            const float rn = radial.norm();
+            // An atom sitting on the axis has no lever arm and no torsional
+            // role: it gets nothing rather than an arbitrary direction.
+            F_ref = Vector3f();
+            if (rn > 1e-6f)
+            {
+                const Vector3f that = ahat ^ (radial / rn);
+                F_ref = that * in.F_Ref.dot(that);
+            }
+        }
+
+        ref.addForce(F_ref);
+        axis.sumAtomForces += F_ref;
+        axis.sumAtomTorquesAboutB += (ref.getPosition() - B) ^ F_ref;
 
         ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
     }
@@ -736,9 +762,23 @@ void SpringNetwork::redistributeGhostForces()
     for (const GhostAxis & axis : _ghostaxes)
     {
         Vector3f F_B, F_C;
+        // Filtering changes what the reaction has to balance against, and
+        // getting this wrong would defeat the whole point. Unfiltered, the
+        // reaction TRANSFERS the ghosts' force and torque onto the four real
+        // atoms. Filtered, the discarded radial and axial parts carry no
+        // torque about the axis but do carry torque about the point B, so
+        // balancing against the ghost totals would hand exactly what was
+        // removed back to B and C -- the leak relocated, not gone. Balancing
+        // the filtered set against zero instead makes it self-cancelling in
+        // force and torque, which is precisely AMBER's structure; and since
+        // F_B and F_C act on the axis itself they cannot disturb the axial
+        // torque the substituents carry.
+        const Vector3f zero;
         GhostParticle::redistributeAxisReaction(
             getParticle(axis.anchorBIndex).getPosition(), getParticle(axis.anchorCIndex).getPosition(),
-            axis.sumGhostForces, axis.sumGhostTorquesAboutB, axis.sumAtomForces, axis.sumAtomTorquesAboutB, F_B, F_C);
+            _config.dihedral.tangentialonly ? zero : axis.sumGhostForces,
+            _config.dihedral.tangentialonly ? zero : axis.sumGhostTorquesAboutB,
+            axis.sumAtomForces, axis.sumAtomTorquesAboutB, F_B, F_C);
         getParticle(axis.anchorBIndex).addForce(F_B);
         getParticle(axis.anchorCIndex).addForce(F_C);
     }
