@@ -227,6 +227,32 @@ class SpringNetwork
     float getHydrophobicEnergy() const { return _energies.hydrophobic; }
     float getHydrogenBondEnergy() const { return _energies.hbond; }
 
+    // How many hydrogen bonds are held right now. Walks the donor slots, so
+    // each bond counts once. Worth reporting alongside the energy: the total
+    // alone cannot distinguish many weak bonds from few strong ones, and the
+    // count is what shows a base pair holding its two or three.
+    size_t getHydrogenBondCount() const;
+
+    // How many RESIDUE PAIRS hold exactly 1, 2, 3, or 4-or-more bonds right
+    // now, index 0 being the 1-bond bucket. This is what shows a base pair
+    // holding its two or its three: the total energy cannot tell many weak
+    // bonds from few strong ones, and the bond count cannot say how they are
+    // distributed. Pairs of ADJACENT residues in one chain are excluded --
+    // in a helix their bases are stacked within reach and would crowd the
+    // census while carrying almost none of the energy.
+    std::array<size_t, 4> getHydrogenBondPairCensus() const;
+
+    // Writes every bond held right now, one per line, to `path`:
+    //
+    //   donor_chain donor_resid donor_resname donor_atom
+    //   acceptor_...  distance_A  angular_weight  energy_kJmol
+    //
+    // Appended, with a "# step N" header per sample. Written only when
+    // hbond.log names a file. This exists because a total and a count cannot
+    // settle a disagreement about WHICH bonds are held, and nothing else in
+    // the output can.
+    void dumpHydrogenBonds(const std::string & path, int step) const;
+
     // ================================================================================
     // Used to define the minimum IMP energy of all possible conformations at a 
     // given insertion angle (rotation around the axis of the insertion vector).

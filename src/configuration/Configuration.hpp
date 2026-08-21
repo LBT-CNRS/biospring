@@ -256,6 +256,7 @@ inline Configuration defaultConfiguration()
     config.hbond.cutoff = 7.0;
     config.hbond.scale = 1.0;
     config.hbond.path = "";
+    config.hbond.log = "";
 
     config.electrostatic.enable = false;
     config.electrostatic.cutoff = 16.0;

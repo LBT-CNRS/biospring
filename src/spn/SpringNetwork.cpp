@@ -1,4 +1,6 @@
 #include "SpringNetwork.h"
+
+#include <fstream>
 #include "logging.h"
 #include "measure.hpp"
 
@@ -174,6 +176,76 @@ int SpringNetwork::_anyHydrogenBondPartner(size_t index) const
             if (_hbAcceptorSlot[s] >= 0)
                 return _hbAcceptorSlot[s];
     return -1;
+}
+
+size_t SpringNetwork::getHydrogenBondCount() const
+{
+    size_t n = 0;
+    for (int slot : _hbDonorSlot)
+        if (slot >= 0)
+            ++n;
+    return n;
+}
+
+std::array<size_t, 4> SpringNetwork::getHydrogenBondPairCensus() const
+{
+    std::map<std::pair<long, long>, size_t> per_pair;
+    for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
+        for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
+        {
+            const int j = _hbDonorSlot[s];
+            if (j < 0)
+                continue;
+            const Particle & p = _particles[i];
+            const Particle & q = _particles[static_cast<size_t>(j)];
+            const long dres = static_cast<long>(p.getResId()) - static_cast<long>(q.getResId());
+            if (p.getChainName() == q.getChainName() && dres >= -1 && dres <= 1)
+                continue;
+            // Chain folded into the key by its first character: enough to
+            // keep the two strands of a duplex apart.
+            const long a = static_cast<long>(p.getResId()) * 256 +
+                           (p.getChainName().empty() ? 0 : p.getChainName()[0]);
+            const long b = static_cast<long>(q.getResId()) * 256 +
+                           (q.getChainName().empty() ? 0 : q.getChainName()[0]);
+            per_pair[{std::min(a, b), std::max(a, b)}]++;
+        }
+    std::array<size_t, 4> census = {0, 0, 0, 0};
+    for (const auto & entry : per_pair)
+        census[std::min<size_t>(entry.second, 4) - 1]++;
+    return census;
+}
+
+void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
+{
+    std::ofstream out(path, std::ios::app);
+    if (!out)
+    {
+        logging::warning("Cannot open hydrogen bond log '%s'.", path.c_str());
+        return;
+    }
+    out << "# step " << step << "\n";
+    for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
+        for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
+        {
+            const int j = _hbDonorSlot[s];
+            if (j < 0)
+                continue;
+            const Particle & d = _particles[i];
+            const Particle & a = _particles[static_cast<size_t>(j)];
+            const Vector3f v = a.getPosition() - d.getPosition();
+            const float distance = v.norm();
+            float w = 1.0f;
+            if (d.antecedentIndex() >= 0 && distance > 1e-6f)
+            {
+                const Vector3f u = d.getPosition() - _particles[static_cast<size_t>(d.antecedentIndex())].getPosition();
+                const float ulen = u.norm();
+                if (ulen > 1e-6f)
+                    w = forcefield::hydrogen_bond_angular_factor((u / ulen).dot(v / distance));
+            }
+            out << d.getChainName() << ' ' << d.getResId() << ' ' << d.getResName() << ' ' << d.getName() << ' '
+                << a.getChainName() << ' ' << a.getResId() << ' ' << a.getResName() << ' ' << a.getName() << ' '
+                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << '\n';
+        }
 }
 
 bool SpringNetwork::areHydrogenBonded(size_t a, size_t b) const
@@ -624,7 +696,14 @@ void SpringNetwork::_displayFrameData()
     if (isHydrophobicityEnabled())
         logging::info("Hydrophobic energy: %5.2f kJ.mol-1", _energies.hydrophobic);
     if (isHydrogenBondEnabled())
-        logging::info("Hydrogen bond energy: %5.2f kJ.mol-1", _energies.hbond);
+    {
+        const std::array<size_t, 4> census = getHydrogenBondPairCensus();
+        logging::info("Hydrogen bond energy: %5.2f kJ.mol-1 over %zu bond(s); residue pairs holding "
+                      "1/2/3/4+ bonds: %zu/%zu/%zu/%zu",
+                      _energies.hbond, getHydrogenBondCount(), census[0], census[1], census[2], census[3]);
+        if (!_config.hbond.log.empty())
+            dumpHydrogenBonds(_config.hbond.log, _nbiter);
+    }
     if (isInsertionVectorEnabled())
     {
         logging::info("Insertion angle: %5.2lf °", _insertionVector->getAngle());
