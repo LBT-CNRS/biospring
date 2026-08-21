@@ -11,6 +11,246 @@ using namespace netCDF::exceptions;
 
 namespace logging = biospring::logging;
 
+// Writes one dihedral ghost-spring family's binary NetCDF dimension/variable
+// pair (particle-id pairs, stiffness, equilibrium -- no per-particle count,
+// see DihedralSpringBuffer's comment), or nothing at all if `source` is
+// empty (mirrors the `springnb > 0` guard already used for the real
+// springs, so old readers and empty families stay silent/backward
+// compatible).
+static void writeDihedralSpringGroupBinary(NcFile * nc, const std::string & prefix,
+                                           const std::vector<biospring::spn::Spring> & source)
+{
+    const size_t n = source.size();
+    if (n == 0)
+        return;
+
+    NcDim dim2 = nc->addDim(prefix + "dim", 2);
+    NcDim ndim = nc->addDim(prefix + "_number", n);
+    std::vector<NcDim> ssdim(2);
+    ssdim[0] = ndim;
+    ssdim[1] = dim2;
+
+    NcVar springs = nc->addVar(prefix + "springs", ncInt, ssdim);
+    springs.putAtt("long_name", "Dihedral ghost spring between particles referenced by 2 particle ids");
+
+    NcVar stiffness = nc->addVar(prefix + "springsstiffness", ncFloat, ndim);
+    stiffness.putAtt("long_name", "Dihedral ghost spring stiffness");
+
+    NcVar equilibrium = nc->addVar(prefix + "springsequilibrium", ncFloat, ndim);
+    equilibrium.putAtt("long_name", "Dihedral ghost spring distance equilibrium");
+
+    NcVar dcoffset = nc->addVar(prefix + "springsdcoffset", ncFloat, ndim);
+    dcoffset.putAtt("long_name", "Dihedral ghost spring's share of its axis's dihedral-energy correction");
+
+    DihedralSpringBuffer buffer(n);
+    buffer.bufferize(source);
+
+    springs.putVar(buffer.springs);
+    stiffness.putVar(buffer.springsstiffnesses);
+    equilibrium.putVar(buffer.springsequilibriums);
+    dcoffset.putVar(buffer.springsdcoffsets);
+}
+
+// CDL (text NetCDF) equivalents of the above, split the same way the real
+// springs are (_writeHeaderCDL declares dims/vars, _writeSpringDataCDL
+// writes the data), so each can be called from the matching method.
+static void writeDihedralHeaderCDL(std::ostream & os, const std::string & prefix, size_t n)
+{
+    if (n == 0)
+        return;
+    os << "\t" << prefix << "dim = 2; " << std::endl;
+    os << "\t" << prefix << "_number = " << n << ";" << std::endl;
+    os << std::endl;
+}
+
+static void writeDihedralVariablesCDL(std::ostream & os, const std::string & prefix, size_t n)
+{
+    if (n == 0)
+        return;
+    os << "\tint     " << prefix << "springs(" << prefix << "_number," << prefix << "dim); " << std::endl;
+    os << "\t        " << prefix
+       << "springs:long_name = \"Dihedral ghost spring between particles referenced by 2 particle ids\"; "
+       << std::endl;
+    os << std::endl;
+    os << "\tfloat   " << prefix << "springsstiffness(" << prefix << "_number); " << std::endl;
+    os << "\t        " << prefix << "springsstiffness:long_name = \"Dihedral ghost spring stiffness\";" << std::endl;
+    os << "\tfloat   " << prefix << "springsequilibrium(" << prefix << "_number); " << std::endl;
+    os << "\t        " << prefix
+       << "springsequilibrium:long_name = \"Dihedral ghost spring distance equilibrium\";" << std::endl;
+    os << std::endl;
+    os << "\tfloat   " << prefix << "springsdcoffset(" << prefix << "_number); " << std::endl;
+    os << "\t        " << prefix
+       << "springsdcoffset:long_name = \"Dihedral ghost spring's share of its axis's dihedral-energy correction\";"
+       << std::endl;
+    os << std::endl;
+}
+
+static void writeDihedralDataCDL(std::ostream & os, const std::string & prefix,
+                                 const std::vector<biospring::spn::Spring> & source)
+{
+    const size_t n = source.size();
+    if (n == 0)
+        return;
+
+    os << "\t" << prefix << "springs = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].getParticle1().getId() << ", " << source[i].getParticle2().getId();
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\t" << prefix << "springsstiffness = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << static_cast<float>(source[i].getStiffness());
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\t" << prefix << "springsequilibrium = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << static_cast<float>(source[i].getEquilibrium());
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\t" << prefix << "springsdcoffset = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].getDcOffset();
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+}
+
+// Writes ghost-particle anchor-binding binary NetCDF dimension/variable set
+// (own particle index + 3 anchor indices + r/theta/delta placement
+// parameters), or nothing at all if `source` is empty (same silent/backward
+// compatible convention as the dihedral ghost-spring families above).
+static void writeGhostParticleGroupBinary(NcFile * nc,
+                                          const std::vector<biospring::spn::GhostParticleBinding> & source)
+{
+    const size_t n = source.size();
+    if (n == 0)
+        return;
+
+    NcDim dim3 = nc->addDim("ghostparticleanchordim", 3);
+    NcDim gndim = nc->addDim("ghostparticle_number", n);
+
+    NcVar ownidx = nc->addVar("ghostparticleownindex", ncInt, gndim);
+    ownidx.putAtt("long_name", "Ghost particle own particle id");
+
+    std::vector<NcDim> andim(2);
+    andim[0] = gndim;
+    andim[1] = dim3;
+    NcVar anchoridx = nc->addVar("ghostparticleanchorindices", ncInt, andim);
+    anchoridx.putAtt("long_name", "Ghost particle anchor B/C/Ref particle ids");
+
+    NcVar rs = nc->addVar("ghostparticler", ncFloat, gndim);
+    rs.putAtt("units", "A");
+    rs.putAtt("long_name", "Ghost particle distance from anchor B");
+
+    NcVar thetas = nc->addVar("ghostparticletheta", ncFloat, gndim);
+    thetas.putAtt("units", "degree");
+    thetas.putAtt("long_name", "Ghost particle angle from the B->C axis");
+
+    NcVar deltas = nc->addVar("ghostparticledelta", ncFloat, gndim);
+    deltas.putAtt("units", "degree");
+    deltas.putAtt("long_name", "Ghost particle azimuthal angle from the reference direction");
+
+    NcVar placements = nc->addVar("ghostparticleplacement", ncInt, gndim);
+    placements.putAtt("long_name", "Ghost particle placement mode (see spn::GhostPlacement): "
+                                    "0 = rotated image of the reference atom about the axis (DIHEDRAL rings), "
+                                    "1 = on the axis at distance r from B");
+
+    GhostParticleBuffer buffer(n);
+    buffer.bufferize(source);
+
+    ownidx.putVar(buffer.ownindices);
+    anchoridx.putVar(buffer.anchorindices);
+    rs.putVar(buffer.rs);
+    thetas.putVar(buffer.thetas);
+    deltas.putVar(buffer.deltas);
+    placements.putVar(buffer.placements);
+}
+
+// CDL equivalents of the above, split the same way the dihedral families are.
+static void writeGhostParticleHeaderCDL(std::ostream & os, size_t n)
+{
+    if (n == 0)
+        return;
+    os << "\tghostparticleanchordim = 3; " << std::endl;
+    os << "\tghostparticle_number = " << n << ";" << std::endl;
+    os << std::endl;
+}
+
+static void writeGhostParticleVariablesCDL(std::ostream & os, size_t n)
+{
+    if (n == 0)
+        return;
+    os << "\tint     ghostparticleownindex(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticleownindex:long_name = \"Ghost particle own particle id\"; " << std::endl;
+    os << std::endl;
+    os << "\tint     ghostparticleanchorindices(ghostparticle_number,ghostparticleanchordim); " << std::endl;
+    os << "\t        ghostparticleanchorindices:long_name = \"Ghost particle anchor B/C/Ref particle ids\"; "
+       << std::endl;
+    os << std::endl;
+    os << "\tfloat   ghostparticler(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticler:units = \"A\" ;" << std::endl;
+    os << "\t        ghostparticler:long_name = \"Ghost particle distance from anchor B\";" << std::endl;
+    os << "\tfloat   ghostparticletheta(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticletheta:units = \"degree\" ;" << std::endl;
+    os << "\t        ghostparticletheta:long_name = \"Ghost particle angle from the B->C axis\";" << std::endl;
+    os << "\tfloat   ghostparticledelta(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticledelta:units = \"degree\" ;" << std::endl;
+    os << "\t        ghostparticledelta:long_name = \"Ghost particle azimuthal angle from the reference direction\";"
+       << std::endl;
+    os << "\tint     ghostparticleplacement(ghostparticle_number); " << std::endl;
+    os << "\t        ghostparticleplacement:long_name = \"Ghost particle placement mode: 0 = rotation, 1 = axial\";"
+       << std::endl;
+    os << std::endl;
+}
+
+static void writeGhostParticleDataCDL(std::ostream & os,
+                                      const std::vector<biospring::spn::GhostParticleBinding> & source)
+{
+    const size_t n = source.size();
+    if (n == 0)
+        return;
+
+    os << "\tghostparticleownindex = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].ownIndex;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticleanchorindices = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].anchorBIndex << ", " << source[i].anchorCIndex << ", " << source[i].anchorRefIndex;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticler = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].r;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticletheta = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].theta_deg;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticledelta = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << source[i].delta_deg;
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tghostparticleplacement = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        os << static_cast<int>(source[i].placement);
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+}
+
 NcFile * NetCDFWriter::safeOpenBinary()
 {
     NcFile * nc = nullptr;
@@ -150,6 +390,12 @@ void NetCDFWriter::writeBinary()
         nbofsprings.putVar(sbuffer.nbofspringsperparticle);
     }
 
+    for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        writeDihedralSpringGroupBinary(nc, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+            _spn->getDihedralSprings(family));
+
+    writeGhostParticleGroupBinary(nc, _spn->getGhostParticles());
+
     delete nc;
 }
 
@@ -181,6 +427,13 @@ void NetCDFWriter::_writeHeaderCDL()
         _ostream << "\tspring_number = " << nbsprings << ";" << std::endl;
         _ostream << std::endl;
     }
+
+
+    for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        writeDihedralHeaderCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+            _spn->getDihedralSprings(family).size());
+
+    writeGhostParticleHeaderCDL(_ostream, _spn->getGhostParticles().size());
 
     _ostream << "variables:" << std::endl;
     _ostream << "\tfloat   coordinates(particle_number, spatialdim); " << std::endl;
@@ -255,7 +508,15 @@ void NetCDFWriter::_writeHeaderCDL()
 
         _ostream << "\tfloat   springsequilibrium(spring_number); " << std::endl;
         _ostream << "\t        springsequilibrium:long_name = \"Spring distance equilibrium\";" << std::endl;
+        _ostream << std::endl;
     }
+
+
+    for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        writeDihedralVariablesCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+            _spn->getDihedralSprings(family).size());
+
+    writeGhostParticleVariablesCDL(_ostream, _spn->getGhostParticles().size());
 }
 
 void NetCDFWriter::_writeParticleDataCDL()
@@ -468,5 +729,13 @@ void NetCDFWriter::_writeSpringDataCDL()
                 _ostream << "," << std::endl;
         }
     }
+
+
+    for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
+        writeDihedralDataCDL(_ostream, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
+            _spn->getDihedralSprings(family));
+
+    writeGhostParticleDataCDL(_ostream, _spn->getGhostParticles());
+
     _ostream << "}" << std::endl;
 }

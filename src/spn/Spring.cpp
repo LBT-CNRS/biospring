@@ -17,11 +17,11 @@ void Spring::applyForceToParticle(const biospring::forcefield::ForceField & ff)
     _p2.addForce(-force);
 }
 
-Vector3f Spring::computeForce(const biospring::forcefield::ForceField & ff)
+Vector3f Spring::computeForce(const biospring::forcefield::ForceField & ff, bool ignoreDynamicState)
 {
     _energy = 0.0f;
 
-    if ((_p1.isRigid() && _p2.isRigid()) || (!_p1.isDynamic() && !_p2.isDynamic()))
+    if ((_p1.isRigid() && _p2.isRigid()) || (!ignoreDynamicState && !_p1.isDynamic() && !_p2.isDynamic()))
         return {};
 
     const Vector3f displacement = _p2.getPosition() - _p1.getPosition();

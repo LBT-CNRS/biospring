@@ -1,3 +1,18 @@
+# .nbi.ff = non-bonded interaction (per-atom-type charge/radius/epsilon/mass/
+# transfer-energy parameters -- steric, electrostatic, hydrophobicity, IMP).
+# Identical duplicate of the .ff file of the same name, kept only for
+# backward compatibility with --ff/--grp: the newer .nbi.ff/.bi.ff pair of
+# extensions distinguishes non-bonded (.nbi.ff, this file) from bonded
+# (.bi.ff -- dihedral ghost-ring springs on a --rigidbody topology, see
+# BondedForceFieldReader) parameter files.
+#
+# KEEP THE TWO IN SYNC. They drifted once: the twelve ACE/NME cap types were
+# appended here and not to amber.ff, and since pdb2spn skips any atom whose
+# type is missing WITHOUT logging it, --ff amber.ff quietly dropped every
+# capped structure's caps. Nothing enforces the invariant, so check it by
+# hand after editing either file:
+#   diff <(grep -vE '^#|^$' amber.ff) <(grep -vE '^#|^$' amber.nbi.ff)
+#
 #type	charge(e)	radius(A)	epsilon(kJ.mol-1)		mass(g.mol-1)	transferIMP(kJ.mol-1.A-2)	Hydrophobicity
 AC	0.5973	1.908	0.086	12.01	-0.0134	0.0
 ACA	0.0337	1.908	0.1094	12.01	-0.105	0.0
