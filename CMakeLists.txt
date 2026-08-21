@@ -150,6 +150,9 @@ set(BIOSPRING_CORE_SOURCES
     src/IO/PQRReader.cpp
     src/IO/PQRWriter.cpp
     src/IO/ReduceRuleReader.cpp
+    src/IO/RigidBodyRuleReader.cpp
+    src/rigidbodygroup/RigidBodyRule.cpp
+    src/rigidbodygroup/RigidBodyBuilder.cpp
     src/IO/XTCTrajWriter.cpp
     src/IO/modern/CSVTrajectoryWriter.cpp
     src/IO/modern/PDBTrajectoryWriter.cpp
