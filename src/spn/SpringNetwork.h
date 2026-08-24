@@ -307,6 +307,34 @@ class SpringNetwork
                               unsigned anchorRefIndex, float r,
                               float theta_deg, float delta_deg);
 
+    // Records which atoms are bonded to the two ends of the (B, C) torsion
+    // axis -- knowledge the force field has and the network cannot recover
+    // (it holds springs, not bonds). Only dihedral.distributetorque reads
+    // it; without that setting the lists are inert.
+    //
+    // Must be called AFTER the ghosts, since it attaches to an axis the
+    // ghosts create: an axis carrying no ghost is silently ignored, because
+    // there is no torsion on it to share out.
+    void setAxisSubstituents(unsigned anchorBIndex, unsigned anchorCIndex,
+                             const std::vector<unsigned> & substituentsB,
+                             const std::vector<unsigned> & substituentsC,
+                             const std::vector<double> & weightsB = {},
+                             const std::vector<double> & weightsC = {});
+
+    // How many axes carry substituent lists -- for the pdb2spn summary, the
+    // .nc writer, and the tests.
+    size_t getNumberOfAxesWithSubstituents() const;
+
+    // Flattens the axis substituent lists for the .nc writer: one (B, C)
+    // pair and one (countB, countC) pair per axis that has any, and every
+    // substituent index end to end in that order. Only axes that carry a
+    // list appear -- an axis with none has nothing to persist. Flattened
+    // here rather than exposing GhostAxis, which is an internal accumulator
+    // rewritten on every step.
+    void getAxisSubstituents(std::vector<std::array<unsigned, 2>> & anchors,
+                             std::vector<std::array<unsigned, 2>> & counts, std::vector<unsigned> & atoms,
+                             std::vector<float> * weights = nullptr) const;
+
     // Redistributes every ghost particle's currently accumulated force
     // (from ordinary spring force computation, e.g. a dihedral ghost
     // spring between two ghost particles) onto its 3 anchors, then resets
@@ -641,8 +669,47 @@ class SpringNetwork
         Vector3f sumGhostTorquesAboutB;
         Vector3f sumAtomForces;
         Vector3f sumAtomTorquesAboutB;
+
+        // Every atom bonded to B (excluding C) and to C (excluding B), from
+        // the force field's DIHEDRALAXIS records -- empty unless the model
+        // was built with them. Read only by dihedral.distributetorque, to
+        // spread this axis's torque the way AMBER spreads it instead of
+        // leaving it on the reference atoms the rings happen to image.
+        std::vector<unsigned> substituentsB;
+        std::vector<unsigned> substituentsC;
+
+        // Each substituent's share of this side's torsional barrier, as the
+        // force field assigns it -- parallel to the lists above. Empty, or a
+        // negative entry, means equal shares. AMBER's own split is NOT equal:
+        // on ubiquitin the largest/smallest share on one side has a median
+        // ratio of 1.40 and reaches 6.38, and only 35 % of sides are truly
+        // equal (the nucleic force fields are far more uniform, median 1.07
+        // and 1.00 -- which is why an equal split helped RNA and hurt
+        // protein).
+        std::vector<float> weightsB;
+        std::vector<float> weightsC;
+
+        // This step's torque about the axis, signed, one scalar per side --
+        // all a filtered force can carry, and all the distribution needs.
+        float axialTorqueB;
+        float axialTorqueC;
     };
     std::vector<GhostAxis> _ghostaxes;
+
+    // Set once distributetorque has been checked against what the model
+    // actually carries, so the per-step path never re-tests it and the
+    // warning is emitted once rather than 20000 times.
+    bool _distributetorque = false;
+
+    // Shares one side's axial torque over its substituents and applies it,
+    // accumulating what was applied into the axis totals so pass 3 still
+    // balances against what really reached the atoms. Returns false if the
+    // side cannot carry torque at all (no substituent with a lever arm), in
+    // which case the caller falls back to the ring's own reference atoms.
+    bool _distributeAxialTorque(GhostAxis & axis, const std::vector<unsigned> & substituents,
+                                const std::vector<float> & weights, float torque);
+
+    void _setupDihedralTorqueDistribution();
 
     // One bucket per dynamic-particle-loop index, filled while computing
     // nonbonded pair interactions in parallel: each pair is evaluated once,

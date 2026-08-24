@@ -172,17 +172,57 @@ class DihedralSetting : public SettingBase
     // Per-atom agreement with AMBER's own dihedral forces goes from a
     // correlation of 0.000 to 0.650, with the median magnitude ratio moving
     // from 21x to 1.00.
+    //
+    // ON by default, because there is no case where the unprojected force is
+    // the better answer -- it is not a trade-off between two models, it is a
+    // defect and its fix. The switch stays only so a run can be reproduced
+    // against results predating it, and so the two can be measured side by
+    // side; it is not a modelling choice.
     bool tangentialonly;
 
-    DihedralSetting(const std::string & name) : SettingBase(name), tangentialonly(false)
+    // Spread each axis's torsional torque over EVERY substituent bonded to
+    // its two axis atoms, instead of leaving it on the one or two reference
+    // atoms the ghost rings happen to be built from.
+    //
+    // The ring's total torque is already right (correlation 0.993 against
+    // AMBER over 468 axes on ubiquitin, mean error 0.69 kJ/mol/rad, zero sign
+    // flips) but it arrives CONCENTRATED: on 936 of 937 axes the ring pushes
+    // fewer atoms than AMBER does -- 1.35 against 4.92 on average -- so each
+    // atom it does push receives about 2.38x too much. AMBER splits a torsion
+    // into one term per (substituent, substituent) pair, each carrying an
+    // equal share, so every substituent on a side ends up with 1/N of that
+    // side's torque. This reproduces that split directly: |dphi/dr_i| =
+    // 1/(|r_i| sin theta), the inverse perpendicular radius, so a share of
+    // torque becomes a force by dividing by that atom's own lever arm. Total
+    // torque per side is unchanged by construction -- only its delivery is.
+    //
+    // The substituent lists are NOT derived at runtime. They come from
+    // DIHEDRALAXIS records in the .bi.ff, written by the same generator pass
+    // that emits the dihedral terms, and travel through the .nc -- the
+    // force field knows which atoms are bonded, and no runtime rule
+    // recovers that safely (a distance cutoff cannot separate 1-2 bonds
+    // from 1-3 pairs: a methyl's H...H is 1.78 A, shorter than a C-S bond at
+    // 1.81 A). A .nc written before those records existed simply carries no
+    // lists, and this setting then has nothing to act on -- it warns and
+    // leaves the ring's own reference atoms alone rather than guessing.
+    //
+    // OFF by default, unlike tangentialonly. The projection fixes a defect;
+    // this refines how an already-correct total is shared out, and it is the
+    // one place in the model where a force reaches an atom no spring
+    // connects it to.
+    bool distributetorque;
+
+    DihedralSetting(const std::string & name) : SettingBase(name), tangentialonly(true), distributetorque(false)
     {
-        _parameterNames = {"tangentialonly"};
+        _parameterNames = {"tangentialonly", "distributetorque"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
     {
         if (param == "tangentialonly")
             _parse_bool(tangentialonly, s, param);
+        else if (param == "distributetorque")
+            _parse_bool(distributetorque, s, param);
         else
             logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
     }
@@ -190,6 +230,7 @@ class DihedralSetting : public SettingBase
     void print(std::ostream & os = std::cout) const override
     {
         _mspFormatter.print("tangentialonly", tangentialonly, os);
+        _mspFormatter.print("distributetorque", distributetorque, os);
     }
 };
 

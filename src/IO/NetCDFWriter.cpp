@@ -251,6 +251,119 @@ static void writeGhostParticleDataCDL(std::ostream & os,
     }
 }
 
+// Which atoms are bonded to each torsion axis's two ends -- force-field
+// knowledge that cannot be recomputed from geometry, so it has to be
+// carried (see topology::Topology::DihedralAxisInfo). Written only if some
+// axis has a list, same silent/backward-compatible convention as the ghost
+// group above: a reader that finds no dimension simply has no lists.
+static void writeDihedralAxisGroupBinary(NcFile * nc, const std::vector<std::array<unsigned, 2>> & anchors,
+                                         const std::vector<std::array<unsigned, 2>> & counts,
+                                         const std::vector<unsigned> & atoms, const std::vector<float> & weights)
+{
+    if (anchors.empty())
+        return;
+
+    NcDim dim2 = nc->addDim("dihedralaxissidedim", 2);
+    NcDim andim = nc->addDim("dihedralaxis_number", anchors.size());
+    NcDim atdim = nc->addDim("dihedralaxisatom_number", atoms.size());
+
+    std::vector<NcDim> pairdim(2);
+    pairdim[0] = andim;
+    pairdim[1] = dim2;
+
+    NcVar anchorvar = nc->addVar("dihedralaxisanchorindices", ncInt, pairdim);
+    anchorvar.putAtt("long_name", "Torsion axis anchor B/C particle ids");
+
+    NcVar countvar = nc->addVar("dihedralaxissubstituentcounts", ncInt, pairdim);
+    countvar.putAtt("long_name", "Number of substituents on the B side and on the C side of each torsion axis");
+
+    NcVar atomvar = nc->addVar("dihedralaxissubstituents", ncInt, atdim);
+    atomvar.putAtt("long_name", "Particle ids of every torsion-axis substituent, axis by axis, B side then C side, "
+                                "sliced by dihedralaxissubstituentcounts");
+
+    NcVar weightvar = nc->addVar("dihedralaxissubstituentweights", ncFloat, atdim);
+    weightvar.putAtt("long_name", "Each torsion-axis substituent's share of its side's barrier, -1 where the force "
+                                  "field gave none (equal shares)");
+
+    DihedralAxisBuffer buffer;
+    buffer.initialize(anchors.size(), atoms.size());
+    for (size_t i = 0; i < anchors.size(); ++i)
+    {
+        buffer.anchorindices[i][0] = static_cast<int>(anchors[i][0]);
+        buffer.anchorindices[i][1] = static_cast<int>(anchors[i][1]);
+        buffer.counts[i][0] = static_cast<int>(counts[i][0]);
+        buffer.counts[i][1] = static_cast<int>(counts[i][1]);
+    }
+    for (size_t i = 0; i < atoms.size(); ++i)
+    {
+        buffer.atoms[i] = static_cast<int>(atoms[i]);
+        buffer.weights[i] = i < weights.size() ? weights[i] : -1.0f;
+    }
+
+    anchorvar.putVar(buffer.anchorindices);
+    countvar.putVar(buffer.counts);
+    if (!atoms.empty())
+    {
+        atomvar.putVar(buffer.atoms);
+        weightvar.putVar(buffer.weights);
+    }
+}
+
+static void writeDihedralAxisHeaderCDL(std::ostream & os, size_t nAxes, size_t nAtoms)
+{
+    if (nAxes == 0)
+        return;
+    os << "\tdihedralaxissidedim = 2 ;" << std::endl;
+    os << "\tdihedralaxis_number = " << nAxes << " ;" << std::endl;
+    os << "\tdihedralaxisatom_number = " << nAtoms << " ;" << std::endl;
+}
+
+static void writeDihedralAxisVariablesCDL(std::ostream & os, size_t nAxes)
+{
+    if (nAxes == 0)
+        return;
+    os << "\tint     dihedralaxisanchorindices(dihedralaxis_number,dihedralaxissidedim); " << std::endl;
+    os << "\t        dihedralaxisanchorindices:long_name = \"Torsion axis anchor B/C particle ids\"; " << std::endl;
+    os << std::endl;
+    os << "\tint     dihedralaxissubstituentcounts(dihedralaxis_number,dihedralaxissidedim); " << std::endl;
+    os << "\t        dihedralaxissubstituentcounts:long_name = \"Number of substituents on the B side and on the C "
+          "side of each torsion axis\"; "
+       << std::endl;
+    os << std::endl;
+    os << "\tint     dihedralaxissubstituents(dihedralaxisatom_number); " << std::endl;
+    os << "\t        dihedralaxissubstituents:long_name = \"Particle ids of every torsion-axis substituent, axis by "
+          "axis, B side then C side\"; "
+       << std::endl;
+    os << std::endl;
+}
+
+static void writeDihedralAxisDataCDL(std::ostream & os, const std::vector<std::array<unsigned, 2>> & anchors,
+                                     const std::vector<std::array<unsigned, 2>> & counts,
+                                     const std::vector<unsigned> & atoms)
+{
+    if (anchors.empty())
+        return;
+
+    os << "\tdihedralaxisanchorindices = " << std::endl;
+    for (size_t i = 0; i < anchors.size(); i++)
+    {
+        os << anchors[i][0] << ", " << anchors[i][1];
+        os << (i == anchors.size() - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tdihedralaxissubstituentcounts = " << std::endl;
+    for (size_t i = 0; i < counts.size(); i++)
+    {
+        os << counts[i][0] << ", " << counts[i][1];
+        os << (i == counts.size() - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\tdihedralaxissubstituents = " << std::endl;
+    for (size_t i = 0; i < atoms.size(); i++)
+    {
+        os << atoms[i];
+        os << (i == atoms.size() - 1 ? ";" : ",") << std::endl;
+    }
+}
+
 NcFile * NetCDFWriter::safeOpenBinary()
 {
     NcFile * nc = nullptr;
@@ -404,6 +517,11 @@ void NetCDFWriter::writeBinary()
             _spn->getDihedralSprings(family));
 
     writeGhostParticleGroupBinary(nc, _spn->getGhostParticles());
+    std::vector<std::array<unsigned, 2>> axisanchors, axiscounts;
+    std::vector<unsigned> axisatoms;
+    std::vector<float> axisweights;
+    _spn->getAxisSubstituents(axisanchors, axiscounts, axisatoms, &axisweights);
+    writeDihedralAxisGroupBinary(nc, axisanchors, axiscounts, axisatoms, axisweights);
 
     delete nc;
 }
@@ -445,6 +563,11 @@ void NetCDFWriter::_writeHeaderCDL()
             _spn->getDihedralSprings(family).size());
 
     writeGhostParticleHeaderCDL(_ostream, _spn->getGhostParticles().size());
+    std::vector<std::array<unsigned, 2>> axisanchors, axiscounts;
+    std::vector<unsigned> axisatoms;
+    std::vector<float> axisweights;
+    _spn->getAxisSubstituents(axisanchors, axiscounts, axisatoms, &axisweights);
+    writeDihedralAxisHeaderCDL(_ostream, axisanchors.size(), axisatoms.size());
 
     _ostream << "variables:" << std::endl;
     _ostream << "\tfloat   coordinates(particle_number, spatialdim); " << std::endl;
@@ -530,6 +653,9 @@ void NetCDFWriter::_writeHeaderCDL()
             _spn->getDihedralSprings(family).size());
 
     writeGhostParticleVariablesCDL(_ostream, _spn->getGhostParticles().size());
+    // Same axisanchors the dimension block above already fetched: this is one
+    // function, declaring dimensions then variables.
+    writeDihedralAxisVariablesCDL(_ostream, axisanchors.size());
 }
 
 void NetCDFWriter::_writeParticleDataCDL()
@@ -751,6 +877,11 @@ void NetCDFWriter::_writeSpringDataCDL()
             _spn->getDihedralSprings(family));
 
     writeGhostParticleDataCDL(_ostream, _spn->getGhostParticles());
+    std::vector<std::array<unsigned, 2>> axisanchors, axiscounts;
+    std::vector<unsigned> axisatoms;
+    std::vector<float> axisweights;
+    _spn->getAxisSubstituents(axisanchors, axiscounts, axisatoms, &axisweights);
+    writeDihedralAxisDataCDL(_ostream, axisanchors, axiscounts, axisatoms);
 
     _ostream << "}" << std::endl;
 }

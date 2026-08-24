@@ -383,6 +383,88 @@ def emit_bend(rule_name, resname, atom1, atom2, atom3_display, theta0_deg, k_bio
                  f"{theta0_deg:7.3f} {k_biospring:10.4f}")
     n_ok += 1
 
+n_axis_records = 0
+
+def axis_share_weights(b_pairs, c_pairs, b_class, c_class):
+    """Each substituent's share of its side's torsional barrier, as AMBER
+    assigns it. b_pairs/c_pairs are [(display_name, amber_class)].
+
+    AMBER writes one term per (substituent, substituent) pair, each with its
+    OWN k, so a substituent's share is the total |k| of every term it appears
+    in. Equal shares are the special case where those totals happen to match,
+    and they do NOT in general: measured on ubiquitin, the ratio between the
+    largest and smallest share on one side of an axis has a median of 1.40 and
+    reaches 6.38, and only 35 % of sides are genuinely equal. (The nucleic
+    force fields are far more uniform -- median 1.07 for OL15, 1.00 for OL3 --
+    which is exactly why an equal split helped on RNA and hurt on protein.)
+
+    Returns (b_weights, c_weights) normalised to sum to 1 per side, or None if
+    no AMBER term covers this axis at all -- in which case the record is
+    emitted without weights and biospring falls back to equal shares.
+
+    Approximation, stated plainly: a term's torque is k*n*sin(n*phi - phase),
+    not k, so a static weight is exact only when the terms a side carries
+    share their periodicity and phase. The ring produces one total torque for
+    the whole axis, so any split of it by fixed weights is approximate; this
+    one is at least AMBER's own weighting rather than a uniform guess."""
+    b_w = {name: 0.0 for name, _ in b_pairs}
+    c_w = {name: 0.0 for name, _ in c_pairs}
+    for bn, bc in b_pairs:
+        for cn, cc in c_pairs:
+            terms = axes.lookup_torsion_specific(bc, b_class, c_class, cc)
+            if terms is None:
+                terms = axes.lookup_torsion_wildcard(b_class, c_class)
+            if terms is None:
+                continue
+            total = sum(abs(k) for _, k, _ in terms)
+            b_w[bn] += total
+            c_w[cn] += total
+    out = []
+    for w, pairs in ((b_w, b_pairs), (c_w, c_pairs)):
+        s = sum(w.values())
+        if s <= 0.0:
+            return None
+        out.append([w[name] / s for name, _ in pairs])
+    return out[0], out[1]
+
+def emit_dihedral_axis(rule_name, resname, b_display, c_display, b_pairs, c_pairs, b_class, c_class):
+    """Every atom bonded to either end of one torsion axis, with the share of
+    that side's barrier AMBER gives it, so biospring can hand out the axis's
+    torque the way AMBER hands it out (dihedral.distributetorque -- see
+    spn::SpringNetwork::_distributeAxialTorque).
+
+    A ghost ring images ONE reference atom per side, whichever this generator
+    picked as b_neighbors[0]/c_neighbors[0]. AMBER instead writes one term per
+    (substituent, substituent) pair, so every bonded atom carries part of the
+    torque -- measured on ubiquitin, the ring pushes 1.35 atoms per axis
+    against AMBER's 4.92, hence ~2.38x too much force on each. The total
+    torque is already right; only its delivery is not.
+
+    This has to come from HERE rather than be recovered at runtime: the .nc
+    knows springs, not bonds, and no distance cutoff separates a 1-2 bond from
+    a 1-3 pair (a methyl's H...H is 1.78 A, shorter than a C-S bond at
+    1.81 A). The weights make that doubly true -- they are pure force-field
+    data with no geometric trace at all.
+
+    Written as `atom:weight`, a form no atom name can collide with. A record
+    whose atoms carry no `:` is still valid and means equal shares.
+
+    Emits nothing rather than an empty record when a side has no substituent
+    -- there is no torsion on such an axis anyway."""
+    global n_axis_records
+    if not b_pairs or not c_pairs:
+        return
+    weights = axis_share_weights(b_pairs, c_pairs, b_class, c_class)
+    if weights is None:
+        b_field = " ".join(name for name, _ in b_pairs)
+        c_field = " ".join(name for name, _ in c_pairs)
+    else:
+        b_field = " ".join("%s:%.4f" % (name, w) for (name, _), w in zip(b_pairs, weights[0]))
+        c_field = " ".join("%s:%.4f" % (name, w) for (name, _), w in zip(c_pairs, weights[1]))
+    lines.append(f"DIHEDRALAXIS {rule_name:20s} {resname:7s} {b_display:5s} {c_display:6s} "
+                 f"{len(b_pairs)} {b_field} {len(c_pairs)} {c_field}")
+    n_axis_records += 1
+
 def rel_name(vertex_atom, other_atom):
     # Same +/- convention as .rbody/STRETCH: name as-is if same residue,
     # "+"/"-" prefixed if the neighbour is in the next/previous residue.
@@ -757,6 +839,13 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label, per_pair=False)
         axes.bump_axis_skip()
         return
     b_ref, c_ref = b_neighbors[0], c_neighbors[0]
+
+    # Same-residue by construction here (real_bond_neighbors filters on the
+    # residue index), so the names need no +/- prefix.
+    emit_dihedral_axis(f"{resname}_{axis_label}_axis", resname, b_name, c_name,
+                       [(n, resolved_class(resname, n, False, False)) for n in b_neighbors],
+                       [(n, resolved_class(resname, n, False, False)) for n in c_neighbors],
+                       b_class, c_class)
 
     def side_geom(neighbors, vertex_class, other_class, ref_name, is_b_side):
         # Formula-derived delta (found and fixed 2026-08-08, same
@@ -1339,6 +1428,15 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
         axes.bump_axis_skip()
         return
 
+    # Backbone axes reach across residues -- phi's b-side holds the previous
+    # residue's C, psi's c-side the next residue's N -- so each neighbour is
+    # named through rel_name, which adds the "-"/"+" prefix the .bi.ff and
+    # .rbody both use.
+    emit_dihedral_axis(f"{resname}_{axis_label}_axis", resname, b_name, c_name,
+                       [(rel_name(b_atom, a)[1], bb_atom_class(a)) for a in b_neighbors],
+                       [(rel_name(c_atom, a)[1], bb_atom_class(a)) for a in c_neighbors],
+                       b_class, c_class)
+
     def group_target(b_atoms, c_atoms):
         """Target for a LOCAL (b_atoms x c_atoms) submatrix, using each
         list's own first entry as this group's own local reference (a
@@ -1555,6 +1653,15 @@ def generate_omega_axis(resname, source_resname=None):
         print(f"SKIP DIHEDRAL OMEGA ({resname}): missing a real CA on one side")
         axes.bump_axis_skip()
         return
+
+    # Omega has its own generator, so it needs its own call: without it the
+    # peptide bonds were the one family left uncovered -- ubiquitin reported
+    # 788 of 938 axes, and the 150 missing were exactly its 75 peptide bonds,
+    # both orientations each.
+    emit_dihedral_axis(f"{resname}_omega_axis", resname, "C", "+N",
+                       [(rel_name(b_atom, a)[1], bb_atom_class(a)) for a in b_neighbors],
+                       [(rel_name(b_atom, a)[1], bb_atom_class(a)) for a in c_neighbors],
+                       b_class, c_class)
 
     # delta_o/delta_other_c: derived PURELY from AMBER's own real
     # HarmonicAngleForce angle values at C(i) and N(i+1) (idealized_azimuth_
@@ -1804,5 +1911,5 @@ with open(OUT, "w") as f:
     f.write("\n".join(lines) + "\n")
 
 print(f"\nWrote {axes.n_ghost_particles} GHOSTPARTICLE entries and {axes.n_dihedral_ok} "
-     f"DIHEDRAL entries ({axes.n_dihedral_skip} skipped) and {n_ok} STRETCH/BEND entries "
-     f"({n_skip} skipped) to {OUT}")
+     f"DIHEDRAL entries ({axes.n_dihedral_skip} skipped), {n_axis_records} DIHEDRALAXIS entries "
+     f"and {n_ok} STRETCH/BEND entries ({n_skip} skipped) to {OUT}")

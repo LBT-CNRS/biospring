@@ -31,6 +31,7 @@ class NetCDFReader : public TopologyReaderBase
     // families in one shared order instead of two hand-kept lists.
     std::array<DihedralSpringBuffer, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT> _dihedralbuffers;
     GhostParticleBuffer _ghostparticlebuffer;
+    DihedralAxisBuffer _dihedralaxisbuffer;
 
     std::unique_ptr<netCDF::NcFile> _file;
     int _filec = -1;
@@ -47,6 +48,7 @@ class NetCDFReader : public TopologyReaderBase
     // readDihedralSpringGroup: an old .nc file, or one with no ghost
     // particles, simply has none of these variables).
     void readGhostParticles();
+    void readDihedralAxes();
 
     void readParticles();
     void readNumberOfParticles();
@@ -57,6 +59,7 @@ class NetCDFReader : public TopologyReaderBase
     void addBendSpringsToSpn();
     void addDihedralSpringsToSpn(unsigned family);
     void addGhostParticlesToSpn();
+    void addDihedralAxesToSpn();
 
     void checkNDims(const netCDF::NcVar & var, int ref);
     void checkDim(const netCDF::NcVar & var, int dimid, size_t size);

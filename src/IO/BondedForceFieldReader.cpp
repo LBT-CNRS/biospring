@@ -172,10 +172,75 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
                          tokens[8].c_str());
         _ghostparticles.push_back(entry);
     }
+    else if (type == "DIHEDRALAXIS")
+    {
+        // Variable length, unlike every other record: the substituent counts
+        // are data, not layout. "DIHEDRALAXIS <name> <resname> <atom_B>
+        // <atom_C> <nB> <B atoms...> <nC> <C atoms...>", so 7 fixed tokens
+        // plus nB + nC.
+        if (tokens.size() < 7)
+            logging::die("BondedForceFieldReader: line %d: DIHEDRALAXIS expects at least 7 tokens (type name resname "
+                         "atom_B atom_C nB [atoms...] nC [atoms...]), found %d",
+                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
+
+        DihedralAxisEntry entry;
+        entry.name = tokens[1];
+        entry.resname = tokens[2];
+        entry.atom_B = tokens[3];
+        entry.atom_C = tokens[4];
+
+        size_t cursor = 5;
+        for (int side = 0; side < 2; ++side)
+        {
+            size_t count = 0;
+            if (cursor >= tokens.size() || !utils::string::from_string(count, tokens[cursor]))
+                logging::die("BondedForceFieldReader: line %d: DIHEDRALAXIS expects a substituent count at token %d",
+                             static_cast<int>(line_id), static_cast<int>(cursor + 1));
+            cursor++;
+            if (cursor + count > tokens.size())
+                logging::die("BondedForceFieldReader: line %d: DIHEDRALAXIS announces %d substituents but only %d "
+                             "tokens remain",
+                             static_cast<int>(line_id), static_cast<int>(count),
+                             static_cast<int>(tokens.size() - cursor));
+            std::vector<std::string> & side_atoms = (side == 0) ? entry.substituents_B : entry.substituents_C;
+            std::vector<double> & side_weights = (side == 0) ? entry.weights_B : entry.weights_C;
+            for (size_t k = 0; k < count; ++k)
+            {
+                // "<atom>" or "<atom>:<weight>". A colon cannot occur in an
+                // atom name, so the split is unambiguous; a token without one
+                // means an equal share.
+                const std::string & token = tokens[cursor + k];
+                const size_t colon = token.find(':');
+                if (colon == std::string::npos)
+                {
+                    side_atoms.push_back(token);
+                    side_weights.push_back(-1.0);
+                    continue;
+                }
+                double weight = 0.0;
+                if (!utils::string::from_string(weight, token.substr(colon + 1)))
+                    logging::die("BondedForceFieldReader: line %d: DIHEDRALAXIS substituent '%s' has an invalid "
+                                 "weight",
+                                 static_cast<int>(line_id), token.c_str());
+                if (weight < 0.0)
+                    logging::die("BondedForceFieldReader: line %d: DIHEDRALAXIS substituent '%s' has a negative "
+                                 "weight",
+                                 static_cast<int>(line_id), token.c_str());
+                side_atoms.push_back(token.substr(0, colon));
+                side_weights.push_back(weight);
+            }
+            cursor += count;
+        }
+        if (cursor != tokens.size())
+            logging::die("BondedForceFieldReader: line %d: DIHEDRALAXIS has %d unexpected trailing token(s)",
+                         static_cast<int>(line_id), static_cast<int>(tokens.size() - cursor));
+
+        _dihedral_axes.push_back(entry);
+    }
     else
     {
         logging::die("BondedForceFieldReader: line %d: unknown entry type '%s' (expected STRETCH, BEND, "
-                     "GHOSTPARTICLE or DIHEDRAL)",
+                     "GHOSTPARTICLE, DIHEDRAL or DIHEDRALAXIS)",
                      static_cast<int>(line_id), type.c_str());
     }
 }
@@ -196,9 +261,9 @@ void BondedForceFieldReader::read()
     }
     close();
 
-    logging::info("BondedForceFieldReader: read %zu stretching, %zu bending, %zu ghost particle and %zu dihedral "
-                 "rule(s).",
-                 _stretch.size(), _bend.size(), _ghostparticles.size(), _dihedral.size());
+    logging::info("BondedForceFieldReader: read %zu stretching, %zu bending, %zu ghost particle, %zu dihedral and "
+                 "%zu dihedral-axis rule(s).",
+                 _stretch.size(), _bend.size(), _ghostparticles.size(), _dihedral.size(), _dihedral_axes.size());
 }
 
 std::vector<BondedForceFieldReader::ResidueParticleIndices>
@@ -333,6 +398,49 @@ bool BondedForceFieldReader::_existing_equilibrium(topology::Topology & topology
         return false;
     equilibrium = existing->equilibrium();
     return true;
+}
+
+void BondedForceFieldReader::_register_axis_substituents(topology::Topology & topology,
+                                                          std::vector<ResidueParticleIndices> & residues, size_t index,
+                                                          const std::string & resname,
+                                                          const reduce::ReduceRuleContainer * translation) const
+{
+    for (const DihedralAxisEntry & entry : _dihedral_axes)
+    {
+        if (entry.resname != resname)
+            continue;
+
+        topology::Particle * anchor_b = _resolve_atom(entry.atom_B, residues, index, topology, translation);
+        topology::Particle * anchor_c = _resolve_atom(entry.atom_C, residues, index, topology, translation);
+        if (anchor_b == nullptr || anchor_c == nullptr)
+            continue;
+
+        std::vector<topology::pid_t> b_uids, c_uids;
+        std::vector<double> b_weights, c_weights;
+        for (int side = 0; side < 2; ++side)
+        {
+            const std::vector<std::string> & names = (side == 0) ? entry.substituents_B : entry.substituents_C;
+            const std::vector<double> & weights = (side == 0) ? entry.weights_B : entry.weights_C;
+            std::vector<topology::pid_t> & uids = (side == 0) ? b_uids : c_uids;
+            std::vector<double> & out_weights = (side == 0) ? b_weights : c_weights;
+            for (size_t k = 0; k < names.size(); ++k)
+            {
+                topology::Particle * p = _resolve_atom(names[k], residues, index, topology, translation);
+                // A substituent that does not resolve is dropped, not fatal:
+                // a chain terminus genuinely lacks the neighbouring residue's
+                // atoms, and the surviving weights are renormalised later.
+                if (p == nullptr)
+                    continue;
+                uids.push_back(p->unique_id());
+                out_weights.push_back(weights[k]);
+            }
+        }
+
+        if (b_uids.empty() && c_uids.empty())
+            continue;
+
+        topology.add_dihedral_axis(*anchor_b, *anchor_c, b_uids, c_uids, b_weights, c_weights);
+    }
 }
 
 unsigned BondedForceFieldReader::_create_ghost_particles(topology::Topology & topology,
@@ -509,7 +617,12 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
         const std::string resname = topology.get_particle(residues[index][0]).properties().residue_name();
 
         if (enableGhostParticles)
+        {
             nb_ghostparticles_created += _create_ghost_particles(topology, residues, index, resname, translation);
+            // Gated on the same flag: the substituent lists exist to share out
+            // a ring's torque, so they mean nothing where no ring was built.
+            _register_axis_substituents(topology, residues, index, resname, translation);
+        }
 
         if (enableStretch)
             for (const StretchEntry & entry : _stretch)

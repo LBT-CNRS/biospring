@@ -118,7 +118,7 @@ Bonds and valence angles have no `.msp` switch and no `pdb2spn` flag of their ow
 held by the `--rigidbody` mesh at `--stiffness`. See `073.BondedStages`' README in the
 Biospring-Example repository for
 why the model is built that way, and for the `--stiffness` value it needs.
-* **dihedral.tangentialonly = 0** *(boolean)* Project each ghost ring's reaction onto the
+* **dihedral.tangentialonly = 1** *(boolean)* Project each ghost ring's reaction onto the
 tangential direction about its own axis before it reaches the real atoms, so a torsion pushes a
 substituent only *around* that axis -- which is exactly what AMBER's dihedral force does
 (`F` is along `r_ij x r_jk`, hence perpendicular to both the axis and the i-j-k plane). What the
@@ -134,10 +134,59 @@ scale with `--stiffness` while the mesh's resistance does, it is what forces a s
 the projection, stiffness can drop from 8000 to 500 and the timestep rise from 1.0 to 4.0 fs,
 with *better* geometry at equal simulated time (CA-RMSD 1.60 -> 1.48 A over 20 ps).
 
-Off by default: it changes the forces of an existing model, so it is opted into rather than
-imposed. **Known limit**: the torque is right in total and in direction, but it is delivered
-concentrated -- on 936 of 937 axes the ring pushes fewer substituents than AMBER (1.35 against
-4.92 on average), so the force on the atoms it does push is about 2.4x too large.
+On by default. There is no case where the unprojected force is the better answer -- it is not a
+choice between two models but a defect and its fix, and leaving it off meant every example turning
+it on. The switch remains so a run can be reproduced against results predating it, and so the two
+can be measured side by side. The torque it produces is right in total and in direction, but it
+arrives concentrated -- on 936 of 937 axes the ring pushes fewer substituents than AMBER (1.35
+against 4.92 on average), so the force on the atoms it does push is about 2.4x too large. That is
+what `dihedral.distributetorque` below addresses.
+* **dihedral.distributetorque = 0** *(boolean)* Share each axis's torsional torque over *every*
+atom bonded to its two ends, instead of leaving it on the one or two reference atoms the ghost
+rings happen to be built from. AMBER splits a torsion into one term per (substituent,
+substituent) pair, each with its own barrier, so every substituent of a side carries part of the
+torque; this reproduces that split directly. A share becomes a force by one division:
+`|dphi/dr_i| = 1/(|r_i| sin theta)`, the inverse perpendicular radius, so each atom is pushed
+tangentially at its own lever arm. **The total torque per side is unchanged by construction** --
+only its delivery is.
+
+**The shares are AMBER's, not equal**, and that distinction is what makes the option worth
+having. Each substituent's weight -- the fraction of its side's barrier AMBER assigns it -- is
+written in the `DIHEDRALAXIS` record as `atom:weight`. Equal shares are not AMBER's rule: on
+ubiquitin the ratio between the largest and smallest share on one side has a median of 1.40 and
+reaches 6.38, and only 35 % of sides are genuinely equal. (The nucleic force fields are far more
+uniform: median 1.07 for OL15, 1.00 for OL3.) A record written without weights still works and
+means equal shares.
+
+Measured on ubiquitin, one step from rest with the dihedral term alone, against AMBER's own
+per-atom torsion forces over the 1038 atoms AMBER pushes (a BioSpring zero counting as zero):
+
+| | projection only | equal shares | AMBER's shares |
+|---|---|---|---|
+| atoms reached, of those AMBER pushes | 83 % | 96 % | 96 % |
+| cos to AMBER's force, median | 0.933 | 0.951 | **0.984** |
+| rms\|F_bio - F_amber\| (kJ/mol/A) | 8.87 | 9.53 | **7.24** |
+
+Equal shares make agreement *worse* than not distributing at all; AMBER's shares improve it by
+18 %. On DNA and RNA the three variants sit within 1.2 % of each other, on a baseline three
+times larger (about 31 kJ/mol/A) that is dominated by the axes BioSpring deliberately does not
+model there -- the frozen furanose and the rigid base cliques -- so those two systems do not
+discriminate between the variants either way.
+
+**Two requirements, both checked at startup** rather than left to fail quietly. It needs
+`dihedral.tangentialonly`, because converting a force to a torque and back keeps only what turns
+about the axis: with the raw force the radial and axial parts would be discarded rather than
+distributed, which is a different model than the one asked for. And it needs a model built with
+`DIHEDRALAXIS` records in its `.bi.ff` -- the lists come from the force field, travel through the
+`.nc`, and are *not* derived at runtime, because the `.nc` knows springs rather than bonds and no
+distance cutoff separates a 1-2 bond from a 1-3 pair (a methyl's H...H is 1.78 A, shorter than a
+C-S bond at 1.81 A). Either requirement unmet: a warning naming the cause, and distribution stays
+off. Coverage is complete on the current force fields -- 938/938 torsion axes on ubiquitin,
+488/488 on the DNA duplex, 160/160 on the RNA hairpin.
+
+Off by default, unlike `tangentialonly`. The projection fixes a defect; this refines how an
+already-correct total is shared out, and it is the one place in the model where a force reaches an
+atom that no spring connects it to.
 
 * **viscosity.enable = 0** *(boolean)* Enables a damping factor on the particles.
 * **viscosity.value = 1.0** *(Da.fs-1, float)* Damping factor.

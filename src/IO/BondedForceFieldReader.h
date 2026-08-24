@@ -96,6 +96,42 @@ struct GhostParticleEntry
     double delta_deg;
 };
 
+// Every atom bonded to one end of a torsion axis, so the torque a ring
+// produces can be shared out the way AMBER shares it (see
+// configuration::DihedralSetting::distributetorque, which is the only thing
+// that reads this -- the entry is inert otherwise).
+//
+// A ghost ring images ONE reference atom per side, whichever the generator
+// picked; AMBER instead writes one term per (substituent, substituent) pair,
+// so every atom bonded to B or C ends up carrying an equal share. Recovering
+// that list at runtime is not safely possible: the .nc knows springs, not
+// bonds, and no distance cutoff separates a 1-2 bond from a 1-3 pair -- a
+// methyl's H...H is 1.78 A, shorter than a C-S bond at 1.81 A. The force
+// field, on the other hand, knows exactly, so it says so here.
+//
+// substituents_B excludes atom_C and substituents_C excludes atom_B: the two
+// axis atoms are not substituents of each other, and an atom on the axis has
+// no lever arm to carry torque with anyway.
+// Each substituent is written as `<atom>` or `<atom>:<weight>`, the weight
+// being that atom's share of its side's torsional barrier as AMBER assigns
+// it. Equal shares are NOT AMBER's rule: measured on ubiquitin, the ratio
+// between the largest and smallest share on one side has a median of 1.40 and
+// reaches 6.38, and only 35 % of sides are genuinely equal. A record with no
+// weights is valid and means equal shares.
+//
+// Weights are per SPELLING, so a nucleic atom listed under two names carries
+// its share twice and a side's written total can exceed 1. That is deliberate
+// and safe: they are renormalised over the atoms that actually resolve, which
+// is also what makes a dropped chain-terminus substituent harmless.
+struct DihedralAxisEntry
+{
+    std::string resname, name, atom_B, atom_C;
+    std::vector<std::string> substituents_B;
+    std::vector<std::string> substituents_C;
+    std::vector<double> weights_B;
+    std::vector<double> weights_C;
+};
+
 // Parses a .bi.ff file ("bonded interaction .force field" -- see the
 // .nbi.ff/.bi.ff naming note in data/forcefield/*.nbi.ff): lines of
 // "STRETCH <name> <resname> <atom1> <atom2> <r0_A> <k_kJ.mol-1.A-2>",
@@ -107,9 +143,11 @@ struct GhostParticleEntry
 // <k_kJ.mol-1.A-2> <dc_offset_kJ.mol-1>" (atom_ref/atom_rotant may each name
 // either a real atom or a GHOSTPARTICLE defined earlier in the same
 // residue; dc_offset is this spring's share of its axis's exact
-// dihedral-energy correction, see DihedralEntry). Atom names may carry a
-// "+"/"-" prefix (CHARMM-style: next/previous residue), same convention as
-// .rbody.
+// dihedral-energy correction, see DihedralEntry), or "DIHEDRALAXIS <name>
+// <resname> <atom_B> <atom_C> <nB> <B atoms...> <nC> <C atoms...>" (see
+// DihedralAxisEntry -- the only variable-length record here, and the only
+// one that creates no spring). Atom names may carry a "+"/"-" prefix
+// (CHARMM-style: next/previous residue), same convention as .rbody.
 //
 // TODO(ring planarity): ring groups in ProteinAtomRigidGroups.rbody
 // (aromatic side chains, guanidinium, proline ring) also carry pairwise
@@ -242,10 +280,24 @@ class BondedForceFieldReader : public ReaderBase
     std::vector<BendEntry> _bend;
     std::vector<DihedralEntry> _dihedral;
     std::vector<GhostParticleEntry> _ghostparticles;
+    std::vector<DihedralAxisEntry> _dihedral_axes;
 
     using ResidueParticleIndices = std::vector<size_t>;
 
     void _parse_line(const std::string & line, size_t line_id);
+
+    // Resolves each DIHEDRALAXIS entry matching `resname` and records it on
+    // the topology. Unlike the spring families this creates nothing and
+    // changes no force: it only names atoms, for
+    // dihedral.distributetorque to use later. An entry whose axis does not
+    // resolve is skipped silently -- the same axis's GHOSTPARTICLE lines
+    // will have warned already, and a chain terminus legitimately has no
+    // -O3'/+P to resolve. Individual substituents that do not resolve are
+    // dropped from the list, which stays valid: a share is 1/N of whatever
+    // is actually there.
+    void _register_axis_substituents(topology::Topology & topology, std::vector<ResidueParticleIndices> & residues,
+                                     size_t index, const std::string & resname,
+                                     const reduce::ReduceRuleContainer * translation) const;
 
     std::vector<ResidueParticleIndices> _group_particles_by_residue(const topology::Topology & topology) const;
 

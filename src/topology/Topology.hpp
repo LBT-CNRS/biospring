@@ -135,8 +135,37 @@ class Topology
         unsigned placement;
     };
 
+    // Every atom bonded to one end of a torsion axis, so a ring's torque can
+    // be shared out the way AMBER shares it -- see
+    // IO::DihedralAxisEntry, which is where these come from, and
+    // configuration::DihedralSetting::distributetorque, which is the only
+    // thing that acts on them.
+    //
+    // Carried alongside the ghosts rather than derived with them because it
+    // is knowledge the FORCE FIELD has and the geometry does not: which
+    // atoms are covalently bonded. Uids, not indices, for the same reason as
+    // GhostParticleInfo -- remove_particle can reorder the collection.
+    struct DihedralAxisInfo
+    {
+        pid_t anchor_B_uid;
+        pid_t anchor_C_uid;
+        std::vector<pid_t> substituents_B_uid;
+        std::vector<pid_t> substituents_C_uid;
+        // Each substituent's share of its side's torsional barrier, parallel
+        // to the uid lists. A negative entry means "unweighted" -- a force
+        // field that writes no weights, for which equal shares are used.
+        std::vector<double> weights_B;
+        std::vector<double> weights_C;
+    };
+
   protected:
     std::unordered_map<pid_t, GhostParticleInfo> _ghost_particles;
+
+    // One entry per distinct (B, C) axis. A plain vector, not a map: axes are
+    // few next to ghosts (example 072: a few hundred against 6484), the
+    // natural key would be a pair, and both producers append rather than
+    // look up.
+    std::vector<DihedralAxisInfo> _dihedral_axes;
 
   public:
     // =============================================================================
@@ -249,6 +278,7 @@ class Topology
         for (auto & family : _dihedral_springs)
             family.clear();
         _ghost_particles.clear();
+        _dihedral_axes.clear();
         _particles.data().reserve(n);
         _copy_particles(snapshot);
         _copy_springs(snapshot);
@@ -269,11 +299,22 @@ class Topology
                                   const Particle & anchor_ref, double r, double theta_deg, double delta_deg,
                                   unsigned placement)
     {
+        // The three uids are read BEFORE the push_back, and that ordering is
+        // load-bearing. anchor_B/C/ref are references INTO _particles, and
+        // push_back can reallocate it -- after which all three dangle and
+        // unique_id() reads freed memory, silently recording a ghost whose
+        // anchors are 0. It is the same hazard reserve_particles exists to
+        // manage for springs, and it stayed invisible because pdb2spn always
+        // reserves first: only a topology built small and grown in place hits
+        // the reallocation (found 2026-08-21 by a 4-particle unit test, where
+        // adding the ghost grew capacity from 4 to 8).
+        const pid_t b_uid = anchor_B.unique_id();
+        const pid_t c_uid = anchor_C.unique_id();
+        const pid_t ref_uid = anchor_ref.unique_id();
         _particles.push_back(particle);
         Particle & added = _particles[_particles.size() - 1];
         _ghost_particles[added.unique_id()] =
-            GhostParticleInfo{anchor_B.unique_id(), anchor_C.unique_id(), anchor_ref.unique_id(), r, theta_deg,
-                              delta_deg, placement};
+            GhostParticleInfo{b_uid, c_uid, ref_uid, r, theta_deg, delta_deg, placement};
         return added;
     }
 
@@ -295,6 +336,40 @@ class Topology
             _particles[anchor_B_index].unique_id(), _particles[anchor_C_index].unique_id(),
             _particles[anchor_ref_index].unique_id(), r, theta_deg, delta_deg, placement};
     }
+
+    // Records the substituents of one torsion axis (see DihedralAxisInfo).
+    // Creates nothing and changes no force -- it only names atoms, for
+    // dihedral.distributetorque to act on later.
+    void add_dihedral_axis(const Particle & anchor_B, const Particle & anchor_C,
+                           const std::vector<pid_t> & substituents_B, const std::vector<pid_t> & substituents_C,
+                           const std::vector<double> & weights_B = {}, const std::vector<double> & weights_C = {})
+    {
+        _dihedral_axes.push_back(DihedralAxisInfo{anchor_B.unique_id(), anchor_C.unique_id(), substituents_B,
+                                                  substituents_C, weights_B, weights_C});
+    }
+
+    // Same, by index, for NetCDFReader -- which reads particles first and
+    // only learns the axes from a separate buffer afterwards, exactly as it
+    // does for ghosts (see register_ghost_particle).
+    void register_dihedral_axis(size_t anchor_B_index, size_t anchor_C_index,
+                                const std::vector<size_t> & substituents_B_index,
+                                const std::vector<size_t> & substituents_C_index,
+                                const std::vector<double> & weights_B = {},
+                                const std::vector<double> & weights_C = {})
+    {
+        DihedralAxisInfo info;
+        info.anchor_B_uid = _particles[anchor_B_index].unique_id();
+        info.anchor_C_uid = _particles[anchor_C_index].unique_id();
+        for (size_t i : substituents_B_index)
+            info.substituents_B_uid.push_back(_particles[i].unique_id());
+        for (size_t i : substituents_C_index)
+            info.substituents_C_uid.push_back(_particles[i].unique_id());
+        info.weights_B = weights_B;
+        info.weights_C = weights_C;
+        _dihedral_axes.push_back(info);
+    }
+
+    const std::vector<DihedralAxisInfo> & dihedral_axes() const { return _dihedral_axes; }
 
     // =============================================================================
     // Spring manipulation.
@@ -600,6 +675,22 @@ class Topology
             size_t j = _particles.by_uid().at(source.second().unique_id());
             spn.addBendSpring(i, j, source.equilibrium(), source.stiffness());
         }
+
+        // Axis substituent lists (see DihedralAxisInfo). Last, and it has to
+        // be: the network resolves each one onto an axis that only exists
+        // because a ghost created it, so every ghost must already be in.
+        // An axis with no ghost on it is dropped there, not here.
+        for (const DihedralAxisInfo & info : _dihedral_axes)
+        {
+            std::vector<unsigned> b_indices, c_indices;
+            for (pid_t uid : info.substituents_B_uid)
+                b_indices.push_back(static_cast<unsigned>(_particles.by_uid().at(uid)));
+            for (pid_t uid : info.substituents_C_uid)
+                c_indices.push_back(static_cast<unsigned>(_particles.by_uid().at(uid)));
+            spn.setAxisSubstituents(static_cast<unsigned>(_particles.by_uid().at(info.anchor_B_uid)),
+                                    static_cast<unsigned>(_particles.by_uid().at(info.anchor_C_uid)), b_indices,
+                                    c_indices, info.weights_B, info.weights_C);
+        }
     }
 
   protected:
@@ -679,6 +770,23 @@ class Topology
                 GhostParticleInfo{_particles[b_index].unique_id(), _particles[c_index].unique_id(),
                                   _particles[ref_index].unique_id(), info.r, info.theta_deg, info.delta_deg,
                                   info.placement};
+        }
+
+        // The axis substituent lists travel with the ghosts and need the same
+        // uid re-resolution: they are uids into `other`, meaningless here.
+        _dihedral_axes.clear();
+        for (const DihedralAxisInfo & info : other._dihedral_axes)
+        {
+            DihedralAxisInfo copy;
+            copy.anchor_B_uid = _particles[other._particles.by_uid().at(info.anchor_B_uid)].unique_id();
+            copy.anchor_C_uid = _particles[other._particles.by_uid().at(info.anchor_C_uid)].unique_id();
+            for (pid_t uid : info.substituents_B_uid)
+                copy.substituents_B_uid.push_back(_particles[other._particles.by_uid().at(uid)].unique_id());
+            for (pid_t uid : info.substituents_C_uid)
+                copy.substituents_C_uid.push_back(_particles[other._particles.by_uid().at(uid)].unique_id());
+            copy.weights_B = info.weights_B;
+            copy.weights_C = info.weights_C;
+            _dihedral_axes.push_back(copy);
         }
     }
 };

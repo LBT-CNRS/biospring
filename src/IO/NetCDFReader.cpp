@@ -142,6 +142,14 @@ void NetCDFReader::read()
         // constraint relative to the spring/dihedral steps above.
         readGhostParticles();
         addGhostParticlesToSpn();
+
+        // Axis substituent lists, which only name already-added particles --
+        // so, like the ghosts, this needs addParticlesToSpn() to have run and
+        // nothing else. The ordering that does matter is on the network side,
+        // where the lists attach to axes the ghosts create (see
+        // Topology::to_spring_network).
+        readDihedralAxes();
+        addDihedralAxesToSpn();
     }
     catch (netCDF::exceptions::NcException & e)
     {
@@ -371,6 +379,104 @@ void NetCDFReader::readGhostParticles()
     checkNDims(data, 1);
     checkDim(data, 0, n);
     data.getVar(_ghostparticlebuffer.placements);
+}
+
+void NetCDFReader::readDihedralAxes()
+{
+    // Optional in the same way and for the same reasons as the ghosts above,
+    // with one extra case: a .nc written before DIHEDRALAXIS records existed
+    // has ghosts but no axis lists. dihedral.distributetorque then has
+    // nothing to act on and says so at setup, rather than the file failing to
+    // load over a setting it may not even use.
+    netCDF::NcDim dim = _file->getDim("dihedralaxis_number");
+    if (dim.isNull())
+    {
+        _dihedralaxisbuffer.initialize(0, 0);
+        return;
+    }
+
+    const size_t n = dim.getSize();
+    netCDF::NcDim atomdim = _file->getDim("dihedralaxisatom_number");
+    const size_t natoms = atomdim.isNull() ? 0 : atomdim.getSize();
+    _dihedralaxisbuffer.initialize(n, natoms);
+    if (n == 0)
+        return;
+
+    netCDF::NcVar data;
+
+    data = getNcVar("dihedralaxisanchorindices");
+    checkNDims(data, 2);
+    checkDim(data, 0, n);
+    checkDim(data, 1, 2);
+    data.getVar(_dihedralaxisbuffer.anchorindices);
+
+    data = getNcVar("dihedralaxissubstituentcounts");
+    checkNDims(data, 2);
+    checkDim(data, 0, n);
+    checkDim(data, 1, 2);
+    data.getVar(_dihedralaxisbuffer.counts);
+
+    if (natoms > 0)
+    {
+        data = getNcVar("dihedralaxissubstituents");
+        checkNDims(data, 1);
+        checkDim(data, 0, natoms);
+        data.getVar(_dihedralaxisbuffer.atoms);
+
+        // Optional on its own: a .nc written before the weights existed has
+        // the substituent lists but no shares, and equal shares are the right
+        // reading of that. -1 is the same "none given" marker the .bi.ff's
+        // unweighted form produces.
+        data = getNcVar("dihedralaxissubstituentweights", /*mandatory=*/false);
+        if (!data.isNull())
+        {
+            checkNDims(data, 1);
+            checkDim(data, 0, natoms);
+            data.getVar(_dihedralaxisbuffer.weights);
+        }
+        else
+            for (size_t i = 0; i < natoms; ++i)
+                _dihedralaxisbuffer.weights[i] = -1.0f;
+    }
+}
+
+void NetCDFReader::addDihedralAxesToSpn()
+{
+    // The counts slice the flat atom list, so the offset has to run forward
+    // across axes: axis i starts where axis i-1 ended. A count that overruns
+    // the list would mean a truncated or hand-edited file, so it is checked
+    // rather than trusted -- reading past the end would be silent corruption.
+    size_t offset = 0;
+    for (size_t i = 0; i < _dihedralaxisbuffer.number_of_axes; ++i)
+    {
+        const size_t countB = static_cast<size_t>(_dihedralaxisbuffer.counts[i][0]);
+        const size_t countC = static_cast<size_t>(_dihedralaxisbuffer.counts[i][1]);
+        if (offset + countB + countC > _dihedralaxisbuffer.number_of_atoms)
+        {
+            logging::warning("Torsion axis %zu declares %zu substituents but only %zu remain in the file: the "
+                             "dihedral axis lists are inconsistent and are dropped.",
+                             i, countB + countC, _dihedralaxisbuffer.number_of_atoms - offset);
+            return;
+        }
+
+        std::vector<size_t> b_indices, c_indices;
+        std::vector<double> b_weights, c_weights;
+        for (size_t k = 0; k < countB; ++k)
+        {
+            b_indices.push_back(static_cast<size_t>(_dihedralaxisbuffer.atoms[offset + k]));
+            b_weights.push_back(_dihedralaxisbuffer.weights[offset + k]);
+        }
+        for (size_t k = 0; k < countC; ++k)
+        {
+            c_indices.push_back(static_cast<size_t>(_dihedralaxisbuffer.atoms[offset + countB + k]));
+            c_weights.push_back(_dihedralaxisbuffer.weights[offset + countB + k]);
+        }
+        offset += countB + countC;
+
+        _topology.register_dihedral_axis(static_cast<size_t>(_dihedralaxisbuffer.anchorindices[i][0]),
+                                         static_cast<size_t>(_dihedralaxisbuffer.anchorindices[i][1]), b_indices,
+                                         c_indices, b_weights, c_weights);
+    }
 }
 
 void NetCDFReader::readNumberOfParticles()
