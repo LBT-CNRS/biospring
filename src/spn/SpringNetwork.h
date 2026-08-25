@@ -524,6 +524,12 @@ class SpringNetwork
     virtual void computeBendForces();
     virtual void computeDihedralForces();
     virtual void computeHydrogenBondForces();
+
+    // Where a donor's hydrogen points, as a unit vector (zero if the donor
+    // names no antecedent). Shared by the candidate ranking and the log; the
+    // force computes the same direction inline because its gradient needs the
+    // two individual bond directions as well, not only their sum.
+    Vector3f donorDirection(const Particle & p) const;
     virtual void computeParticleForces();
     virtual void updateParticlePositions();
 

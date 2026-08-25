@@ -24,10 +24,18 @@ struct DonorAcceptorRole
     // none, in which case the bond keeps its old, purely distance-based
     // behaviour for this atom. See ParticleProperties::antecedentIndex.
     std::string antecedent;
+
+    // A SECOND antecedent, optional. One is not enough for a planar sp2
+    // donor: a backbone amide nitrogen sits between CA and the previous
+    // residue's C, and its hydrogen points opposite their bisector, 58
+    // degrees off the CA->N direction a single antecedent gives. Naming both
+    // recovers the true N-H direction to under a degree. Same for a guanine
+    // N1 or a thymine N3 between two ring carbons.
+    std::string antecedent2;
 };
 
 // Parses a .hbond file: lines of
-// "<resname> <atomname> <donor> <acceptor> [<antecedent>]", donor/acceptor
+// "<resname> <atomname> <donor> <acceptor> [<antecedent> [<antecedent2>]]", donor/acceptor
 // being CAPACITIES (0, 1, 2...) rather than flags -- 0/1 keeps its old
 // meaning exactly, so a table written before capacities existed still reads
 // the same. The fifth column is optional and names the heavy atom that gives
