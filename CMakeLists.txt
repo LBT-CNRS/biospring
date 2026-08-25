@@ -155,6 +155,7 @@ set(BIOSPRING_CORE_SOURCES
     src/IO/RigidBodyRuleReader.cpp
     src/rigidbodygroup/RigidBodyRule.cpp
     src/rigidbodygroup/RigidBodyBuilder.cpp
+    src/staticbond/StaticBondBuilder.cpp
     src/IO/XTCTrajWriter.cpp
     src/IO/modern/CSVTrajectoryWriter.cpp
     src/IO/modern/PDBTrajectoryWriter.cpp
