@@ -1,0 +1,103 @@
+#Donor/acceptor classification for the dynamic hydrogen-bond mechanism,
+#keyed by amber.grp's renamed particle types (e.g. ALA:N -> AN) instead of
+#plain PDB atom names -- companion table to amber.grp/amber.ff, generated
+#by cross-referencing amber.grp against ProteinDonorAcceptor.hbond (same
+#classification, see that file's header for the rationale and sources).
+#
+#Use this table (via hbond.path in the .msp file) when the topology was
+#built with --grp amber.grp --ff amber.ff (--rigidbody or otherwise): those
+#options rename every particle, so ProteinDonorAcceptor.hbond's plain
+#atom-name keys ("N", "O", ...) would no longer match. Residue name is kept
+#as the first column even though amber's renamed types are already globally
+#unique on their own, for a uniform 4-column format across both tables.
+#
+#Format: <resname> <type> <donor> <acceptor>, donor/acceptor are 0 or 1.
+#
+#The sixth column is a SECOND antecedent: a backbone amide nitrogen is planar
+#between CA and the previous residue's C, and its hydrogen points opposite
+#their bisector. CA alone is 58 degrees off and costs a factor 3.2 on
+#cos^2(theta) -- see ProteinDonorAcceptor.hbond for the measurement. "-C" is
+#the previous residue's C, resolved on the plain atom name because its type
+#depends on that residue.
+
+ACE  XO    0 2 XC
+
+ALA  AN    1 0 ACA -C
+ALA  AO    0 2 AC
+
+ARG  RN    1 0 RCA -C
+ARG  RO    0 2 RC
+ARG  RNE   1 0 RCD
+ARG  RNH1  2 0 RCZ
+ARG  RNH2  2 0 RCZ
+
+ASN  NN    1 0 NCA -C
+ASN  NO    0 2 NC
+ASN  NND2  2 0 NCG
+ASN  NOD1  0 2 NCG
+
+ASP  DN    1 0 DCA -C
+ASP  DO    0 2 DC
+ASP  DOD1  0 2 DCG
+ASP  DOD2  0 2 DCG
+
+CYS  CN    1 0 CCA -C
+CYS  CO    0 2 CC
+CYS  CSG   1 1 CCB
+
+GLN  QN    1 0 QCA -C
+GLN  QO    0 2 QC
+GLN  QNE2  2 0 QCD
+GLN  QOE1  0 2 QCD
+
+GLU  EN    1 0 ECA -C
+GLU  EO    0 2 EC
+GLU  EOE1  0 2 ECD
+GLU  EOE2  0 2 ECD
+
+GLY  GN    1 0 GCA -C
+GLY  GO    0 2 GC
+
+HIS  HN    1 0 HCA -C
+HIS  HO    0 2 HC
+HIS  HND1  1 1 HCE1
+HIS  HNE2  1 1 HCE1
+
+ILE  IN    1 0 ICA -C
+ILE  IO    0 2 IC
+
+LEU  LN    1 0 LCA -C
+LEU  LO    0 2 LC
+
+LYS  KN    1 0 KCA -C
+LYS  KO    0 2 KC
+LYS  KNZ   3 0 KCE
+
+MET  MN    1 0 MCA -C
+MET  MO    0 2 MC
+
+NME  ZN    1 0 ZC
+
+PHE  FN    1 0 FCA -C
+PHE  FO    0 2 FC
+
+PRO  PO    0 2 PC
+
+SER  SN    1 0 SCA -C
+SER  SO    0 2 SC
+SER  SOG   1 2 SCB
+
+THR  TN    1 0 TCA -C
+THR  TO    0 2 TC
+THR  TOG1  1 2 TCB
+
+TRP  WN    1 0 WCA -C
+TRP  WO    0 2 WC
+TRP  WNE1  1 0 WCD1
+
+TYR  YN    1 0 YCA -C
+TYR  YO    0 2 YC
+TYR  YOH   1 2 YCZ
+
+VAL  VN    1 0 VCA -C
+VAL  VO    0 2 VC

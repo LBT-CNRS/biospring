@@ -1,0 +1,123 @@
+#Donor/acceptor classification for the dynamic hydrogen-bond mechanism
+#(distance-only Morse potential between donor and acceptor heavy atoms, no
+#explicit H needed -- see the hbond.* settings in doc/MSP_Options.md).
+#
+#Same classification as used by standard structural-biology H-bond tools
+#(HBPLUS/McDonald & Thornton, Reduce/Probe): not invented here, just encoded
+#for BioSpring's own per-residue lookup.
+#
+#Format: <resname> <atomname> <donor> <acceptor>, donor/acceptor are 0 or 1
+#(a hydroxyl oxygen is both: it carries a donatable H and has a lone pair to
+#accept one).
+#
+#Keyed by plain, unreduced PDB atom names -- use this table when the
+#topology was built without --grp/--ff (e.g. plain -cutoff spring
+#creation). For a topology reduced with --grp amber.grp --ff amber.ff,
+#particles are renamed (e.g. ALA:N -> AN), so use amber.hbond instead,
+#which carries the same classification keyed by those renamed types.
+#
+#Backbone (every residue, standard rules below):
+#  N  1 0  -- amide H (absent for Pro, which has no entry for N here)
+#  O  0 1
+#
+#His is listed donor+acceptor on both ring nitrogens: without an explicit H,
+#the actual tautomer/protonation state is unknown, so either ring nitrogen
+#may act as donor or acceptor depending on the real structure.
+#
+#Cys SG is a weak, optional donor/acceptor (sulfur, much less electronegative
+#than N/O) -- included for completeness, matching HBPLUS, but expect it to
+#contribute far less than a N/O-mediated hydrogen bond.
+#
+#SECOND ANTECEDENT, sixth column. A backbone amide nitrogen is planar with
+#two heavy neighbours -- CA and the PREVIOUS residue's C -- and its hydrogen
+#points opposite their bisector. Naming only CA puts the reference direction
+#58 degrees off: measured on ubiquitin's alpha helix, cos^2(theta) comes out
+#at 0.28 where the real N-H direction gives 0.91, so every backbone bond
+#loses a factor 3.2 on geometry that is in fact ideal. With both named, the
+#bisector reproduces the true direction to 0.7 degrees and recovers 99 % of
+#the weight -- the geometric form of the rule DSSP has used since Kabsch &
+#Sander 1983. "-C" is the previous residue's C, same +/- convention as
+#.rbody and .bi.ff. A chain's first residue simply has none and falls back
+#to the single-antecedent direction.
+
+ACE  O     0 2 C
+
+ALA  N     1 0 CA -C
+ALA  O     0 2 C
+
+ARG  N     1 0 CA -C
+ARG  O     0 2 C
+ARG  NE    1 0 CD
+ARG  NH1   2 0 CZ
+ARG  NH2   2 0 CZ
+
+ASN  N     1 0 CA -C
+ASN  O     0 2 C
+ASN  ND2   2 0 CG
+ASN  OD1   0 2 CG
+
+ASP  N     1 0 CA -C
+ASP  O     0 2 C
+ASP  OD1   0 2 CG
+ASP  OD2   0 2 CG
+
+CYS  N     1 0 CA -C
+CYS  O     0 2 C
+CYS  SG    1 1 CB
+
+GLN  N     1 0 CA -C
+GLN  O     0 2 C
+GLN  NE2   2 0 CD
+GLN  OE1   0 2 CD
+
+GLU  N     1 0 CA -C
+GLU  O     0 2 C
+GLU  OE1   0 2 CD
+GLU  OE2   0 2 CD
+
+GLY  N     1 0 CA -C
+GLY  O     0 2 C
+
+HIS  N     1 0 CA -C
+HIS  O     0 2 C
+HIS  ND1   1 1 CE1
+HIS  NE2   1 1 CE1
+
+ILE  N     1 0 CA -C
+ILE  O     0 2 C
+
+LEU  N     1 0 CA -C
+LEU  O     0 2 C
+
+LYS  N     1 0 CA -C
+LYS  O     0 2 C
+LYS  NZ    3 0 CE
+
+MET  N     1 0 CA -C
+MET  O     0 2 C
+
+NME  N     1 0 CH3
+
+PHE  N     1 0 CA -C
+PHE  O     0 2 C
+
+PRO  O     0 2 C
+
+SER  N     1 0 CA -C
+SER  O     0 2 C
+SER  OG    1 2 CB
+
+THR  N     1 0 CA -C
+THR  O     0 2 C
+THR  OG1   1 2 CB
+
+TRP  N     1 0 CA -C
+TRP  O     0 2 C
+TRP  NE1   1 0 CD1
+
+TYR  N     1 0 CA -C
+TYR  O     0 2 C
+TYR  OH    1 2 CZ
+
+VAL  N     1 0 CA -C
+VAL  O     0 2 C
