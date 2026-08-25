@@ -9,7 +9,12 @@
 #Watson-Crick atoms plus the Hoogsteen (N7) and minor-groove (N3)
 #faces, the phosphate and ester oxygens, and the furanose O4'.
 #
-#Format: <resname> <type> <donor> <acceptor>, each 0 or 1.
+#Format: <resname> <type> <donor> <acceptor> <antecedent>
+#[<second antecedent>]. The capacities are counts, not flags.
+#The antecedents give the site its direction: one names the heavy
+#atom it hangs off, two mean the direction is their exterior
+#bisector, which is what a ring nitrogen or an ester oxygen needs.
+#A "+"/"-" prefix reaches into the next/previous residue.
 #
 #TWO LIMITS TO KNOW, both in the mechanism rather than this table:
 #
@@ -24,43 +29,45 @@
 #   RNA it routinely serves both roles AT ONCE, which one partner
 #   per particle cannot represent. Expect it to under-bond.
 #
-#The attractive term is also distance-only, with no donor-H...
-#acceptor angle. On 074's duplex that costs 2 of 48 Watson-Crick
-#bonds: two stacked same-strand groups sit closer to each other
-#(2.75 A) than to their real partners (2.90 and 2.94 A).
+#The attractive term now carries BOTH angles -- donor and
+#acceptor -- so a site's antecedents decide how much of the well
+#it ever sees. Getting them wrong is not a small error: naming one
+#neighbour of a two-neighbour site puts the direction 52-121 deg
+#off, measured on 074's duplex and 075's hairpin, and the cos^2
+#factor turns that into a weight of 0.25 or, past 90 deg, zero.
 #
 DA   dOP1   0 2 dP
 DA   dOP2   0 2 dP
-DA   dO5    0 2 dC5
-DA   dO4    0 2 dC4
-DA   aN7    0 1 aC5
+DA   dO5    0 2 dC5   dP
+DA   dO4    0 2 dC4   1C1
+DA   aN7    0 1 aC5   aC8
 DA   aN6    2 0 aC6
-DA   aN1    0 1 aC2
-DA   aN3    0 1 aC2
-DA   dO3    0 2 dC3
+DA   aN1    0 1 aC2   aC6
+DA   aN3    0 1 aC2   aC4
+DA   dO3    0 2 dC3   +P
 DC   dOP1   0 2 dP
 DC   dOP2   0 2 dP
-DC   dO5    0 2 dC5
-DC   dO4    0 2 dC4
+DC   dO5    0 2 dC5   dP
+DC   dO4    0 2 dC4   2C1
 DC   cN4    2 0 cC4
-DC   cN3    0 1 cC2
+DC   cN3    0 1 cC2   cC4
 DC   cO2    0 2 cC2
-DC   dO3    0 2 dC3
+DC   dO3    0 2 dC3   +P
 DG   dOP1   0 2 dP
 DG   dOP2   0 2 dP
-DG   dO5    0 2 dC5
-DG   dO4    0 2 dC4
-DG   gN7    0 1 gC5
+DG   dO5    0 2 dC5   dP
+DG   dO4    0 2 dC4   3C1
+DG   gN7    0 1 gC5   gC8
 DG   gO6    0 2 gC6
-DG   gN1    1 0 gC2
+DG   gN1    1 0 gC2   gC6
 DG   gN2    2 0 gC2
-DG   gN3    0 1 gC2
-DG   dO3    0 2 dC3
+DG   gN3    0 1 gC2   gC4
+DG   dO3    0 2 dC3   +P
 DT   dOP1   0 2 dP
 DT   dOP2   0 2 dP
-DT   dO5    0 2 dC5
-DT   dO4    0 2 dC4
+DT   dO5    0 2 dC5   dP
+DT   dO4    0 2 dC4   4C1
 DT   tO4    0 2 tC4
-DT   tN3    1 0 tC2
+DT   tN3    1 0 tC2   tC4
 DT   tO2    0 2 tC2
-DT   dO3    0 2 dC3
+DT   dO3    0 2 dC3   +P

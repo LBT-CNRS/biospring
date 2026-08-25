@@ -74,13 +74,29 @@ BACKBONE = ["P", "OP1", "OP2", "O5'", "C5'", "H5'", "H5''", "C4'", "H4'",
 PER_BASE_SUGAR = ["C1'", "H1'"]
 
 
-# Hydrogen-bond roles, as (donor capacity, acceptor capacity, antecedent).
+# Hydrogen-bond roles, as (donor capacity, acceptor capacity, antecedent,
+# second antecedent or None).
 #
 # The capacity is chemistry: one donatable hydrogen per donation, one lone
 # pair per acceptance -- an exocyclic amine gives two, a carbonyl accepts
 # two. The antecedent is the heavy atom the site hangs off; it is what gives
 # the bond its DIRECTION, the antecedent->site vector standing in for where
 # the hydrogen (or the lone pair) points.
+#
+# ONE antecedent only says that when the site has ONE heavy neighbour. A ring
+# nitrogen has two, and so do the ester and furanose oxygens: there the H (or
+# the lone-pair average) points along the EXTERIOR BISECTOR of the two bonds,
+# not along either one. Naming a single neighbour puts the direction ~60 deg
+# off, measured on 074's duplex and 075's hairpin, which the cos^2 factor
+# turns into a weight of 0.25 instead of 0.96 -- and for O5'/O4', whose two
+# neighbours straddle the site by ~100-120 deg, into a NEGATIVE cosine, i.e.
+# a site that can never bond at all. So every two-neighbour site names both,
+# and the exocyclic amines (N6, N4, N2) keep one on purpose: their carbon IS
+# the bisector of their two N-H bonds, at cos 0.94-0.99.
+#
+# O3' is the one cross-residue case: it hangs off C3' and the NEXT residue's
+# phosphorus, written "+P" with the same "-"/"+" convention .rbody and .bi.ff
+# use. A 3'-terminal O3' has no next residue and simply keeps one antecedent.
 #
 # Same source as the protein side (HBPLUS / McDonald & Thornton, and
 # Reduce/Probe), cited in ProteinDonorAcceptor.hbond's own header. Using one
@@ -94,30 +110,34 @@ PER_BASE_SUGAR = ["C1'", "H1'"]
 # Hoogsteen geometries a folded RNA actually uses. Measured on 074's duplex,
 # they cost almost nothing: BioSpring's reciprocal-best-hit rule still
 # recovers 46 of the 48 Watson-Crick bonds.
-PURINE = {"N3": (0, 1, "C2"), "N7": (0, 1, "C5")}
+PURINE = {"N3": (0, 1, "C2", "C4"), "N7": (0, 1, "C5", "C8")}
 BASE_ROLES = {
-    "A": {"N1": (0, 1, "C2"), "N6": (2, 0, "C6"), **PURINE},      # N1/N6 Watson-Crick
-    "G": {"N1": (1, 0, "C2"), "N2": (2, 0, "C2"), "O6": (0, 2, "C6"), **PURINE},
-    "C": {"N3": (0, 1, "C2"), "N4": (2, 0, "C4"), "O2": (0, 2, "C2")},
-    "T": {"N3": (1, 0, "C2"), "O4": (0, 2, "C4"), "O2": (0, 2, "C2")},
-    "U": {"N3": (1, 0, "C2"), "O4": (0, 2, "C4"), "O2": (0, 2, "C2")},
+    "A": {"N1": (0, 1, "C2", "C6"), "N6": (2, 0, "C6", None), **PURINE},  # N1/N6 Watson-Crick
+    "G": {"N1": (1, 0, "C2", "C6"), "N2": (2, 0, "C2", None),
+          "O6": (0, 2, "C6", None), **PURINE},
+    "C": {"N3": (0, 1, "C2", "C4"), "N4": (2, 0, "C4", None), "O2": (0, 2, "C2", None)},
+    "T": {"N3": (1, 0, "C2", "C4"), "O4": (0, 2, "C4", None), "O2": (0, 2, "C2", None)},
+    "U": {"N3": (1, 0, "C2", "C4"), "O4": (0, 2, "C4", None), "O2": (0, 2, "C2", None)},
 }
 # Phosphate oxygens are strong acceptors; the esters and the furanose ring
 # oxygen are weak ones. O2' is RNA's alone and is both roles at once.
-SUGAR_ROLES = {"OP1": (0, 2, "P"), "OP2": (0, 2, "P"),
-               "O5'": (0, 2, "C5'"), "O3'": (0, 2, "C3'"), "O4'": (0, 2, "C4'"),
-               "O2'": (1, 2, "C2'")}
+# OP1/OP2 and O2' hang off one heavy atom each; the three ester/ether oxygens
+# sit between two, and O3' reaches into the next residue for its phosphorus.
+SUGAR_ROLES = {"OP1": (0, 2, "P", None), "OP2": (0, 2, "P", None),
+               "O5'": (0, 2, "C5'", "P"), "O3'": (0, 2, "C3'", "+P"),
+               "O4'": (0, 2, "C4'", "C1'"), "O2'": (1, 2, "C2'", None)}
 
 
 def roles(base, atom):
-    """(donor cap, acceptor cap, antecedent) or None when the atom has no role."""
+    """(donor cap, acceptor cap, antecedent, second antecedent or None), or
+    None when the atom has no role."""
     if atom in BASE_ROLES[base]:
         return BASE_ROLES[base][atom]
     return SUGAR_ROLES.get(atom)
 
 
 def hbond_lines(grp, base_of):
-    """<resname> <type> <donor> <acceptor> <antecedent>, one per (residue, type).
+    """<resname> <type> <donor> <acceptor> <ante> [<ante2>], one per (residue, type).
 
     Derived from the .grp just built, so the two files cannot drift apart:
     a type that the .grp stops naming stops being classified here too.
@@ -148,8 +168,21 @@ def hbond_lines(grp, base_of):
             # phosphorus, say). The site keeps its capacities and loses only
             # its direction -- degraded, still valid.
             out.append("%-4s %-6s %d %d" % (resname, type_name, role[0], role[1]))
-        else:
+            continue
+        # A cross-residue second antecedent ("+P") goes out as written: it is
+        # matched on the plain atom name, because the type of an atom in the
+        # NEXT residue depends on which base that residue carries. A local one
+        # is translated to the type name the .grp uses, and one absent from
+        # this residue is dropped -- the site keeps its single-antecedent
+        # direction rather than a wrong one.
+        anc2 = role[3] if len(role) > 3 else None
+        if anc2 is not None and anc2[0] not in "+-":
+            anc2 = by_atom.get((resname, anc2))
+        if anc2 is None:
             out.append("%-4s %-6s %d %d %s" % (resname, type_name, role[0], role[1], anc))
+        else:
+            out.append("%-4s %-6s %d %d %-5s %s"
+                       % (resname, type_name, role[0], role[1], anc, anc2))
     return out
 
 
@@ -299,7 +332,12 @@ def main():
                "#Watson-Crick atoms plus the Hoogsteen (N7) and minor-groove (N3)",
                "#faces, the phosphate and ester oxygens, and the furanose O4'.",
                "#",
-               "#Format: <resname> <type> <donor> <acceptor>, each 0 or 1.",
+               "#Format: <resname> <type> <donor> <acceptor> <antecedent>",
+               "#[<second antecedent>]. The capacities are counts, not flags.",
+               "#The antecedents give the site its direction: one names the heavy",
+               "#atom it hangs off, two mean the direction is their exterior",
+               "#bisector, which is what a ring nitrogen or an ester oxygen needs.",
+               "#A \"+\"/\"-\" prefix reaches into the next/previous residue.",
                "#",
                "#TWO LIMITS TO KNOW, both in the mechanism rather than this table:",
                "#",
@@ -314,10 +352,12 @@ def main():
                "#   RNA it routinely serves both roles AT ONCE, which one partner",
                "#   per particle cannot represent. Expect it to under-bond.",
                "#",
-               "#The attractive term is also distance-only, with no donor-H...",
-               "#acceptor angle. On 074's duplex that costs 2 of 48 Watson-Crick",
-               "#bonds: two stacked same-strand groups sit closer to each other",
-               "#(2.75 A) than to their real partners (2.90 and 2.94 A).",
+               "#The attractive term now carries BOTH angles -- donor and",
+               "#acceptor -- so a site's antecedents decide how much of the well",
+               "#it ever sees. Getting them wrong is not a small error: naming one",
+               "#neighbour of a two-neighbour site puts the direction 52-121 deg",
+               "#off, measured on 074's duplex and 075's hairpin, and the cos^2",
+               "#factor turns that into a weight of 0.25 or, past 90 deg, zero.",
                "#"], hbond_lines(grp, base_of))
 
 
