@@ -137,15 +137,30 @@ class ElectrostaticSetting : public EnergySetting
   public:
     double dielectric;
 
-    ElectrostaticSetting(const std::string & name) : EnergySetting(name), dielectric(1.0)
+    // Make the dielectric grow with distance -- epsilon(r) = dielectric * r,
+    // r in Angstrom (Warshel & Levitt 1976). A constant 78 screens a pair at
+    // contact exactly as hard as one 30 A away, and that is wrong in the
+    // direction that matters: no water fits between two atoms 3 A apart, so
+    // the short-range interaction is barely screened in reality. Measured on
+    // a native alpha-helix hydrogen bond of ubiquitin, the amide/carbonyl
+    // attraction is -13.61 kJ/mol unscreened and -0.17 at 78.
+    //
+    // OFF by default: it changes every electrostatic energy in the model, so
+    // it is a modelling choice and not a correction.
+    bool distancedependent;
+
+    ElectrostaticSetting(const std::string & name)
+        : EnergySetting(name), dielectric(1.0), distancedependent(false)
     {
-        _parameterNames = {"enable", "scale", "cutoff", "dielectric"};
+        _parameterNames = {"enable", "scale", "cutoff", "dielectric", "distancedependent"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
     {
         if (param == "dielectric")
             utils::string::from_string<decltype(dielectric)>(dielectric, s);
+        else if (param == "distancedependent")
+            _parse_bool(distancedependent, s, param);
         else
             EnergySetting::setFromString(param, s);
     }
@@ -154,6 +169,7 @@ class ElectrostaticSetting : public EnergySetting
     {
         EnergySetting::print(os);
         _mspFormatter.print("dielectric", dielectric, os);
+        _mspFormatter.print("distancedependent", distancedependent, os);
     }
 };
 

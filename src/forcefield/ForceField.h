@@ -22,7 +22,7 @@ class ForceField
     ForceField()
         : _stericscale(1.0), _springscale(1.0), _impscale(1.0), _impuppermebraneoffset(0.0), _implowermembraneoffset(0.0),
           _uppermembtubecurv(0.0), _lowermembtubecurv(0.0),
-          _forcefieldscale(1.0), _coulombscale(1.0), _hydrophobicityscale(1.0), _dielectric(1.0),
+          _forcefieldscale(1.0), _coulombscale(1.0), _hydrophobicityscale(1.0), _dielectric(1.0), _distancedependentdielectric(false),
           _hydrogenbondscale(1.0), _hydrogenbondwelldepth(16.7), _hydrogenbondequilibrium(2.9),
           _hydrogenbondwidth(1.34)
     {
@@ -39,6 +39,7 @@ class ForceField
         _coulombscale = other._coulombscale;
         _hydrophobicityscale = other._hydrophobicityscale;
         _dielectric = other._dielectric;
+        _distancedependentdielectric = other._distancedependentdielectric;
         _hydrogenbondscale = other._hydrogenbondscale;
         _hydrogenbondwelldepth = other._hydrogenbondwelldepth;
         _hydrogenbondequilibrium = other._hydrogenbondequilibrium;
@@ -126,6 +127,22 @@ class ForceField
     float getDielectric() const { return _dielectric; }
     void setDielectric(float dielectric) { _dielectric = dielectric; }
 
+    // Distance-dependent dielectric: epsilon(r) = dielectric * r, with r in
+    // Angstrom (Warshel & Levitt 1976). A constant dielectric of 78 screens a
+    // pair 3 A apart exactly as hard as one 30 A apart, which is wrong in the
+    // direction that matters here: no water molecule fits between two atoms
+    // at contact, so the short-range interaction is barely screened in
+    // reality. Measured on a native alpha-helix hydrogen bond of ubiquitin,
+    // the amide/carbonyl attraction is -13.61 kJ/mol unscreened and -0.17 at
+    // 78 -- annihilated.
+    //
+    // The FORCE is not the same substitution. With epsilon(r) = e0*r the
+    // energy goes as 1/r^2, so the force goes as 2/r^3: putting e0*r into the
+    // force formula alone would give half the right answer, and nothing but a
+    // gradient check would notice.
+    bool isDistanceDependentDielectric() const { return _distancedependentdielectric; }
+    void setDistanceDependentDielectric(bool on) { _distancedependentdielectric = on; }
+
     // Hydrogen-bond Morse potential parameters. Defaults derived from
     // literature (see energy/hydrogenbond.hpp); settable mainly for testing.
     float getHydrogenBondScale() const { return _hydrogenbondscale; }
@@ -152,6 +169,7 @@ class ForceField
     float _coulombscale;
     float _hydrophobicityscale;
     float _dielectric;
+    bool _distancedependentdielectric;
     float _hydrogenbondscale;
     float _hydrogenbondwelldepth;
     float _hydrogenbondequilibrium;

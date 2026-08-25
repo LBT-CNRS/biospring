@@ -5,6 +5,7 @@
 #include "Particle.h"
 #include "SpringNetwork.h"
 #include "configuration/Configuration.hpp"
+#include "forcefield/ForceFieldElectrostaticCoulombAndStericLinear.h"
 #include "forcefield/constants.hpp"
 #include "measure.hpp"
 
@@ -135,6 +136,43 @@ TEST(TestElectrostaticEnergyStatic, static_neighbor_contributes_full_pair_energy
 }
 
 // -- Main function  ----------------------------------------------------------
+
+// A distance-dependent dielectric changes the exponent, not just a constant.
+// With epsilon(r) = e0*r the energy goes as 1/r^2, so -dE/dr goes as 2/r^3 --
+// twice what substituting e0*r into the ordinary 1/r^2 force expression
+// gives. Getting that wrong halves every electrostatic force while leaving
+// every reported energy correct, which no energy check would ever reveal.
+//
+// Energy and force module are returned in different unit systems (kJ/mol
+// against Da.A.fs-2), so the check is expressed as a RATIO between the two
+// modes: whatever the conversion factor is, it is the same on both sides and
+// cancels. The constant dielectric is the reference, its gradient being
+// long-established.
+TEST(TestElectrostaticEnergyStatic, distance_dependent_dielectric_force_matches_its_own_gradient)
+{
+    biospring::forcefield::ForceFieldElectrostaticCoulombAndStericLinear ff;
+    const float q1 = 0.5f, q2 = -0.7f, h = 1e-3f;
+
+    auto ratio = [&](float r) {
+        const float fd = -(ff.computeElectrostaticEnergy(q1, q2, r + h) -
+                           ff.computeElectrostaticEnergy(q1, q2, r - h)) / (2.0f * h);
+        return fd / ff.computeElectrostaticForceModule(q1, q2, r);
+    };
+
+    ff.setDielectric(4.0f);
+    ff.setDistanceDependentDielectric(false);
+    const float reference = ratio(5.0f);
+
+    ff.setDistanceDependentDielectric(true);
+    for (float r : {3.0f, 5.0f, 8.0f})
+        EXPECT_NEAR(ratio(r) / reference, 1.0f, 0.02f) << "at r = " << r;
+
+    // ... and the energy really does fall off faster: doubling the distance
+    // divides it by four, not by two.
+    EXPECT_NEAR(ff.computeElectrostaticEnergy(q1, q2, 3.0f) /
+                ff.computeElectrostaticEnergy(q1, q2, 6.0f), 4.0f, 0.05f);
+}
+
 int main(int argc, char * argv[])
 {
     ::testing::InitGoogleTest(&argc, argv);
