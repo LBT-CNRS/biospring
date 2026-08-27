@@ -73,6 +73,14 @@ size_t retuneHydrogenBondSprings(topology::Topology & topology, const DonorAccep
     for (size_t i = 0; i < topology.number_of_springs(); ++i)
     {
         auto & spring = topology.get_spring(i);
+        // Two bonded cysteine sulfurs are a bridge, never a hydrogen bond --
+        // and a thiol IS listed as both donor and acceptor, so without this
+        // the hydrogen-bond pass claims every declared disulfide. It came out
+        // right only because the disulfide pass runs second and retunes it
+        // back, which is luck, not design.
+        if (isCysteineSulfur(spring.first()) && isCysteineSulfur(spring.second()))
+            continue;
+
         const DonorAcceptorRole * first = roleOf(table, spring.first());
         const DonorAcceptorRole * second = roleOf(table, spring.second());
         if (first == nullptr || second == nullptr)
