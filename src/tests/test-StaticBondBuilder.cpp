@@ -37,6 +37,11 @@ staticbond::DonorAcceptorTable backboneTable()
     t[{"ALA", "N"}] = {1, 0};
     t[{"ALA", "O"}] = {0, 2};
     t[{"ALA", "CB"}] = {0, 0};
+    // A thiol really is both a donor and an acceptor, and amber.hbond says so.
+    // The table must carry that, or the test cannot see the disulfide being
+    // mistaken for a hydrogen bond.
+    t[{"CYS", "SG"}] = {1, 2};
+    t[{"CYS", "CSG"}] = {1, 2};
     return t;
 }
 
@@ -164,6 +169,9 @@ TEST(StaticBondBuilder, the_two_passes_do_not_claim_each_others_bonds)
     declare(top, n, o);
     declare(top, s1, s2);
 
+    // The hydrogen-bond pass must claim ONE bond, not two: a thiol is a
+    // declared donor and acceptor, so the bridge would otherwise be counted as
+    // a hydrogen bond and only corrected by the disulfide pass running second.
     EXPECT_EQ(staticbond::retuneHydrogenBondSprings(top, backboneTable(),
                                                     staticbond::HYDROGEN_BOND_STIFFNESS),
               1u);
