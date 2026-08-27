@@ -371,6 +371,76 @@ class Reducer
             ParticleContainer grains = _reduce_residue(residue);
             _target_topology.particles().push_back(grains);
         }
+
+        _carry_declared_bonds();
+    }
+
+    // A spring in the source topology is USER INPUT -- a PDB's CONECT record
+    // saying this bond exists -- and reduction used to drop every one of them
+    // in silence, because the target topology is built from particles alone.
+    //
+    // It costs the rigid-body examples their declared bonds even though they
+    // are ALL-ATOM: they pass --grp not to coarse-grain anything but to type
+    // their atoms (amber.grp renames Glu's N to EN so amber.nbi.ff can assign
+    // per-type charges), and that typing still goes through here. Measured on
+    // gkinase, whose CONECT declares its disulfide: 1 spring in the .nc
+    // without --grp, 0 with it, nothing else changed.
+    void _carry_declared_bonds()
+    {
+        if (_source_topology.number_of_springs() == 0)
+            return;
+
+        // (chain, residue id, grain name) -> target index. A grain is named
+        // after the rule that built it, which is what a source atom resolves
+        // to below.
+        std::map<std::tuple<std::string, int, std::string>, size_t> target_index;
+        for (size_t i = 0; i < _target_topology.number_of_particles(); ++i)
+        {
+            const auto & p = _target_topology.get_particle(i).properties();
+            target_index.emplace(std::make_tuple(p.chain_name(), p.residue_id(), p.name()), i);
+        }
+
+        // Which grain did this source atom end up in? Its residue's rules name
+        // exactly one that claims it.
+        auto grain_of = [&](const topology::Particle & source) -> long
+        {
+            const auto & p = source.properties();
+            const auto rules = _rules.get_rules_for_residue(p.residue_name());
+            for (size_t r = 0; r < rules.size(); ++r)
+            {
+                if (!rules[r].hasAtomNamed(p.name()))
+                    continue;
+                const auto found =
+                    target_index.find(std::make_tuple(p.chain_name(), p.residue_id(), rules[r].getName()));
+                return found == target_index.end() ? -1 : static_cast<long>(found->second);
+            }
+            return -1;
+        };
+
+        size_t carried = 0, lost = 0, merged = 0;
+        for (size_t i = 0; i < _source_topology.number_of_springs(); ++i)
+        {
+            const auto & spring = _source_topology.get_spring(i);
+            const long first = grain_of(spring.first());
+            const long second = grain_of(spring.second());
+            if (first < 0 || second < 0)
+            {
+                ++lost; // an end that no grain kept -- a dropped terminal H, say
+                continue;
+            }
+            if (first == second)
+            {
+                ++merged; // both ends in one grain: nothing left to hold
+                continue;
+            }
+            _target_topology.add_spring(_target_topology.get_particle(first),
+                                        _target_topology.get_particle(second), spring.equilibrium(),
+                                        spring.stiffness());
+            ++carried;
+        }
+        logging::info("Reduction carried %zu of %zu declared bond(s): %zu had an end in no grain, %zu had "
+                      "both ends in the same grain.",
+                      carried, _source_topology.number_of_springs(), lost, merged);
     }
 
     void reduce(const ReductionParameters & parameters)
