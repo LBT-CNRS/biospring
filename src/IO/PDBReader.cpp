@@ -150,6 +150,16 @@ void PDBReader::read()
                 _topology.add_particle(p);
             }
         }
+        else if (isSSBondLine(buffer) || isLinkLine(buffer))
+        {
+            ResidueAtomRef first, second;
+            const bool ok = isSSBondLine(buffer) ? parseSSBondLine(buffer, first, second)
+                                                 : parseLinkLine(buffer, first, second);
+            if (ok)
+                _residue_bonds.emplace_back(first, second);
+            else
+                logging::warning("skipping malformed %s record: %s", buffer.substr(0, 6).c_str(), buffer.c_str());
+        }
         else if (isConectLine(buffer))
         {
             // https://pdb2pqr.readthedocs.io/en/v3.5.0/_modules/pdb2pqr/pdb.html#CONECT.__init__
@@ -183,6 +193,103 @@ void PDBReader::read()
             }
         }
     } while (std::getline(_instream, buffer));
+
+    _resolveResidueBonds();
+}
+
+// A fixed-column field, empty when the line is too short to hold it.
+static std::string column(const std::string & line, size_t begin, size_t length)
+{
+    if (line.size() < begin + length)
+        return {};
+    std::string field = line.substr(begin, length);
+    const size_t first = field.find_first_not_of(' ');
+    if (first == std::string::npos)
+        return {};
+    return field.substr(first, field.find_last_not_of(' ') - first + 1);
+}
+
+static bool readResidueId(const std::string & line, size_t begin, size_t length, int & out)
+{
+    const std::string field = column(line, begin, length);
+    if (field.empty())
+        return false;
+    try
+    {
+        out = std::stoi(field);
+    }
+    catch (const std::exception &)
+    {
+        return false;
+    }
+    return true;
+}
+
+// SSBOND: chain 16, seqNum 18-21, then chain 30, seqNum 32-35 (1-based
+// columns, PDB v3.3). The atom is always SG on both ends.
+bool PDBReader::parseSSBondLine(const std::string & line, ResidueAtomRef & first, ResidueAtomRef & second)
+{
+    first.chain = column(line, 15, 1);
+    second.chain = column(line, 29, 1);
+    first.name = "SG";
+    second.name = "SG";
+    return readResidueId(line, 17, 4, first.residue_id) && readResidueId(line, 31, 4, second.residue_id);
+}
+
+// LINK: name 13-16, chain 22, seqNum 23-26, then name 43-46, chain 52,
+// seqNum 53-56 (1-based columns, PDB v3.3).
+bool PDBReader::parseLinkLine(const std::string & line, ResidueAtomRef & first, ResidueAtomRef & second)
+{
+    first.name = column(line, 12, 4);
+    second.name = column(line, 42, 4);
+    first.chain = column(line, 21, 1);
+    second.chain = column(line, 51, 1);
+    if (first.name.empty() || second.name.empty())
+        return false;
+    return readResidueId(line, 22, 4, first.residue_id) && readResidueId(line, 52, 4, second.residue_id);
+}
+
+void PDBReader::_resolveResidueBonds()
+{
+    if (_residue_bonds.empty())
+        return;
+
+    std::map<std::tuple<std::string, int, std::string>, size_t> by_atom;
+    for (size_t i = 0; i < _topology.number_of_particles(); ++i)
+    {
+        const auto & p = _topology.get_particle(i).properties();
+        by_atom.emplace(std::make_tuple(p.chain_name(), p.residue_id(), p.name()), i);
+    }
+
+    size_t added = 0, unresolved = 0, duplicate = 0;
+    for (const auto & bond : _residue_bonds)
+    {
+        const auto first = by_atom.find(std::make_tuple(bond.first.chain, bond.first.residue_id, bond.first.name));
+        const auto second = by_atom.find(std::make_tuple(bond.second.chain, bond.second.residue_id, bond.second.name));
+        if (first == by_atom.end() || second == by_atom.end())
+        {
+            // Routine on a real file: the record may name a HETATM the filter
+            // dropped, or a hydrogen the structure does not carry.
+            ++unresolved;
+            continue;
+        }
+        try
+        {
+            _topology.add_spring(first->second, second->second);
+            ++added;
+        }
+        catch (const topology::SpringAlreadyExistsException &)
+        {
+            // Routine, and worth its own count: a real PDB often declares the
+            // same bridge twice, once by SSBOND and once by CONECT. Folding
+            // that into "added = 0" made the log read as a parse failure when
+            // the record had in fact been understood -- 1S4Q does exactly this.
+            ++duplicate;
+        }
+    }
+    logging::info("Read %zu new bond(s) from SSBOND/LINK records; %zu already declared by a CONECT, %zu named "
+                  "an atom absent from the model.",
+                  added, duplicate, unresolved);
 }
 
 //
