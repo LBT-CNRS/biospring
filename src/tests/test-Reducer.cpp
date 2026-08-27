@@ -1,9 +1,12 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <set>
 #include <string>
+#include <utility>
 
 #include "IO/io.h"
+#include "IO/ReduceRuleReader.h"
 #include "reduce/Reducer.h"
 #include "measure.hpp"
 #include "topology.hpp"
@@ -104,14 +107,46 @@ int main(int argc, char * argv[])
 // even the endpoints' residue ids -- passes while the bond is wrong.
 TEST_F(TestReducer, declared_bonds_survive_the_copy_out_of_the_reducer)
 {
-    // The fixture's PDB declares no bond, so make one: two backbone nitrogens
-    // far enough apart in sequence to land in different grains.
+    // Learn first which grains this model actually keeps: most residues here
+    // lose one, and a bond whose end lands in a dropped grain is correctly
+    // discarded -- which would make this test pass for the wrong reason.
+    std::set<std::pair<int, std::string>> kept;
+    {
+        biospring::reduce::Reducer probe(topology);
+        probe.initialize_forcefield(path_forcefield);
+        probe.initialize_rules(path_reduce_rules);
+        probe.reduce();
+        const auto & reduced = probe.target_topology();
+        for (size_t i = 0; i < reduced.number_of_particles(); ++i)
+        {
+            const auto & p = reduced.get_particle(i).properties();
+            kept.insert({p.residue_id(), p.name()});
+        }
+    }
+    ASSERT_FALSE(kept.empty());
+
+    // Two atoms whose grains both survive, in residues far enough apart that
+    // they cannot merge into one grain.
+    biospring::reduce::ReduceRuleReader rules_reader(path_reduce_rules);
+    rules_reader.read();
+    const auto all_rules = rules_reader.rules();
+    auto grain_of = [&](const biospring::topology::Particle & particle) -> std::string
+    {
+        const auto & p = particle.properties();
+        const auto rules = all_rules.get_rules_for_residue(p.residue_name());
+        for (size_t r = 0; r < rules.size(); ++r)
+            if (rules[r].hasAtomNamed(p.name()))
+                return rules[r].getName();
+        return "";
+    };
+
     size_t first = topology.number_of_particles(), second = topology.number_of_particles();
     int first_residue = -1;
     for (size_t i = 0; i < topology.number_of_particles(); ++i)
     {
         const auto & p = topology.get_particle(i).properties();
-        if (p.name() != "N")
+        const std::string grain = grain_of(topology.get_particle(i));
+        if (grain.empty() || kept.find({p.residue_id(), grain}) == kept.end())
             continue;
         if (first == topology.number_of_particles())
         {
@@ -134,10 +169,22 @@ TEST_F(TestReducer, declared_bonds_survive_the_copy_out_of_the_reducer)
     reducer.initialize_rules(path_reduce_rules);
     reducer.reduce();
 
-    // Exactly what pdb2spn does, copy included.
+    // Exactly what pdb2spn does, copy included. The source must be read from a
+    // copy taken before this line: Reducer holds it by reference, and pdb2spn
+    // assigns the reduced topology onto that same object.
+    const biospring::topology::Topology declared = topology;
     biospring::topology::Topology reduced = reducer.target_topology();
-    reducer.carry_declared_bonds(reduced);
+    reducer.carry_declared_bonds(declared, reduced);
 
+    {
+        std::set<biospring::topology::pid_t> uids;
+        size_t dup = 0;
+        for (size_t i = 0; i < reduced.number_of_particles(); ++i)
+            if (!uids.insert(reduced.get_particle(i).unique_id()).second)
+                ++dup;
+        EXPECT_EQ(dup, 0u) << "the reduced topology reuses particle unique ids, which is what the .nc "
+                              "writer resolves spring endpoints through";
+    }
     ASSERT_EQ(reduced.number_of_springs(), 1u) << "the declared bond was lost by reduction";
     const auto & spring = reduced.get_spring(0);
     EXPECT_NEAR(spring.equilibrium(), biospring::measure::distance(spring.first(), spring.second()), 1e-3)

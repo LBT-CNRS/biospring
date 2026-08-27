@@ -652,12 +652,17 @@ void biospring::pdb2spn::reduceToCoarseGrain(topology::Topology & top, const Com
     params.ignoreMissing = args.ignoreMissing;
 
     logging::status("Reducing input topology to coarse grain");
+    // The declared bonds have to be read from a COPY taken before reduction:
+    // Reducer holds its source by reference, and the assignment below writes
+    // the reduced topology onto that very object.
+    const topology::Topology declared = top;
+
     biospring::reduce::Reducer reducer(top);
     reducer.reduce(params);
     top = reducer.target_topology();
     // AFTER the copy, never before: a Spring holds a Particle&, so one created
     // inside the reducer would be left pointing at the wrong particle here --
     // silently, since its equilibrium length stays correct.
-    reducer.carry_declared_bonds(top);
+    reducer.carry_declared_bonds(declared, top);
     logging::info("Number of particles after reduction: %d", top.number_of_particles());
 }

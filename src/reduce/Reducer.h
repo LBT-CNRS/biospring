@@ -396,10 +396,24 @@ class Reducer
     // to rebuild every spring and repaired it by accident.
     //
     // Called by pdb2spn once `target` is final and nothing will copy it again.
-    void carry_declared_bonds(topology::Topology & target) const
+    // `source` is passed in rather than read from _source_topology, which is a
+    // REFERENCE to the caller's topology: pdb2spn assigns the reduced topology
+    // back onto that same object, so by the time this runs the "source" would
+    // alias the reduced one. The symptom was a source atom named tO4 instead of
+    // O4 -- already a grain name -- and every bond silently unresolvable.
+    void carry_declared_bonds(const topology::Topology & source_topology, topology::Topology & target) const
     {
-        if (_source_topology.number_of_springs() == 0)
+        if (source_topology.number_of_springs() == 0)
             return;
+
+        // The target still carries the PRE-REDUCTION springs: assigning the
+        // reduced topology over the caller's does not replace them, and their
+        // Particle& no longer address the reduced particles. Keeping them
+        // alongside the ones re-declared below put every bond in the file
+        // twice -- once right, once joining atoms up to 10 A apart while
+        // still reporting the declared length. Re-declaring means starting
+        // from none.
+        target.springs().clear();
 
         // (chain, residue id, grain name) -> target index. A grain is named
         // after the rule that built it, which is what a source atom resolves
@@ -428,10 +442,10 @@ class Reducer
             return -1;
         };
 
-        size_t carried = 0, lost = 0, merged = 0;
-        for (size_t i = 0; i < _source_topology.number_of_springs(); ++i)
+        size_t carried = 0, lost = 0, merged = 0, collapsed = 0;
+        for (size_t i = 0; i < source_topology.number_of_springs(); ++i)
         {
-            const auto & spring = _source_topology.get_spring(i);
+            const auto & spring = source_topology.get_spring(i);
             const long first = grain_of(spring.first());
             const long second = grain_of(spring.second());
             if (first < 0 || second < 0)
@@ -450,13 +464,26 @@ class Reducer
             // (0.56 A of it on the test model). Under the all-atom identity
             // mapping the rigid-body examples use, a grain IS its atom, so the
             // re-measured value is the declared one to the last digit.
-            target.add_spring(target.get_particle(first), target.get_particle(second), -1.0,
-                              spring.stiffness());
-            ++carried;
+            // Several atom-atom bonds can land on the SAME pair of grains --
+            // two backbone hydrogen bonds between residues i and j become one
+            // spring once each residue is a single bead. That is the coarse
+            // grain doing its job, not an error, but add_spring rejects the
+            // duplicate: catch it and count it rather than let it abort the
+            // run (it did, on GK's CA model).
+            try
+            {
+                target.add_spring(target.get_particle(first), target.get_particle(second), -1.0,
+                                  spring.stiffness());
+                ++carried;
+            }
+            catch (const topology::SpringAlreadyExistsException &)
+            {
+                ++collapsed;
+            }
         }
         logging::info("Reduction carried %zu of %zu declared bond(s): %zu had an end in no grain, %zu had "
-                      "both ends in the same grain.",
-                      carried, _source_topology.number_of_springs(), lost, merged);
+                      "both ends in the same grain, %zu shared a grain pair with another bond.",
+                      carried, source_topology.number_of_springs(), lost, merged, collapsed);
     }
 
     void reduce(const ReductionParameters & parameters)
