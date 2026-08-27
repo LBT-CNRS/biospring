@@ -41,13 +41,18 @@ const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "back to their original name (it must be an all-atom identity mapping,",
     "one atom per rule, like amber.grp -- not a real coarse-grain reduction).",
     "",
-    "-static-hbond/--static-hbond and -static-disulfide/--static-disulfide add",
-    "springs for the hydrogen bonds and disulfide bridges ALREADY PRESENT in",
-    "the input structure, calibrated to the force constant of the real bond.",
-    "Both are additive: they compose with -cutoff, with -rigidbody, or with a",
-    "network that has neither, and never replace a spring a pair already has.",
-    "A static spring holds a known structure together; it cannot break, and it",
-    "cannot form a bond the input did not contain.",
+    "-static-hbond/--static-hbond and -static-disulfide/--static-disulfide give",
+    "DECLARED hydrogen bonds and disulfide bridges the force constant their",
+    "chemistry calls for (60.0 and 1389.1 kJ/mol/A^2) instead of the uniform",
+    "-stiffness every CONECT record otherwise receives.",
+    "",
+    "Which bonds exist is YOUR input, read from the structure's own CONECT",
+    "records; neither option searches for a bond or invents one. A structure",
+    "that declares no bond gets no spring. Equilibrium stays the declared",
+    "bond's own length, so retuning cannot deform the input structure.",
+    "",
+    "A spring never breaks and never forms: these hold a declared structure",
+    "together, they do not model association.",
     "",
 };
 
@@ -90,6 +95,27 @@ int main(int argc, char ** argv)
         }
     }
 
+    // Hydrogen bonds and disulfides, from the bonds the structure DECLARES.
+    //
+    // This has to run HERE, before -cutoff or -rigidbody adds anything: once
+    // the mesh exists there is no way left to tell a CONECT record from a
+    // structural spring, and retuning afterwards silently softens the mesh
+    // instead (measured on gkinase: 186 mesh springs dropped from 8000 to 60,
+    // against the single bond the file actually declares).
+    if (!args.pathStaticHydrogenBond.empty())
+    {
+        logging::status("Retuning declared hydrogen bonds using %s.", args.pathStaticHydrogenBond.c_str());
+        const auto table = biospring::staticbond::readDonorAcceptorTable(args.pathStaticHydrogenBond);
+        biospring::staticbond::retuneHydrogenBondSprings(topology, table,
+                                                         biospring::staticbond::HYDROGEN_BOND_STIFFNESS);
+    }
+
+    if (args.addStaticDisulfide)
+    {
+        logging::status("Retuning declared disulfide bridges.");
+        biospring::staticbond::retuneDisulfideSprings(topology, biospring::staticbond::DISULFIDE_STIFFNESS);
+    }
+
 
     if (args.cutoff > 0)
     {
@@ -129,21 +155,6 @@ int main(int argc, char ** argv)
     // both network builders and independent of either: these describe bonds
     // the structure already has, whatever strategy built the rest of the
     // network -- or none at all.
-    if (!args.pathStaticHydrogenBond.empty())
-    {
-        logging::status("Adding static hydrogen-bond springs from %s.", args.pathStaticHydrogenBond.c_str());
-        const auto table = biospring::staticbond::readDonorAcceptorTable(args.pathStaticHydrogenBond);
-        biospring::staticbond::addHydrogenBondSprings(topology, table, biospring::staticbond::HYDROGEN_BOND_CUTOFF,
-                                                      biospring::staticbond::HYDROGEN_BOND_STIFFNESS);
-    }
-
-    if (args.addStaticDisulfide)
-    {
-        logging::status("Adding static disulfide springs.");
-        biospring::staticbond::addDisulfideSprings(topology, biospring::staticbond::DISULFIDE_CUTOFF,
-                                                   biospring::staticbond::DISULFIDE_STIFFNESS);
-    }
-
     // Sets the particle charge to user-defined value.
     if (args.useUserCharge())
     {
