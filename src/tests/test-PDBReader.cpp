@@ -94,3 +94,73 @@ TEST(TestPDBReader, ValidConectRecordsStillCreateSprings)
     EXPECT_EQ(reader.getTopology().number_of_particles(), 3u);
     EXPECT_EQ(reader.getTopology().number_of_springs(), 2u);
 }
+
+// SSBOND is the PDB's own record for a disulfide bridge, and it names its
+// atoms by residue rather than by serial -- and sits BEFORE them in the file.
+// GKinase.1S4Q.pdb declares its bridge this way and nothing else; before this
+// was read, such a file came in with no bond at all.
+TEST(TestPDBReader, SSBondRecordCreatesTheBridge)
+{
+    const std::string content =
+        "SSBOND   1 CYS A   22    CYS A   45                          1555   1555  2.03\n"
+        "ATOM      1  SG  CYS A  22       0.000   0.000   0.000  1.00  0.00           S\n"
+        "ATOM      2  CB  CYS A  22       1.800   0.000   0.000  1.00  0.00           C\n"
+        "ATOM      3  SG  CYS A  45       2.040   0.000   0.000  1.00  0.00           S\n";
+    const std::string path = write_temp_pdb("ssbond.pdb", content);
+
+    PDBReader reader(path);
+    reader.read();
+
+    EXPECT_EQ(reader.getTopology().number_of_particles(), 3u);
+    ASSERT_EQ(reader.getTopology().number_of_springs(), 1u);
+    const auto & spring = reader.getTopology().get_spring(0);
+    EXPECT_EQ(spring.first().properties().residue_id(), 22);
+    EXPECT_EQ(spring.second().properties().residue_id(), 45);
+}
+
+// The same bridge declared twice, the standard way and by hand, is one bond.
+TEST(TestPDBReader, SSBondAlreadyDeclaredByConectIsNotDoubled)
+{
+    const std::string content =
+        "SSBOND   1 CYS A   22    CYS A   45\n"
+        "ATOM      1  SG  CYS A  22       0.000   0.000   0.000  1.00  0.00           S\n"
+        "ATOM      2  SG  CYS A  45       2.040   0.000   0.000  1.00  0.00           S\n"
+        "CONECT    1    2\n";
+    const std::string path = write_temp_pdb("ssbond-and-conect.pdb", content);
+
+    PDBReader reader(path);
+    reader.read();
+
+    EXPECT_EQ(reader.getTopology().number_of_springs(), 1u);
+}
+
+// LINK carries any other inter-residue bond, and names both atoms explicitly.
+TEST(TestPDBReader, LinkRecordCreatesTheBond)
+{
+    const std::string content =
+        "LINK         O   ALA A   1                 N   GLY A  10     1555   1555  2.90\n"
+        "ATOM      1  O   ALA A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+        "ATOM      2  N   GLY A  10       2.900   0.000   0.000  1.00  0.00           N\n";
+    const std::string path = write_temp_pdb("link.pdb", content);
+
+    PDBReader reader(path);
+    reader.read();
+
+    ASSERT_EQ(reader.getTopology().number_of_springs(), 1u);
+}
+
+// A record naming an atom the model does not carry is routine on a real file
+// (a HETATM the filter dropped): skipped, never bonded to particle 0.
+TEST(TestPDBReader, SSBondToAbsentAtomCreatesNoBond)
+{
+    const std::string content =
+        "SSBOND   1 CYS A   22    CYS A   99\n"
+        "ATOM      1  SG  CYS A  22       0.000   0.000   0.000  1.00  0.00           S\n"
+        "ATOM      2  SG  CYS A  45       2.040   0.000   0.000  1.00  0.00           S\n";
+    const std::string path = write_temp_pdb("ssbond-dangling.pdb", content);
+
+    PDBReader reader(path);
+    reader.read();
+
+    EXPECT_EQ(reader.getTopology().number_of_springs(), 0u);
+}
