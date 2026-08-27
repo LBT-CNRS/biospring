@@ -372,7 +372,6 @@ class Reducer
             _target_topology.particles().push_back(grains);
         }
 
-        _carry_declared_bonds();
     }
 
     // A spring in the source topology is USER INPUT -- a PDB's CONECT record
@@ -385,7 +384,19 @@ class Reducer
     // per-type charges), and that typing still goes through here. Measured on
     // gkinase, whose CONECT declares its disulfide: 1 spring in the .nc
     // without --grp, 0 with it, nothing else changed.
-    void _carry_declared_bonds()
+    //
+    // This is deliberately NOT done inside reduce(): a Spring holds a
+    // Particle& , and pdb2spn copies the reduced topology out of the reducer
+    // afterwards. Springs created before that copy end up pointing at the
+    // wrong particles -- silently, because the equilibrium length is still
+    // the right one. Measured on 074's duplex: 48 base-pair springs with a
+    // correct r0 of 2.7-3.3 A sitting on atoms 5 to 12 A apart, which at the
+    // mesh stiffness is a force big enough to throw the structure to 1e8 A.
+    // It only showed up without --dihedral, because reserve_particles happens
+    // to rebuild every spring and repaired it by accident.
+    //
+    // Called by pdb2spn once `target` is final and nothing will copy it again.
+    void carry_declared_bonds(topology::Topology & target) const
     {
         if (_source_topology.number_of_springs() == 0)
             return;
@@ -394,9 +405,9 @@ class Reducer
         // after the rule that built it, which is what a source atom resolves
         // to below.
         std::map<std::tuple<std::string, int, std::string>, size_t> target_index;
-        for (size_t i = 0; i < _target_topology.number_of_particles(); ++i)
+        for (size_t i = 0; i < target.number_of_particles(); ++i)
         {
-            const auto & p = _target_topology.get_particle(i).properties();
+            const auto & p = target.get_particle(i).properties();
             target_index.emplace(std::make_tuple(p.chain_name(), p.residue_id(), p.name()), i);
         }
 
@@ -433,9 +444,14 @@ class Reducer
                 ++merged; // both ends in one grain: nothing left to hold
                 continue;
             }
-            _target_topology.add_spring(_target_topology.get_particle(first),
-                                        _target_topology.get_particle(second), spring.equilibrium(),
-                                        spring.stiffness());
+            // Equilibrium is RE-MEASURED between the grains, not carried over
+            // from the atoms: a grain sits at the centroid of its atoms, so an
+            // atomic length would leave the spring under permanent strain
+            // (0.56 A of it on the test model). Under the all-atom identity
+            // mapping the rigid-body examples use, a grain IS its atom, so the
+            // re-measured value is the declared one to the last digit.
+            target.add_spring(target.get_particle(first), target.get_particle(second), -1.0,
+                              spring.stiffness());
             ++carried;
         }
         logging::info("Reduction carried %zu of %zu declared bond(s): %zu had an end in no grain, %zu had "
