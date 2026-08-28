@@ -116,7 +116,6 @@ int main(int argc, char ** argv)
         biospring::staticbond::retuneDisulfideSprings(topology, biospring::staticbond::DISULFIDE_STIFFNESS);
     }
 
-
     if (args.cutoff > 0)
     {
         logging::status("Creating springs with distance cutoff %.2f and stiffness %.2f.", args.cutoff, args.stiffness);
@@ -150,11 +149,6 @@ int main(int argc, char ** argv)
         logging::info("Created %d spring(s).", topology.number_of_springs());
     }
 
-
-    // Hydrogen bonds and disulfides as ordinary springs. Deliberately AFTER
-    // both network builders and independent of either: these describe bonds
-    // the structure already has, whatever strategy built the rest of the
-    // network -- or none at all.
     // Sets the particle charge to user-defined value.
     if (args.useUserCharge())
     {
