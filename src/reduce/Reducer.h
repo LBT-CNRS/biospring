@@ -556,53 +556,6 @@ class Reducer
     }
 };
 
-namespace legacy
-{
-
-class Reducer
-{
-  public:
-    Reducer() : _spn(0), _reduce(0), _ff(), _ignoreDuplicateParticles(false), _ignoreMissingParticle(false) {}
-
-    void setIgnoreDuplicateParticles(bool value) { _ignoreDuplicateParticles = value; }
-    void ignoreDuplicateParticles() { _ignoreDuplicateParticles = true; }
-    bool getIgnoreDuplicateParticles() const { return _ignoreDuplicateParticles; }
-
-    void setIgnoreMissingParticles(bool value) { _ignoreMissingParticle = value; }
-    void ignoreMissingParticles() { _ignoreMissingParticle = true; }
-    bool getIgnoreMissingParticles() const { return _ignoreMissingParticle; }
-
-    spn::SpringNetwork * getSpringNetwork(void) const { return _spn; }
-    void setSpringNetwork(spn::SpringNetwork * const spn) { _spn = spn; }
-
-    Reduce * getReduce(void) const { return _reduce; }
-    void setReduce(Reduce * const red) { _reduce = red; }
-    void setReduce(const std::string & path);
-
-    const biospring::forcefield::ForceField & getForceField(void) const { return _ff; }
-    void setForceField(const std::string & path);
-
-    void reduce(void) const;
-    void reduceToCoarseGrain(spn::SpringNetwork & spn, const ReductionParameters & parameters);
-
-    bool isSpringNetworkSet(void) const { return _spn->getNumberOfParticles() > 0; }
-    bool isReduceSet(void) const { return _reduce->getNumberOfRules() > 0; }
-    bool isForceFieldSet(void) const { return _ff.getNumberOfProperties() > 0; }
-
-  protected:
-    spn::SpringNetwork * _spn;
-    Reduce * _reduce;
-    biospring::forcefield::ForceField _ff;
-
-    bool _ignoreDuplicateParticles;
-    bool _ignoreMissingParticle;
-
-    void _reduceAA(std::vector<const biospring::spn::Particle *> & particles,
-                   std::vector<biospring::spn::Particle *> & cgParticles, const std::string & resname,
-                   const size_t resid) const;
-};
-
-} // namespace legacy
 } // namespace reduce
 } // namespace biospring
 
