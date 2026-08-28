@@ -208,10 +208,6 @@ int main(int argc, char ** argv)
                                   args.dihedralBackbone, args.dihedralSidechain, args.dihedralPlanarity);
     }
 
-    // Hydrogen bonds and disulfides as ordinary springs. Deliberately AFTER
-    // both network builders and independent of either: these describe bonds
-    // the structure already has, whatever strategy built the rest of the
-    // network -- or none at all.
     // Sets the particle charge to user-defined value.
     if (args.useUserCharge())
     {

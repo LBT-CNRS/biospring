@@ -85,8 +85,13 @@ size_t retuneHydrogenBondSprings(topology::Topology & topology, const DonorAccep
 //
 // The sulfur is found by name: a particle whose name ends in "SG" in a residue
 // whose name starts with "CY", which covers both the raw PDB name and the type
-// a .grp gives it (amber.grp names it CSG). Element names would be the honest
-// test, but no reader in BioSpring populates them.
+// a .grp gives it (amber.grp names it CSG).
+//
+// The element would be the honest test, and PDBReader does read columns 77-78
+// when they are there -- but a real file often leaves them blank, and one of
+// this repository's own examples does: helix_loop_sheet.pdb carries 374 atoms
+// and not one element. Keying on the element would make the option work on
+// some structures and silently not on others.
 //
 // Returns the number of springs retuned.
 size_t retuneDisulfideSprings(topology::Topology & topology, float stiffness);
