@@ -429,19 +429,19 @@ void Matrix::readSolutionsFromRREF(ostream& os)
         }
         if (allZeros && R(i, cols_ - 1) != 0) {
             hasSolutions = false;
-            os << "NO SOLUTIONS" << endl << endl;
+            os << "NO SOLUTIONS" << std::endl << std::endl;
             doneSearching = true;
         } else if (allZeros && R(i, cols_ - 1) == 0) {
-            os << "INFINITE SOLUTIONS" << endl << endl;
+            os << "INFINITE SOLUTIONS" << std::endl << std::endl;
             doneSearching = true;
         } else if (rows_ < cols_ - 1) {
-            os << "INFINITE SOLUTIONS" << endl << endl;
+            os << "INFINITE SOLUTIONS" << std::endl << std::endl;
             doneSearching = true;
         }
         i++;
     }
     if (!doneSearching)
-        os << "UNIQUE SOLUTION" << endl << endl;
+        os << "UNIQUE SOLUTION" << std::endl << std::endl;
 
     // get solutions if they exist
     if (hasSolutions)
@@ -467,9 +467,9 @@ void Matrix::readSolutionsFromRREF(ostream& os)
                     }
                 }
             }
-            os << "Special solution:" << endl << special << endl;
+            os << "Special solution:" << std::endl << special << std::endl;
         }
-        os << "Particular solution:" << endl << particular << endl;
+        os << "Particular solution:" << std::endl << particular << std::endl;
     }
 }
 
@@ -576,7 +576,7 @@ ostream& operator<<(ostream& os, const Matrix& m)
         for (int j = 1; j < m.cols_; ++j) {
             os << " " << m.p[i][j];
         }
-        os << endl;
+        os << std::endl;
     }
     return os;
 }
