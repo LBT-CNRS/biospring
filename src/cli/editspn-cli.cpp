@@ -63,12 +63,12 @@ int main(int argc, char ** argv)
 //
 // Reads a spring description text file and store the descriptors in sdesc.
 //
-void readSpringFile(const std::string & filename, vector<SpringDescriptor> & sdesc)
+void readSpringFile(const std::string & filename, std::vector<SpringDescriptor> & sdesc)
 {
     std::ifstream filein;
     biospring::utils::file::openread(filename, filein);
 
-    istringstream iss;
+    std::istringstream iss;
 
     for (unsigned lineid = 1; not filein.eof(); ++lineid)
     {
@@ -77,7 +77,7 @@ void readSpringFile(const std::string & filename, vector<SpringDescriptor> & sde
 
         if (not(buffer.empty() or buffer[0] == '#'))
         {
-            istringstream iss(buffer);
+            std::istringstream iss(buffer);
             std::string id1, id2, sstiff, sequi;
             iss >> id1 >> id2 >> sstiff >> sequi;
 
@@ -106,7 +106,7 @@ void readSpringFile(const std::string & filename, vector<SpringDescriptor> & sde
 // If some springs already exist, change their property to those described in
 // sdesc.
 //
-void addSpringsToSpn(const vector<SpringDescriptor> & springDescriptors, biospring::topology::Topology & top)
+void addSpringsToSpn(const std::vector<SpringDescriptor> & springDescriptors, biospring::topology::Topology & top)
 {
     std::unordered_map<std::string, unsigned> pidmap;
 
@@ -167,7 +167,7 @@ void addSpringsToSpn(const std::string & path, biospring::topology::Topology & t
 //
 void checkParticleIdFormat(const std::string & pid, const unsigned & lineid)
 {
-    vector<std::string> tokens;
+    std::vector<std::string> tokens;
     std::string delimiters = "::";
 
     std::string::size_type lastPos = pid.find_first_not_of(delimiters, 0);
@@ -191,7 +191,7 @@ void checkParticleIdFormat(const std::string & pid, const unsigned & lineid)
 //
 // Dues if the particle id is not in the map containing all particle ids
 //
-void checkParticleInSpn(const std::string & pid, const unordered_map<std::string, unsigned> & pidmap)
+void checkParticleInSpn(const std::string & pid, const std::unordered_map<std::string, unsigned> & pidmap)
 {
     if (pidmap.count(pid) == 0)
     {
