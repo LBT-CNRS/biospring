@@ -5,6 +5,10 @@
 #include <unordered_map>
 #include <vector>
 
+// ReduceRule used to arrive here through reduce/Reduce.h, which was legacy and
+// is gone. The dependency is real, so it is declared.
+#include "ReduceRule.h"
+
 namespace biospring
 {
 namespace reduce

@@ -53,7 +53,7 @@ void SafeConfigurationReader::_registerParameter(const _Token & param)
 SafeConfigurationReader::_Token SafeConfigurationReader::_splitLine(const std::string & line, const size_t lineid)
 {
     size_t loc = line.find("=");
-    if (loc == string::npos)
+    if (loc == std::string::npos)
     {
         logging::die("SafeConfigurationReader: line %d: syntax error: expects param = value (found \"%s\")", lineid,
                      line.c_str());
