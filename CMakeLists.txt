@@ -134,8 +134,6 @@ set(BIOSPRING_CORE_SOURCES
     src/forcefield/ForceField.cpp
     src/grid/GridCoordinatesSystem.cpp
     src/grid/PotentialGrid.cpp
-    src/reduce/ParticleGroup.cpp
-    src/reduce/Reduce.cpp
     src/reduce/Reducer.cpp
     src/reduce/ReduceRule.cpp
     src/IO/io.cpp

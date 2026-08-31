@@ -387,7 +387,7 @@ void RigidBody::solveMonteCarlo()
     //logging::info("delta_e: %f", delta_e);
     // p > 1 if delta_e < 0 -> accepted ; p decreases progressively when delta_e > 0 increases.
     double T = _spn->getMonteCarloTemperature();
-    double p = exp(min(1., -(delta_e * 1000) / (1.380650 * T * 6.0221407))); // 
+    double p = exp(std::min(1., -(delta_e * 1000) / (1.380650 * T * 6.0221407))); // 
     //logging::info("delta_e: %f, p: %f", p);
     //logging::info((to_string(bf).c_str()));
     bool accepted = p >= Random::get<Random::common>(0., 1.);

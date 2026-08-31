@@ -5,7 +5,6 @@
 #include "configuration/Configuration.hpp"
 
 #include "forcefield/ForceField.h"
-#include "reduce/Reduce.h"
 
 #include "IO/modern.hpp"
 
@@ -439,14 +438,14 @@ class SpringNetwork
     // ================================================================================
     // Returns subsets of particles.
 
-    const vector<Particle> & getParticles() const { return _particles; }
-    const vector<Particle> & getInitParticles() const { return _initparticles; }
+    const std::vector<Particle> & getParticles() const { return _particles; }
+    const std::vector<Particle> & getInitParticles() const { return _initparticles; }
 
     // Returns subsets of particle ids.
-    vector<unsigned> getDynamicParticles() const { return _dynamicparticules; }
-    vector<unsigned> getChargedParticles() const { return _chargedparticules; }
-    vector<unsigned> getStaticParticles() const { return _staticparticules; }
-    vector<unsigned> getHydrophobicParticles() const { return _hydrophobicparticules; }
+    std::vector<unsigned> getDynamicParticles() const { return _dynamicparticules; }
+    std::vector<unsigned> getChargedParticles() const { return _chargedparticules; }
+    std::vector<unsigned> getStaticParticles() const { return _staticparticules; }
+    std::vector<unsigned> getHydrophobicParticles() const { return _hydrophobicparticules; }
 
     // Returns the particle's centroid.
     auto getCentroid() const { return biospring::measure::centroid(_particles); }
@@ -636,7 +635,7 @@ class SpringNetwork
 
     std::unique_ptr<InsertionVector> _insertionVector;
 
-    vector<Constraint *> _constraints;
+    std::vector<Constraint *> _constraints;
     float _meanConstraintsDistances;
 
     static unsigned _currentstructid;

@@ -8,7 +8,7 @@ namespace rigidbody
 {
     std::vector<RigidBody*> RigidBodiesManager::collection;
 
-    void RigidBodiesManager::InitRigidBodies(spn::SpringNetwork * sp, vector<unsigned> newParticlesIds)
+    void RigidBodiesManager::InitRigidBodies(spn::SpringNetwork * sp, std::vector<unsigned> newParticlesIds)
     {
         if (newParticlesIds.empty()) {
             // If rigidparticlesids is empty, clear the collection and return.

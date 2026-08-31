@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "IO/ReaderBase.h"
-#include "reduce/Reduce.h"
 #include "reduce/ReduceRule.h"
 #include "reduce/ReduceRuleContainer.hpp"
 
@@ -32,28 +31,6 @@ class ReduceRuleReader : public ReaderBase
     ReduceRule parse_rule(const std::string & line, size_t line_id) const;
 };
 
-namespace legacy
-{
-
-class ReduceRuleReader : public ReaderBase
-{
-  public:
-    ReduceRuleReader() : ReaderBase(), _reduce(nullptr) {}
-    ReduceRuleReader(const std::string & path) : ReaderBase(path), _reduce(nullptr) {}
-    ReduceRuleReader(const char * const path) : ReaderBase(path), _reduce(nullptr) {}
-
-    ~ReduceRuleReader() {}
-
-    Reduce * getReduce() const { return _reduce; }
-    void setReduce(Reduce * const red) { _reduce = red; }
-
-    void read();
-
-  private:
-    Reduce * _reduce;
-};
-
-} // namespace legacy
 } // namespace reduce
 } // namespace biospring
 
