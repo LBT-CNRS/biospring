@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "Particle.h"
-#include "Reduce.h"
 #include "ReduceRuleContainer.hpp"
 #include "SpringNetwork.h"
 #include "forcefield/ForceField.h"

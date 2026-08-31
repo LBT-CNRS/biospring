@@ -65,7 +65,7 @@ void writeTopology(const std::string & path, const topology::Topology & topology
     _writeTopology(path, &spn, writePdbConect);
 }
 
-void writeTopology(const vector<string> & outputfiles, const topology::Topology & topology, bool writePdbConect)
+void writeTopology(const std::vector<std::string> & outputfiles, const topology::Topology & topology, bool writePdbConect)
 {
     spn::SpringNetwork spn;
     topology.to_spring_network(spn);
