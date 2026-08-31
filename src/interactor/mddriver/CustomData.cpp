@@ -1,4 +1,5 @@
 #ifdef MDDRIVER_SUPPORT
+#include <cmath>
 
 #include <string>
 #include <unordered_map>
@@ -87,21 +88,21 @@ void CustomData::processCustomFloatData(InteractorMDDriver * imdl) {
                 if (nbfloat == 2) {
                     biospring::forcefield::ForceField* ff = imdl->getSpringNetwork()->getForceField();
                     logging::info("Recieved new double membrane tube curvature to: %f(upper memb) and %f(lower memb)", customFloat[0], customFloat[1]);
-                    if (!isnan(customFloat[0]) && isnan(customFloat[1]))
+                    if (!std::isnan(customFloat[0]) && std::isnan(customFloat[1]))
                     {
                         logging::info("Set new double membrane tube curvature to: %f(upper memb) ", customFloat[0]);
                         logging::info("Keep double membrane tube curvature to: %f(lower memb) ", ff->getImpDoubleMembraneLowerMembTubeCurv());
                         ff->setImpDoubleMembraneUpperMembTubeCurv(customFloat[0]);
                     }
                       
-                    if (!isnan(customFloat[1]) && isnan(customFloat[0]))
+                    if (!std::isnan(customFloat[1]) && std::isnan(customFloat[0]))
                     {
                         logging::info("Set new double membrane tube curvature to: %f(lower memb) ", customFloat[1]);
                         logging::info("Keep double membrane tube curvature to: %f(upper memb) ", ff->getImpDoubleMembraneUpperMembTubeCurv());
                         ff->setImpDoubleMembraneLowerMembTubeCurv(customFloat[1]);
                     }
 
-                    if (!isnan(customFloat[1]) && !isnan(customFloat[0]))
+                    if (!std::isnan(customFloat[1]) && !std::isnan(customFloat[0]))
                     {
                         logging::info("Set new double membrane tube curvature to: %f(upper memb) and %f(lower memb)", customFloat[0], customFloat[1]);
                         ff->setImpDoubleMembraneUpperMembTubeCurv(customFloat[0]);
