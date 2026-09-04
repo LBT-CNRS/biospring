@@ -91,6 +91,163 @@ struct SpringBuffer
     }
 };
 
+// Buffers one dihedral ghost-spring family (phi/psi/omega/sidechain/planarity
+// -- see SpringNetwork's _dihedral*springs) for NetCDF I/O. Deliberately
+// simpler than SpringBuffer: no `nbofspringsperparticle` companion array,
+// since ghost springs are never registered as spring-neighbours (see
+// SpringNetwork::addDihedralSpring's comment) and nothing reads
+// that field back on the SpringBuffer side either (write-only, informational).
+struct DihedralSpringBuffer
+{
+    size_t number_of_springs;
+    int (*springs)[2];
+    float * springsstiffnesses;
+    float * springsequilibriums;
+    // This spring's share of its axis's exact dihedral-energy correction
+    // (see spn::Spring::getDcOffset). Zero for a family that never got this
+    // far in a version of the .bi.ff written before the correction existed
+    // (old .nc files stay readable, see readDihedralSpringGroup).
+    float * springsdcoffsets;
+
+    ~DihedralSpringBuffer() { clear(); }
+
+    DihedralSpringBuffer(const DihedralSpringBuffer &) = delete;
+    DihedralSpringBuffer & operator=(const DihedralSpringBuffer &) = delete;
+
+    void clear()
+    {
+        delete[] springs;
+        delete[] springsstiffnesses;
+        delete[] springsequilibriums;
+        delete[] springsdcoffsets;
+        springs = nullptr;
+        springsstiffnesses = nullptr;
+        springsequilibriums = nullptr;
+        springsdcoffsets = nullptr;
+        number_of_springs = 0;
+    }
+
+    DihedralSpringBuffer()
+        : number_of_springs(0), springs(0), springsstiffnesses(0), springsequilibriums(0), springsdcoffsets(0)
+    {
+    }
+
+    DihedralSpringBuffer(size_t number_of_springs) : DihedralSpringBuffer() { initialize(number_of_springs); }
+
+    void initialize(size_t nSprings)
+    {
+        clear();
+        number_of_springs = nSprings;
+        if (nSprings > 0)
+        {
+            springs = new int[nSprings][2]{};
+            springsstiffnesses = new float[nSprings]{};
+            springsequilibriums = new float[nSprings]{};
+            springsdcoffsets = new float[nSprings]{};
+        }
+    }
+
+    // Copies one dihedral spring family's data (from SpringNetwork's own
+    // vector, i.e. getDihedralSprings(family)) into these buffers.
+    void bufferize(const std::vector<biospring::spn::Spring> & source)
+    {
+        for (size_t i = 0; i < source.size(); ++i)
+        {
+            const biospring::spn::Spring & s = source[i];
+            springs[i][0] = s.getParticle1().getId();
+            springs[i][1] = s.getParticle2().getId();
+            springsequilibriums[i] = s.getEquilibrium();
+            springsstiffnesses[i] = s.getStiffness();
+            springsdcoffsets[i] = s.getDcOffset();
+        }
+    }
+};
+
+// Buffers ghost-particle anchor bindings (SpringNetwork's _ghostparticles /
+// GhostParticleBinding, see GhostParticle.h) for NetCDF I/O. A ghost
+// particle's own coordinates/mass/etc. are already covered by the regular
+// ParticleBuffer above (it is a real, if massless and static, entry in
+// SpringNetwork's particle list) -- this buffer only carries the extra
+// binding info (which particle is a ghost, its 3 anchor particles, and its
+// placement parameters) needed to reconstruct it on reload.
+struct GhostParticleBuffer
+{
+    size_t number_of_ghostparticles;
+    int * ownindices;
+    int (*anchorindices)[3];
+    float * rs;
+    float * thetas;
+    float * deltas;
+    // spn::GhostPlacement: which construction places the ghost. Explicit
+    // rather than inferred from the geometry -- the two modes read disjoint
+    // parameters, so no value combination identifies them on its own.
+    int * placements;
+
+    ~GhostParticleBuffer() { clear(); }
+
+    GhostParticleBuffer(const GhostParticleBuffer &) = delete;
+    GhostParticleBuffer & operator=(const GhostParticleBuffer &) = delete;
+
+    void clear()
+    {
+        delete[] ownindices;
+        delete[] anchorindices;
+        delete[] rs;
+        delete[] thetas;
+        delete[] deltas;
+        delete[] placements;
+        placements = nullptr;
+        ownindices = nullptr;
+        anchorindices = nullptr;
+        rs = nullptr;
+        thetas = nullptr;
+        deltas = nullptr;
+        number_of_ghostparticles = 0;
+    }
+
+    GhostParticleBuffer()
+        : number_of_ghostparticles(0), ownindices(0), anchorindices(0), rs(0), thetas(0), deltas(0), placements(0)
+    {
+    }
+
+    GhostParticleBuffer(size_t number_of_ghostparticles) : GhostParticleBuffer()
+    {
+        initialize(number_of_ghostparticles);
+    }
+
+    void initialize(size_t nGhosts)
+    {
+        clear();
+        number_of_ghostparticles = nGhosts;
+        if (nGhosts > 0)
+        {
+            ownindices = new int[nGhosts]{};
+            anchorindices = new int[nGhosts][3]{};
+            rs = new float[nGhosts]{};
+            thetas = new float[nGhosts]{};
+            deltas = new float[nGhosts]{};
+            placements = new int[nGhosts]{};
+        }
+    }
+
+    // Copies SpringNetwork ghost-particle bindings (getGhostParticles()) into these buffers.
+    void bufferize(const std::vector<biospring::spn::GhostParticleBinding> & source)
+    {
+        for (size_t i = 0; i < source.size(); ++i)
+        {
+            const biospring::spn::GhostParticleBinding & g = source[i];
+            ownindices[i] = static_cast<int>(g.ownIndex);
+            anchorindices[i][0] = static_cast<int>(g.anchorBIndex);
+            anchorindices[i][1] = static_cast<int>(g.anchorCIndex);
+            anchorindices[i][2] = static_cast<int>(g.anchorRefIndex);
+            rs[i] = g.r;
+            thetas[i] = g.theta_deg;
+            deltas[i] = g.delta_deg;
+            placements[i] = static_cast<int>(g.placement);
+        }
+    }
+};
+
 struct ParticleBuffer
 {
     size_t number_of_particles;

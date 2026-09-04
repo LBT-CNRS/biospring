@@ -137,6 +137,7 @@ set(BIOSPRING_CORE_SOURCES
     src/reduce/Reducer.cpp
     src/reduce/ReduceRule.cpp
     src/IO/io.cpp
+    src/IO/BondedForceFieldReader.cpp
     src/IO/CSVSampleWriter.cpp
     src/IO/ForceFieldReader.cpp
     src/IO/NetCDFReader.cpp
@@ -163,6 +164,7 @@ set(BIOSPRING_CORE_SOURCES
     src/interactor/Interactor.cpp
     src/logging.cpp
     src/measure.cpp
+    src/spn/GhostParticle.cpp
     src/spn/Particle.cpp
     src/spn/ParticleProperty.cpp
     src/spn/Spring.cpp

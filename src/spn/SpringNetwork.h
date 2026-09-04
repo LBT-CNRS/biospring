@@ -1,6 +1,7 @@
 #ifndef _SPRINGNETWORK_H_
 #define _SPRINGNETWORK_H_
 
+#include <array>
 #include "configuration/Configuration.hpp"
 
 #include "forcefield/ForceField.h"
@@ -14,6 +15,7 @@
 #include "timeit.hpp"
 
 #include "Constraint.h"
+#include "GhostParticle.h"
 #include "InsertionVector.h"
 #include "interactor/Interactor.h"
 #include "Particle.h"
@@ -49,7 +51,12 @@ class SpringNetwork
 
     struct Energies
     {
+        // The --rigidbody/ENM mesh's own energy. The dihedral ghost rings
+        // keep a dedicated channel instead of being folded in here, since
+        // "spring energy" is only a meaningful, self-contained quantity for
+        // a plain ENM/rigid-body network.
         float spring = 0.0f;
+        float dihedral = 0.0f;
         float electrostatic = 0.0f;
         float steric = 0.0f;
         float kinetic = 0.0f;
@@ -59,6 +66,7 @@ class SpringNetwork
         void reset()
         {
             spring = 0.0;
+            dihedral = 0.0;
             electrostatic = 0.0;
             steric = 0.0;
             kinetic = 0.0;
@@ -84,6 +92,8 @@ class SpringNetwork
         SearcherPtr steric;
         SearcherPtr electrostatic;
         SearcherPtr hydrophobic;
+
+        // Shared grid holding every donor AND acceptor particle together
     };
 
     static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
@@ -102,8 +112,11 @@ class SpringNetwork
     SpringNetwork()
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
-          _dynamicsprings(), _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
-          _hydrophobicPairScratch(), _energies(), _nsearch(), _neighborSearchesDirty(false),
+          _dynamicsprings(), _dihedralsprings(),
+          _ghostparticles(),
+          _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
+          _hydrophobicPairScratch(), _energies(), _nsearch(),
+          _neighborSearchesDirty(false),
           _nbiter(0), _end(false), _pause(false), _grids(), _constraintenabled(false), _framerate(0.0),
           _freesasaState(), _ff(nullptr), _trajectories(), _insertionVector(nullptr), _constraints(),
           _meanConstraintsDistances(0.0), _structid(_currentstructid++), _config(), _profiler()
@@ -154,7 +167,51 @@ class SpringNetwork
     // ================================================================================
     // Returns energies (read-only).
     float getKineticEnergy() const { return _energies.kinetic; }
+    // The untouched --rigidbody/ENM mesh only -- see Energies' own comment.
     float getSpringEnergy() const { return _energies.spring; }
+    // The dihedral families, used as the index of _dihedralsprings and of
+    // anything that has to walk them in a fixed order (NetCDF I/O, the
+    // per-family runtime gates, Topology's own collections and
+    // BondedForceFieldReader's DihedralFamily, which both alias this).
+    // Keep DIHEDRAL_FAMILY_COUNT last.
+    //
+    // The first five name protein chemistry (phi/psi/omega, chi1-4, and the
+    // improper that keeps aromatic rings planar); the nucleic ones are
+    // separate families rather than reusing SIDECHAIN because a nucleotide's
+    // axes do not map onto a residue's: alpha..zeta are six backbone
+    // torsions where a protein has three, and NUCLEIC_SUGAR is split off
+    // from the rest of the backbone because those four furanose ring bonds
+    // are what governs the sugar pucker -- the single lever selecting the A
+    // or B helical form -- so its energy has to be readable, and switchable,
+    // on its own.
+    enum DihedralFamilyIndex
+    {
+        DIHEDRAL_PHI = 0,
+        DIHEDRAL_PSI,
+        DIHEDRAL_OMEGA,
+        DIHEDRAL_SIDECHAIN,
+        DIHEDRAL_PLANARITY,
+        DIHEDRAL_NUCLEIC_BACKBONE,
+        DIHEDRAL_NUCLEIC_CHI,
+        DIHEDRAL_NUCLEIC_SUGAR,
+        DIHEDRAL_FAMILY_COUNT
+    };
+
+    // The .nc variable-group prefix of each family, in DihedralFamilyIndex
+    // order. Stated once here so the writer and the reader cannot drift out
+    // of step -- they used to spell these names out separately, four times
+    // over.
+    static constexpr const char * DIHEDRAL_FAMILY_NAMES[DIHEDRAL_FAMILY_COUNT] = {
+        "dihedralphi",      "dihedralpsi",   "dihedralomega",           "dihedralsidechain", "dihedralplanarity",
+        "dihedralnucleicbackbone", "dihedralnucleicchi", "dihedralnucleicsugar"};
+
+    // Read-only view of one family's springs, for NetCDF I/O.
+    const std::vector<Spring> & getDihedralSprings(unsigned family) const
+    {
+        return _dihedralsprings[family];
+    }
+
+    float getDihedralEnergy() const { return _energies.dihedral; }
     float getStericEnergy() const { return _energies.steric; }
     float getElectrostaticEnergy() const { return _energies.electrostatic; }
     float getIMPEnergy() const { return _energies.imp; }
@@ -189,6 +246,19 @@ class SpringNetwork
     // Adds a spring to the network.
     void addSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
 
+    // Adds a dihedral ghost spring to the network -- always a new spring
+    // (unlike addSpring, never checked against existing spring-neighbours),
+    // and deliberately not registered as a spring-neighbour: a ghost spring
+    // connects two real substituent atoms that are a real 1-4 pair (never a
+    // real 1-2/1-3 bond), and BioSpring's nonbonded exclusion is driven
+    // entirely by spring-neighbour membership (see Particle::isInSpringNeighbors) --
+    // registering ghost springs there would silently exclude 1-4 pairs from
+    // nonbonded forces as a side effect, which is a separate physical
+    // modelling decision (matching AMBER's scaled 1-4 nonbonded convention)
+    // that this feature does not make. See doc/BondedForceFieldSprings.md.
+    void addDihedralSpring(unsigned family, unsigned id1, unsigned id2, float equilibrium, float stiffness,
+                           float dcOffset = 0.0f);
+
     void updateSpringState(unsigned id, bool isStatic);
     void addStaticSpring(unsigned id) { _staticsprings.push_back(id); }
     void addDynamicSpring(unsigned id) { _dynamicsprings.push_back(id); }
@@ -197,6 +267,37 @@ class SpringNetwork
 
     // Adds a particle to the network.
     void addParticle(const Particle & p);
+
+    // Adds a massless virtual-site ("ghost") particle to the network,
+    // bound to 3 already-added real anchor particles (by index -- see
+    // GhostParticle.h for why an index, not a pointer/reference, is used).
+    // Must be called during the same "add every particle" phase as
+    // addParticle (before any spring is added -- enforced the same way,
+    // via addParticle's own check), and anchorBIndex/anchorCIndex/
+    // anchorRefIndex must already refer to previously-added particles.
+    // Creates the ghost's own Particle entry (isStatic()=true, mass=0,
+    // initial position placed from the anchors' current positions) and
+    // returns its index. See redistributeGhostForces/updateGhostPositions
+    // for the two per-step operations this binding drives.
+    unsigned addGhostParticle(unsigned placement, unsigned anchorBIndex, unsigned anchorCIndex,
+                              unsigned anchorRefIndex, float r,
+                              float theta_deg, float delta_deg);
+
+    // Redistributes every ghost particle's currently accumulated force
+    // (from ordinary spring force computation, e.g. a dihedral ghost
+    // spring between two ghost particles) onto its 3 anchors, then resets
+    // the ghost's own force to zero (it is static, so it never reaches
+    // updateParticlePositions's normal per-dynamic-particle resetForce()).
+    // Called once per step, right after computeForces().
+    void redistributeGhostForces();
+
+    // Recomputes every ghost particle's position from its 3 anchors'
+    // CURRENT positions. Called once per step, right after
+    // updateParticlePositions() (i.e. after the anchors themselves have
+    // been integrated).
+    void updateGhostPositions();
+
+    const std::vector<GhostParticleBinding> & getGhostParticles() const { return _ghostparticles; }
 
     void updateParticleState(unsigned id, bool isStatic);
     void addStaticParticle(unsigned id) { _staticparticules.push_back(id); }
@@ -215,6 +316,9 @@ class SpringNetwork
 
     // Returns the list of springs.
     const std::vector<Spring> & getSprings() const { return _springs; }
+
+    // One dihedral ghost-spring family's list is reached by index only, via
+    // getDihedralSprings(family) above.
 
     // Returns ith spring in spring list.
     std::vector<Spring>::const_reference getSpring(unsigned index) const { return _springs[index]; }
@@ -255,6 +359,17 @@ class SpringNetwork
     float getNeighborSkin() const { return _config.sim.neighborskin; }
 
     bool isSpringEnabled() const { return _config.spring.enable; }
+    // Per-family runtime debug toggles for the dihedral ghost springs that
+    // -dihedral* already decided, at build time, to create (see
+    // Configuration.hpp's own comment on these settings).
+    bool isDihedralPhiEnabled() const { return _config.dihedralphi.enable; }
+    bool isDihedralPsiEnabled() const { return _config.dihedralpsi.enable; }
+    bool isDihedralOmegaEnabled() const { return _config.dihedralomega.enable; }
+    bool isDihedralChiEnabled() const { return _config.dihedralchi.enable; }
+    bool isDihedralPlanarityEnabled() const { return _config.dihedralplanarity.enable; }
+    bool isDihedralNucleicBackboneEnabled() const { return _config.dihedralnucleicbackbone.enable; }
+    bool isDihedralNucleicChiEnabled() const { return _config.dihedralnucleicchi.enable; }
+    bool isDihedralNucleicSugarEnabled() const { return _config.dihedralnucleicsugar.enable; }
     bool isViscosityEnabled() const { return _config.viscosity.enable; }
     bool isStericEnabled() const { return _config.steric.enable; }
     bool isElectrostaticEnabled() const { return _config.electrostatic.enable; }
@@ -303,8 +418,19 @@ class SpringNetwork
     virtual void computeStep();
     virtual void computeForces();
     virtual void computeSpringForces();
+    virtual void computeDihedralForces();
     virtual void computeParticleForces();
     virtual void updateParticlePositions();
+
+  private:
+    // Shared parallel-compute/serial-accumulate loop behind
+    // computeDihedralForces -- see its definition for the
+    // pattern and why the accumulation stays serial. Returns the summed
+    // energy of the collection.
+    float _computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
+                                         bool subtractDcOffset);
+
+  public:
 
     unsigned getNumberOfSprings() const { return _springs.size(); }
     unsigned getNumberOfParticles() const { return _particles.size(); }
@@ -361,6 +487,7 @@ class SpringNetwork
     void _setupConstraints();
     std::vector<size_t> _chargedParticleIndexes() const;
     std::vector<size_t> _hydrophobicParticleIndexes() const;
+
     void _excludeProbeFromNeighborSearch(NeighborSearch::Searcher & searcher);
     void _updateNeighborSearches();
     void _markNeighborSearchesDirty();
@@ -417,9 +544,61 @@ class SpringNetwork
     std::vector<unsigned> _staticsprings;
     std::vector<unsigned> _dynamicsprings;
 
+    // Dihedral ghost springs, kept in their own arrays (rather than tagged
+    // entries in _springs) so each family stays identifiable for NetCDF I/O
+    // (see getDihedralPhiSprings etc.) without touching Spring/_springs at
+    // all. Which families are BUILT is a build-time decision (see
+    // -dihedral/--dihedral in pdb2spn-cli.cpp: PHI/PSI/OMEGA are always
+    // built together); which of the built ones are actually APPLIED at
+    // runtime is independently gated in computeDihedralForces by this
+    // Configuration's dihedral.phi/psi/omega/chi settings, on top of the
+    // same isSpringEnabled() master switch regular springs use. Always
+    // fully iterated when enabled (no static/dynamic split): a ghost
+    // spring connecting two fully static particles is an unusual, not a
+    // performance-critical, case.
+    // Indexed by family rather than held as parallel members, for the same
+    // reason topology::Topology is: a new family used to mean repeating the
+    // same declaration, clear, accumulate, add and clear-all lines here too.
+    std::array<std::vector<Spring>, DIHEDRAL_FAMILY_COUNT> _dihedralsprings;
+
+    // Ghost (massless virtual-site) particle bindings -- see
+    // GhostParticle.h. Each entry's own Particle lives in _particles like
+    // any other (isStatic()=true, mass=0); this only records which 3
+    // anchor particles (by index) drive its position/force.
+    std::vector<GhostParticleBinding> _ghostparticles;
+
     // One force contribution per dynamic spring. Reused between steps to avoid
     // allocations in the simulation loop and to keep OpenMP writes disjoint.
     std::vector<Vector3f> _springForceScratch;
+
+    // One anchor-force triple per ghost, filled in parallel by
+    // redistributeGhostForces' Jacobian pass, then accumulated serially
+    // (anchors are heavily shared -- up to 62 ghosts per anchor on
+    // example 072 -- so they must not be written concurrently). Same
+    // parallel-compute/serial-accumulate split as _springForceScratch.
+    struct GhostForceContribution
+    {
+        Vector3f F_B;
+        Vector3f F_C;
+        Vector3f F_Ref;
+    };
+    std::vector<GhostForceContribution> _ghostForceScratch;
+
+    // One entry per distinct (B, C) ghost axis. The reaction owed to the
+    // two axis atoms is reconstructed once per axis from the running
+    // force/torque totals of every ghost hanging off it -- see
+    // GhostParticle::redistributeAxisReaction, which is only valid over
+    // complete spring pairs, hence per axis rather than per ghost.
+    struct GhostAxis
+    {
+        unsigned anchorBIndex;
+        unsigned anchorCIndex;
+        Vector3f sumGhostForces;
+        Vector3f sumGhostTorquesAboutB;
+        Vector3f sumAtomForces;
+        Vector3f sumAtomTorquesAboutB;
+    };
+    std::vector<GhostAxis> _ghostaxes;
 
     // One bucket per dynamic-particle-loop index, filled while computing
     // nonbonded pair interactions in parallel: each pair is evaluated once,
@@ -431,9 +610,12 @@ class SpringNetwork
     std::vector<std::vector<spn::DeferredNonbondedContribution>> _electrostaticPairScratch;
     std::vector<std::vector<spn::DeferredNonbondedContribution>> _hydrophobicPairScratch;
 
+
     Energies _energies;
     NeighborSearch _nsearch;
     bool _neighborSearchesDirty;
+
+
 
     int _nbiter;
     bool _end;

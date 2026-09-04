@@ -90,6 +90,55 @@ i.e. ~2.5 kJ.mol-1.A-2).
 time, by pdb2spn/editspn/mergespn's own `--cutoff` option (see there), not rebuilt at runtime from
 this value.
 ---
+---
+* **dihedralphi.enable = 1** *(boolean)* Runtime debug on/off for phi (backbone) dihedral ghost
+springs, independently of psi/omega/chi. Only meaningful if the topology was actually built with
+`-dihedralbackbone` (or `-dihedral`) in the first place -- a family not built has no springs to
+enable/disable either way. Defaults to enabled so an `.msp` written before this setting existed
+keeps the same behaviour.
+* **dihedralpsi.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the psi axis.
+* **dihedralomega.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the omega
+(peptide-bond) axis.
+* **dihedralchi.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for every side-chain
+chi1-4 dihedral (the SIDECHAIN family in the `.bi.ff`).
+* **dihedralplanarity.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the PLANARITY
+impropers that keep aromatic rings and the His hub flat.
+
+**These settings isolate a family's contribution; they do not undo the model.** Turning every
+one of them off does *not* reproduce a topology built without the corresponding `pdb2spn`
+flags: a family not requested at build time never gets a spring, a ghost particle or a NetCDF
+entry, so nothing at runtime can bring it back -- and what you get instead is the rigid body
+still carrying every ghost particle the disabled families created.
+
+To compare a rigid-body model against a bonded one, **build one `.nc` per stage**
+(`--rigidbody` alone, then `+ --dihedral`) rather than toggling one `.nc` at runtime. See
+`073.BondedStages` in the Biospring-Example repository, which does exactly that.
+
+Bonds and valence angles have no `.msp` switch and no `pdb2spn` flag of their own: they are
+held by the `--rigidbody` mesh at `--stiffness`. See `073.BondedStages`' README in the
+Biospring-Example repository for
+why the model is built that way, and for the `--stiffness` value it needs.
+* **dihedral.tangentialonly = 0** *(boolean)* Project each ghost ring's reaction onto the
+tangential direction about its own axis before it reaches the real atoms, so a torsion pushes a
+substituent only *around* that axis -- which is exactly what AMBER's dihedral force does
+(`F` is along `r_ij x r_jk`, hence perpendicular to both the axis and the i-j-k plane). What the
+projection drops carries no torque about the axis at all, so the torque is preserved exactly;
+the reaction on the two axis atoms is then balanced against zero rather than against the ghost
+totals, which is what keeps the discarded part from simply reappearing there.
+
+Measured on ubiquitin, this is not a small correction: 96.4 % of the force the rings apply
+(99.8 % median) is radial or axial and merely deforms the rigid-body mesh. With the projection,
+spring energy after 20000 steps falls from 442.90 to 0.80 kJ/mol, and per-atom agreement with
+AMBER's own dihedral forces goes from a correlation of 0.000 to 0.650. Because the leak does not
+scale with `--stiffness` while the mesh's resistance does, it is what forces a stiff mesh: with
+the projection, stiffness can drop from 8000 to 500 and the timestep rise from 1.0 to 4.0 fs,
+with *better* geometry at equal simulated time (CA-RMSD 1.60 -> 1.48 A over 20 ps).
+
+Off by default: it changes the forces of an existing model, so it is opted into rather than
+imposed. **Known limit**: the torque is right in total and in direction, but it is delivered
+concentrated -- on 936 of 937 axes the ring pushes fewer substituents than AMBER (1.35 against
+4.92 on average), so the force on the atoms it does push is about 2.4x too large.
+
 * **viscosity.enable = 0** *(boolean)* Enables a damping factor on the particles.
 * **viscosity.value = 1.0** *(Da.fs-1, float)* Damping factor.
 

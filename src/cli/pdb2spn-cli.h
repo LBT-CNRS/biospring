@@ -20,6 +20,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     std::string pathForceField;
     std::string pathGroup;
     std::string pathRigidBody;
+    std::string pathBondedInteraction;
     std::string pathStaticHydrogenBond;
     std::vector<std::string> pathOutputList;
 
@@ -33,6 +34,10 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     bool ignoreDuplicates;
     bool ignoreMissing;
     bool writePdbConect;
+    bool dihedral;
+    bool dihedralBackbone;
+    bool dihedralSidechain;
+    bool dihedralPlanarity;
 
     // Constructor (inherited from argparse::CommandLineArgumentsBase).
     CommandLineArguments(const std::string & name, const argparse::description_t & description,

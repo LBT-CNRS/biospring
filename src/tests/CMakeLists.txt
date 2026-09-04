@@ -66,6 +66,7 @@ set(TEST_MODULES
     utils
 
     Box
+    GhostParticle
     Configuration
     ForceFieldReader
     NetCDFRoundTrip
