@@ -248,6 +248,69 @@ struct GhostParticleBuffer
     }
 };
 
+// Which atoms are bonded to the two ends of each torsion axis -- read only
+// by dihedral.distributetorque (see configuration::DihedralSetting). It is
+// force-field knowledge, not geometry, so it cannot be recomputed from a .nc
+// and has to be carried in one.
+//
+// Flat, with counts, because the lists are of variable length and NetCDF
+// wants rectangular arrays: `atoms` holds every substituent of every axis end
+// to end, and `counts[i]` says how many of them belong to axis i's B side and
+// how many to its C side. Walk them by running the offset forward -- an axis
+// starts where the previous one ended.
+struct DihedralAxisBuffer
+{
+    size_t number_of_axes;
+    size_t number_of_atoms;
+    int (*anchorindices)[2];
+    int (*counts)[2];
+    int * atoms;
+    // Parallel to `atoms`: each substituent's share of its side's torsional
+    // barrier, or -1 where the force field gave none (equal shares).
+    float * weights;
+
+    ~DihedralAxisBuffer() { clear(); }
+
+    DihedralAxisBuffer(const DihedralAxisBuffer &) = delete;
+    DihedralAxisBuffer & operator=(const DihedralAxisBuffer &) = delete;
+
+    void clear()
+    {
+        delete[] anchorindices;
+        delete[] counts;
+        delete[] atoms;
+        delete[] weights;
+        anchorindices = nullptr;
+        counts = nullptr;
+        atoms = nullptr;
+        weights = nullptr;
+        number_of_axes = 0;
+        number_of_atoms = 0;
+    }
+
+    DihedralAxisBuffer()
+        : number_of_axes(0), number_of_atoms(0), anchorindices(0), counts(0), atoms(0), weights(0)
+    {
+    }
+
+    void initialize(size_t nAxes, size_t nAtoms)
+    {
+        clear();
+        number_of_axes = nAxes;
+        number_of_atoms = nAtoms;
+        if (nAxes > 0)
+        {
+            anchorindices = new int[nAxes][2]{};
+            counts = new int[nAxes][2]{};
+        }
+        if (nAtoms > 0)
+        {
+            atoms = new int[nAtoms]{};
+            weights = new float[nAtoms]{};
+        }
+    }
+};
+
 struct ParticleBuffer
 {
     size_t number_of_particles;

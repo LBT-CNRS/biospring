@@ -246,6 +246,16 @@ TEST(Topology, to_spring_network_with_ghost_particle)
     // Force redistribution TRANSFERS what acted on the ghost: the three
     // anchors must end up carrying exactly it, and the ghost's own force
     // must be cleared.
+    // These two invariants -- the transfer, and the ghost being cleared --
+    // describe the UNPROJECTED redistribution, so the projection has to be
+    // off. With it on (the default) the applied set is deliberately no longer
+    // a transfer of the ghost's force: it is balanced against zero instead,
+    // so that it cancels in force and torque on its own. See
+    // dihedral_tangential_projection_leaves_a_self_cancelling_set below.
+    configuration::Configuration untouched = configuration::defaultConfiguration();
+    untouched.dihedral.tangentialonly = false;
+    spn.setup(untouched);
+
     const Vector3f applied(1.0f, 2.0f, 3.0f);
     spn.getParticle(3).addForce(applied);
     spn.redistributeGhostForces();
@@ -394,7 +404,11 @@ TEST(Topology, dihedral_ghost_spring_applies_force)
     ASSERT_EQ(spn.getGhostParticles().size(), 2);
     // computeDihedralForces() needs a force field (SpringNetwork::_ff) to
     // compute the harmonic term through -- only setup() constructs it.
-    spn.setup(configuration::defaultConfiguration());
+    // Projection off: this checks the ring spring's own force reaching its
+    // anchors, not what the projection then keeps of it.
+    configuration::Configuration conf = configuration::defaultConfiguration();
+    conf.dihedral.tangentialonly = false;
+    spn.setup(conf);
 
     spn.computeDihedralForces();
 
@@ -437,6 +451,256 @@ TEST(Topology, dihedral_ghost_spring_applies_force)
 // anchors' FD match), a dc_offset leaking into forces (dc shifts E by a
 // constant, so FD is blind to it ONLY if forces ignore it too), or a
 // spring type silently skipped on one side but not the other.
+// What the tangential projection guarantees, and what it deliberately gives
+// up. It is NOT a transfer any more: the radial and axial parts of the
+// ghost's reaction are dropped rather than passed on, because they carry no
+// torque about the axis and only deform the mesh. What must still hold is
+// that the set actually applied cancels on its own -- zero net force and
+// zero net torque -- which is AMBER's structure for a torsion, and what
+// keeps momentum conserved. Balancing against the ghost totals instead would
+// hand the discarded part straight back to the two axis atoms, leaving the
+// leak in place and merely moving it.
+TEST(Topology, dihedral_tangential_projection_leaves_a_self_cancelling_set)
+{
+    topology::Topology top;
+
+    topology::ParticleProperties propsB, propsC, propsRef;
+    propsB.set_position(Vector3f(0.0, 0.0, 0.0));
+    propsC.set_position(Vector3f(0.0, 0.0, 2.0));
+    propsRef.set_position(Vector3f(1.0, 0.0, 0.3));
+    top.add_particle(topology::Particle(propsB));
+    top.add_particle(topology::Particle(propsC));
+    top.add_particle(topology::Particle(propsRef));
+
+    topology::ParticleProperties ghost_props;
+    ghost_props.set_static(true);
+    ghost_props.set_mass(0.0f);
+    top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0), top.get_particle(1),
+                           top.get_particle(2), 1.0f, 75.0f, 0.0f,
+                           static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
+
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+    ASSERT_EQ(spn.getGhostParticles().size(), 1);
+
+    configuration::Configuration conf = configuration::defaultConfiguration();
+    conf.spring.enable = true;
+    ASSERT_TRUE(conf.dihedral.tangentialonly);        // the default, on purpose
+    spn.setup(conf);
+
+    // A force with all three components, so the projection has something to
+    // drop in every direction.
+    spn.getParticle(3).addForce(Vector3f(1.3f, -0.7f, 2.1f));
+    spn.redistributeGhostForces();
+
+    Vector3f net;
+    Vector3f torque;
+    const Vector3f origin = spn.getParticle(0).getPosition();
+    for (size_t i = 0; i < spn.getNumberOfParticles(); ++i)
+    {
+        const Vector3f f = spn.getParticle(i).getForce();
+        net += f;
+        torque += (spn.getParticle(i).getPosition() - origin) ^ f;
+    }
+    EXPECT_NEAR(net.norm(), 0.0f, 1e-4);
+
+    Vector3f axis = spn.getParticle(1).getPosition() - spn.getParticle(0).getPosition();
+    axis.normalize();
+    // The net torque is NOT zero, and must not be: what survives is exactly
+    // the torsional torque, along the axis. Only its perpendicular part has
+    // to vanish -- and a force applied ON the axis cannot generate an axial
+    // torque anyway, so demanding zero total torque would be contradictory.
+    const Vector3f perpendicular = torque - axis * torque.dot(axis);
+    EXPECT_NEAR(perpendicular.norm(), 0.0f, 1e-4);
+    EXPECT_GT(std::abs(torque.dot(axis)), 1e-3);
+
+    // And the substituent keeps only what turns it about the axis.
+    const Vector3f rel = spn.getParticle(2).getPosition() - origin;
+    Vector3f radial = rel - axis * rel.dot(axis);
+    radial.normalize();
+    const Vector3f on_ref = spn.getParticle(2).getForce();
+    EXPECT_NEAR(on_ref.dot(axis), 0.0f, 1e-4);
+    EXPECT_NEAR(on_ref.dot(radial), 0.0f, 1e-4);
+    EXPECT_GT(on_ref.norm(), 1e-3);                   // and it is not simply zero
+}
+
+// dihedral.distributetorque must move a torsion's torque around WITHOUT
+// changing it. That is the whole claim: the ring's total torque is already
+// right, only its delivery is wrong, so any redistribution that alters the
+// total would be a different force field rather than the same one shared out.
+//
+// Built so the two are not accidentally equal: the reference atom sits at
+// perpendicular radius 1, and the extra substituent at radius 2. Splitting a
+// torque equally between them therefore gives them DIFFERENT forces (the
+// share is divided by each atom's own lever arm), which is exactly what a
+// naive "copy the force to the neighbours" would get wrong -- that would
+// double the torque here rather than preserve it.
+TEST(Topology, dihedral_torque_distribution_preserves_the_axial_torque)
+{
+    topology::Topology top;
+
+    topology::ParticleProperties propsB, propsC, propsRef, propsExtra;
+    propsB.set_position(Vector3f(0.0, 0.0, 0.0));
+    propsC.set_position(Vector3f(0.0, 0.0, 2.0));
+    propsRef.set_position(Vector3f(1.0, 0.0, 0.3));      // perpendicular radius 1
+    propsExtra.set_position(Vector3f(0.0, 2.0, -0.4));   // perpendicular radius 2
+    top.add_particle(topology::Particle(propsB));
+    top.add_particle(topology::Particle(propsC));
+    top.add_particle(topology::Particle(propsRef));
+    top.add_particle(topology::Particle(propsExtra));
+
+    topology::ParticleProperties ghost_props;
+    ghost_props.set_static(true);
+    ghost_props.set_mass(0.0f);
+    top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0), top.get_particle(1),
+                           top.get_particle(2), 1.0f, 75.0f, 0.0f,
+                           static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
+
+    // Both real substituents of B are declared; C has none, so its side
+    // simply keeps the ring's own behaviour.
+    top.add_dihedral_axis(top.get_particle(0), top.get_particle(1),
+                          {top.get_particle(2).unique_id(), top.get_particle(3).unique_id()}, {});
+
+    const Vector3f applied(1.3f, -0.7f, 2.1f);
+
+    // Reference run: projection only, which is the state whose torque must be
+    // reproduced.
+    float torque_without = 0.0f;
+    {
+        spn::SpringNetwork spn;
+        top.to_spring_network(spn);
+        configuration::Configuration conf = configuration::defaultConfiguration();
+        conf.spring.enable = true;
+        spn.setup(conf);
+        ASSERT_EQ(spn.getNumberOfAxesWithSubstituents(), 1u);
+
+        spn.getParticle(4).addForce(applied);
+        spn.redistributeGhostForces();
+
+        Vector3f axis = spn.getParticle(1).getPosition() - spn.getParticle(0).getPosition();
+        axis.normalize();
+        const Vector3f origin = spn.getParticle(0).getPosition();
+        Vector3f torque;
+        for (size_t i = 0; i < spn.getNumberOfParticles(); ++i)
+            torque += (spn.getParticle(i).getPosition() - origin) ^ spn.getParticle(i).getForce();
+        torque_without = torque.dot(axis);
+        EXPECT_GT(std::abs(torque_without), 1e-3);
+
+        // The extra substituent is untouched without the setting -- otherwise
+        // the comparison below would be measuring nothing.
+        EXPECT_NEAR(spn.getParticle(3).getForce().norm(), 0.0f, 1e-6);
+    }
+
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+    configuration::Configuration conf = configuration::defaultConfiguration();
+    conf.spring.enable = true;
+    conf.dihedral.distributetorque = true;
+    spn.setup(conf);
+
+    spn.getParticle(4).addForce(applied);
+    spn.redistributeGhostForces();
+
+    Vector3f axis = spn.getParticle(1).getPosition() - spn.getParticle(0).getPosition();
+    axis.normalize();
+    const Vector3f origin = spn.getParticle(0).getPosition();
+    Vector3f torque, net;
+    for (size_t i = 0; i < spn.getNumberOfParticles(); ++i)
+    {
+        net += spn.getParticle(i).getForce();
+        torque += (spn.getParticle(i).getPosition() - origin) ^ spn.getParticle(i).getForce();
+    }
+
+    // The claim, stated three ways.
+    EXPECT_NEAR(torque.dot(axis), torque_without, 1e-4);          // same torque
+    EXPECT_NEAR(net.norm(), 0.0f, 1e-4);                          // still self-cancelling
+    EXPECT_NEAR((torque - axis * torque.dot(axis)).norm(), 0.0f, 1e-4);
+
+    // And it really did reach the second atom, tangentially. The two carry an
+    // EQUAL share of torque, so their forces are in inverse ratio of their
+    // lever arms: radius 1 against radius 2 gives exactly 2, not 1. A
+    // redistribution that simply copied the force across would give 1, and
+    // one that ignored the lever arm would double the total torque.
+    const Vector3f on_ref = spn.getParticle(2).getForce();
+    const Vector3f on_extra = spn.getParticle(3).getForce();
+    EXPECT_GT(on_extra.norm(), 1e-3);
+    EXPECT_NEAR(on_extra.dot(axis), 0.0f, 1e-4);
+    EXPECT_NEAR(on_ref.norm() / on_extra.norm(), 2.0f, 1e-3);
+}
+
+// Weighted shares: the force field says how much of a side's barrier each
+// substituent carries, and equal shares are NOT AMBER's answer -- on
+// ubiquitin the largest/smallest share on one side has a median ratio of 1.40
+// and reaches 6.38. Measured, the difference decides the whole option: on the
+// dihedral term alone, rms|F_bio - F_amber| is 8.87 kJ/mol/A with the
+// projection alone, 9.53 with equal shares (worse), and 7.24 with these
+// weights.
+//
+// Geometry chosen so no two expected numbers coincide: shares 0.75/0.25 on
+// atoms at perpendicular radius 1 and 2, giving forces 0.75t and 0.125t --
+// a ratio of 6, which neither equal shares (2) nor a plain force copy (1)
+// can produce.
+TEST(Topology, dihedral_torque_distribution_honours_the_force_field_shares)
+{
+    topology::Topology top;
+
+    topology::ParticleProperties propsB, propsC, propsRef, propsExtra;
+    propsB.set_position(Vector3f(0.0, 0.0, 0.0));
+    propsC.set_position(Vector3f(0.0, 0.0, 2.0));
+    propsRef.set_position(Vector3f(1.0, 0.0, 0.3));
+    propsExtra.set_position(Vector3f(0.0, 2.0, -0.4));
+    top.add_particle(topology::Particle(propsB));
+    top.add_particle(topology::Particle(propsC));
+    top.add_particle(topology::Particle(propsRef));
+    top.add_particle(topology::Particle(propsExtra));
+
+    topology::ParticleProperties ghost_props;
+    ghost_props.set_static(true);
+    ghost_props.set_mass(0.0f);
+    top.add_ghost_particle(topology::Particle(ghost_props), top.get_particle(0), top.get_particle(1),
+                           top.get_particle(2), 1.0f, 75.0f, 0.0f,
+                           static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
+
+    top.add_dihedral_axis(top.get_particle(0), top.get_particle(1),
+                          {top.get_particle(2).unique_id(), top.get_particle(3).unique_id()}, {},
+                          {0.75, 0.25}, {});
+
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+    configuration::Configuration conf = configuration::defaultConfiguration();
+    conf.spring.enable = true;
+    conf.dihedral.distributetorque = true;
+    spn.setup(conf);
+
+    spn.getParticle(4).addForce(Vector3f(1.3f, -0.7f, 2.1f));
+    spn.redistributeGhostForces();
+
+    Vector3f axis = spn.getParticle(1).getPosition() - spn.getParticle(0).getPosition();
+    axis.normalize();
+    const Vector3f origin = spn.getParticle(0).getPosition();
+    Vector3f torque, net;
+    for (size_t i = 0; i < spn.getNumberOfParticles(); ++i)
+    {
+        net += spn.getParticle(i).getForce();
+        torque += (spn.getParticle(i).getPosition() - origin) ^ spn.getParticle(i).getForce();
+    }
+
+    // Weighting changes the SPLIT, never the total: the same two invariants
+    // the equal-share test asserts must still hold exactly.
+    EXPECT_NEAR(net.norm(), 0.0f, 1e-4);
+    EXPECT_NEAR((torque - axis * torque.dot(axis)).norm(), 0.0f, 1e-4);
+
+    const Vector3f on_ref = spn.getParticle(2).getForce();
+    const Vector3f on_extra = spn.getParticle(3).getForce();
+    EXPECT_GT(on_extra.norm(), 1e-3);
+    EXPECT_NEAR(on_ref.norm() / on_extra.norm(), 6.0f, 1e-3);
+
+    // And each atom's torque really is its declared share of the total.
+    const float tau = torque.dot(axis);
+    const float tau_ref = axis.dot((spn.getParticle(2).getPosition() - origin) ^ on_ref);
+    EXPECT_NEAR(tau_ref / tau, 0.75f, 1e-3);
+}
+
 TEST(Topology, forces_match_energy_gradient_by_finite_differences)
 {
     topology::Topology top;
@@ -481,6 +745,14 @@ TEST(Topology, forces_match_energy_gradient_by_finite_differences)
     // other ghost test uses), so it must be on for anything to happen.
     configuration::Configuration conf = configuration::defaultConfiguration();
     conf.spring.enable = true;
+    // This test checks the SPRING's own force against its own energy, so the
+    // tangential projection has to be off. With it on -- the default -- the
+    // applied force is deliberately only the phi component of the gradient,
+    // and a finite-difference check in the full coordinate space is meant to
+    // disagree: the projection drops exactly the radial and axial parts that
+    // a numerical gradient still sees. Turning it off here tests the spring;
+    // leaving it on would test the redistribution policy instead.
+    conf.dihedral.tangentialonly = false;
     spn.setup(conf);
 
     auto reset_forces = [&]() {

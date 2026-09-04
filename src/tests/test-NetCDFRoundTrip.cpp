@@ -88,3 +88,54 @@ TEST_F(TestNetCDFRoundTrip, ThePerParticleFloatsAreNotSwapped)
     EXPECT_FLOAT_EQ(properties.imp().transfert_energy_by_accessible_surface(), TRANSFER_ENERGY);
     EXPECT_FLOAT_EQ(properties.imp().solvent_accessible_surface(), ACCESSIBLE_SURFACE);
 }
+
+// The axis substituent lists have to survive the .nc, because that is the only
+// way they reach biospring at all: they come from DIHEDRALAXIS records read by
+// pdb2spn, and biospring never sees a .bi.ff. Lose them here and
+// dihedral.distributetorque silently has nothing to act on.
+//
+// Written as a flat atom list sliced by per-axis counts, which is where this
+// can go wrong quietly: the two sides must come back with the right lengths,
+// in the right order, on the right axis. So the sides are given DIFFERENT
+// lengths -- a symmetric case would pass even with the two swapped.
+TEST(NetCDFRoundTrip, DihedralAxisSubstituentsSurviveTheRoundTrip)
+{
+    const std::string path = (std::filesystem::temp_directory_path() / "roundtrip-axes.nc").string();
+
+    spn::SpringNetwork spn;
+    for (int i = 0; i < 5; ++i)
+    {
+        spn::Particle p;
+        p.setPosition(Vector3f(static_cast<float>(i), 0.0, 0.0));
+        p.setMass(12.0);
+        spn.addParticle(p);
+    }
+    // A ghost on the (0, 1) axis: without one there is no axis to attach to.
+    spn.addGhostParticle(static_cast<unsigned>(spn::GhostPlacement::AxisRotation), 0, 1, 2, 1.0f, 75.0f, 0.0f);
+    spn.setAxisSubstituents(0, 1, {2, 3}, {4});
+    ASSERT_EQ(spn.getNumberOfAxesWithSubstituents(), 1u);
+
+    configuration::Configuration config;
+    config.sim.nbsteps = 1;
+    spn.setup(config);
+    NetCDFWriter(path, &spn).writeBinary();
+
+    NetCDFReader reader(path);
+    reader.read();
+    spn::SpringNetwork reloaded;
+    reader.getTopology().to_spring_network(reloaded);
+
+    std::vector<std::array<unsigned, 2>> anchors, counts;
+    std::vector<unsigned> atoms;
+    reloaded.getAxisSubstituents(anchors, counts, atoms);
+
+    ASSERT_EQ(anchors.size(), 1u);
+    EXPECT_EQ(anchors[0][0], 0u);
+    EXPECT_EQ(anchors[0][1], 1u);
+    EXPECT_EQ(counts[0][0], 2u);                      // B side, two atoms
+    EXPECT_EQ(counts[0][1], 1u);                      // C side, one -- deliberately different
+    ASSERT_EQ(atoms.size(), 3u);
+    EXPECT_EQ(atoms[0], 2u);
+    EXPECT_EQ(atoms[1], 3u);
+    EXPECT_EQ(atoms[2], 4u);
+}

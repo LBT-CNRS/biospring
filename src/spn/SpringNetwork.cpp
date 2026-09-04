@@ -93,8 +93,22 @@ void SpringNetwork::computeSpringForces()
     _energies.spring = springenergy;
 }
 
-// Shared parallel-compute/serial-accumulate loop for the DIHEDRAL
-// spring collections -- the exact pattern computeSpringForces
+// Calculates STRETCH spring forces and applies them to the particles.
+// Updates global `_energies.stretch`. A plain real-atom spring (no ghosts,
+// unlike BEND/DIHEDRAL: a 1-2 bond length has no 3-body conflation to
+// avoid), so no ignoreDynamicState override -- a stretch spring between two
+// particles the user froze with --static correctly contributes nothing,
+// same as it did before this spring lived in its own collection. Not
+// parallelised, like computeDihedralForces: kept simple until profiling
+// ever shows a need otherwise.
+void SpringNetwork::computeStretchForces()
+{
+    _energies.stretch = _computeSpringCollectionForces(_stretchsprings, /*ignoreDynamicState=*/false,
+                                                       /*subtractDcOffset=*/false);
+}
+
+// Shared parallel-compute/serial-accumulate loop for the STRETCH, BEND and
+// DIHEDRAL spring collections -- the exact pattern computeSpringForces
 // established: the spring evaluation (the expensive part) runs in parallel
 // into _springForceScratch, then a deterministic serial pass applies the
 // forces (particles are shared between springs, so they must not be
@@ -126,6 +140,23 @@ float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & spring
     return energy;
 }
 
+// Calculates BEND ghost-ghost spring forces and applies them to the
+// particles. Updates global `_energies.bend`. ignoreDynamicState=true for
+// the same reason as computeDihedralForces: both ghosts are always static.
+// Gated by isBendingEnabled() (a runtime debug on/off for a family that
+// -bending already decided, at build time, to actually create springs
+// for -- see Configuration.hpp's own comment) on top of the isSpringEnabled()
+// master switch the caller (computeForces) already applies: when disabled,
+// BOTH force and energy are skipped (a pure reporting-only toggle would
+// leave the dynamics unchanged, defeating the point of isolating this
+// family's contribution).
+void SpringNetwork::computeBendForces()
+{
+    _energies.bend = isBendingEnabled() ? _computeSpringCollectionForces(_bendsprings, /*ignoreDynamicState=*/true,
+                                                                         /*subtractDcOffset=*/false)
+                                        : 0.0f;
+}
+
 // Calculates dihedral ghost-spring forces and applies them to the
 // particles. Updates global `_energies.dihedral`. Which families were
 // actually BUILT is a build-time decision (see -dihedral/--dihedral in
@@ -133,9 +164,8 @@ float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & spring
 // independently gated per-family (isDihedralPhi/Psi/Omega/ChiEnabled(),
 // see Configuration.hpp's own comment) on top of the isSpringEnabled()
 // master switch the caller (computeForces) already applies -- same
-// when a family is disabled BOTH force and energy are skipped (a pure
-// reporting-only toggle would leave the dynamics unchanged, defeating the
-// point of isolating a family's contribution).
+// both-force-and-energy-skipped reasoning as computeBendForces above (a
+// disabled family must not silently keep influencing the dynamics).
 //
 // ignoreDynamicState=true: both endpoints of a dihedral ghost spring are
 // always static virtual sites (see Spring::computeForce's own doc) --
@@ -320,6 +350,8 @@ void SpringNetwork::computeForces()
     if (isSpringEnabled())
     {
         computeSpringForces();
+        computeStretchForces();
+        computeBendForces();
         computeDihedralForces();
     }
     computeParticleForces();
@@ -457,6 +489,8 @@ void SpringNetwork::_displayFrameData()
     if (isSpringEnabled())
     {
         logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
+        logging::info("Stretch energy: %5.2f kJ.mol-1", _energies.stretch);
+        logging::info("Bend energy: %5.2f kJ.mol-1", _energies.bend);
         logging::info("Dihedral energy: %5.2f kJ.mol-1", _energies.dihedral);
     }
     if (isElectrostaticEnabled())
@@ -567,7 +601,7 @@ void SpringNetwork::addSpring(unsigned id1, unsigned id2, float equilibrium, flo
     }
 }
 
-// Shared implementation behind addDihedralSpring:
+// Shared implementation for addDihedralSpring and the STRETCH/BEND adds:
 // unlike addSpring, a ghost spring is always a new addition (no
 // spring-neighbour check), never registered in the particles'
 // spring-neighbour map (see the header comment on addDihedralSpring for
@@ -592,6 +626,16 @@ void SpringNetwork::addDihedralSpring(unsigned family, unsigned id1, unsigned id
     if (family >= DIHEDRAL_FAMILY_COUNT)
         throw std::out_of_range("SpringNetwork::addDihedralSpring: dihedral family index out of range");
     addDihedralSpringTo(_dihedralsprings[family], _particles, id1, id2, equilibrium, stiffness, dcOffset);
+}
+
+void SpringNetwork::addStretchSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+{
+    addDihedralSpringTo(_stretchsprings, _particles, id1, id2, equilibrium, stiffness, /*dcOffset=*/0.0f);
+}
+
+void SpringNetwork::addBendSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness)
+{
+    addDihedralSpringTo(_bendsprings, _particles, id1, id2, equilibrium, stiffness, /*dcOffset=*/0.0f);
 }
 
 void SpringNetwork::updateSpringState(unsigned id, bool isStatic) {
@@ -642,7 +686,10 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
 
     const float delta_rad_init = delta_deg * static_cast<float>(M_PI) / 180.0f;
     const Vector3f position =
-        GhostParticle::computePositionByRotation(
+        (placement == GhostPlacement::AxialOffset)
+            ? GhostParticle::computePositionAxial(getParticle(anchorBIndex).getPosition(),
+                                                  getParticle(anchorCIndex).getPosition(), r)
+            : GhostParticle::computePositionByRotation(
                   getParticle(anchorBIndex).getPosition(), getParticle(anchorCIndex).getPosition(),
                   getParticle(anchorRefIndex).getPosition(), std::cos(delta_rad_init), std::sin(delta_rad_init));
 
@@ -663,13 +710,191 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
         if (_ghostaxes[axisIndex].anchorBIndex == anchorBIndex && _ghostaxes[axisIndex].anchorCIndex == anchorCIndex)
             break;
     if (axisIndex == _ghostaxes.size())
-        _ghostaxes.push_back(GhostAxis{anchorBIndex, anchorCIndex, Vector3f(), Vector3f(), Vector3f(), Vector3f()});
+        _ghostaxes.push_back(GhostAxis{anchorBIndex, anchorCIndex, Vector3f(), Vector3f(), Vector3f(), Vector3f(),
+                                       {}, {}, {}, {}, 0.0f, 0.0f});
 
     const float delta_rad = delta_deg * static_cast<float>(M_PI) / 180.0f;
     _ghostparticles.push_back(GhostParticleBinding{ownIndex, anchorBIndex, anchorCIndex, anchorRefIndex, r, theta_deg,
                                                    delta_deg, std::cos(delta_rad), std::sin(delta_rad), axisIndex,
                                                    placement});
     return ownIndex;
+}
+
+void SpringNetwork::setAxisSubstituents(unsigned anchorBIndex, unsigned anchorCIndex,
+                                        const std::vector<unsigned> & substituentsB,
+                                        const std::vector<unsigned> & substituentsC,
+                                        const std::vector<double> & weightsB,
+                                        const std::vector<double> & weightsC)
+{
+    // Stored as float, and only when the force field supplied one per atom --
+    // a partial list would silently mix weighted and equal shares on the same
+    // side, which is worse than either.
+    std::vector<float> wB, wC;
+    if (weightsB.size() == substituentsB.size())
+        for (double w : weightsB)
+            wB.push_back(static_cast<float>(w));
+    if (weightsC.size() == substituentsC.size())
+        for (double w : weightsC)
+            wC.push_back(static_cast<float>(w));
+
+    // BOTH ORIENTATIONS, and missing this leaves exactly half the model
+    // uncovered. One torsion builds two GhostAxis entries, (B, C) and
+    // (C, B): a ring's ghosts rotate about the axis with their OWN anchor as
+    // B, so the substituents of each side hang off a different entry. Setting
+    // only (B, C) covered the B side and left every C-side ring pushing its
+    // reference atom alone (measured on the RNA hairpin: 82 of 160 axes, and
+    // the 78 missing were precisely the reversed ones).
+    //
+    // The reversed entry takes the lists swapped, which is what it means: for
+    // axis (C, B), the atoms bonded to its own B -- that is, to C -- are the
+    // original C side.
+    //
+    // The force field also writes records for axes no ghost was ever built on
+    // (a family switched off at build time, an unresolved anchor at a chain
+    // terminus). Those match nothing here and are dropped: no torsion turns
+    // about them, so there is nothing to share out.
+    // A (B, C) pair can also exist as a BEND axis -- BEND anchors its two
+    // axial ghosts on the same two atoms a torsion may turn about -- and such
+    // an axis carries no torsion to share out. Its ghosts are AxialOffset and
+    // are self-balancing, so a list there would never be read; it would only
+    // inflate the coverage count into claiming more axes than exist.
+    for (size_t i = 0; i < _ghostaxes.size(); ++i)
+    {
+        GhostAxis & axis = _ghostaxes[i];
+        const bool matches = axis.anchorBIndex == anchorBIndex && axis.anchorCIndex == anchorCIndex;
+        const bool reversed = axis.anchorBIndex == anchorCIndex && axis.anchorCIndex == anchorBIndex;
+        if (!matches && !reversed)
+            continue;
+
+        bool carriesRing = false;
+        for (const GhostParticleBinding & binding : _ghostparticles)
+            if (binding.axisIndex == i && binding.placement == GhostPlacement::AxisRotation)
+            {
+                carriesRing = true;
+                break;
+            }
+        if (!carriesRing)
+            continue;
+
+        axis.substituentsB = matches ? substituentsB : substituentsC;
+        axis.substituentsC = matches ? substituentsC : substituentsB;
+        axis.weightsB = matches ? wB : wC;
+        axis.weightsC = matches ? wC : wB;
+    }
+}
+
+size_t SpringNetwork::getNumberOfAxesWithSubstituents() const
+{
+    size_t n = 0;
+    for (const GhostAxis & axis : _ghostaxes)
+        if (!axis.substituentsB.empty() || !axis.substituentsC.empty())
+            n++;
+    return n;
+}
+
+void SpringNetwork::getAxisSubstituents(std::vector<std::array<unsigned, 2>> & anchors,
+                                        std::vector<std::array<unsigned, 2>> & counts, std::vector<unsigned> & atoms,
+                                        std::vector<float> * weights) const
+{
+    anchors.clear();
+    counts.clear();
+    atoms.clear();
+    if (weights != nullptr)
+        weights->clear();
+    for (const GhostAxis & axis : _ghostaxes)
+    {
+        if (axis.substituentsB.empty() && axis.substituentsC.empty())
+            continue;
+        anchors.push_back({axis.anchorBIndex, axis.anchorCIndex});
+        counts.push_back({static_cast<unsigned>(axis.substituentsB.size()),
+                          static_cast<unsigned>(axis.substituentsC.size())});
+        atoms.insert(atoms.end(), axis.substituentsB.begin(), axis.substituentsB.end());
+        atoms.insert(atoms.end(), axis.substituentsC.begin(), axis.substituentsC.end());
+        if (weights == nullptr)
+            continue;
+        // A side with no weights is written as -1 per atom, the same "no
+        // weight given" marker the .bi.ff's unweighted form produces, so the
+        // array stays parallel to `atoms` and one length check covers both.
+        for (int side = 0; side < 2; ++side)
+        {
+            const std::vector<unsigned> & subs = side == 0 ? axis.substituentsB : axis.substituentsC;
+            const std::vector<float> & w = side == 0 ? axis.weightsB : axis.weightsC;
+            for (size_t k = 0; k < subs.size(); ++k)
+                weights->push_back(w.size() == subs.size() ? w[k] : -1.0f);
+        }
+    }
+}
+
+// Shares `torque` (signed, about the axis) equally over `substituents`, as
+// AMBER does: it splits a torsion into one term per (substituent,
+// substituent) pair with an equal barrier each, so every substituent on a
+// side ends up carrying 1/N of that side's torque. Converting a share back
+// to a force is one division, |dphi/dr_i| = 1/(|r_i| sin theta) being the
+// inverse perpendicular radius -- no Jacobian, only positions relative to
+// the axis, which the projection already computes.
+bool SpringNetwork::_distributeAxialTorque(GhostAxis & axis, const std::vector<unsigned> & substituents,
+                                           const std::vector<float> & weights, float torque)
+{
+    const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
+    const Vector3f & C = getParticle(axis.anchorCIndex).getPosition();
+    Vector3f ahat = C - B;
+    const float axisLength = ahat.norm();
+    if (axisLength < 1e-6f)
+        return false;
+    ahat = ahat / axisLength;
+
+    // Two passes over the same small list. An atom sitting ON the axis has no
+    // lever arm and cannot carry any share, so it has to be excluded BEFORE
+    // the shares are settled -- including it and then skipping it would
+    // quietly lose its share and shrink the total torque. Same reason the
+    // weights are renormalised here rather than trusted as written: the
+    // force field lists every spelling of an atom and every substituent
+    // including cross-residue ones, and what survives resolution is a subset.
+    const bool weighted = weights.size() == substituents.size();
+    std::vector<Vector3f> tangents;
+    std::vector<float> radii, shares;
+    tangents.reserve(substituents.size());
+    radii.reserve(substituents.size());
+    shares.reserve(substituents.size());
+    float total = 0.0f;
+    for (size_t k = 0; k < substituents.size(); ++k)
+    {
+        const Vector3f rel = getParticle(substituents[k]).getPosition() - B;
+        const Vector3f radial = rel - ahat * rel.dot(ahat);
+        const float rn = radial.norm();
+        if (rn <= 1e-6f)
+            continue;
+        // A negative weight is the force field saying "no weight given".
+        const float share = (weighted && weights[k] >= 0.0f) ? weights[k] : 1.0f;
+        tangents.push_back(ahat ^ (radial / rn));
+        radii.push_back(rn);
+        shares.push_back(share);
+        total += share;
+    }
+    // Every carrier weighted zero: AMBER really does assign this side no
+    // barrier through these atoms (phi's amide H is the standard case), so
+    // there is nothing to hand out rather than something to spread evenly.
+    if (tangents.empty() || total <= 0.0f)
+        return false;
+
+    size_t slot = 0;
+    for (unsigned index : substituents)
+    {
+        const Vector3f rel = getParticle(index).getPosition() - B;
+        const Vector3f radial = rel - ahat * rel.dot(ahat);
+        if (radial.norm() <= 1e-6f)
+            continue;
+        const Vector3f F = tangents[slot] * (torque * shares[slot] / total / radii[slot]);
+        slot++;
+        if (F.norm() <= 0.0f)
+            continue;
+
+        Particle & p = getParticle(index);
+        p.addForce(F);
+        axis.sumAtomForces += F;
+        axis.sumAtomTorquesAboutB += (p.getPosition() - B) ^ F;
+    }
+    return true;
 }
 
 // Anchors are heavily shared -- on example 072, 6484 ghosts hang off well
@@ -695,8 +920,18 @@ void SpringNetwork::redistributeGhostForces()
         const Vector3f & B = getParticle(binding.anchorBIndex).getPosition();
         const Vector3f & C = getParticle(binding.anchorCIndex).getPosition();
         GhostForceContribution & out = _ghostForceScratch[i];
-        out.F_Ref = GhostParticle::rotateForceToAtom(B, C, getParticle(binding.ownIndex).getForce(),
-                                                     binding.cos_delta, binding.sin_delta);
+        if (binding.placement == GhostPlacement::AxialOffset)
+        {
+            // Self-balancing, no reference atom involved, no accumulation.
+            GhostParticle::redistributeForceAxial(B, C, binding.r, getParticle(binding.ownIndex).getForce(), out.F_B,
+                                                  out.F_C);
+            out.F_Ref = Vector3f();
+        }
+        else
+        {
+            out.F_Ref = GhostParticle::rotateForceToAtom(B, C, getParticle(binding.ownIndex).getForce(),
+                                                         binding.cos_delta, binding.sin_delta);
+        }
     }
 
     // Pass 2, serial: apply to the real atoms (heavily shared, so not
@@ -708,12 +943,22 @@ void SpringNetwork::redistributeGhostForces()
         axis.sumGhostTorquesAboutB = Vector3f();
         axis.sumAtomForces = Vector3f();
         axis.sumAtomTorquesAboutB = Vector3f();
+        axis.axialTorqueB = 0.0f;
+        axis.axialTorqueC = 0.0f;
     }
     for (size_t i = 0; i < _ghostparticles.size(); ++i)
     {
         const GhostParticleBinding & binding = _ghostparticles[i];
         const GhostForceContribution & in = _ghostForceScratch[i];
         Particle & ghost = getParticle(binding.ownIndex);
+
+        if (binding.placement == GhostPlacement::AxialOffset)
+        {
+            getParticle(binding.anchorBIndex).addForce(in.F_B);
+            getParticle(binding.anchorCIndex).addForce(in.F_C);
+            ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
+            continue;
+        }
 
         Particle & ref = getParticle(binding.anchorRefIndex);
         GhostAxis & axis = _ghostaxes[binding.axisIndex];
@@ -750,11 +995,73 @@ void SpringNetwork::redistributeGhostForces()
             }
         }
 
-        ref.addForce(F_ref);
-        axis.sumAtomForces += F_ref;
-        axis.sumAtomTorquesAboutB += (ref.getPosition() - B) ^ F_ref;
+        // With distribution on, this force is not applied here: it is banked
+        // as the torque it carries and shared out per axis in pass 2b, so
+        // every bonded substituent gets its AMBER share instead of the ring's
+        // one reference atom taking the lot. Only the axial component is
+        // banked, which is all a filtered force has -- and it is independent
+        // of where along the axis it is measured from, so B serves for both
+        // sides (a shift d along the axis changes the torque by (d a) ^ F,
+        // whose axial part is a . (a ^ F) = 0).
+        bool banked = false;
+        if (_distributetorque)
+        {
+            const Vector3f & C = getParticle(axis.anchorCIndex).getPosition();
+            Vector3f ahat = C - B;
+            if (ahat.norm() > 1e-6f)
+            {
+                ahat.normalize();
+                const float tau = ahat.dot((ref.getPosition() - B) ^ F_ref);
+                // Which side the reference atom is on decides which share it
+                // joins. An atom the force field did not list -- an axis with
+                // no records, a substituent that failed to resolve -- is not
+                // banked, and falls through to the direct path below.
+                for (unsigned index : axis.substituentsB)
+                    if (index == binding.anchorRefIndex)
+                    {
+                        axis.axialTorqueB += tau;
+                        banked = true;
+                        break;
+                    }
+                if (!banked)
+                    for (unsigned index : axis.substituentsC)
+                        if (index == binding.anchorRefIndex)
+                        {
+                            axis.axialTorqueC += tau;
+                            banked = true;
+                            break;
+                        }
+            }
+        }
+
+        if (!banked)
+        {
+            ref.addForce(F_ref);
+            axis.sumAtomForces += F_ref;
+            axis.sumAtomTorquesAboutB += (ref.getPosition() - B) ^ F_ref;
+        }
 
         ghost.setForce(Vector3f(0.0f, 0.0f, 0.0f));
+    }
+
+    // Pass 2b: share each side's banked torque over its bonded substituents.
+    // Runs between the transfer and the axis reaction because pass 3 balances
+    // against what actually reached the atoms, and that is only settled here.
+    if (_distributetorque)
+    {
+        // The return value is deliberately ignored: a side only holds banked
+        // torque because one of ITS OWN listed atoms carried a tangential
+        // force in pass 2, which required a non-zero lever arm on the same
+        // positions this pass reads. So a banked side always has at least one
+        // carrier and the call cannot fail here. It can only return false on
+        // a degenerate geometry, where nothing is left to conserve anyway.
+        for (GhostAxis & axis : _ghostaxes)
+        {
+            if (axis.axialTorqueB != 0.0f)
+                (void)_distributeAxialTorque(axis, axis.substituentsB, axis.weightsB, axis.axialTorqueB);
+            if (axis.axialTorqueC != 0.0f)
+                (void)_distributeAxialTorque(axis, axis.substituentsC, axis.weightsC, axis.axialTorqueC);
+        }
     }
 
     // Pass 3: one closed-form reaction per axis, restoring global force and
@@ -799,8 +1106,11 @@ void SpringNetwork::updateGhostPositions()
         const Vector3f & B = getParticle(binding.anchorBIndex).getPosition();
         const Vector3f & C = getParticle(binding.anchorCIndex).getPosition();
         getParticle(binding.ownIndex)
-            .setPosition(GhostParticle::computePositionByRotation(
-                B, C, getParticle(binding.anchorRefIndex).getPosition(), binding.cos_delta, binding.sin_delta));
+            .setPosition(binding.placement == GhostPlacement::AxialOffset
+                             ? GhostParticle::computePositionAxial(B, C, binding.r)
+                             : GhostParticle::computePositionByRotation(
+                                   B, C, getParticle(binding.anchorRefIndex).getPosition(), binding.cos_delta,
+                                   binding.sin_delta));
     }
 }
 
@@ -828,6 +1138,8 @@ void SpringNetwork::clear()
     _dynamicsprings.clear();
     for (auto & family : _dihedralsprings)
         family.clear();
+    _stretchsprings.clear();
+    _bendsprings.clear();
     _ghostparticles.clear();
     _springForceScratch.clear();
     _nsearch.steric.reset();
@@ -936,9 +1248,87 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupDensityGrid();
     _setupInsertionVector();
     _setupTrajectories();
+    _setupDihedralTorqueDistribution();
     _neighborSearchesDirty = false;
     // _setupConstraints();
     // _setupSelections();
+}
+
+// Decides once whether the torque distribution can run at all, so the
+// per-step path is a single bool and any complaint is made once instead of
+// on every one of 20000 steps.
+//
+// Two things have to hold, and neither is the user's mistake to discover at
+// step 4000. The model must carry DIHEDRALAXIS records -- a .nc built before
+// they existed, or from a force field that writes none, has nothing to
+// distribute over. And the projection must be on: converting a force to a
+// torque and back keeps only what turns about the axis, so with the raw
+// force it would silently throw away the radial and axial parts rather than
+// distribute them, which is a different model than the one asked for.
+void SpringNetwork::_setupDihedralTorqueDistribution()
+{
+    _distributetorque = false;
+    if (!_config.dihedral.distributetorque)
+        return;
+
+    if (!_config.dihedral.tangentialonly)
+    {
+        logging::warning("dihedral.distributetorque needs dihedral.tangentialonly: sharing out a torque keeps only "
+                         "what turns about the axis, so the unprojected radial and axial force would be dropped "
+                         "rather than distributed. Distribution stays off.");
+        return;
+    }
+
+    const size_t withLists = getNumberOfAxesWithSubstituents();
+    if (withLists == 0)
+    {
+        logging::warning("dihedral.distributetorque is on but no torsion axis carries substituents: this model was "
+                         "built without DIHEDRALAXIS records (an older .nc, or a force field that writes none). "
+                         "Distribution stays off; the rings keep pushing their own reference atoms.");
+        return;
+    }
+
+    // Counted against the axes a PROPER torsion actually turns about, which
+    // is neither of the two obvious denominators. _ghostaxes counts every
+    // axis, including one per valence angle from BEND's axial ghosts. And
+    // filtering those out still leaves the PLANARITY impropers, which are
+    // ghost rings on an axis too but restrain a hub's flatness rather than
+    // share a barrier over substituent pairs -- they have no substituent
+    // lists and want none. Reporting against either would read as poor
+    // coverage when coverage is in fact near complete.
+    std::vector<bool> isProperTorsionAxis(_ghostaxes.size(), false);
+    std::unordered_map<unsigned, unsigned> axisOfGhost;
+    for (const GhostParticleBinding & binding : _ghostparticles)
+        if (binding.placement == GhostPlacement::AxisRotation)
+            axisOfGhost[binding.ownIndex] = binding.axisIndex;
+    for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
+    {
+        if (family == DIHEDRAL_PLANARITY)
+            continue;
+        for (const Spring & spring : _dihedralsprings[family])
+            for (unsigned index : {spring.getParticle1().getId(), spring.getParticle2().getId()})
+            {
+                const auto found = axisOfGhost.find(index);
+                if (found != axisOfGhost.end())
+                    isProperTorsionAxis[found->second] = true;
+            }
+    }
+    // Both numbers come from this one set, which is the point: computed two
+    // different ways they disagreed, and a coverage figure whose numerator
+    // can exceed its denominator tells the reader nothing.
+    size_t torsionAxes = 0, covered = 0;
+    for (size_t i = 0; i < _ghostaxes.size(); ++i)
+    {
+        if (!isProperTorsionAxis[i])
+            continue;
+        torsionAxes++;
+        if (!_ghostaxes[i].substituentsB.empty() || !_ghostaxes[i].substituentsC.empty())
+            covered++;
+    }
+
+    _distributetorque = true;
+    logging::info("Dihedral torque distributed over bonded substituents on %zu of %zu torsion axes.", covered,
+                  torsionAxes);
 }
 
 void SpringNetwork::_setupSteric()

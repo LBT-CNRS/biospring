@@ -20,12 +20,18 @@ class NetCDFReader : public TopologyReaderBase
   protected:
     SpringBuffer _sbuffer;
     ParticleBuffer _pbuffer;
+    // Reuses DihedralSpringBuffer's layout (see NetCDFWriter's stretch/bend
+    // call sites): structurally identical to a dihedral ghost-spring group,
+    // just with springsdcoffsets always zero.
+    DihedralSpringBuffer _stretchbuffer;
+    DihedralSpringBuffer _bendbuffer;
     // One buffer per dihedral family, indexed by the family itself (see
     // spn::SpringNetwork::DihedralFamilyIndex) -- read back under the .nc
     // variable prefix that same index names, so reader and writer walk the
     // families in one shared order instead of two hand-kept lists.
     std::array<DihedralSpringBuffer, biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT> _dihedralbuffers;
     GhostParticleBuffer _ghostparticlebuffer;
+    DihedralAxisBuffer _dihedralaxisbuffer;
 
     std::unique_ptr<netCDF::NcFile> _file;
     int _filec = -1;
@@ -42,14 +48,18 @@ class NetCDFReader : public TopologyReaderBase
     // readDihedralSpringGroup: an old .nc file, or one with no ghost
     // particles, simply has none of these variables).
     void readGhostParticles();
+    void readDihedralAxes();
 
     void readParticles();
     void readNumberOfParticles();
 
     void addParticlesToSpn();
     void addSpringsToSpn();
+    void addStretchSpringsToSpn();
+    void addBendSpringsToSpn();
     void addDihedralSpringsToSpn(unsigned family);
     void addGhostParticlesToSpn();
+    void addDihedralAxesToSpn();
 
     void checkNDims(const netCDF::NcVar & var, int ref);
     void checkDim(const netCDF::NcVar & var, int dimid, size_t size);

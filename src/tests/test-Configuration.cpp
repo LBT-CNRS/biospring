@@ -116,13 +116,13 @@ TEST(Configuration, deprecated_amber_steric_mode_maps_to_the_current_name)
 TEST(Configuration, dihedral_tangentialonly_survives_the_parse_path)
 {
     Configuration config;
+    EXPECT_TRUE(config.dihedral.tangentialonly);      // on by default
+
+    config.setFromString("dihedral.tangentialonly", "0");
     EXPECT_FALSE(config.dihedral.tangentialonly);
 
     config.setFromString("dihedral.tangentialonly", "1");
     EXPECT_TRUE(config.dihedral.tangentialonly);
-
-    config.setFromString("dihedral.tangentialonly", "0");
-    EXPECT_FALSE(config.dihedral.tangentialonly);
 
     // A group that is registered but misspelled must still be refused.
     EXPECT_THROW(config.setFromString("dihedral.tangential", "1"), std::exception);

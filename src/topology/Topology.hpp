@@ -77,6 +77,38 @@ class Topology
         return _make_dihedral_springs(particles, std::make_index_sequence<DIHEDRAL_FAMILY_COUNT>{});
     }
 
+    // A real 1-2 bond, retuned to real AMBER r0/k -- kept separate from
+    // _springs (rather than retuned in place there) so it has its own
+    // energy channel (see spn::SpringNetwork::Energies), symmetric with
+    // BEND/DIHEDRAL below: "spring energy" is only a meaningful,
+    // self-contained quantity for the plain ENM/rigid-body mesh, not once
+    // inflated by the real force-field corrections layered on top of it.
+    // The pre-existing --rigidbody spring for the same real 1-2 pair is
+    // kept (not removed) but its stiffness is zeroed, so nonbonded
+    // exclusion (driven by spring-neighbour membership in _springs, not by
+    // this collection) is unaffected.
+    SpringCollection _stretch_springs;
+
+    // Ghost-ghost springs standing in for a real valence-angle (BEND)
+    // restraint, kept separate from _springs for the same reason the
+    // dihedral families are (identifiable through .nc I/O without tagging
+    // Spring itself). Unlike the dihedral families, these connect two
+    // GHOST particles anchored to the vertex atom (see
+    // BondedForceFieldReader's BEND handling) rather than two real atoms:
+    // a plain distance spring directly between the two real 1-3 atoms
+    // conflates real angle-bending with real bond-stretching (their
+    // adjacent bonds are independently flexible via their own STRETCH
+    // springs), since the measured 1-3 distance depends on both -- found
+    // and quantified via a real MD-trajectory validation (~60% systematic
+    // energy excess, ~95% of it from bond-stretch leaking into the 1-3
+    // distance, only ~5% genuine linearization error). Anchoring each
+    // ghost at a FIXED (AMBER r0) distance from the vertex, along the
+    // REAL, current bond *direction*, removes that leakage: the ghost-ghost
+    // distance then depends on the real angle only, matching the existing
+    // d0/k13 curvature-matched calibration formula's own assumption
+    // (bonds fixed at r0) exactly, instead of violating it every step.
+    SpringCollection _bend_springs;
+
   public:
     // Binds a ghost (massless virtual-site) Particle -- created by
     // add_ghost_particle below, never 1:1 with a PDB atom -- to its 3 real
@@ -103,8 +135,37 @@ class Topology
         unsigned placement;
     };
 
+    // Every atom bonded to one end of a torsion axis, so a ring's torque can
+    // be shared out the way AMBER shares it -- see
+    // IO::DihedralAxisEntry, which is where these come from, and
+    // configuration::DihedralSetting::distributetorque, which is the only
+    // thing that acts on them.
+    //
+    // Carried alongside the ghosts rather than derived with them because it
+    // is knowledge the FORCE FIELD has and the geometry does not: which
+    // atoms are covalently bonded. Uids, not indices, for the same reason as
+    // GhostParticleInfo -- remove_particle can reorder the collection.
+    struct DihedralAxisInfo
+    {
+        pid_t anchor_B_uid;
+        pid_t anchor_C_uid;
+        std::vector<pid_t> substituents_B_uid;
+        std::vector<pid_t> substituents_C_uid;
+        // Each substituent's share of its side's torsional barrier, parallel
+        // to the uid lists. A negative entry means "unweighted" -- a force
+        // field that writes no weights, for which equal shares are used.
+        std::vector<double> weights_B;
+        std::vector<double> weights_C;
+    };
+
   protected:
     std::unordered_map<pid_t, GhostParticleInfo> _ghost_particles;
+
+    // One entry per distinct (B, C) axis. A plain vector, not a map: axes are
+    // few next to ghosts (example 072: a few hundred against 6484), the
+    // natural key would be a pair, and both producers append rather than
+    // look up.
+    std::vector<DihedralAxisInfo> _dihedral_axes;
 
   public:
     // =============================================================================
@@ -112,13 +173,15 @@ class Topology
     // =============================================================================
 
     Topology()
-        : _springs(_particles), _dihedral_springs(_make_dihedral_springs(_particles))
+        : _springs(_particles), _dihedral_springs(_make_dihedral_springs(_particles)), _stretch_springs(_particles),
+          _bend_springs(_particles)
     {
     }
 
     // Copy constructor.
     Topology(const Topology & other)
-        : _springs(_particles), _dihedral_springs(_make_dihedral_springs(_particles))
+        : _springs(_particles), _dihedral_springs(_make_dihedral_springs(_particles)), _stretch_springs(_particles),
+          _bend_springs(_particles)
     {
         _copy_particles(other);
         _copy_springs(other);
@@ -145,6 +208,8 @@ class Topology
             _springs.clear();
             for (auto & family : _dihedral_springs)
                 family.clear();
+            _stretch_springs.clear();
+            _bend_springs.clear();
         }
 
         _copy_particles(other);
@@ -213,6 +278,7 @@ class Topology
         for (auto & family : _dihedral_springs)
             family.clear();
         _ghost_particles.clear();
+        _dihedral_axes.clear();
         _particles.data().reserve(n);
         _copy_particles(snapshot);
         _copy_springs(snapshot);
@@ -233,11 +299,22 @@ class Topology
                                   const Particle & anchor_ref, double r, double theta_deg, double delta_deg,
                                   unsigned placement)
     {
+        // The three uids are read BEFORE the push_back, and that ordering is
+        // load-bearing. anchor_B/C/ref are references INTO _particles, and
+        // push_back can reallocate it -- after which all three dangle and
+        // unique_id() reads freed memory, silently recording a ghost whose
+        // anchors are 0. It is the same hazard reserve_particles exists to
+        // manage for springs, and it stayed invisible because pdb2spn always
+        // reserves first: only a topology built small and grown in place hits
+        // the reallocation (found 2026-08-21 by a 4-particle unit test, where
+        // adding the ghost grew capacity from 4 to 8).
+        const pid_t b_uid = anchor_B.unique_id();
+        const pid_t c_uid = anchor_C.unique_id();
+        const pid_t ref_uid = anchor_ref.unique_id();
         _particles.push_back(particle);
         Particle & added = _particles[_particles.size() - 1];
         _ghost_particles[added.unique_id()] =
-            GhostParticleInfo{anchor_B.unique_id(), anchor_C.unique_id(), anchor_ref.unique_id(), r, theta_deg,
-                              delta_deg, placement};
+            GhostParticleInfo{b_uid, c_uid, ref_uid, r, theta_deg, delta_deg, placement};
         return added;
     }
 
@@ -259,6 +336,40 @@ class Topology
             _particles[anchor_B_index].unique_id(), _particles[anchor_C_index].unique_id(),
             _particles[anchor_ref_index].unique_id(), r, theta_deg, delta_deg, placement};
     }
+
+    // Records the substituents of one torsion axis (see DihedralAxisInfo).
+    // Creates nothing and changes no force -- it only names atoms, for
+    // dihedral.distributetorque to act on later.
+    void add_dihedral_axis(const Particle & anchor_B, const Particle & anchor_C,
+                           const std::vector<pid_t> & substituents_B, const std::vector<pid_t> & substituents_C,
+                           const std::vector<double> & weights_B = {}, const std::vector<double> & weights_C = {})
+    {
+        _dihedral_axes.push_back(DihedralAxisInfo{anchor_B.unique_id(), anchor_C.unique_id(), substituents_B,
+                                                  substituents_C, weights_B, weights_C});
+    }
+
+    // Same, by index, for NetCDFReader -- which reads particles first and
+    // only learns the axes from a separate buffer afterwards, exactly as it
+    // does for ghosts (see register_ghost_particle).
+    void register_dihedral_axis(size_t anchor_B_index, size_t anchor_C_index,
+                                const std::vector<size_t> & substituents_B_index,
+                                const std::vector<size_t> & substituents_C_index,
+                                const std::vector<double> & weights_B = {},
+                                const std::vector<double> & weights_C = {})
+    {
+        DihedralAxisInfo info;
+        info.anchor_B_uid = _particles[anchor_B_index].unique_id();
+        info.anchor_C_uid = _particles[anchor_C_index].unique_id();
+        for (size_t i : substituents_B_index)
+            info.substituents_B_uid.push_back(_particles[i].unique_id());
+        for (size_t i : substituents_C_index)
+            info.substituents_C_uid.push_back(_particles[i].unique_id());
+        info.weights_B = weights_B;
+        info.weights_C = weights_C;
+        _dihedral_axes.push_back(info);
+    }
+
+    const std::vector<DihedralAxisInfo> & dihedral_axes() const { return _dihedral_axes; }
 
     // =============================================================================
     // Spring manipulation.
@@ -287,6 +398,23 @@ class Topology
         // .at(), not [] -- see dihedral_springs() below for why the index is
         // range-checked.
         return _dihedral_springs.at(family).add_spring(p1, p2, equilibrium, stiffness);
+    }
+
+    // Creates a STRETCH spring between two real atoms (see _stretch_springs'
+    // own comment) -- always a new addition (never retuned in place, unlike
+    // the old --rigidbody spring for the same pair, which the caller zeroes
+    // out separately instead).
+    auto & add_stretch_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
+    {
+        return _stretch_springs.add_spring(p1, p2, equilibrium, stiffness);
+    }
+
+    // Creates a BEND ghost-ghost spring between two vertex-anchored ghost
+    // particles (see _bend_springs' own comment) -- always a new addition,
+    // like the dihedral families, never a retune of a real spring.
+    auto & add_bend_spring(Particle & p1, Particle & p2, double equilibrium = -1.0, double stiffness = 1.0)
+    {
+        return _bend_springs.add_spring(p1, p2, equilibrium, stiffness);
     }
 
     // Adds springs between all particles within a cutoff distance.
@@ -396,6 +524,12 @@ class Topology
     auto & dihedral_springs(unsigned family) { return _dihedral_springs.at(family); }
     const auto & dihedral_springs(unsigned family) const { return _dihedral_springs.at(family); }
 
+    auto & stretch_springs() { return _stretch_springs; }
+    const auto & stretch_springs() const { return _stretch_springs; }
+
+    auto & bend_springs() { return _bend_springs; }
+    const auto & bend_springs() const { return _bend_springs; }
+
     auto & get_spring(size_t position) { return _springs[position]; }
     const auto & get_spring(size_t position) const { return _springs[position]; }
 
@@ -482,7 +616,7 @@ class Topology
             // and every Lennard-Jones form is proportional to epsilon_ij, so
             // both the steric energy AND force came out exactly zero on any
             // topology built this way (found 2026-08-13 while writing
-            // example 072 (Biospring-Example): "Steric energy: 0.00" with correct radii/charges
+            // example/072: "Steric energy: 0.00" with correct radii/charges
             // in the same .nc). Every other link in the chain was already
             // correct -- ForceFieldReader parses it, Reducer sets it on the
             // grain, SpnBuffer writes it, NetCDFReader restores it -- only
@@ -521,6 +655,41 @@ class Topology
                 size_t j = _particles.by_uid().at(source.second().unique_id());
                 spn.addDihedralSpring(family, i, j, source.equilibrium(), source.stiffness(), source.dc_offset());
             }
+        }
+
+        // STRETCH springs (see _stretch_springs' own comment) -- plain
+        // copy, no dc_offset concept here either.
+        for (const topology::Spring & source : _stretch_springs)
+        {
+            size_t i = _particles.by_uid().at(source.first().unique_id());
+            size_t j = _particles.by_uid().at(source.second().unique_id());
+            spn.addStretchSpring(i, j, source.equilibrium(), source.stiffness());
+        }
+
+        // BEND ghost-ghost springs (see _bend_springs' own comment) -- no
+        // dc_offset concept here (that is specific to the dihedral ring
+        // construction's DC artifact), so a plain copy like _springs above.
+        for (const topology::Spring & source : _bend_springs)
+        {
+            size_t i = _particles.by_uid().at(source.first().unique_id());
+            size_t j = _particles.by_uid().at(source.second().unique_id());
+            spn.addBendSpring(i, j, source.equilibrium(), source.stiffness());
+        }
+
+        // Axis substituent lists (see DihedralAxisInfo). Last, and it has to
+        // be: the network resolves each one onto an axis that only exists
+        // because a ghost created it, so every ghost must already be in.
+        // An axis with no ghost on it is dropped there, not here.
+        for (const DihedralAxisInfo & info : _dihedral_axes)
+        {
+            std::vector<unsigned> b_indices, c_indices;
+            for (pid_t uid : info.substituents_B_uid)
+                b_indices.push_back(static_cast<unsigned>(_particles.by_uid().at(uid)));
+            for (pid_t uid : info.substituents_C_uid)
+                c_indices.push_back(static_cast<unsigned>(_particles.by_uid().at(uid)));
+            spn.setAxisSubstituents(static_cast<unsigned>(_particles.by_uid().at(info.anchor_B_uid)),
+                                    static_cast<unsigned>(_particles.by_uid().at(info.anchor_C_uid)), b_indices,
+                                    c_indices, info.weights_B, info.weights_C);
         }
     }
 
@@ -577,6 +746,8 @@ class Topology
         for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
             _copy_spring_collection(_dihedral_springs[family], other._dihedral_springs[family], other._particles,
                                     offset);
+        _copy_spring_collection(_stretch_springs, other._stretch_springs, other._particles, offset);
+        _copy_spring_collection(_bend_springs, other._bend_springs, other._particles, offset);
     }
 
     // Copies `other`'s ghost-particle bindings to this topology. Same uid
@@ -599,6 +770,23 @@ class Topology
                 GhostParticleInfo{_particles[b_index].unique_id(), _particles[c_index].unique_id(),
                                   _particles[ref_index].unique_id(), info.r, info.theta_deg, info.delta_deg,
                                   info.placement};
+        }
+
+        // The axis substituent lists travel with the ghosts and need the same
+        // uid re-resolution: they are uids into `other`, meaningless here.
+        _dihedral_axes.clear();
+        for (const DihedralAxisInfo & info : other._dihedral_axes)
+        {
+            DihedralAxisInfo copy;
+            copy.anchor_B_uid = _particles[other._particles.by_uid().at(info.anchor_B_uid)].unique_id();
+            copy.anchor_C_uid = _particles[other._particles.by_uid().at(info.anchor_C_uid)].unique_id();
+            for (pid_t uid : info.substituents_B_uid)
+                copy.substituents_B_uid.push_back(_particles[other._particles.by_uid().at(uid)].unique_id());
+            for (pid_t uid : info.substituents_C_uid)
+                copy.substituents_C_uid.push_back(_particles[other._particles.by_uid().at(uid)].unique_id());
+            copy.weights_B = info.weights_B;
+            copy.weights_C = info.weights_C;
+            _dihedral_axes.push_back(copy);
         }
     }
 };

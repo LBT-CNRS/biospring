@@ -160,7 +160,7 @@ class ForceFieldTables:
 # ---------------------------------------------------------------------------
 
 lines = []
-counters = {"stretch": 0, "bend": 0, "skip": 0}
+counters = {"stretch": 0, "bend": 0, "skip": 0, "axis": 0}
 _seen = set()
 
 
@@ -169,12 +169,6 @@ def _aliases(name):
 
 
 def emit_stretch(resname, a1, a2, r0_A, k):
-    # STRETCH and BEND are no longer part of the model: bonds and angles
-    # are held by the .rbody mesh at --stiffness, not by their own
-    # springs. The computation stays because the dihedral rings need
-    # the same AMBER bond lengths and angles for their geometry; only
-    # the emission is suppressed.
-    return
     for n1 in _aliases(a1):
         for n2 in _aliases(a2):
             key = (resname, tuple(sorted((n1, n2.lstrip("+-")))), n2[:1] in "+-")
@@ -186,13 +180,48 @@ def emit_stretch(resname, a1, a2, r0_A, k):
             counters["stretch"] += 1
 
 
+def emit_dihedral_axis(resname, axis_label, b_name, c_name, b_subs, c_subs, weights=None):
+    """Every atom bonded to either end of one torsion axis, for
+    dihedral.distributetorque (see the protein generator's own
+    emit_dihedral_axis for why this cannot be recovered at runtime).
+
+    Alias handling differs from emit_stretch's. There, each spelling needs its
+    own record, because a spring is a specific pair. Here a substituent list is
+    a SET, and biospring drops the members it cannot resolve -- so listing
+    every spelling side by side is exactly right: whichever the PDB actually
+    uses survives, the rest fall away, and the share stays 1/N of what is
+    really there. The two AXIS atoms still need the alias product, since an
+    unresolved axis drops the whole record.
+    """
+    if not b_subs or not c_subs:
+        return
+
+    def spellings(name):
+        prefix = name[:1] if name[:1] in "+-" else ""
+        return [prefix + a for a in _aliases(name.lstrip("+-"))]
+
+    # Weights ride along with each spelling. Both spellings of one atom
+    # therefore carry the same share and the side's total looks doubled --
+    # harmless, because biospring renormalises over the atoms that actually
+    # resolve, which is one spelling per atom (and is what makes a dropped
+    # terminal substituent safe too).
+    def tag(name, w):
+        return name if w is None else "%s:%.4f" % (name, w)
+
+    bw = weights[0] if weights else [None] * len(b_subs)
+    cw = weights[1] if weights else [None] * len(c_subs)
+    b_field = [tag(sp, w) for name, w in zip(b_subs, bw) for sp in spellings(name)]
+    c_field = [tag(sp, w) for name, w in zip(c_subs, cw) for sp in spellings(name)]
+
+    for b_display in spellings(b_name):
+        for c_display in spellings(c_name):
+            lines.append(f"DIHEDRALAXIS {resname}_{axis_label}_axis{'':<4s} {resname:7s} "
+                         f"{b_display:6s} {c_display:7s} "
+                         f"{len(b_field)} {' '.join(b_field)} {len(c_field)} {' '.join(c_field)}")
+            counters["axis"] += 1
+
+
 def emit_bend(resname, a1, vertex, a3, theta0, k):
-    # STRETCH and BEND are no longer part of the model: bonds and angles
-    # are held by the .rbody mesh at --stiffness, not by their own
-    # springs. The computation stays because the dihedral rings need
-    # the same AMBER bond lengths and angles for their geometry; only
-    # the emission is suppressed.
-    return
     for n1 in _aliases(a1):
         for n3 in _aliases(a3):
             key = (resname, vertex, tuple(sorted((n1, n3))), "bend")
@@ -218,6 +247,22 @@ PREV_O3 = "-O3'"
 # the .rbody's uniform springs and no bonded rule retunes them, and no
 # torsion is emitted about a ring bond (delta included -- it turns about
 # C4'-C3').
+#
+# Retested 2026-08-21 with dihedral.tangentialonly, on the theory that the
+# collapse was driven by the radial and axial force the rings leak and that
+# projecting it away would close the channel. It does not. Lifting the freeze
+# and running the RNA hairpin 20000 steps: the twelve sugars leave C3'-endo
+# entirely (100 % North at P = 12.9 deg to none, 67 % intermediate and 33 %
+# South), the amplitude falls 37.0 -> 24.3 deg, and the dihedral energy lands
+# at 289.47 kJ/mol -- the same collapse as before, against 293 measured in
+# 2026-08-19 and the 5388 AMBER asks.
+#
+# The distinction that matters: the projection fixes the FORCE, not the
+# energy landscape. The relaxation channel is a spurious MINIMUM of the ring
+# energy, reachable by deforming the ring until every ghost-ghost distance
+# meets its d0 at once. Projecting the force does not remove that minimum;
+# it only stops the rings pushing towards it directly. Soften the ring's
+# bonds and nothing else keeps the geometry out of it.
 #
 # Why, measured (2026-08-19): a ghost ring's energy is not a function of
 # the dihedral alone. Since the ghost is the image of a REAL atom rotated
@@ -695,6 +740,36 @@ def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as, per_
         return
     b_ref, c_ref = b_neighbors[0], c_neighbors[0]
 
+    # Under every residue spelling, exactly like the springs below: a rule
+    # that knows only DA matches nothing at all in a file written with RA.
+    # AMBER's own share per substituent -- see the protein generator's
+    # axis_share_weights for why an equal split is not AMBER's split.
+    def side_weights():
+        bw = {n: 0.0 for n in b_neighbors}
+        cw = {n: 0.0 for n in c_neighbors}
+        for bn in b_neighbors:
+            for cn in c_neighbors:
+                terms = axes.lookup_torsion_specific(atoms[bn.lstrip('+-')], b_class, c_class,
+                                                     atoms[cn.lstrip('+-')])
+                if terms is None:
+                    terms = axes.lookup_torsion_wildcard(b_class, c_class)
+                if terms is None:
+                    continue
+                total = sum(abs(k) for _, k, _ in terms)
+                bw[bn] += total
+                cw[cn] += total
+        out = []
+        for w, names in ((bw, b_neighbors), (cw, c_neighbors)):
+            tot = sum(w.values())
+            if tot <= 0.0:
+                return None
+            out.append([w[n] / tot for n in names])
+        return out[0], out[1]
+
+    weights = side_weights()
+    for name in emit_as:
+        emit_dihedral_axis(name, axis_label, b_name, c_name, b_neighbors, c_neighbors, weights)
+
     def side_geom(nbrs, vertex_class, other_class, ref_name):
         with_classes = [(n, atoms[n.lstrip('+-')]) for n in nbrs]
         deltas = axes.formula_derived_deltas(vertex_class, other_class, with_classes, ref_name)
@@ -782,12 +857,8 @@ def main():
         "#nucleic-acid-specific AMBER force fields (see the script's docstring",
         "#for why amber99sb.xml's own nucleic templates are the wrong choice).",
         "#",
-        "#This file carries DIHEDRAL records only -- see the format further",
-        "#down. Bonds and valence angles used to be emitted here as STRETCH",
-        "#and BEND; both families were removed and now live in the rigid-body",
-        "#mesh (DNAAtomRigidGroups.rbody / RNAAtomRigidGroups.rbody). AMBER",
-        "#bond lengths and angles are still read, because the ghost rings'",
-        "#geometry is built from them.",
+        "#STRETCH <name> <resname> <atom1> <atom2> <r0_A> <k_kJ.mol-1.A-2>",
+        "#BEND    <name> <resname> <atom1> <vertex> <atom3> <theta0_deg> <k>",
         "#",
         "#'+X' is atom X of the NEXT residue: the only cross-residue bond in a",
         "#nucleic acid is O3'(i)-P(i+1), the phosphodiester link.",
@@ -888,8 +959,9 @@ def main():
     with open(out, "w") as f:
         f.write("\n".join(header + body) + "\n")
     print(f"\nWrote {axes.n_ghost_particles} GHOSTPARTICLE and {axes.n_dihedral_ok} DIHEDRAL "
-          f"entries ({axes.n_dihedral_skip} axes skipped) to {out}. Bonds and valence angles "
-          f"are not emitted: the rigid-body mesh carries them.")
+          f"entries ({axes.n_dihedral_skip} axes skipped), {counters['axis']} DIHEDRALAXIS, "
+          f"{counters['stretch']} STRETCH and "
+          f"{counters['bend']} BEND ({counters['skip']} skipped) to {out}")
 
 
 if __name__ == "__main__":
