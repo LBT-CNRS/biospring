@@ -134,8 +134,6 @@ set(BIOSPRING_CORE_SOURCES
     src/forcefield/ForceField.cpp
     src/grid/GridCoordinatesSystem.cpp
     src/grid/PotentialGrid.cpp
-    src/reduce/ParticleGroup.cpp
-    src/reduce/Reduce.cpp
     src/reduce/Reducer.cpp
     src/reduce/ReduceRule.cpp
     src/IO/io.cpp
@@ -150,6 +148,10 @@ set(BIOSPRING_CORE_SOURCES
     src/IO/PQRReader.cpp
     src/IO/PQRWriter.cpp
     src/IO/ReduceRuleReader.cpp
+    src/IO/RigidBodyRuleReader.cpp
+    src/rigidbodygroup/RigidBodyRule.cpp
+    src/rigidbodygroup/RigidBodyBuilder.cpp
+    src/staticbond/StaticBondBuilder.cpp
     src/IO/XTCTrajWriter.cpp
     src/IO/modern/CSVTrajectoryWriter.cpp
     src/IO/modern/PDBTrajectoryWriter.cpp

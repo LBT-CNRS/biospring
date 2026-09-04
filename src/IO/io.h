@@ -15,7 +15,7 @@ namespace io
 topology::Topology readTopology(const std::string & path);
 
 void writeTopology(const std::string & path, const topology::Topology & topology, bool writePdbConect = false);
-void writeTopology(const vector<string> & outputfiles, const topology::Topology & topology, bool writePdbConect = false);
+void writeTopology(const std::vector<std::string> & outputfiles, const topology::Topology & topology, bool writePdbConect = false);
 
 } // namespace io
 

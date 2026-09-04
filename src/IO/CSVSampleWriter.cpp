@@ -49,5 +49,5 @@ void CSVSampleWriter::write()
     if (_spn->isInsertionVectorEnabled())
         _ostream << "\t" << iv.getAngle() << "\t" << iv.getInsertionDepth();
 
-    _ostream << endl;
+    _ostream << std::endl;
 }

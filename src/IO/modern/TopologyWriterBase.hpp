@@ -1,13 +1,20 @@
 #ifndef __TOPOLOGY_WRITER_BASE_HPP__
 #define __TOPOLOGY_WRITER_BASE_HPP__
 
-#include "SpringNetwork.h"
 #include "WriterBase.hpp"
 
 #include <string>
 
+// Forward-declared, not included: SpringNetwork.h includes IO/modern.hpp,
+// which lands back here, and this header only needs to hold a reference.
+// The cycle used to be broken by luck -- reduce/Reduce.h happened to pull
+// SpringNetwork.h in first -- and removing that legacy header exposed it.
 namespace biospring
 {
+namespace spn
+{
+class SpringNetwork;
+}
 namespace io
 {
 namespace modern

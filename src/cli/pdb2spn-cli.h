@@ -19,6 +19,8 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     std::string pathTopology;
     std::string pathForceField;
     std::string pathGroup;
+    std::string pathRigidBody;
+    std::string pathStaticHydrogenBond;
     std::vector<std::string> pathOutputList;
 
 
@@ -27,6 +29,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     float stiffness;
     float charge;
     bool isStatic;
+    bool addStaticDisulfide;
     bool ignoreDuplicates;
     bool ignoreMissing;
     bool writePdbConect;
@@ -40,7 +43,6 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     void parseCommandLine(int argc, const char * const argv[]);
 
     bool useUserCutoff() const { return _parser.get_option("--cutoff").is_set(); }
-    bool useUserStiffness() const { return _parser.get_option("--stiffness").is_set(); }
     bool useUserCharge() const { return _parser.get_option("--charge").is_set(); }
 };
 

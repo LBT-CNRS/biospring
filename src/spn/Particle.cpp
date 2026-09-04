@@ -41,12 +41,12 @@ void Particle::updateFromForceField(const biospring::forcefield::ForceField & ff
 
 void Particle::addToSpringNeighbors(unsigned index, Spring * spring)
 {
-    _springneighbors.insert(unordered_map<unsigned, Spring *>::value_type(index, spring));
+    _springneighbors.insert(std::unordered_map<unsigned, Spring *>::value_type(index, spring));
 }
 
-string Particle::tostr() const
+std::string Particle::tostr() const
 {
-    ostringstream oss;
+    std::ostringstream oss;
     oss << _chainname << "::" << _resname << "::" << _resid << "::" << _name;
     return oss.str();
 }
@@ -336,7 +336,7 @@ void Particle::addElectrostaticForceNoGrid(float cutoff)
     bool apply = true;
 
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-    vector<unsigned> chargedparticules = _springnetwork->getChargedParticles();
+    std::vector<unsigned> chargedparticules = _springnetwork->getChargedParticles();
     for (unsigned i = 0; i < chargedparticules.size(); i++)
     {
         const Particle & p = _springnetwork->getParticle(chargedparticules[i]);
