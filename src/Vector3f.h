@@ -60,7 +60,22 @@ class Vector3f
     }
 
     // Returns the module of this vector.
-    float norm() const;
+    //
+    // Defined here rather than in Vector3f.cpp, where it used to delegate to
+    // biospring::measure::norm. That call could never be inlined -- measure.hpp
+    // includes this header, so this header cannot include it back -- and it
+    // widened three floats to double to run a double-precision sqrt and narrow
+    // the result back. A sampling profile of RecA put this one function at 21 %
+    // of all the time the process spent doing work.
+    //
+    // The near-zero guard is measure::norm's, kept: it returns exactly 0 rather
+    // than whatever sqrt makes of a denormal.
+    float norm() const
+    {
+        if (std::abs(_x) < 1e-40f && std::abs(_y) < 1e-40f && std::abs(_z) < 1e-40f)
+            return 0.0f;
+        return std::sqrt(_x * _x + _y * _y + _z * _z);
+    }
 
     // Returns the opposite vector.
     Vector3f operator-() const { return Vector3f(-_x, -_y, -_z); }
