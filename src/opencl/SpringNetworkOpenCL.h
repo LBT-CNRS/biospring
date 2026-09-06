@@ -89,6 +89,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		virtual void run();
 		virtual void idleRun();
 		virtual void initRun();
+		virtual void endRun();
 
 
 

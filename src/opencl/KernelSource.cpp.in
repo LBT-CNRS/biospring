@@ -1,0 +1,22 @@
+// Generated from biospring.cl at configure time. Do not edit.
+//
+// A raw string literal keeps the kernel readable here and needs no escaping.
+// The delimiter only has to be absent from OpenCL C, which BIOSPRING_CL is.
+
+#ifdef OPENCL_SUPPORT
+
+#include "KernelSource.h"
+
+namespace biospring
+{
+namespace opencl
+{
+
+const char * const KERNEL_SOURCE = R"BIOSPRING_CL(
+@BIOSPRING_CL_TEXT@
+)BIOSPRING_CL";
+
+} // namespace opencl
+} // namespace biospring
+
+#endif // OPENCL_SUPPORT

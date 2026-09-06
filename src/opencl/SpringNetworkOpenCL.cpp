@@ -5,6 +5,9 @@
 #include "SpringNetworkOpenCL.h"
 #include "IO/PDBTrajectoryWriter.h"
 #include "IO/CSVSampleWriter.h"
+#include "KernelSource.h"
+
+#include <fstream>
 
 
 #include "Spring.h"
@@ -226,11 +229,31 @@ void SpringNetworkOpenCL::createBuffer()
 	_queue=cl::CommandQueue(_context, _devices[0], CL_QUEUE_PROFILING_ENABLE, &_err);
 	checkErr("CommandQueue::CommandQueue()");
 
-	ifstream _file("biospring.cl");
-	_err=_file.is_open() ? CL_SUCCESS:-1;
-	checkErr("biospring.cl");
+	// The kernel text is compiled into the binary (see KernelSource.h), so
+	// there is nothing to find on disk and nothing that depends on the
+	// directory biospring was launched from.
+	//
+	// This used to be ifstream("biospring.cl") guarded by
+	//     _err = _file.is_open() ? CL_SUCCESS : -1;
+	// and -1 is the value of CL_DEVICE_NOT_FOUND, so a kernel file the process
+	// could not open announced itself as a machine with no GPU. The device had
+	// been found and reported by name two screens earlier.
+	std::string prog(biospring::opencl::KERNEL_SOURCE);
 
-	std::string prog(std::istreambuf_iterator<char>(_file),(std::istreambuf_iterator<char>()));
+	// Still allow a file, for editing the kernel without rebuilding. If one is
+	// named and cannot be read, that is what gets reported.
+	if (const char * kernelpath = getenv("BIOSPRING_OPENCL_KERNEL"))
+	{
+		std::ifstream _file(kernelpath);
+		if (!_file.is_open())
+		{
+			std::cerr << "ERROR: BIOSPRING_OPENCL_KERNEL names '" << kernelpath
+			          << "', which cannot be read." << std::endl;
+			exit(EXIT_FAILURE);
+		}
+		prog.assign(std::istreambuf_iterator<char>(_file), std::istreambuf_iterator<char>());
+		std::cerr << "Using OpenCL kernel source from " << kernelpath << std::endl;
+	}
 
 	try
 		{
@@ -255,16 +278,24 @@ void SpringNetworkOpenCL::createBuffer()
 		}
 
 
-	printf("done building program\n");
-	cerr << "Build Status: " << _program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(_devices[0]) << endl;
-	cerr << "Build Options:\t" << _program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(_devices[0]) << endl;
-	cerr << "Build Log:\t " << _program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(_devices[0]) << endl;
+	// The build log is what tells you why a kernel would not compile, so it is
+	// printed when the build fails -- and only then. It used to go to stderr on
+	// every successful run, alongside the status, the options and a bare
+	// "globalsize" integer, which is how a real diagnostic gets ignored.
+	if (_program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(_devices[0]) != CL_BUILD_SUCCESS)
+		{
+		cerr << "ERROR: could not build the OpenCL kernels." << endl;
+		cerr << "Build status: " << _program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(_devices[0]) << endl;
+		cerr << "Build options: " << _program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(_devices[0]) << endl;
+		cerr << "Build log:" << endl
+		     << _program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(_devices[0]) << endl;
+		exit(EXIT_FAILURE);
+		}
 
 	checkErr("Program::build()");
 	unsigned workgroupsize=WORK_GROUP_SIZE;
 	unsigned globalsize=(_nbparticlesocl/workgroupsize)*(workgroupsize)+workgroupsize;
 
-	cout<<globalsize<<endl;
 	_kernelspring=cl::Kernel(_program, "spring", &_err);
 	_kernelfunctorspring = _kernelspring.bind(_queue, cl::NDRange(globalsize), cl::NDRange(WORK_GROUP_SIZE));
 	checkErr("Kernel::Kernel()");
@@ -282,12 +313,10 @@ void SpringNetworkOpenCL::createBuffer()
 	_kernelfunctorintegration = _kernelintegration.bind(_queue, cl::NDRange(globalsize), cl::NDRange(WORK_GROUP_SIZE));
 	checkErr("Kernel::Kernel()");
 
-	cerr<<__FUNCTION__<<" end"<<endl;
 	}
 
 void SpringNetworkOpenCL::InitOcl()
 	{
-	cerr<<__FUNCTION__<<" start"<<endl;
 
 
 	#ifdef OPENGL_SUPPORT
@@ -366,7 +395,6 @@ void SpringNetworkOpenCL::InitOcl()
 		_contextproperties[1] = (cl_context_properties)(_platforms[0])();
 		_contextproperties[2] = 0;
 
-		cerr<<__FUNCTION__<<" test"<<endl;
 		_context=cl::Context(CL_DEVICE_TYPE_GPU,_contextproperties,NULL,NULL,&_err);
 		checkErr( "Context::Context()");
 	#endif
@@ -379,40 +407,11 @@ void SpringNetworkOpenCL::InitOcl()
 
 void SpringNetworkOpenCL::wrappingOcl()
 	{
-	cerr<<__FUNCTION__<<" start"<<endl;
 	computeOpenCLPositions();
-	//computeRandomSet();
-	for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		cout<<"x "<<_particlepositions[i].x<<" y "<<_particlepositions[i].y<<" z " <<_particlepositions[i].z<<std::endl;
-		}
-
-		for(unsigned i=0;i<_nbspringsocl;i++)
-		{
-		cout<<"id1 "<<_springsocl[i].id1<<" id2 "<<_springsocl[i].id2<<" stiffness " <<_springsocl[i].stiffness<<" equilibrium " <<_springsocl[i].equilibrium<<std::endl;
-		}
-
-		computeOpenCLVelocities();
-		for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		cout<<"vx "<<_particlevelocities[i].x<<" vy "<<_particlevelocities[i].y<<" vz " <<_particlevelocities[i].z<<std::endl;
-		}
-
-		computeOpenCLForces();
-		for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		cout<<"fx "<<_particleforces[i].x<<" fy "<<_particleforces[i].y<<" fz " <<_particleforces[i].z<<std::endl;
-		}
-
-		computeOpenCLSprings();
-
-		computeParticleToSpringIndexes();
-
-		for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		std::cout<<"Indexes "<<i<<" "<<_particletospringindexes[i]<<std::endl;
-		}
-	cerr<<__FUNCTION__<<" end"<<endl;
+	computeOpenCLVelocities();
+	computeOpenCLForces();
+	computeOpenCLSprings();
+	computeParticleToSpringIndexes();
 	}
 
 double springtime=0.0;
@@ -446,7 +445,7 @@ void SpringNetworkOpenCL::idleRun()
 
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	springtime=(endTime-startTime)*1.0E-9;
+	springtime+=(endTime-startTime)*1.0E-9;
 
 
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
@@ -455,14 +454,14 @@ void SpringNetworkOpenCL::idleRun()
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	dampingtime=(endTime-startTime)*1.0E-9;
+	dampingtime+=(endTime-startTime)*1.0E-9;
 
 
 	_event=_kernelfunctorexternal(_inoutForceBuffer,_inExternalForceBuffer,_nbparticlesocl);
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	integrationtime=(endTime-startTime)*1.0E-9;
+	integrationtime+=(endTime-startTime)*1.0E-9;
 
     _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
                                       _inoutForceBuffer, getTimeStep(),
@@ -470,7 +469,7 @@ void SpringNetworkOpenCL::idleRun()
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	externalforcetime=(endTime-startTime)*1.0E-9;
+	externalforcetime+=(endTime-startTime)*1.0E-9;
 
 	_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_TRUE, 0,
         sizeof(float4) * _nbparticlesocl, _particlevelocities);
@@ -495,17 +494,6 @@ void SpringNetworkOpenCL::idleRun()
 
 
 	SpringNetwork::idleRun();
-	totaltime=springtime+dampingtime+integrationtime+externalforcetime;
-
-	std::cout <<"Output particles :" << std::endl;
-	for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		cout<<"x "<<_particlepositions[i].x<<" y "<<_particlepositions[i].y<<" z " <<_particlepositions[i].z<<std::endl;
-		cout<<"vx "<<_particlevelocities[i].x<<" vy "<<_particlevelocities[i].y<<" vz " <<_particlevelocities[i].z<<std::endl;
-		cout<<"fx "<<_particleforces[i].x<<" fy "<<_particleforces[i].y<<" fz " <<_particleforces[i].z<<std::endl;
-		}
-
-	std::cout<<"Times: "<<totaltime<<"( spring : "<<springtime<<", damping : "<<dampingtime<<", integration : "<<integrationtime<<", external : "<<externalforcetime<<")"<< std::endl;
 
 	//usleep(10);
 
@@ -523,6 +511,18 @@ void SpringNetworkOpenCL::initRun()
 	InitOcl();
 	wrappingOcl();
 	createBuffer();
+	}
+
+// One summary for the run instead of one line of raw timings on stdout for
+// every step, which is what idleRun() used to do. The four counters are
+// accumulated there rather than overwritten, so these are run totals.
+void SpringNetworkOpenCL::endRun()
+	{
+	totaltime=springtime+dampingtime+integrationtime+externalforcetime;
+	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
+	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
+	         <<", external: "<<externalforcetime<<" )"<<std::endl;
+	SpringNetwork::endRun();
 	}
 
 
@@ -548,7 +548,6 @@ void SpringNetworkOpenCL::convertSpringtoSpringocl(const Spring & spin, Springoc
 	}
 void SpringNetworkOpenCL::computeParticleToSpringIndexes()
     {
-    cerr << __FUNCTION__ << " start" << endl;
     delete[] _particletospringindexes;
     _particletospringindexes = new int[_nbparticlesocl];
     std::fill_n(_particletospringindexes, _nbparticlesocl, -1);
@@ -561,7 +560,6 @@ void SpringNetworkOpenCL::computeParticleToSpringIndexes()
         if (particleId < _nbparticlesocl && _particletospringindexes[particleId] < 0)
             _particletospringindexes[particleId] = static_cast<int>(i);
         }
-    cerr << __FUNCTION__ << " end" << endl;
     }
 
 float SpringNetworkOpenCL::distance (const float4 p1,const float4 p2)
@@ -577,7 +575,6 @@ float SpringNetworkOpenCL::distance (const float4 p1,const float4 p2)
 
 void SpringNetworkOpenCL::computeOpenCLSprings()
     {
-    cerr << __FUNCTION__ << " start" << endl;
 
     const unsigned particleCount = SpringNetwork::getNumberOfParticles();
     const unsigned springCount = SpringNetwork::getNumberOfSprings();
@@ -615,12 +612,10 @@ void SpringNetworkOpenCL::computeOpenCLSprings()
         for (const Springocl & spring : particleSprings)
             _springsocl[springIndex++] = spring;
 
-    cerr << __FUNCTION__ << " end" << endl;
     }
 
 void SpringNetworkOpenCL::computeOpenCLPositions()
 		{
-		cerr<<__FUNCTION__<<" start"<<endl;
 
 		_nbparticlesocl=SpringNetwork::getNumberOfParticles();
 		delete[] _particlepositions;
@@ -636,7 +631,6 @@ void SpringNetworkOpenCL::computeOpenCLPositions()
 			_particlepositions[i].z=v.getZ();
 			_particlepositions[i].w=1.0f;
 			}
-		cerr<<__FUNCTION__<<" end"<<endl;
 
 
 
@@ -711,7 +705,6 @@ void SpringNetworkOpenCL::computeRandomSet()
 
 void SpringNetworkOpenCL::getParticlePosition(unsigned i, float position[3]) const
 	{
-	cerr<<"getParticlePosition i"<<i<<endl;
 	position[0]=_particlepositions[i].x;
 	position[1]=_particlepositions[i].y;
 	position[2]=_particlepositions[i].z;
