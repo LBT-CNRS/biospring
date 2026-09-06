@@ -48,7 +48,7 @@ using biospring::spn::SpringNetwork;
 SpringNetworkOpenCL::SpringNetworkOpenCL()
     : SpringNetwork(), _springparticlesindexes(nullptr), _nbparticlesocl(0), _nbspringsocl(0),
       _particlepositions(nullptr), _particlevelocities(nullptr), _particleforces(nullptr),
-      _particleexternalforces(nullptr), _particletospringindexes(nullptr), _springsocl(nullptr),
+      _particleexternalforces(nullptr), _particlemasses(nullptr), _particletospringindexes(nullptr), _springsocl(nullptr),
       _err(CL_SUCCESS), _contextproperties(nullptr)
     {
     getOpenCLRessources();
@@ -85,6 +85,7 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particleforces;
     delete[] _particleexternalforces;
     delete[] _particletospringindexes;
+    delete[] _particlemasses;
     delete[] _springsocl;
     delete[] _contextproperties;
     }
@@ -184,10 +185,18 @@ void SpringNetworkOpenCL::createBuffer()
 						  &_err);
 		checkErr( "Buffer::Buffer() 4");
 
+		_inMassBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(float)*_nbparticlesocl,
+								 _particlemasses,
+								 &_err);
+		checkErr( "Buffer::Buffer() mass");
+
 		_inSpringIndexesBuffer=cl::Buffer(
 								 _context,
 								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
-								 sizeof(int)*_nbparticlesocl,
+								 sizeof(int)*(_nbparticlesocl+1),
 								 _particletospringindexes,
 								 &_err);
 
@@ -410,6 +419,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLPositions();
 	computeOpenCLVelocities();
 	computeOpenCLForces();
+	computeOpenCLMasses();
 	computeOpenCLSprings();
 	computeParticleToSpringIndexes();
 	}
@@ -435,7 +445,13 @@ void SpringNetworkOpenCL::idleRun()
 		_queue.finish();
 	#endif
 
+    // Exactly what the CPU folds into a spring force: the force field's spring
+    // scale and the kJ.mol-1.A-1 -> Da.A.fs-2 conversion. The kernel calls the
+    // same biospring_spring_force_module() with it, so the two sides cannot
+    // disagree about the magnitude. Only the conversion used to be passed,
+    // which made the GPU spring.scale times too weak.
     const float springForceScale =
+        getForceField()->getSpringScale() *
         static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
     _event = _kernelfunctorspring(_inoutPositionBuffer, _inSpringBuffer,
                                  _inSpringIndexesBuffer, _inoutForceBuffer,
@@ -464,7 +480,7 @@ void SpringNetworkOpenCL::idleRun()
 	integrationtime+=(endTime-startTime)*1.0E-9;
 
     _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
-                                      _inoutForceBuffer, getTimeStep(),
+                                      _inoutForceBuffer, _inMassBuffer, getTimeStep(),
                                       _nbparticlesocl);
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
@@ -493,14 +509,21 @@ void SpringNetworkOpenCL::idleRun()
 
 
 
-	SpringNetwork::idleRun();
+	// Copy the device's answer back into the Particle objects before the base
+	// class runs its bookkeeping, because everything downstream of here reads
+	// particles, not our float4 arrays: _writeNextStep() and its PDB/XTC/CSV
+	// writers, the energies, the interactors.
+	//
+	// Without this the GPU path computed correctly and reported the structure
+	// it started from -- every frame of every trajectory identical to the
+	// input, on a run that was doing real work.
+	_syncParticlesFromDevice();
 
-	//usleep(10);
+	SpringNetwork::idleRun();
 
 	#ifdef OPENGL_SUPPORT
 		//Release the VBOs so OpenGL can play with them
 		_err = _queue.enqueueReleaseGLObjects(&_allvbos, NULL, &_event);
-		//printf("release gl: %s\n", oclErrorString(err));
 		_queue.finish();
 	#endif
 	}
@@ -546,20 +569,42 @@ void SpringNetworkOpenCL::convertSpringtoSpringocl(const Spring & spin, Springoc
 	spout.stiffness=spin.getStiffness();
 	spout.equilibrium=spin.getEquilibrium();
 	}
+// Device -> host. The reverse of computeOpenCLPositions()/Velocities().
+void SpringNetworkOpenCL::_syncParticlesFromDevice()
+	{
+	const unsigned n = SpringNetwork::getNumberOfParticles();
+	for (unsigned i = 0; i < n; ++i)
+		{
+		Particle & particle = SpringNetwork::getParticle(i);
+		particle.setPosition(Vector3f(_particlepositions[i].x, _particlepositions[i].y,
+		                              _particlepositions[i].z));
+		particle.setVelocity(Vector3f(_particlevelocities[i].x, _particlevelocities[i].y,
+		                              _particlevelocities[i].z));
+		}
+	}
+
 void SpringNetworkOpenCL::computeParticleToSpringIndexes()
     {
+    // A CSR offset array: N+1 entries, where entry i is where particle i's
+    // springs begin and entry i+1 is where they end. A particle with no spring
+    // has start == end and its loop simply does not run.
+    //
+    // This used to be N entries with -1 meaning "no spring", and the kernel
+    // read the NEXT particle's entry to find where to stop. So a particle
+    // whose successor had no springs got an end index of -1 and contributed
+    // nothing, and the last particle fell back to the PARTICLE count used as
+    // a SPRING index. Offsets remove both cases rather than guarding them.
     delete[] _particletospringindexes;
-    _particletospringindexes = new int[_nbparticlesocl];
-    std::fill_n(_particletospringindexes, _nbparticlesocl, -1);
+    _particletospringindexes = new int[_nbparticlesocl + 1];
 
-    // Springs are grouped by id1 by computeOpenCLSprings(). Keep the first
-    // spring index for each particle, including the final group.
-    for (unsigned i = 0; i < _nbspringsocl; ++i)
+    unsigned springIndex = 0;
+    for (unsigned particleId = 0; particleId < _nbparticlesocl; ++particleId)
         {
-        const unsigned particleId = _springsocl[i].id1;
-        if (particleId < _nbparticlesocl && _particletospringindexes[particleId] < 0)
-            _particletospringindexes[particleId] = static_cast<int>(i);
+        _particletospringindexes[particleId] = static_cast<int>(springIndex);
+        while (springIndex < _nbspringsocl && _springsocl[springIndex].id1 == particleId)
+            ++springIndex;
         }
+    _particletospringindexes[_nbparticlesocl] = static_cast<int>(springIndex);
     }
 
 float SpringNetworkOpenCL::distance (const float4 p1,const float4 p2)
@@ -635,6 +680,18 @@ void SpringNetworkOpenCL::computeOpenCLPositions()
 
 
 		}
+
+// The integration kernel divides the force by the mass, exactly as
+// Particle::_integrateForce does. Before this buffer existed it did not, so
+// the GPU integrated every particle as if it weighed 1 Da -- invisible on a
+// toy system where that is true, wrong on any real structure.
+void SpringNetworkOpenCL::computeOpenCLMasses()
+	{
+	delete[] _particlemasses;
+	_particlemasses = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		_particlemasses[i] = SpringNetwork::getParticle(i).getMass();
+	}
 
 void SpringNetworkOpenCL::computeOpenCLForces()
 {

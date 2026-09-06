@@ -2,11 +2,16 @@
 #define __SPRING_ENERGY_HPP__
 
 #include "../constants.hpp"
+#include "../shared/spring_shared.h"
 
 namespace biospring
 {
 namespace forcefield
 {
+
+// The arithmetic lives in ../shared/spring_shared.h, which the OpenCL kernel
+// source is built from as well. What stays here is this project's C++ naming
+// and the unit convention; the formula itself is not restated.
 
 /// @param distance Distance between the two particles, in Angstrom (A).
 /// @param stiffness Spring constant, in kJ.mol-1.A-2 (molar convention;
@@ -16,16 +21,14 @@ namespace forcefield
 /// @return Spring energy, in kJ.mol-1.
 inline float spring_energy(float distance, float stiffness, float equilibrium)
 {
-    float distancevar = (distance - equilibrium);
-    return 0.5 * stiffness * distancevar * distancevar;
+    return biospring_spring_energy(distance, stiffness, equilibrium);
 }
 
 /// @return Spring force module, in Da.A.fs-2 (see GLOBAL_SPRING_FORCE_CONVERT).
 inline float spring_force_module(float distance, float stiffness, float equilibrium)
 {
-    float force_module = stiffness * (distance - equilibrium);
-    force_module *= GLOBAL_SPRING_FORCE_CONVERT;
-    return force_module;
+    return biospring_spring_force_module(distance, stiffness, equilibrium,
+                                         static_cast<float>(GLOBAL_SPRING_FORCE_CONVERT));
 }
 
 } // namespace forcefield
