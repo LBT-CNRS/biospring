@@ -95,11 +95,22 @@ __kernel void external(__global float4 * forces,   const __global float4 * exter
 // a topology may declare a mass of 0.
 __kernel void integration(__global float4 * positions, __global float4 * velocities,
                           __global float4 * forces, const __global float * masses,
-                          const float timestep, const uint N)
+                          const __global int * isdynamic, const float timestep, const uint N)
 	{
 	size_t tid = get_global_id(0);
 	if(tid>=N) 
 		return;
+
+	// A static particle is left exactly as the CPU leaves it: not integrated,
+	// and its force not reset either, because SpringNetwork's resetForce() sits
+	// inside the same loop over the dynamic list. Filtering on the mass instead,
+	// as this kernel used to, only agrees with that while every static particle
+	// happens to be a massless ghost -- true of every example shipped today,
+	// and untrue for any network built with pdb2spn --static, which freezes
+	// particles without touching their masses.
+	if(!isdynamic[tid])
+		return;
+
 	float mass = masses[tid];
 	if(mass>0.0f)
 		velocities[tid]+=(forces[tid]/mass)*timestep;

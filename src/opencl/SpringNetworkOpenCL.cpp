@@ -48,7 +48,7 @@ using biospring::spn::SpringNetwork;
 SpringNetworkOpenCL::SpringNetworkOpenCL()
     : SpringNetwork(), _springparticlesindexes(nullptr), _nbparticlesocl(0), _nbspringsocl(0),
       _particlepositions(nullptr), _particlevelocities(nullptr), _particleforces(nullptr),
-      _particleexternalforces(nullptr), _particlemasses(nullptr), _particletospringindexes(nullptr), _springsocl(nullptr),
+      _particleexternalforces(nullptr), _particlemasses(nullptr), _particledynamic(nullptr), _particletospringindexes(nullptr), _springsocl(nullptr),
       _err(CL_SUCCESS), _contextproperties(nullptr)
     {
     getOpenCLRessources();
@@ -86,6 +86,7 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particleexternalforces;
     delete[] _particletospringindexes;
     delete[] _particlemasses;
+    delete[] _particledynamic;
     delete[] _springsocl;
     delete[] _contextproperties;
     }
@@ -200,6 +201,14 @@ void SpringNetworkOpenCL::createBuffer()
 								 _particlemasses,
 								 &_err);
 		checkErr( "Buffer::Buffer() mass");
+
+		_inDynamicBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(int)*_nbparticlesocl,
+								 _particledynamic,
+								 &_err);
+		checkErr( "Buffer::Buffer() dynamic state");
 
 		_inSpringIndexesBuffer=cl::Buffer(
 								 _context,
@@ -428,6 +437,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLVelocities();
 	computeOpenCLForces();
 	computeOpenCLMasses();
+	computeOpenCLDynamicState();
 	computeOpenCLSprings();
 	computeParticleToSpringIndexes();
 	}
@@ -493,8 +503,8 @@ void SpringNetworkOpenCL::idleRun()
 	integrationtime+=(endTime-startTime)*1.0E-9;
 
     _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
-                                      _inoutForceBuffer, _inMassBuffer, getTimeStep(),
-                                      _nbparticlesocl);
+                                      _inoutForceBuffer, _inMassBuffer, _inDynamicBuffer,
+                                      getTimeStep(), _nbparticlesocl);
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
@@ -704,6 +714,22 @@ void SpringNetworkOpenCL::computeOpenCLMasses()
 	_particlemasses = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
 	for (unsigned i = 0; i < _nbparticlesocl; i++)
 		_particlemasses[i] = SpringNetwork::getParticle(i).getMass();
+	}
+
+// The CPU integrates only the particles on its dynamic list, and a static one
+// is left entirely alone -- not moved, and not even force-reset, since
+// resetForce() sits inside that same loop. The kernel had no notion of any of
+// this: it walked every particle and used the mass as its only filter, which
+// reproduces the CPU only because every static particle in today's examples is
+// a massless ghost. pdb2spn --static freezes particles WITHOUT touching their
+// mass, so a network built that way would have the GPU moving what the CPU
+// holds.
+void SpringNetworkOpenCL::computeOpenCLDynamicState()
+	{
+	delete[] _particledynamic;
+	_particledynamic = _nbparticlesocl == 0 ? nullptr : new int[_nbparticlesocl];
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		_particledynamic[i] = SpringNetwork::getParticle(i).isDynamic() ? 1 : 0;
 	}
 
 void SpringNetworkOpenCL::computeOpenCLForces()

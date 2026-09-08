@@ -146,3 +146,84 @@ TEST(SpringNetworkOpenCL, MatchesTheCPUOnAReleasedSpring)
         EXPECT_LT(delta.norm(), 5.0e-3f) << "particle " << i << " ended up elsewhere on the GPU";
     }
 }
+
+namespace
+{
+
+// Same released spring, plus a third particle that is STATIC and carries a real
+// mass, held to the first by a spring of its own.
+//
+// That combination is the one the mass-based filter got wrong. The CPU freezes
+// a particle because it is absent from its dynamic list; its mass never enters
+// into it. The kernel had no notion of the dynamic state and filtered on the
+// mass alone, which agrees with the CPU only while every static particle is a
+// massless ghost -- true of every example shipped today, and untrue the moment
+// anyone builds a network with pdb2spn --static, which freezes particles
+// without touching their masses.
+void buildWithAnchoredStaticParticle(spn::SpringNetwork & network, configuration::Configuration & config)
+{
+    spn::Particle first;
+    first.setPosition(Vector3f(0.0f, 0.0f, 0.0f));
+    first.setMass(12.0f);
+    network.addParticle(first);
+
+    spn::Particle second;
+    second.setPosition(Vector3f(3.5f, 0.0f, 0.0f));
+    second.setMass(14.0f);
+    network.addParticle(second);
+
+    spn::Particle anchor;
+    anchor.setPosition(Vector3f(0.0f, 3.5f, 0.0f));
+    anchor.setMass(12.0f);
+    anchor.setDynamic(false);
+    network.addParticle(anchor);
+
+    network.addSpring(0, 1, /*equilibrium=*/2.0f, /*stiffness=*/1.0f);
+    network.addSpring(0, 2, /*equilibrium=*/2.0f, /*stiffness=*/1.0f);
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = 1000;
+    config.sim.timestep = 0.1;
+    config.spring.enable = true;
+    config.spring.scale = 25.0;
+    config.viscosity.enable = true;
+    config.viscosity.value = 1.0;
+
+    network.setup(config);
+}
+
+} // namespace
+
+TEST(SpringNetworkOpenCL, HoldsStaticParticlesTheWayTheCPUDoes)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const Vector3f anchorstart(0.0f, 3.5f, 0.0f);
+
+    spn::SpringNetwork cpu;
+    configuration::Configuration cpuconfig;
+    buildWithAnchoredStaticParticle(cpu, cpuconfig);
+    cpu.run();
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration gpuconfig;
+    buildWithAnchoredStaticParticle(gpu, gpuconfig);
+    gpu.run();
+
+    // The spring pulls hard on the anchor -- it starts 1.5 A from equilibrium --
+    // so it staying put is a statement about the dynamic state being honoured,
+    // not about there being nothing to move it.
+    EXPECT_LT((cpu.getParticle(2).getPosition() - anchorstart).norm(), 1.0e-5f)
+        << "the CPU moved a static particle";
+    EXPECT_LT((gpu.getParticle(2).getPosition() - anchorstart).norm(), 1.0e-5f)
+        << "the GPU moved a static particle; it is filtering on the mass instead of the dynamic state";
+
+    // And the two dynamic particles, pulled by a spring whose other end is
+    // pinned, must still end up in the same place on both paths.
+    for (unsigned i = 0; i < 2; ++i)
+    {
+        const Vector3f delta = cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition();
+        EXPECT_LT(delta.norm(), 5.0e-3f) << "particle " << i << " ended up elsewhere on the GPU";
+    }
+}
