@@ -177,13 +177,21 @@ void SpringNetworkOpenCL::createBuffer()
 		checkErr( "Buffer::Buffer() 3");
 
 
-		_inSpringBuffer=cl::Buffer(
-						  _context,
-						  CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
-						  sizeof(Springocl)*_nbspringsocl,
-						  _springsocl,
-						  &_err);
-		checkErr( "Buffer::Buffer() 4");
+		// A network with no spring at all is legitimate -- several examples are
+		// pure steric or electrostatic -- but OpenCL rejects a zero-sized
+		// buffer, and the C++ wrapper turns that into an exception nobody
+		// catches. The backend used to abort() on those, with
+		// "cl::Error: clCreateBuffer" and nothing to say which buffer.
+		if (_nbspringsocl > 0)
+			{
+			_inSpringBuffer=cl::Buffer(
+							  _context,
+							  CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+							  sizeof(Springocl)*_nbspringsocl,
+							  _springsocl,
+							  &_err);
+			checkErr( "Buffer::Buffer() 4");
+			}
 
 		_inMassBuffer=cl::Buffer(
 								 _context,
@@ -450,6 +458,10 @@ void SpringNetworkOpenCL::idleRun()
     // same biospring_spring_force_module() with it, so the two sides cannot
     // disagree about the magnitude. Only the conversion used to be passed,
     // which made the GPU spring.scale times too weak.
+    // Nothing to gather from when there is no spring, and the buffer the kernel
+    // would read does not exist.
+    if (_nbspringsocl > 0)
+    {
     const float springForceScale =
         getForceField()->getSpringScale() *
         static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
@@ -462,6 +474,7 @@ void SpringNetworkOpenCL::idleRun()
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 	springtime+=(endTime-startTime)*1.0E-9;
+    }
 
 
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
