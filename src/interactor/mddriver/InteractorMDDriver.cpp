@@ -142,7 +142,7 @@ void InteractorMDDriver::setupIMDInteractions( InteractorMDDriver * imdl)
 		if (spn->isAnyElectrostaticEnabled())
 		{
 			biospring::grid::PotentialGrid electrostaticGrid = spn->getElectrostaticGrid();
-			updateGridFromSource(imdl->_IMDpotentialGrid, potentialGrid);
+			updateGridFromSource(imdl->_IMDpotentialGrid, electrostaticGrid);
 		}
 
 		if (spn->isDensityGridEnabled())

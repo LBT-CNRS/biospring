@@ -243,7 +243,7 @@ class SpringNetwork
 
     // Steric force scale (also pushed into the ForceField via setStericScale,
     // see SpringNetwork::setup). Named getGridScale for historical reasons;
-    // despite the name it has nothing to do with potentialgrid or
+    // despite the name it has nothing to do with electrostaticgrid or
     // densitygrid, which have their own independent scale (see
     // ForceField::getForceFieldScale and getDensityGridScale below).
     float getGridScale() const { return _config.steric.gridscale; }
@@ -270,7 +270,7 @@ class SpringNetwork
     // addElectrostaticFieldForce.
     //
     // Example 011.DNAseI ships exactly that combination (coulomb.enable = 0,
-    // potentialgrid.enable = 1) and is built around steering an ion through the
+    // electrostaticgrid.enable = 1) and is built around steering an ion through the
     // map. Measured before this fix: turning the map off changed the ion's
     // displacement by nothing at all, 0.3419 A either way, because it was never
     // loaded. The demo steered nothing.
