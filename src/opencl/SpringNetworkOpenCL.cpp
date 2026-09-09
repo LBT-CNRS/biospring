@@ -6,6 +6,8 @@
 #include "IO/PDBTrajectoryWriter.h"
 #include "IO/CSVSampleWriter.h"
 #include "KernelSource.h"
+#include <cmath>
+#include "logging.h"
 
 #include <fstream>
 
@@ -599,8 +601,30 @@ void SpringNetworkOpenCL::_syncParticlesFromDevice()
 	for (unsigned i = 0; i < n; ++i)
 		{
 		Particle & particle = SpringNetwork::getParticle(i);
-		particle.setPosition(Vector3f(_particlepositions[i].x, _particlepositions[i].y,
-		                              _particlepositions[i].z));
+		const float x = _particlepositions[i].x;
+		const float y = _particlepositions[i].y;
+		const float z = _particlepositions[i].z;
+
+		// The same check SpringNetwork::updateParticlePositions makes after
+		// integrating, and for the same reason. It lives there, inside the CPU
+		// integrator, which this path replaces wholesale: the kernel integrates
+		// instead, so without this the two backends disagree on what a diverged
+		// run does -- the CPU stops and says which particle went, the GPU
+		// carries on silently. Measured on 074.DNADuplex at dt = 8 fs, the CPU
+		// exited 1 with the message and the GPU exited 0.
+		//
+		// Only the dynamic particles, as on the CPU: a static one is never
+		// integrated, so it cannot be sent non-finite by the integrator.
+		//
+		// It costs nothing worth counting -- measured at 0.98x to 1.05x on
+		// systems from 1525 to 37200 dynamic particles, i.e. inside the noise.
+		// isfinite on a float is a comparison against the exponent mask, the
+		// value has just been read into a register, and the branch is never
+		// taken.
+		if (particle.isDynamic() && (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)))
+			biospring::logging::die("Found non-finite position for particle %d.", particle.getId());
+
+		particle.setPosition(Vector3f(x, y, z));
 		particle.setVelocity(Vector3f(_particlevelocities[i].x, _particlevelocities[i].y,
 		                              _particlevelocities[i].z));
 		}
