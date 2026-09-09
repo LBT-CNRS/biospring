@@ -29,7 +29,10 @@ class Configuration
     TrajectorySetting pdbtraj;
     TrajectorySetting xtctraj;
     TrajectorySetting csvsample;
-    GridSetting potentialgrid;
+    // Electrostatic potential map (APBS/OpenDX). Named for which potential
+    // it holds: the old name said only that it was a grid, next to a
+    // densitygrid that is one too.
+    GridSetting electrostaticgrid;
     GridSetting densitygrid;
     ProbeSetting probe;
     RigidBodySetting rigidbody;
@@ -37,7 +40,7 @@ class Configuration
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"),
           electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"),
-          pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), potentialgrid("potentialgrid"),
+          pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), electrostaticgrid("electrostaticgrid"),
           densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody")
     {
         _register(sim);
@@ -51,7 +54,7 @@ class Configuration
         _register(pdbtraj);
         _register(xtctraj);
         _register(csvsample);
-        _register(potentialgrid);
+        _register(electrostaticgrid);
         _register(densitygrid);
         _register(probe);
         _register(rigidbody);
@@ -81,7 +84,7 @@ class Configuration
         os << "\n";
         csvsample.print();
         os << "\n";
-        potentialgrid.print();
+        electrostaticgrid.print();
         os << "\n";
         densitygrid.print();
         os << "\n";
@@ -128,8 +131,8 @@ class Configuration
             xtctraj.setFromString(name, value);
         else if (group == csvsample.name)
             csvsample.setFromString(name, value);
-        else if (group == potentialgrid.name)
-            potentialgrid.setFromString(name, value);
+        else if (group == electrostaticgrid.name)
+            electrostaticgrid.setFromString(name, value);
         else if (group == densitygrid.name)
             densitygrid.setFromString(name, value);
         else if (group == probe.name)

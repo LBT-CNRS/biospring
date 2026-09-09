@@ -106,7 +106,7 @@ void SpringNetwork::computeParticleForces()
     {
         Particle & p = getParticle(_dynamicparticules[i]);
 
-        if (isElectrostaticEnabled())
+        if (isAnyElectrostaticEnabled())
         {
             if (isElectrostaticCoulombEnabled() && p.isCharged() && _nsearch.electrostatic)
                 p.addElectrostaticForce(_electrostaticPairScratch[i]);
@@ -377,7 +377,7 @@ void SpringNetwork::_displayFrameData()
     logging::info("Kinetic energy: %5.2f kJ.mol-1", _energies.kinetic);
     if (isSpringEnabled())
         logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
-    if (isElectrostaticEnabled())
+    if (isAnyElectrostaticEnabled())
         logging::info("Electrostatic energy: %5.2f kJ.mol-1", _energies.electrostatic);
     if (isStericEnabled())
         logging::info("Steric energy: %5.2f kJ.mol-1", _energies.steric);
@@ -703,7 +703,7 @@ void SpringNetwork::_setupForceField()
     _ff->setStericScale(_config.steric.gridscale);
     _ff->setCoulombScale(_config.electrostatic.scale);
     _ff->setDielectric(_config.electrostatic.dielectric);
-    _ff->setForceFieldScale(_config.potentialgrid.scale);
+    _ff->setForceFieldScale(_config.electrostaticgrid.scale);
     _ff->setSpringScale(_config.spring.scale);
     _ff->setIMPScale(_config.imp.scale);
     _ff->setHydrophobicityScale(_config.hydrophobicity.scale);
@@ -711,14 +711,14 @@ void SpringNetwork::_setupForceField()
 
 void SpringNetwork::_setupElectrostatic()
 {
-    if (!isElectrostaticEnabled())
+    if (!isAnyElectrostaticEnabled())
         return;
 
     if (isElectrostaticFieldEnabled())
     {
-        const std::string dxpath = _config.potentialgrid.path;
+        const std::string dxpath = _config.electrostaticgrid.path;
         logging::info("Reading electrostatic map from DX file '%s'", dxpath.c_str());
-        _grids.potential = opendx::readGrid(dxpath);
+        _grids.electrostatic = opendx::readGrid(dxpath);
     }
 
     if (isElectrostaticCoulombEnabled())

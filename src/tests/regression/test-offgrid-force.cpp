@@ -39,7 +39,7 @@ struct TestOffGridForce : public ::testing::Test
         spn.addParticle(outside);
         spn.setup(config);
 
-        for (grid::PotentialGrid * g : {&spn.getPotentialGrid(), &spn.getDensityGrid()})
+        for (grid::PotentialGrid * g : {&spn.getElectrostaticGrid(), &spn.getDensityGrid()})
         {
             g->reshape({0.0, 0.0, 0.0, 10.0, 10.0, 10.0}, {1.0, 1.0, 1.0});
             for (size_t i = 0; i < g->shape()[0]; ++i)
