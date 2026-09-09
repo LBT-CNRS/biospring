@@ -126,7 +126,8 @@ Coulomb's equation.
 ---
 * **electrostaticgrid.enable = 0** *(boolean)* Enable the APBS electrostatic potential grid.
 Renamed from `potentialgrid`, which said only that it was a grid: `densitygrid` below is one
-too. An .msp still using the old name is rejected with `invalid parameter`.
+too. An .msp still using the old name keeps working and prints one deprecation warning per
+obsolete group.
 * **electrostaticgrid.path = ""** *(string)* Name of the APBS potential grid file in OpenDX format.
 * **electrostaticgrid.scale = 1** *(dimensionless factor, float)* Multiplier applied to electrostatic
 forces derived from the grid.
