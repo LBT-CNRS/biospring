@@ -21,6 +21,9 @@ struct MDDriverParameters
     unsigned debug = 0;
     std::string logpath = "";
     float forcescale = 1.0;
+    // Send one frame every N steps. 1 keeps the previous behaviour; a client
+    // asking for a different rate over IMD_TRATE overrides it at run time.
+    unsigned transmissionrate = 1;
 };
 
 // Stores FreeSASA parameters.
