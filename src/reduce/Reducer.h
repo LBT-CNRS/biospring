@@ -7,6 +7,7 @@
 #ifndef __REDUCER_H__
 #define __REDUCER_H__
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -55,12 +56,15 @@ class GrainBuilder
     bool _ignore_missing_particles;
     Grain _grain; // output grain
     bool _grain_built;
+    bool _warn_when_empty;
+    // Set from _check_not_empty, which is const.
+    mutable bool _was_empty;
 
   public:
     GrainBuilder(const ParticleContainer & input_particles, const ReduceRule & rule,
                  const forcefield::ForceField & forcefield)
         : _input_particles(input_particles), _rule(rule), _forcefield(forcefield), _ignore_duplicate_particles(false),
-          _ignore_missing_particles(false), _grain(), _grain_built(false)
+          _ignore_missing_particles(false), _grain(), _grain_built(false), _warn_when_empty(true), _was_empty(false)
     {
     }
 
@@ -72,6 +76,18 @@ class GrainBuilder
 
     void set_ignore_missing_particles(bool value) { _ignore_missing_particles = value; }
     bool get_ignore_missing_particles(void) const { return _ignore_missing_particles; }
+
+    // Several rules may build the SAME grain from different spellings of the
+    // same atom -- amber.dna.grp accepts both OP1 and O1P for dOP1, both H5'
+    // and H5'1 for dH5. Exactly one spelling can match, so the others find
+    // nothing, and warning from here announced as "skipped" a grain the
+    // sibling rule had just built. ResidueReducer::build silences this one and
+    // warns once per residue, only for grains that no rule produced at all.
+    void set_warn_when_empty(bool value) { _warn_when_empty = value; }
+
+    // Whether build() failed because no atom matched, as opposed to matching
+    // the wrong number of them.
+    bool was_empty(void) const { return _was_empty; }
 
     const Grain & grain(void)
     {
@@ -164,8 +180,10 @@ class GrainBuilder
         bool success = true;
         if (grain.empty())
         {
-            logging::warning("Residue %s:%d: No particle found to create grain %s...skipping it",
-                             _residue_name().c_str(), _residue_id(), _grain_name().c_str());
+            _was_empty = true;
+            if (_warn_when_empty)
+                logging::warning("Residue %s:%d: No particle found to create grain %s...skipping it",
+                                 _residue_name().c_str(), _residue_id(), _grain_name().c_str());
             success = false;
         }
         return success;
@@ -272,15 +290,40 @@ class ResidueReducer
 
         std::vector<topology::Particle> grains;
 
+        // A grain name can appear in several rules, one per accepted spelling
+        // of its atoms (amber.dna.grp takes OP1 or O1P for dOP1, H5' or H5'1
+        // for dH5). Only one spelling can be present, so the others necessarily
+        // find nothing -- which is not a missing grain and must not be reported
+        // as one. Decide per grain NAME, after every rule has had its turn.
+        std::set<std::string> built;
+        std::set<std::string> empty;
+
         for (const auto & rule : _rules)
         {
             GrainBuilder grain_builder(_particles, rule, _forcefield);
             grain_builder.set_ignore_duplicate_particles(_ignore_duplicate_particles);
             grain_builder.set_ignore_missing_particles(_ignore_missing_particles);
+            grain_builder.set_warn_when_empty(false);
 
             bool success = grain_builder.build();
             if (success)
+            {
                 grains.push_back(grain_builder.grain());
+                built.insert(rule.name());
+            }
+            else if (grain_builder.was_empty())
+            {
+                empty.insert(rule.name());
+            }
+        }
+
+        if (!_particles.empty())
+        {
+            const auto & residue = _particles.front().properties();
+            for (const std::string & name : empty)
+                if (built.find(name) == built.end())
+                    logging::warning("Residue %s:%d: no atom matches any accepted spelling for grain %s, skipping it",
+                                     residue.residue_name().c_str(), residue.residue_id(), name.c_str());
         }
 
         return grains;
