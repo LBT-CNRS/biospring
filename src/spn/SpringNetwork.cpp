@@ -351,10 +351,21 @@ void SpringNetwork::run()
     initRun();
 
 #ifdef MDDRIVER_SUPPORT
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    interactor::InteractorMDDriver* interactormddriver = getInteractorInstance<interactor::InteractorMDDriver>();
-    logging::info("    MDDriver parameters:");
-    logging::info("      port: %d is open for connection.", interactormddriver->getPort());
+    // getInteractorInstance returns null when no interactor of that type was
+    // registered, which is every caller that drives a SpringNetwork directly
+    // rather than through biospring-cli -- the OpenCL parity tests, for one.
+    // Dereferencing it unconditionally segfaulted all of them as soon as
+    // MDDriver support was compiled in, and only then, which is why it went
+    // unnoticed: the builds those tests were written against had it off.
+    // The wait belongs with the announcement: it exists to let the server
+    // finish opening its port, and there is no port without an interactor.
+    if (interactor::InteractorMDDriver * interactormddriver =
+            getInteractorInstance<interactor::InteractorMDDriver>())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        logging::info("    MDDriver parameters:");
+        logging::info("      port: %d is open for connection.", interactormddriver->getPort());
+    }
 #endif
 
     if (isRigidBodyEnabled())
