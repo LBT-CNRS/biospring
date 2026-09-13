@@ -694,7 +694,14 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                 // DNA duplex with amber.dna.grp: 3268 springs for 2400 real
                 // angles, 868 of them doubled. Never seen before because
                 // amber.grp is strictly one type per atom.
-                const auto outer = std::minmax(p1->unique_id(), p3->unique_id());
+                // Braces on purpose: unique_id() returns by value, and the
+                // two-argument std::minmax returns a pair of REFERENCES to its
+                // arguments. Bound to temporaries, those references dangle the
+                // moment this statement ends, so the deduplication key read on
+                // the next line was undefined behaviour -- on exactly the
+                // 868 doubled springs this guard exists to catch. The
+                // initializer_list overload returns the values.
+                const auto outer = std::minmax({p1->unique_id(), p3->unique_id()});
                 if (!bend_done.insert({p2->unique_id(), outer.first, outer.second}).second)
                     continue;
 

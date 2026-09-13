@@ -82,7 +82,11 @@ class Configuration
           dihedralpsi("dihedralpsi"), dihedralomega("dihedralomega"), dihedralchi("dihedralchi"),
           dihedralplanarity("dihedralplanarity"), dihedralnucleicbackbone("dihedralnucleicbackbone"),
           dihedralnucleicchi("dihedralnucleicchi"), dihedralnucleicsugar("dihedralnucleicsugar"),
-          dihedral("dihedral"), bending("bending")
+          // Declaration order, which is the order members are actually built
+          // in: bending is declared before dihedral. Listing them the other way
+          // round warned once per translation unit that includes
+          // SpringNetwork.h, which is most of them.
+          bending("bending"), dihedral("dihedral")
     {
         _register(sim);
         _register(steric);
