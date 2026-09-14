@@ -1,0 +1,289 @@
+#Omega-free variant of ProteinAtomRigidGroups.rbody. Use this one WITH
+#--dihedral, and the standard file without it.
+#
+#Why it exists. A _PHI group spans the peptide bond -C-N and a _PSI group
+#spans C-+N, so each puts springs between substituents on either side of an
+#omega axis -- which locks it. Audited on ubiquitin, the standard file leaves
+#325 of 400 rotatable bonds free and the 75 it locks are every one of the
+#peptide bonds. That is the right answer when nothing else models omega: the
+#peptide bond is planar and the mesh is what keeps it so.
+#
+#It stops being the right answer once --dihedral supplies a real omega
+#torsion. The term is then applied to an axis that cannot turn: measured, it
+#contributes 10.89 kJ/mol of 3009.46 on ubiquitin, and only because the
+#structure already starts trans where the mesh and the torsion happen to
+#agree. A structure arriving with a distorted omega could not be corrected,
+#and cis/trans isomerism -- proline's in particular -- cannot be modelled at
+#all.
+#
+#What changes. Each _PHI and _PSI group is split in two at its axis, so that
+#both halves keep the two axis atoms but no half holds substituents from
+#both sides. Springs from an axis atom to a substituent are 1-3 distances,
+#invariant under the rotation, so they still hold their valence angle
+#without constraining the torsion. Audited: 384 of 400 bonds free, no omega
+#among the 16 remaining, and every valence angle still covered.
+#
+#Generated from ProteinAtomRigidGroups.rbody -- regenerate rather than
+#hand-edit, so the two stay in step.
+#
+
+A_CA ALA N CA C CB HA
+A_NTER ALA N CA H1 H H2 H3
+A_CTER ALA CA C O OXT
+A_PHIC  ALA -CA -C -O N
+A_PHIN  ALA -C N H CA
+A_PSIC  ALA CA C O +N
+A_PSIN  ALA C +N +H +CA
+A_CB ALA CA CB HB1 HB2 HB3
+
+R_CA ARG N CA C CB HA
+R_NTER ARG N CA H1 H H2 H3
+R_CTER ARG CA C O OXT
+R_PHIC  ARG -CA -C -O N
+R_PHIN  ARG -C N H CA
+R_PSIC  ARG CA C O +N
+R_PSIN  ARG C +N +H +CA
+R_CB ARG CA CB CG HB2 HB3
+R_CG ARG CB CG CD HG2 HG3
+R_CD ARG CG CD NE HD2 HD3
+R_NE ARG CD NE CZ HE
+R_CZ ARG NE CZ NH1 NH2
+R_NH1 ARG CZ NH1 HH11 HH12
+R_NH2 ARG CZ NH2 HH21 HH22
+
+N_CA ASN N CA C CB HA
+N_NTER ASN N CA H1 H H2 H3
+N_CTER ASN CA C O OXT
+N_PHIC  ASN -CA -C -O N
+N_PHIN  ASN -C N H CA
+N_PSIC  ASN CA C O +N
+N_PSIN  ASN C +N +H +CA
+N_CB ASN CA CB CG HB2 HB3
+N_CG ASN CB CG OD1 ND2
+N_ND2 ASN CG ND2 HD21 HD22
+
+D_CA ASP N CA C CB HA
+D_NTER ASP N CA H1 H H2 H3
+D_CTER ASP CA C O OXT
+D_PHIC  ASP -CA -C -O N
+D_PHIN  ASP -C N H CA
+D_PSIC  ASP CA C O +N
+D_PSIN  ASP C +N +H +CA
+D_CB ASP CA CB CG HB2 HB3
+D_CG ASP CB CG OD1 OD2
+
+C_CA CYS N CA C CB HA
+C_NTER CYS N CA H1 H H2 H3
+C_CTER CYS CA C O OXT
+C_PHIC  CYS -CA -C -O N
+C_PHIN  CYS -C N H CA
+C_PSIC  CYS CA C O +N
+C_PSIN  CYS C +N +H +CA
+C_CB CYS CA CB SG HB2 HB3
+C_SG CYS CB SG HG
+
+Q_CA GLN N CA C CB HA
+Q_NTER GLN N CA H1 H H2 H3
+Q_CTER GLN CA C O OXT
+Q_PHIC  GLN -CA -C -O N
+Q_PHIN  GLN -C N H CA
+Q_PSIC  GLN CA C O +N
+Q_PSIN  GLN C +N +H +CA
+Q_CB GLN CA CB CG HB2 HB3
+Q_CG GLN CB CG CD HG2 HG3
+Q_CD GLN CG CD OE1 NE2
+Q_NE2 GLN CD NE2 HE21 HE22
+
+E_CA GLU N CA C CB HA
+E_NTER GLU N CA H1 H H2 H3
+E_CTER GLU CA C O OXT
+E_PHIC  GLU -CA -C -O N
+E_PHIN  GLU -C N H CA
+E_PSIC  GLU CA C O +N
+E_PSIN  GLU C +N +H +CA
+E_CB GLU CA CB CG HB2 HB3
+E_CG GLU CB CG CD HG2 HG3
+E_CD GLU CG CD OE1 OE2
+
+G_CA GLY N CA C HA2 HA3
+G_NTER GLY N CA H1 H H2 H3
+G_CTER GLY CA C O OXT
+G_PHIC  GLY -CA -C -O N
+G_PHIN  GLY -C N H CA
+G_PSIC  GLY CA C O +N
+G_PSIN  GLY C +N +H +CA
+
+H_CA HIS N CA C CB HA
+H_NTER HIS N CA H1 H H2 H3
+H_CTER HIS CA C O OXT
+H_PHIC  HIS -CA -C -O N
+H_PHIN  HIS -C N H CA
+H_PSIC  HIS CA C O +N
+H_PSIN  HIS C +N +H +CA
+H_CB HIS CA CB CG HB2 HB3
+H_CG HIS CB CG ND1 CD2
+H_ND1 HIS CG ND1 CE1 HD1
+H_CE1 HIS ND1 CE1 NE2 HE1
+H_NE2 HIS CE1 NE2 CD2 HE2
+H_CD2 HIS CG CD2 NE2 HD2
+
+I_CA ILE N CA C CB HA
+I_NTER ILE N CA H1 H H2 H3
+I_CTER ILE CA C O OXT
+I_PHIC  ILE -CA -C -O N
+I_PHIN  ILE -C N H CA
+I_PSIC  ILE CA C O +N
+I_PSIN  ILE C +N +H +CA
+I_CB ILE CA CB CG1 CG2 HB
+I_CG1 ILE CB CG1 CD1 HG12 HG13
+I_CG2 ILE CB CG2 HG21 HG22 HG23
+I_CD1 ILE CG1 CD1 HD11 HD12 HD13
+
+L_CA LEU N CA C CB HA
+L_NTER LEU N CA H1 H H2 H3
+L_CTER LEU CA C O OXT
+L_PHIC  LEU -CA -C -O N
+L_PHIN  LEU -C N H CA
+L_PSIC  LEU CA C O +N
+L_PSIN  LEU C +N +H +CA
+L_CB LEU CA CB CG HB2 HB3
+L_CG LEU CB CG CD1 CD2 HG
+L_CD1 LEU CG CD1 HD11 HD12 HD13
+L_CD2 LEU CG CD2 HD21 HD22 HD23
+
+K_CA LYS N CA C CB HA
+K_NTER LYS N CA H1 H H2 H3
+K_CTER LYS CA C O OXT
+K_PHIC  LYS -CA -C -O N
+K_PHIN  LYS -C N H CA
+K_PSIC  LYS CA C O +N
+K_PSIN  LYS C +N +H +CA
+K_CB LYS CA CB CG HB2 HB3
+K_CG LYS CB CG CD HG2 HG3
+K_CD LYS CG CD CE HD2 HD3
+K_CE LYS CD CE NZ HE2 HE3
+K_NZ LYS CE NZ HZ1 HZ2 HZ3
+
+M_CA MET N CA C CB HA
+M_NTER MET N CA H1 H H2 H3
+M_CTER MET CA C O OXT
+M_PHIC  MET -CA -C -O N
+M_PHIN  MET -C N H CA
+M_PSIC  MET CA C O +N
+M_PSIN  MET C +N +H +CA
+M_CB MET CA CB CG HB2 HB3
+M_CG MET CB CG SD HG2 HG3
+M_SD MET CG SD CE
+M_CE MET SD CE HE1 HE2 HE3
+
+F_CA PHE N CA C CB HA
+F_NTER PHE N CA H1 H H2 H3
+F_CTER PHE CA C O OXT
+F_PHIC  PHE -CA -C -O N
+F_PHIN  PHE -C N H CA
+F_PSIC  PHE CA C O +N
+F_PSIN  PHE C +N +H +CA
+F_CB PHE CA CB CG HB2 HB3
+F_CG PHE CB CG CD1 CD2
+F_CD1 PHE CG CD1 CE1 HD1
+F_CD2 PHE CG CD2 CE2 HD2
+F_CE1 PHE CD1 CE1 CZ HE1
+F_CE2 PHE CD2 CE2 CZ HE2
+F_CZ PHE CE1 CZ CE2 HZ
+
+#Note: P_PHI/P_RING deliberately never connect "-C" to CD (the real
+#(-C)-N-CD angle, from the ring closing onto N instead of an amide H, is
+#the actual physical restriction on Pro's phi). It's added by
+#--bondedinteraction alone (BondedForceFieldReader's fallback spring, with
+#the real AMBER angle constant), not here: a uniform --stiffness spring
+#with no real angle constant would freeze phi completely instead of
+#realistically restricting it -- see IO/BondedForceFieldReader.h.
+P_CA PRO N CA C CB HA
+P_CB PRO CA CB CG HB2 HB3
+P_CG PRO CB CG CD HG2 HG3
+P_CD PRO CG CD N HD2 HD3
+P_NRING PRO CD N CA
+P_NTER PRO N CA CD H2 H3
+P_CTER PRO CA C O OXT
+P_PHIC  PRO -CA -C -O N
+P_PHIN  PRO -C N CA CD
+P_PSIC  PRO CA C O +N
+P_PSIN  PRO C +N +H +CA
+
+S_CA SER N CA C CB HA
+S_NTER SER N CA H1 H H2 H3
+S_CTER SER CA C O OXT
+S_PHIC  SER -CA -C -O N
+S_PHIN  SER -C N H CA
+S_PSIC  SER CA C O +N
+S_PSIN  SER C +N +H +CA
+S_CB SER CA CB OG HB2 HB3
+S_OG SER CB OG HG
+
+T_CA THR N CA C CB HA
+T_NTER THR N CA H1 H H2 H3
+T_CTER THR CA C O OXT
+T_PHIC  THR -CA -C -O N
+T_PHIN  THR -C N H CA
+T_PSIC  THR CA C O +N
+T_PSIN  THR C +N +H +CA
+T_CB THR CA CB OG1 CG2 HB
+T_OG1 THR CB OG1 HG1
+T_CG2 THR CB CG2 HG21 HG22 HG23
+
+W_CA TRP N CA C CB HA
+W_NTER TRP N CA H1 H H2 H3
+W_CTER TRP CA C O OXT
+W_PHIC  TRP -CA -C -O N
+W_PHIN  TRP -C N H CA
+W_PSIC  TRP CA C O +N
+W_PSIN  TRP C +N +H +CA
+W_CB TRP CA CB CG HB2 HB3
+W_CG TRP CB CG CD1 CD2
+W_CD1 TRP CG CD1 NE1 HD1
+W_NE1 TRP CD1 NE1 CE2 HE1
+W_CE2 TRP NE1 CE2 CD2 CZ2
+W_CD2 TRP CG CD2 CE2 CE3
+W_CE3 TRP CD2 CE3 CZ3 HE3
+W_CZ3 TRP CE3 CZ3 CH2 HZ3
+W_CH2 TRP CZ3 CH2 CZ2 HH2
+W_CZ2 TRP CH2 CZ2 CE2 HZ2
+
+Y_CA TYR N CA C CB HA
+Y_NTER TYR N CA H1 H H2 H3
+Y_CTER TYR CA C O OXT
+Y_PHIC  TYR -CA -C -O N
+Y_PHIN  TYR -C N H CA
+Y_PSIC  TYR CA C O +N
+Y_PSIN  TYR C +N +H +CA
+Y_CB TYR CA CB CG HB2 HB3
+Y_CG TYR CB CG CD1 CD2
+Y_CD1 TYR CG CD1 CE1 HD1
+Y_CD2 TYR CG CD2 CE2 HD2
+Y_CE1 TYR CD1 CE1 CZ HE1
+Y_CE2 TYR CD2 CE2 CZ HE2
+Y_CZ TYR CE1 CZ CE2 OH
+Y_OH TYR CZ OH HH
+
+V_CA VAL N CA C CB HA
+V_NTER VAL N CA H1 H H2 H3
+V_CTER VAL CA C O OXT
+V_PHIC  VAL -CA -C -O N
+V_PHIN  VAL -C N H CA
+V_PSIC  VAL CA C O +N
+V_PSIN  VAL C +N +H +CA
+V_CB VAL CA CB CG1 CG2 HB
+V_CG1 VAL CB CG1 HG11 HG12 HG13
+V_CG2 VAL CB CG2 HG21 HG22 HG23
+
+#ACE/NME: standard N-/C-terminal capping groups (acetyl / N-methylamide),
+#used instead of NTER/CTER on a capped peptide. Verified against real
+#connectivity (mdtraj on a real ACE/NME-capped peptide): ACE has no CA, so
+#the next residue's own _PHI rule silently drops its "-CA" atom (missing,
+#skipped per convention) -- the real -C/-O peptide-bond pairs it still
+#finds are enough; nothing extra is needed on the ACE side beyond the two
+#groups below. Same idea for NME on the C-terminal side.
+ACE_C ACE CH3 C O +N
+ACE_CH3 ACE C CH3 H1 H2 H3 HH31 HH32 HH33
+NME_N NME -C N H C CH3
+NME_C NME N C CH3 H1 H2 H3 HH31 HH32 HH33
