@@ -104,7 +104,7 @@ void SpringNetwork::computeSpringForces()
 // loops run sequentially within one step, and resize never shrinks
 // capacity, so no per-step allocation happens either way.
 float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
-                                                    bool subtractDcOffset)
+                                                    bool subtractDcOffset, bool projectTangential)
 {
     _springForceScratch.resize(springs.size());
 
@@ -119,11 +119,67 @@ float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & spring
     {
         Spring & spring = springs[i];
         const Vector3f & force = _springForceScratch[i];
-        spring.getParticle1().addForce(force);
-        spring.getParticle2().addForce(-force);
+        if (projectTangential)
+        {
+            // Keep only what turns the axis, at the point the torsion term
+            // produces it (see tangentialAboutAxis). Each endpoint is
+            // projected about its OWN axis: both endpoints of a dihedral
+            // spring share one, but the projection is a property of the
+            // endpoint's position, not of the pair.
+            spring.getParticle1().addForce(tangentialAboutAxis(spring.getParticle1(), force));
+            spring.getParticle2().addForce(tangentialAboutAxis(spring.getParticle2(), -force));
+        }
+        else
+        {
+            spring.getParticle1().addForce(force);
+            spring.getParticle2().addForce(-force);
+        }
         energy += subtractDcOffset ? spring.getEnergy() - spring.getDcOffset() : spring.getEnergy();
     }
     return energy;
+}
+
+// Component of `f` that turns `p` about the ghost axis it belongs to.
+//
+// A torsion should push a substituent ONLY around its axis. The ring does
+// not: measured on ubiquitin, 78 % of what it applies (86 % median) is
+// radial or axial, which carries no torque about the axis at all and simply
+// deforms bonds and angles. Radial and axial components contribute exactly
+// zero to the axial torque, so dropping them keeps the torque exactly.
+//
+// This used to live in redistributeGhostForces, applied to the force AFTER
+// it had been rotated onto the real atom the ghost images. The two are
+// algebraically the same -- rotating about the axis maps a tangential
+// direction to a tangential direction, so projecting then rotating and
+// rotating then projecting agree -- but doing it here makes the filter a
+// property of the TORSION TERM rather than of the ghost mechanism, so it
+// applies just as well to an endpoint that is a real atom rather than a
+// ghost. A quarter of all ring ghosts sit at azimuth 0, where the placement
+// is the identity and the ghost is an exact copy of its reference atom; they
+// can only be replaced by that atom once the filter no longer hangs off the
+// ghost.
+//
+// A particle with no axis, or sitting on the axis (no lever arm, hence no
+// torsional role), gets nothing rather than an arbitrary direction.
+Vector3f SpringNetwork::tangentialAboutAxis(const Particle & p, const Vector3f & f) const
+{
+    const unsigned particleIndex = static_cast<unsigned>(p.getId());
+    if (particleIndex >= _axisOfParticle.size() || _axisOfParticle[particleIndex] == NO_AXIS)
+        return Vector3f();
+
+    const GhostAxis & axis = _ghostaxes[_axisOfParticle[particleIndex]];
+    const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
+    Vector3f ahat = getParticle(axis.anchorCIndex).getPosition() - B;
+    ahat.normalize();
+
+    const Vector3f rel = p.getPosition() - B;
+    const Vector3f radial = rel - ahat * rel.dot(ahat);
+    const float rn = radial.norm();
+    if (rn <= 1e-6f)
+        return Vector3f();
+
+    const Vector3f that = ahat ^ (radial / rn);
+    return that * f.dot(that);
 }
 
 // Calculates dihedral ghost-spring forces and applies them to the
@@ -150,7 +206,8 @@ void SpringNetwork::computeDihedralForces()
 
     auto accumulate = [&](std::vector<Spring> & springs) {
         dihedralenergy += _computeSpringCollectionForces(springs, /*ignoreDynamicState=*/true,
-                                                         /*subtractDcOffset=*/true);
+                                                         /*subtractDcOffset=*/true,
+                                                         _config.dihedral.tangentialonly);
     };
 
     const bool enabled[DIHEDRAL_FAMILY_COUNT] = {
@@ -684,6 +741,14 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
     if (axisIndex == _ghostaxes.size())
         _ghostaxes.push_back(GhostAxis{anchorBIndex, anchorCIndex, Vector3f(), Vector3f(), Vector3f(), Vector3f()});
 
+    // The tangential filter needs to reach an endpoint's axis from the
+    // endpoint alone (see tangentialAboutAxis), so record it per particle
+    // rather than per ghost binding: a dihedral spring endpoint need not be
+    // a ghost for the filter to apply to it.
+    if (_axisOfParticle.size() <= ownIndex)
+        _axisOfParticle.resize(ownIndex + 1, NO_AXIS);
+    _axisOfParticle[ownIndex] = axisIndex;
+
     const float delta_rad = delta_deg * static_cast<float>(M_PI) / 180.0f;
     _ghostparticles.push_back(GhostParticleBinding{ownIndex, anchorBIndex, anchorCIndex, anchorRefIndex, r, theta_deg,
                                                    delta_deg, std::cos(delta_rad), std::sin(delta_rad), axisIndex,
@@ -750,24 +815,12 @@ void SpringNetwork::redistributeGhostForces()
         // has to be held at a stiffness of 8000. Projecting onto the
         // tangential direction keeps the torque exactly, since radial and
         // axial components contribute exactly zero to it, and drops the rest.
-        Vector3f F_ref = in.F_Ref;
-        if (_config.dihedral.tangentialonly)
-        {
-            const Vector3f & C = getParticle(axis.anchorCIndex).getPosition();
-            Vector3f ahat = C - B;
-            ahat.normalize();
-            const Vector3f rel = ref.getPosition() - B;
-            Vector3f radial = rel - ahat * rel.dot(ahat);
-            const float rn = radial.norm();
-            // An atom sitting on the axis has no lever arm and no torsional
-            // role: it gets nothing rather than an arbitrary direction.
-            F_ref = Vector3f();
-            if (rn > 1e-6f)
-            {
-                const Vector3f that = ahat ^ (radial / rn);
-                F_ref = that * in.F_Ref.dot(that);
-            }
-        }
+        // No projection here any more: the tangential filter is applied where
+        // the dihedral spring produces its force (see tangentialAboutAxis),
+        // so what arrives is already tangential and rotating it onto the real
+        // atom keeps it tangential. Same numbers, but the filter no longer
+        // depends on the endpoint being a ghost.
+        const Vector3f & F_ref = in.F_Ref;
 
         ref.addForce(F_ref);
         axis.sumAtomForces += F_ref;

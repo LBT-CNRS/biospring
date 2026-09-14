@@ -428,7 +428,12 @@ class SpringNetwork
     // pattern and why the accumulation stays serial. Returns the summed
     // energy of the collection.
     float _computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
-                                         bool subtractDcOffset);
+                                         bool subtractDcOffset, bool projectTangential = false);
+
+    // Keeps only what turns a particle about its ghost axis. See the
+    // definition for why the dihedral term, not the ghost mechanism, is
+    // where this belongs.
+    Vector3f tangentialAboutAxis(const Particle & p, const Vector3f & f) const;
 
   public:
 
@@ -599,6 +604,13 @@ class SpringNetwork
         Vector3f sumAtomTorquesAboutB;
     };
     std::vector<GhostAxis> _ghostaxes;
+
+    // particle index -> the ghost axis it belongs to, NO_AXIS for every
+    // particle that belongs to none. Indexed by particle rather than by ghost
+    // binding on purpose: the tangential filter is applied where a dihedral
+    // spring produces its force, and that endpoint need not be a ghost.
+    static constexpr unsigned NO_AXIS = static_cast<unsigned>(-1);
+    std::vector<unsigned> _axisOfParticle;
 
     // One bucket per dynamic-particle-loop index, filled while computing
     // nonbonded pair interactions in parallel: each pair is evaluated once,
