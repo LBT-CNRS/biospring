@@ -104,7 +104,7 @@ void SpringNetwork::computeSpringForces()
 // loops run sequentially within one step, and resize never shrinks
 // capacity, so no per-step allocation happens either way.
 float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
-                                                    bool subtractDcOffset, bool projectTangential)
+                                                    bool subtractDcOffset, const std::vector<unsigned> * axes)
 {
     _springForceScratch.resize(springs.size());
 
@@ -119,15 +119,16 @@ float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & spring
     {
         Spring & spring = springs[i];
         const Vector3f & force = _springForceScratch[i];
-        if (projectTangential)
+        const unsigned axisIndex = axes != nullptr ? (*axes)[i] : NO_AXIS;
+        if (axes != nullptr && axisIndex != NO_AXIS)
         {
             // Keep only what turns the axis, at the point the torsion term
-            // produces it (see tangentialAboutAxis). Each endpoint is
-            // projected about its OWN axis: both endpoints of a dihedral
-            // spring share one, but the projection is a property of the
-            // endpoint's position, not of the pair.
-            spring.getParticle1().addForce(tangentialAboutAxis(spring.getParticle1(), force));
-            spring.getParticle2().addForce(tangentialAboutAxis(spring.getParticle2(), -force));
+            // produces it. The axis belongs to the SPRING, not to either
+            // endpoint: a ghost hangs off exactly one axis, but a real atom
+            // used as an endpoint can serve several, so asking the particle
+            // gives an ambiguous answer while asking the spring cannot.
+            applyProjectedDihedralForce(spring.getParticle1(), force, axisIndex);
+            applyProjectedDihedralForce(spring.getParticle2(), -force, axisIndex);
         }
         else
         {
@@ -161,13 +162,9 @@ float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & spring
 //
 // A particle with no axis, or sitting on the axis (no lever arm, hence no
 // torsional role), gets nothing rather than an arbitrary direction.
-Vector3f SpringNetwork::tangentialAboutAxis(const Particle & p, const Vector3f & f) const
+Vector3f SpringNetwork::tangentialAboutAxis(const Particle & p, const Vector3f & f, unsigned axisIndex) const
 {
-    const unsigned particleIndex = static_cast<unsigned>(p.getId());
-    if (particleIndex >= _axisOfParticle.size() || _axisOfParticle[particleIndex] == NO_AXIS)
-        return Vector3f();
-
-    const GhostAxis & axis = _ghostaxes[_axisOfParticle[particleIndex]];
+    const GhostAxis & axis = _ghostaxes[axisIndex];
     const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
     Vector3f ahat = getParticle(axis.anchorCIndex).getPosition() - B;
     ahat.normalize();
@@ -182,32 +179,107 @@ Vector3f SpringNetwork::tangentialAboutAxis(const Particle & p, const Vector3f &
     return that * f.dot(that);
 }
 
-// Calculates dihedral ghost-spring forces and applies them to the
-// particles. Updates global `_energies.dihedral`. Which families were
-// actually BUILT is a build-time decision (see -dihedral/--dihedral in
-// pdb2spn-cli.cpp); which of the built ones are actually APPLIED here is
-// independently gated per-family (isDihedralPhi/Psi/Omega/ChiEnabled(),
-// see Configuration.hpp's own comment) on top of the isSpringEnabled()
-// master switch the caller (computeForces) already applies -- same
-// when a family is disabled BOTH force and energy are skipped (a pure
-// reporting-only toggle would leave the dynamics unchanged, defeating the
-// point of isolating a family's contribution).
+// Applies one dihedral spring's share of force to one of its endpoints, kept
+// tangential, and books what a real atom receives against its axis.
 //
-// ignoreDynamicState=true: both endpoints of a dihedral ghost spring are
-// always static virtual sites (see Spring::computeForce's own doc) --
-// without this, the force/energy here would silently stay zero for every
-// single one of these springs. subtractDcOffset=true: each spring's own
-// share of its axis's exact dihedral-energy correction (see
-// Spring::getDcOffset's own comment) is subtracted from the reported
-// total; it never affects the forces.
+// A ghost needs no booking here: its force accumulates on the ghost and
+// redistributeGhostForces transfers the total to the real atom it images,
+// booking it there. An endpoint that IS a real atom has no such pass -- the
+// force lands on it directly -- so without this it would never appear in
+// axis.sumAtomForces and the axis reaction would balance against a total that
+// is missing it. Momentum would leak, silently, in proportion to how many
+// ghosts were replaced by the atom they sit on.
+void SpringNetwork::applyProjectedDihedralForce(Particle & p, const Vector3f & f, unsigned axisIndex)
+{
+    const Vector3f projected = tangentialAboutAxis(p, f, axisIndex);
+    p.addForce(projected);
+
+    const unsigned particleIndex = static_cast<unsigned>(p.getId());
+    if (particleIndex < _isGhost.size() && _isGhost[particleIndex])
+        return;
+
+    GhostAxis & axis = _ghostaxes[axisIndex];
+    const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
+    axis.sumAtomForces += projected;
+    axis.sumAtomTorquesAboutB += (p.getPosition() - B) ^ projected;
+}
+
+void SpringNetwork::resetGhostAxisSums()
+{
+    for (GhostAxis & axis : _ghostaxes)
+    {
+        axis.sumGhostForces = Vector3f();
+        axis.sumGhostTorquesAboutB = Vector3f();
+        axis.sumAtomForces = Vector3f();
+        axis.sumAtomTorquesAboutB = Vector3f();
+    }
+}
+
+// Gives every dihedral spring endpoint its axis, including the ones that are
+// real atoms rather than ghosts.
+//
+// Both endpoints of a dihedral spring hang off the same axis -- that is what
+// the ring construction means -- so an endpoint with no axis of its own takes
+// the one its partner knows. No file format carries this: addGhostParticle
+// knows the axis because it created the ghost, and this pass propagates it
+// across each spring afterwards.
+//
+// Run once, lazily, because it has to happen after every ghost is registered
+// AND every dihedral spring is built, and no single construction path
+// guarantees an ordering of those two.
+void SpringNetwork::bindDihedralEndpointsToAxes()
+{
+    if (_dihedralAxesBound)
+        return;
+    _dihedralAxesBound = true;
+
+    // The axis is a property of the SPRING. Both its endpoints hang off the
+    // same one -- that is what a ring is -- so whichever endpoint is a ghost
+    // names it. Asking the particle instead would be ambiguous: a ghost has
+    // exactly one axis, but a real atom used as an endpoint (every azimuth-0
+    // placement is its own reference atom) can serve several.
+    //
+    // Run once, lazily, because it must happen after every ghost is registered
+    // AND every dihedral spring built, and no construction path guarantees an
+    // order between those two.
+    auto ghost_axis = [this](const Particle & p) {
+        const unsigned i = static_cast<unsigned>(p.getId());
+        if (i >= _isGhost.size() || !_isGhost[i])
+            return NO_AXIS;
+        return i < _axisOfParticle.size() ? _axisOfParticle[i] : NO_AXIS;
+    };
+
+    unsigned unresolved = 0;
+    for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
+    {
+        std::vector<Spring> & springs = _dihedralsprings[family];
+        _dihedralAxis[family].assign(springs.size(), NO_AXIS);
+        for (size_t i = 0; i < springs.size(); ++i)
+        {
+            const unsigned a1 = ghost_axis(springs[i].getParticle1());
+            const unsigned a2 = ghost_axis(springs[i].getParticle2());
+            const unsigned a = a1 != NO_AXIS ? a1 : a2;
+            _dihedralAxis[family][i] = a;
+            if (a == NO_AXIS)
+                ++unresolved;
+        }
+    }
+
+    if (unresolved > 0)
+        logging::warning("SpringNetwork: %u dihedral spring(s) have a real atom at BOTH ends, so no ghost "
+                         "names their axis; they are applied unfiltered. Keep one ghost per ring spring.",
+                         unresolved);
+}
+
 void SpringNetwork::computeDihedralForces()
 {
+    bindDihedralEndpointsToAxes();
+
     float dihedralenergy = 0.0f;
 
-    auto accumulate = [&](std::vector<Spring> & springs) {
+    auto accumulate = [&](std::vector<Spring> & springs, const std::vector<unsigned> * axes) {
         dihedralenergy += _computeSpringCollectionForces(springs, /*ignoreDynamicState=*/true,
-                                                         /*subtractDcOffset=*/true,
-                                                         _config.dihedral.tangentialonly);
+                                                         /*subtractDcOffset=*/true, axes);
     };
 
     const bool enabled[DIHEDRAL_FAMILY_COUNT] = {
@@ -216,7 +288,8 @@ void SpringNetwork::computeDihedralForces()
         isDihedralNucleicChiEnabled(),      isDihedralNucleicSugarEnabled()};
     for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
         if (enabled[family])
-            accumulate(_dihedralsprings[family]);
+            accumulate(_dihedralsprings[family],
+                       _config.dihedral.tangentialonly ? &_dihedralAxis[family] : nullptr);
 
     _energies.dihedral = dihedralenergy;
 }
@@ -386,6 +459,12 @@ void SpringNetwork::computeStep()
 {
     idleRun();
     _meanConstraintsDistances = 0.0;
+
+    // Before any force is produced, not inside redistributeGhostForces: with
+    // the tangential filter on, a dihedral endpoint that is a real atom
+    // contributes to its axis's totals while the spring loop runs, which is
+    // earlier than the redistribution pass that used to clear them.
+    resetGhostAxisSums();
 
     computeForces();
     redistributeGhostForces();
@@ -748,6 +827,9 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
     if (_axisOfParticle.size() <= ownIndex)
         _axisOfParticle.resize(ownIndex + 1, NO_AXIS);
     _axisOfParticle[ownIndex] = axisIndex;
+    if (_isGhost.size() <= ownIndex)
+        _isGhost.resize(ownIndex + 1, false);
+    _isGhost[ownIndex] = true;
 
     const float delta_rad = delta_deg * static_cast<float>(M_PI) / 180.0f;
     _ghostparticles.push_back(GhostParticleBinding{ownIndex, anchorBIndex, anchorCIndex, anchorRefIndex, r, theta_deg,
@@ -786,13 +868,9 @@ void SpringNetwork::redistributeGhostForces()
     // Pass 2, serial: apply to the real atoms (heavily shared, so not
     // concurrently writable) while accumulating each axis's force and
     // torque totals.
-    for (GhostAxis & axis : _ghostaxes)
-    {
-        axis.sumGhostForces = Vector3f();
-        axis.sumGhostTorquesAboutB = Vector3f();
-        axis.sumAtomForces = Vector3f();
-        axis.sumAtomTorquesAboutB = Vector3f();
-    }
+    // Totals are cleared once a step in computeStep, before any force exists:
+    // a real dihedral endpoint books into them while the spring loop runs,
+    // which is earlier than this pass.
     for (size_t i = 0; i < _ghostparticles.size(); ++i)
     {
         const GhostParticleBinding & binding = _ghostparticles[i];

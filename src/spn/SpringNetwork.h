@@ -428,12 +428,26 @@ class SpringNetwork
     // pattern and why the accumulation stays serial. Returns the summed
     // energy of the collection.
     float _computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
-                                         bool subtractDcOffset, bool projectTangential = false);
+                                         bool subtractDcOffset, const std::vector<unsigned> * axes = nullptr);
 
     // Keeps only what turns a particle about its ghost axis. See the
     // definition for why the dihedral term, not the ghost mechanism, is
     // where this belongs.
-    Vector3f tangentialAboutAxis(const Particle & p, const Vector3f & f) const;
+    Vector3f tangentialAboutAxis(const Particle & p, const Vector3f & f, unsigned axisIndex) const;
+
+    // Applies a dihedral spring's force to one endpoint, filtered, and books
+    // it against that endpoint's axis when the endpoint is a real atom.
+    void applyProjectedDihedralForce(Particle & p, const Vector3f & f, unsigned axisIndex);
+
+    // Gives a dihedral endpoint that is a real atom the axis its ghost
+    // partner knows. Idempotent, run lazily on the first dihedral step.
+    void bindDihedralEndpointsToAxes();
+    bool _dihedralAxesBound = false;
+
+    // Clears every axis's running totals. Called once a step, before any
+    // force is produced, because a real dihedral endpoint books into them
+    // during the spring loop -- earlier than redistributeGhostForces.
+    void resetGhostAxisSums();
 
   public:
 
@@ -611,6 +625,16 @@ class SpringNetwork
     // spring produces its force, and that endpoint need not be a ghost.
     static constexpr unsigned NO_AXIS = static_cast<unsigned>(-1);
     std::vector<unsigned> _axisOfParticle;
+
+    // Which particles are ghosts. A ghost's dihedral force is booked against
+    // its axis by redistributeGhostForces when it is transferred; a real atom
+    // used as a dihedral endpoint has no such pass and must be booked where
+    // the force is applied (see applyProjectedDihedralForce).
+    std::vector<bool> _isGhost;
+
+    // The ghost axis of each dihedral spring, parallel to _dihedralsprings.
+    // Per spring rather than per particle: see bindDihedralEndpointsToAxes.
+    std::array<std::vector<unsigned>, DIHEDRAL_FAMILY_COUNT> _dihedralAxis;
 
     // One bucket per dynamic-particle-loop index, filled while computing
     // nonbonded pair interactions in parallel: each pair is evaluated once,
