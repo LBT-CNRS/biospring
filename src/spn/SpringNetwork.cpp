@@ -884,7 +884,15 @@ void SpringNetwork::_displayFrameData()
     if (isConstraintEnabled())
         logging::info("Constraints mean distance: %5.2f A", _meanConstraintsDistances);
 #ifdef FREESASA_SUPPORT
-    logging::info("Total SASA (dynamic=%s): %5.2lf A2", _freesasaState.isDynamic? "true" : "false", _freesasaState.sasaTotal);
+    // Only when a FreeSASA interactor was actually registered. Printed
+    // unconditionally it reported 0 on every run that has none, and on the
+    // runs that do have one but are not dynamic it reports a figure computed
+    // once at setup -- so say which, rather than letting a frozen number look
+    // like a live measurement.
+    if (getInteractorInstance<interactor::InteractorFreeSASA>())
+        logging::info("Total SASA (%s): %5.2lf A2",
+                      _freesasaState.isDynamic ? "updated" : "computed once at setup",
+                      _freesasaState.sasaTotal);
 #endif
 
 }
