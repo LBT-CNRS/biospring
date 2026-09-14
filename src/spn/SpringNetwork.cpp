@@ -106,7 +106,7 @@ void SpringNetwork::computeParticleForces()
     {
         Particle & p = getParticle(_dynamicparticules[i]);
 
-        if (isElectrostaticEnabled())
+        if (isAnyElectrostaticEnabled())
         {
             if (isElectrostaticCoulombEnabled() && p.isCharged() && _nsearch.electrostatic)
                 p.addElectrostaticForce(_electrostaticPairScratch[i]);
@@ -272,10 +272,21 @@ void SpringNetwork::run()
     initRun();
 
 #ifdef MDDRIVER_SUPPORT
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    interactor::InteractorMDDriver* interactormddriver = getInteractorInstance<interactor::InteractorMDDriver>();
-    logging::info("    MDDriver parameters:");
-    logging::info("      port: %d is open for connection.", interactormddriver->getPort());
+    // getInteractorInstance returns null when no interactor of that type was
+    // registered, which is every caller that drives a SpringNetwork directly
+    // rather than through biospring-cli -- the OpenCL parity tests, for one.
+    // Dereferencing it unconditionally segfaulted all of them as soon as
+    // MDDriver support was compiled in, and only then, which is why it went
+    // unnoticed: the builds those tests were written against had it off.
+    // The wait belongs with the announcement: it exists to let the server
+    // finish opening its port, and there is no port without an interactor.
+    if (interactor::InteractorMDDriver * interactormddriver =
+            getInteractorInstance<interactor::InteractorMDDriver>())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        logging::info("    MDDriver parameters:");
+        logging::info("      port: %d is open for connection.", interactormddriver->getPort());
+    }
 #endif
 
     if (isRigidBodyEnabled())
@@ -377,7 +388,7 @@ void SpringNetwork::_displayFrameData()
     logging::info("Kinetic energy: %5.2f kJ.mol-1", _energies.kinetic);
     if (isSpringEnabled())
         logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
-    if (isElectrostaticEnabled())
+    if (isAnyElectrostaticEnabled())
         logging::info("Electrostatic energy: %5.2f kJ.mol-1", _energies.electrostatic);
     if (isStericEnabled())
         logging::info("Steric energy: %5.2f kJ.mol-1", _energies.steric);
@@ -394,7 +405,15 @@ void SpringNetwork::_displayFrameData()
     if (isConstraintEnabled())
         logging::info("Constraints mean distance: %5.2f A", _meanConstraintsDistances);
 #ifdef FREESASA_SUPPORT
-    logging::info("Total SASA (dynamic=%s): %5.2lf A2", _freesasaState.isDynamic? "true" : "false", _freesasaState.sasaTotal);
+    // Only when a FreeSASA interactor was actually registered. Printed
+    // unconditionally it reported 0 on every run that has none, and on the
+    // runs that do have one but are not dynamic it reports a figure computed
+    // once at setup -- so say which, rather than letting a frozen number look
+    // like a live measurement.
+    if (getInteractorInstance<interactor::InteractorFreeSASA>())
+        logging::info("Total SASA (%s): %5.2lf A2",
+                      _freesasaState.isDynamic ? "updated" : "computed once at setup",
+                      _freesasaState.sasaTotal);
 #endif
 
 }
@@ -703,7 +722,7 @@ void SpringNetwork::_setupForceField()
     _ff->setStericScale(_config.steric.gridscale);
     _ff->setCoulombScale(_config.electrostatic.scale);
     _ff->setDielectric(_config.electrostatic.dielectric);
-    _ff->setForceFieldScale(_config.potentialgrid.scale);
+    _ff->setForceFieldScale(_config.electrostaticgrid.scale);
     _ff->setSpringScale(_config.spring.scale);
     _ff->setIMPScale(_config.imp.scale);
     _ff->setHydrophobicityScale(_config.hydrophobicity.scale);
@@ -711,14 +730,14 @@ void SpringNetwork::_setupForceField()
 
 void SpringNetwork::_setupElectrostatic()
 {
-    if (!isElectrostaticEnabled())
+    if (!isAnyElectrostaticEnabled())
         return;
 
     if (isElectrostaticFieldEnabled())
     {
-        const std::string dxpath = _config.potentialgrid.path;
+        const std::string dxpath = _config.electrostaticgrid.path;
         logging::info("Reading electrostatic map from DX file '%s'", dxpath.c_str());
-        _grids.potential = opendx::readGrid(dxpath);
+        _grids.electrostatic = opendx::readGrid(dxpath);
     }
 
     if (isElectrostaticCoulombEnabled())
