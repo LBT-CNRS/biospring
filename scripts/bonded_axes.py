@@ -280,6 +280,38 @@ def geom_via_far_anchor(L_axis, bond_to_other, angle_at_other_deg):
     cos_theta = (L_axis ** 2 + r ** 2 - bond_to_other ** 2) / (2.0 * L_axis * r)
     return r, float(np.degrees(np.arccos(np.clip(cos_theta, -1.0, 1.0))))
 
+# Smallest Fourier amplitude (kJ/mol) that still earns its own ring. The gate
+# every emission site used to carry was 1e-6 -- a numerical zero, not a
+# physical one, so AMBER's faintest harmonics got the same n+1 ghosts and n
+# springs as its strongest. BIOSPRING_HARMONIC_MIN_KJ raises that floor.
+#
+# The error of dropping harmonic n is exact and stays on its own axis: the
+# ring contributes |z|*cos(n*phi - gamma), so removing it costs a pure cosine
+# of peak-to-peak 2|z|. The scale to judge it against is RT = 2.494 kJ/mol at
+# 300 K -- a harmonic whose whole swing is a fraction of RT cannot move the
+# conformational distribution, it only costs particles.
+#
+# Default 0.0 keeps every harmonic AMBER declares, so the generated files are
+# unchanged unless this is set deliberately.
+HARMONIC_MIN_KJ = float(os.environ.get("BIOSPRING_HARMONIC_MIN_KJ", "0.0"))
+
+# Harmonics dropped by that floor, for the generator's own end-of-run report:
+# (resname, axis_label, n, |z|).
+HARMONIC_CUT_LOG = []
+
+def harmonic_is_negligible(resname, axis_label, n, zt):
+    """True if harmonic `n` of this axis is too faint to deserve a ring.
+
+    Keeps the historical 1e-6 numerical floor as the lower bound, so a zero
+    AMBER term is still skipped when no physical threshold is asked for."""
+    amp = abs(zt)
+    if amp <= 1e-6:
+        return True
+    if amp <= HARMONIC_MIN_KJ:
+        HARMONIC_CUT_LOG.append((resname, axis_label, n, amp))
+        return True
+    return False
+
 n_dihedral_ok = 0
 n_dihedral_skip = 0
 n_ghost_particles = 0
@@ -461,7 +493,7 @@ def emit_ghost_rings_for_axis(resname, axis_label, family, L_axis, target, dc_by
     variant, and generate_backbone_axis instead of repeating this
     bookkeeping 3 times."""
     for n, zt in target.items():
-        if n == 0 or abs(zt) < 1e-6:
+        if n == 0 or harmonic_is_negligible(resname, axis_label, n, zt):
             continue
         emit_ghost_ring(resname, axis_label, family, n, L_axis, zt, atom_B, atom_C, atom_ref_b, atom_ref_c,
                        dc_by_harmonic.get(n, 0.0), ref_geom_b=ref_geom_b, ref_geom_c=ref_geom_c)

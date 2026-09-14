@@ -749,7 +749,7 @@ def generate_axis(ff, resname, b_name, c_name, axis_label, family, emit_as, per_
                 if t_pair is None:
                     continue
                 for n, tn in sorted(t_pair.items()):
-                    if n == 0 or abs(tn) <= 1e-6:
+                    if n == 0 or axes.harmonic_is_negligible(emit_as[0], axis_label, n, tn):
                         continue
                     for name in emit_as:
                         axes.emit_ghost_ring(name, axis_label, family, n, L_axis, tn,

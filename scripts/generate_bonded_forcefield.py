@@ -844,7 +844,7 @@ def generate_sidechain_axis(resname, b_name, c_name, axis_label, per_pair=False)
                 if t_pair is None:
                     continue
                 for n, tn in sorted(t_pair.items()):
-                    if n == 0 or abs(tn) <= 1e-6:
+                    if n == 0 or axes.harmonic_is_negligible(resname, axis_label, n, tn):
                         continue
                     emit_ghost_ring(resname, axis_label, "SIDECHAIN", n, L_axis, tn, b_name, c_name,
                                     bn, cn, axis_dc_target=dc_pair.get(n, 0.0),
@@ -1079,7 +1079,7 @@ def generate_pro_ring_ncd():
         axes.bump_axis_skip()
         return
     for n in sorted(target):
-        if n == 0 or abs(target[n]) <= 1e-6:
+        if n == 0 or axes.harmonic_is_negligible("PRO", "ring_NCD", n, target[n]):
             continue
         emit_ghost_ring("PRO", "ring_NCD", "SIDECHAIN", n, L_axis, target[n], "N", "CD", "-C", "CG",
                         axis_dc_target=dc_by_harmonic.get(n, 0.0),
@@ -1457,7 +1457,7 @@ def generate_backbone_axis(resname, b_name, c_name, axis_label, source_resname=N
         # -- use whichever one varies as the disambiguating tag.
         group_tag = (ref_b.name if b_is_cross else ref_c.name) if multi_group else ""
         for n, zt in target.items():
-            if n == 0 or abs(zt) < 1e-6:
+            if n == 0 or axes.harmonic_is_negligible(resname, axis_label, n, zt):
                 continue
             # axis_label is always exactly "phi" or "psi" here (see this
             # function's two call sites) -- .upper() gives the DihedralFamily
@@ -1817,3 +1817,20 @@ with open(OUT, "w") as f:
 print(f"\nWrote {axes.n_ghost_particles} GHOSTPARTICLE entries and {axes.n_dihedral_ok} "
      f"DIHEDRAL entries ({axes.n_dihedral_skip} skipped) to {OUT}. Bonds and valence angles "
      f"are not emitted: the rigid-body mesh carries them.")
+
+if axes.HARMONIC_MIN_KJ > 0.0:
+    # Say exactly what was traded away, in the unit the trade is judged in.
+    # The worst single dropped harmonic bounds the error on any one axis: its
+    # ring would have contributed |z|*cos(n*phi-gamma), so the curve moves by
+    # at most 2|z| peak-to-peak, and nothing leaks onto another axis.
+    cut = axes.HARMONIC_CUT_LOG
+    worst = max((a for _, _, _, a in cut), default=0.0)
+    print(f"BIOSPRING_HARMONIC_MIN_KJ={axes.HARMONIC_MIN_KJ:g} kJ/mol dropped {len(cut)} harmonic(s); "
+          f"worst |z| {worst:.4f} kJ/mol, i.e. {2 * worst:.4f} kJ/mol peak-to-peak on its own axis "
+          f"({2 * worst / 2.494:.2f} RT at 300 K).")
+    by_axis = {}
+    for resname, axis_label, n, amp in cut:
+        by_axis.setdefault((axis_label, n), []).append(amp)
+    for (axis_label, n), amps in sorted(by_axis.items(), key=lambda kv: -max(kv[1])):
+        print(f"  dropped {axis_label:<14s} n={n}  |z| {min(amps):.4f}-{max(amps):.4f} kJ/mol  "
+              f"x{len(amps)} residue(s)")
