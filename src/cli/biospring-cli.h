@@ -36,6 +36,9 @@ struct FreeSASAParameters
     unsigned sasa_sr_n = 100;
     double sasa_probe_radius = 1.4;
     std::string sasa_classifier = "default";
+    // Off unless asked for, or unless IMPALA is on -- the only term that reads
+    // the surface FreeSASA computes. See biospring-cli.cpp for why.
+    bool sasa_enable = false;
     unsigned sasa_n_threads = 2;
 };
 //

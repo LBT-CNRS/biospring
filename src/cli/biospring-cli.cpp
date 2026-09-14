@@ -108,18 +108,10 @@ int main(int argc, char ** argv)
     spn->addInteractor(&iMDDriver);
 #endif
 
-        // FreeSASA interactor initialization.
 #if defined(FREESASA_SUPPORT)
+    // Declared here so it outlives spn->run() below; registered only further
+    // down, once the .msp has been read and we know whether anything wants it.
     biospring::interactor::InteractorFreeSASA iFreeSASA;
-    iFreeSASA.setDynamic(args.freesasaParam.sasa_dynamic);
-    iFreeSASA.setAlg(args.freesasaParam.sasa_alg);
-    iFreeSASA.set_lr_n(args.freesasaParam.sasa_lr_n);
-    iFreeSASA.set_sr_n(args.freesasaParam.sasa_sr_n);
-    iFreeSASA.setProbeRad(args.freesasaParam.sasa_probe_radius);
-    iFreeSASA.setRadiiClassifier(args.freesasaParam.sasa_classifier);
-    iFreeSASA.setNthreads(args.freesasaParam.sasa_n_threads);
-    iFreeSASA.setSpringNetwork(spn);
-    spn->addInteractor(&iFreeSASA);
 #endif
 
     // Reads configuration file.
@@ -132,6 +124,33 @@ int main(int argc, char ** argv)
     logging::status("Using configuration parameters:");
     auto config = configReader.getConfiguration();
     config.print();
+
+#if defined(FREESASA_SUPPORT)
+    // FreeSASA recomputes every particle's solvent accessible surface and
+    // publishes it over whatever the .nc carried. Exactly one force term reads
+    // that property: IMPALA, through Particle::addIMPForce and the membrane
+    // block in RigidBody. The hydrophobicity term does NOT -- it works from a
+    // per-particle hydrophobicity scale, not a surface.
+    //
+    // It used to run on every simulation regardless, so a model with neither
+    // paid for a full SASA pass at startup (0.36 s on a 25069-particle system)
+    // and had a "Total SASA" line printed at every sample -- a number computed
+    // once, never updated, and read by nothing. Enabling it with IMPALA keeps
+    // every IMPALA example behaving exactly as before, since those all had it.
+    const bool sasa_wanted = args.freesasaParam.sasa_enable || config.imp.enable;
+    if (sasa_wanted)
+    {
+        iFreeSASA.setDynamic(args.freesasaParam.sasa_dynamic);
+        iFreeSASA.setAlg(args.freesasaParam.sasa_alg);
+        iFreeSASA.set_lr_n(args.freesasaParam.sasa_lr_n);
+        iFreeSASA.set_sr_n(args.freesasaParam.sasa_sr_n);
+        iFreeSASA.setProbeRad(args.freesasaParam.sasa_probe_radius);
+        iFreeSASA.setRadiiClassifier(args.freesasaParam.sasa_classifier);
+        iFreeSASA.setNthreads(args.freesasaParam.sasa_n_threads);
+        iFreeSASA.setSpringNetwork(spn);
+        spn->addInteractor(&iFreeSASA);
+    }
+#endif
 
     // Reads topology file.
     logging::status("Reading Nc file %s.", args.pathTopology.c_str());
@@ -229,6 +248,13 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
 
 #ifdef FREESASA_SUPPORT
 
+    argparse::Argument sasa_enable = argparse::Argument()
+        .name_long("--sasa")
+        .argument_type(argparse::ArgumentType::BOOLEAN)
+        .default_value("false")
+        .description("Compute solvent accessible surfaces. Implied by impala.enable, which is the only "
+                     "force term that reads them; otherwise nothing does, so this is off by default.");
+
     argparse::Argument sasa_dynamic = argparse::Argument()
         .name_long("--sasa-dynamic")
         .argument_type(argparse::ArgumentType::BOOLEAN)
@@ -277,6 +303,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
         .default_value("1")
         .description("Number of threads to use by FreeSASA.");
 
+    _parser.add_argument(sasa_enable);
     _parser.add_argument(sasa_dynamic);
     _parser.add_argument(sasa_sleep);
     _parser.add_argument(sasa_alg);
@@ -325,6 +352,7 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
 #endif // MDDRIVER_SUPPORT
 
 #ifdef FREESASA_SUPPORT
+    freesasaParam.sasa_enable = _parser.get_option("--sasa").is_set();
     freesasaParam.sasa_dynamic = _parser.get_option("--sasa-dynamic").is_set();
     freesasaParam.sasa_sleep = _parser.get_option_value<unsigned>("--sasa-sleep");
     freesasaParam.sasa_alg = _parser.get_option_value<std::string>("--sasa-alg");
