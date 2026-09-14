@@ -89,6 +89,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		virtual void run();
 		virtual void idleRun();
 		virtual void initRun();
+		virtual void endRun();
 
 
 
@@ -116,6 +117,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		float4 * _particlevelocities;
 		float4 * _particleforces;
 		float4 * _particleexternalforces;
+		float * _particlemasses;
+		int * _particledynamic;
 		int * _particletospringindexes;
 
 
@@ -137,6 +140,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inSpringIndexesBuffer;
 
 		cl::Buffer _inExternalForceBuffer;
+		cl::Buffer _inMassBuffer;
+		cl::Buffer _inDynamicBuffer;
 
 		cl_context_properties * _contextproperties;
 		cl::Context _context;
@@ -162,9 +167,12 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void computeOpenCLSprings();
 		void computeOpenCLPositions();
 		void computeOpenCLVelocities();
+		void computeOpenCLMasses();
+		void computeOpenCLDynamicState();
 		void computeOpenCLForces();
 
 		void computeParticleToSpringIndexes();
+		void _syncParticlesFromDevice();
 		void wrappingOcl();
 		void InitOcl();
 		void createBuffer();
