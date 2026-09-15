@@ -18,6 +18,7 @@
 
 #include "SpringNetwork.h"
 
+#include "IO/DonorAcceptorRuleReader.h"
 #include "IO/NetCDFReader.h"
 #include "IO/PDBReader.h"
 #include "logging.h"
@@ -139,6 +140,20 @@ int main(int argc, char ** argv)
     netcdfreader.read();
 
     netcdfreader.getTopology().to_spring_network(*spn);
+
+    // Tags donor/acceptor particles before setup(): _setupHydrogenBond()
+    // (called from setup()) builds its neighbor-search grid from whichever
+    // particles are already tagged isDonor()/isAcceptor() at that point.
+    if (config.hbond.enable)
+    {
+        if (config.hbond.path.empty())
+            logging::die("hbond.enable is set but hbond.path (donor/acceptor table) is not.");
+
+        logging::status("Reading hydrogen bond donor/acceptor table %s.", config.hbond.path.c_str());
+        biospring::io::DonorAcceptorRuleReader hbondreader(config.hbond.path);
+        hbondreader.read();
+        hbondreader.tagParticles(*spn);
+    }
 
     spn->setup(config);
 

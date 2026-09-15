@@ -137,15 +137,30 @@ class ElectrostaticSetting : public EnergySetting
   public:
     double dielectric;
 
-    ElectrostaticSetting(const std::string & name) : EnergySetting(name), dielectric(1.0)
+    // Make the dielectric grow with distance -- epsilon(r) = dielectric * r,
+    // r in Angstrom (Warshel & Levitt 1976). A constant 78 screens a pair at
+    // contact exactly as hard as one 30 A away, and that is wrong in the
+    // direction that matters: no water fits between two atoms 3 A apart, so
+    // the short-range interaction is barely screened in reality. Measured on
+    // a native alpha-helix hydrogen bond of ubiquitin, the amide/carbonyl
+    // attraction is -13.61 kJ/mol unscreened and -0.17 at 78.
+    //
+    // OFF by default: it changes every electrostatic energy in the model, so
+    // it is a modelling choice and not a correction.
+    bool distancedependent;
+
+    ElectrostaticSetting(const std::string & name)
+        : EnergySetting(name), dielectric(1.0), distancedependent(false)
     {
-        _parameterNames = {"enable", "scale", "cutoff", "dielectric"};
+        _parameterNames = {"enable", "scale", "cutoff", "dielectric", "distancedependent"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
     {
         if (param == "dielectric")
             utils::string::from_string<decltype(dielectric)>(dielectric, s);
+        else if (param == "distancedependent")
+            _parse_bool(distancedependent, s, param);
         else
             EnergySetting::setFromString(param, s);
     }
@@ -154,6 +169,7 @@ class ElectrostaticSetting : public EnergySetting
     {
         EnergySetting::print(os);
         _mspFormatter.print("dielectric", dielectric, os);
+        _mspFormatter.print("distancedependent", distancedependent, os);
     }
 };
 
@@ -534,6 +550,46 @@ class RigidBodySetting : public SettingBase
         _mspFormatter.print("montecarlo_translation_norm", montecarlo_translation_norm, os);
         _mspFormatter.print("montecarlo_rotation_norm", montecarlo_rotation_norm, os);
         _mspFormatter.print("montecarlo_temperature", montecarlo_temperature, os);
+    }
+};
+
+// Same enable/scale/cutoff triplet as EnergySetting, plus a `path` to the
+// donor/acceptor table (see IO/DonorAcceptorRuleReader.h and
+// data/reducerules/*.hbond) -- mirrors how GridSetting/TrajectorySetting
+// carry their own input/output file path directly in the .msp file, rather
+// than as a separate command-line-only option.
+class HydrogenBondSetting : public EnergySetting
+{
+  public:
+    std::string path;
+    // Where to write the list of bonds actually held, one line each, at every
+    // sample step. Empty (the default) writes nothing. A total energy and a
+    // bond count cannot say WHICH bonds are held, and that is the only thing
+    // that settles a disagreement about pairing: a fully extended chain
+    // reports a perfectly healthy count made entirely of contacts between
+    // neighbouring residues.
+    std::string log;
+
+    HydrogenBondSetting(const std::string & name) : EnergySetting(name), path(), log()
+    {
+        _parameterNames = {"enable", "scale", "cutoff", "path", "log"};
+    }
+
+    void setFromString(const std::string & param, const std::string & s) override
+    {
+        if (param == "path")
+            path = s;
+        else if (param == "log")
+            log = s;
+        else
+            EnergySetting::setFromString(param, s);
+    }
+
+    void print(std::ostream & os = std::cout) const override
+    {
+        EnergySetting::print(os);
+        _mspFormatter.print("path", path, os);
+        _mspFormatter.print("log", log, os);
     }
 };
 
