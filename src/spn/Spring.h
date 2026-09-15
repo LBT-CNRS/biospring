@@ -64,6 +64,23 @@ class Spring
     unsigned getAxisC() const { return _axisC; }
     bool hasAxis() const { return _axisB != NO_AXIS_ATOM && _axisC != NO_AXIS_ATOM; }
 
+    // Each endpoint's distance from the axis and position along it, as the
+    // model was built. With these the spring can be evaluated on IDEALISED
+    // positions -- real azimuth, reference radius -- so its energy depends on
+    // the torsion angle alone (see SpringNetwork::computeTorsionalDihedral).
+    void setTorsionalFrame(float rho1, float z1, float rho2, float z2)
+    {
+        _rho1 = rho1;
+        _z1 = z1;
+        _rho2 = rho2;
+        _z2 = z2;
+    }
+    float getRho1() const { return _rho1; }
+    float getRho2() const { return _rho2; }
+    float getZ1() const { return _z1; }
+    float getZ2() const { return _z2; }
+    bool hasTorsionalFrame() const { return _rho1 >= 0.0f && _rho2 >= 0.0f; }
+
     void computeEnergy(const biospring::forcefield::ForceField & ff);
     void computeLength();
 
@@ -91,6 +108,10 @@ class Spring
     float _length;
     float _energy;
     float _dcOffset = 0.0f;
+    float _rho1 = -1.0f;
+    float _z1 = 0.0f;
+    float _rho2 = -1.0f;
+    float _z2 = 0.0f;
     unsigned _axisB = NO_AXIS_ATOM;
     unsigned _axisC = NO_AXIS_ATOM;
     unsigned _id;

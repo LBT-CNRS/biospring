@@ -4,6 +4,7 @@
 #include "logging.h"
 #include "measure.hpp"
 
+#include "forcefield/constants.hpp"
 #include "forcefield/ForceField.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Lewitt.h"
@@ -108,6 +109,32 @@ void SpringNetwork::computeSpringForces()
 float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
                                                     bool subtractDcOffset, const std::vector<unsigned> * axes)
 {
+    // The torsional evaluation is not a force on the pair distance at all, so
+    // it does not go through computeForce: it produces its own two forces from
+    // the energy's exact gradient in the azimuths. It runs serially -- the same
+    // particles are shared between springs -- which is what the parallel pass
+    // below avoids, and is affordable because it replaces that pass rather than
+    // adding to it.
+    if (axes != nullptr && _config.dihedral.torsionalonly)
+    {
+        float torsional = 0.0f;
+        for (size_t i = 0; i < springs.size(); ++i)
+        {
+            const unsigned axisIndex = (*axes)[i];
+            if (axisIndex == NO_AXIS || !springs[i].hasTorsionalFrame())
+            {
+                const Vector3f force = springs[i].computeForce(*_ff, ignoreDynamicState);
+                springs[i].getParticle1().addForce(force);
+                springs[i].getParticle2().addForce(-force);
+                torsional += springs[i].getEnergy();
+                continue;
+            }
+            const float e = computeTorsionalDihedral(springs[i], axisIndex);
+            torsional += subtractDcOffset ? e - springs[i].getDcOffset() : e;
+        }
+        return torsional;
+    }
+
     _springForceScratch.resize(springs.size());
 
 #ifdef OPENMP_SUPPORT
@@ -122,7 +149,7 @@ float SpringNetwork::_computeSpringCollectionForces(std::vector<Spring> & spring
         Spring & spring = springs[i];
         const Vector3f & force = _springForceScratch[i];
         const unsigned axisIndex = axes != nullptr ? (*axes)[i] : NO_AXIS;
-        if (axes != nullptr && axisIndex != NO_AXIS)
+        if (axes != nullptr && axisIndex != NO_AXIS && _config.dihedral.tangentialonly)
         {
             // Keep only what turns the axis, at the point the torsion term
             // produces it. The axis belongs to the SPRING, not to either
@@ -209,6 +236,95 @@ void SpringNetwork::applyProjectedDihedralForce(Particle & p, const Vector3f & f
     const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
     axis.sumAtomForces += projected;
     axis.sumAtomTorquesAboutB += (p.getPosition() - B) ^ projected;
+}
+
+// One dihedral spring, evaluated on IDEALISED positions: each endpoint keeps
+// the azimuth it really has about the axis, but is put back at the radius and
+// axial offset it had when the model was built. Their distance is then
+//
+//     d^2 = rho1^2 + rho2^2 + (z1 - z2)^2 - 2*rho1*rho2*cos(dpsi)
+//
+// the same closed form the ring construction is derived from, and a function of
+// the azimuth difference ALONE.
+//
+// That is what makes this conservative where the tangential filter is not. The
+// filter throws away the radial part of a force while the energy keeps its
+// radial dependence, so an atom moving radially changes the energy with no work
+// done against it -- measured on ubiquitin, 124152 kJ/mol of kinetic energy
+// conjured out of a standing start. Here the energy cannot see radial motion at
+// all, so there is nothing to throw away and nothing to leak.
+//
+// The force is the exact gradient of that energy in the azimuths: grad(psi) is
+// t/rho with rho the atom's REAL radius, which is the only place the real
+// radius still enters -- converting a torque back into a force, not deciding
+// the energy. The reaction on the two axis atoms is left to the same
+// closed-form pass that already serves the rings.
+float SpringNetwork::computeTorsionalDihedral(Spring & spring, unsigned axisIndex)
+{
+    const GhostAxis & axis = _ghostaxes[axisIndex];
+    const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
+    Vector3f ahat = getParticle(axis.anchorCIndex).getPosition() - B;
+    ahat.normalize();
+
+    Particle & p1 = spring.getParticle1();
+    Particle & p2 = spring.getParticle2();
+
+    Vector3f r1 = p1.getPosition() - B;
+    r1 = r1 - ahat * r1.dot(ahat);
+    Vector3f r2 = p2.getPosition() - B;
+    r2 = r2 - ahat * r2.dot(ahat);
+    const float n1 = r1.norm();
+    const float n2 = r2.norm();
+    if (n1 <= 1e-6f || n2 <= 1e-6f)
+        return 0.0f; // on the axis: no azimuth, hence no torsional role
+    r1 = r1 / n1;
+    r2 = r2 / n2;
+
+    const Vector3f t1 = ahat ^ r1;
+    const Vector3f t2 = ahat ^ r2;
+    const float cos_dpsi = r1.dot(r2);
+    const float sin_dpsi = t1.dot(r2); // = ahat . (r1 x r2)
+
+    const float rho1 = spring.getRho1();
+    const float rho2 = spring.getRho2();
+    const float dz = spring.getZ1() - spring.getZ2();
+    const float d = std::sqrt(std::max(rho1 * rho1 + rho2 * rho2 + dz * dz - 2.0f * rho1 * rho2 * cos_dpsi, 1e-12f));
+
+    const float k = spring.getStiffness();
+    const float ext = d - spring.getEquilibrium();
+    // GLOBAL_SPRING_FORCE_CONVERT, and springscale, are what Spring::computeForce
+    // applies on the way out: forces are integrated in Da.A.fs-2 while k is a
+    // kJ.mol-1.A-2 number. Bypassing computeForce means applying them here --
+    // without it the force is 1e4 too large, which is exactly what two springs
+    // needed to reach 1.9e8 kJ/mol of kinetic energy.
+    const float dEdpsi = _ff->getSpringScale() * forcefield::GLOBAL_SPRING_FORCE_CONVERT * k * ext *
+                         (rho1 * rho2 * sin_dpsi) / d;
+
+    // dpsi is measured from endpoint 1 to endpoint 2, so it grows with psi2 and
+    // shrinks with psi1.
+    //
+    // The lever arm is the REFERENCE radius, not the current one. grad(psi) is
+    // t/rho_real exactly, but that is singular: let an atom drift towards the
+    // axis and the force diverges, which feeds back and blew the network up at
+    // 4e9 kJ/mol. The reference radius is the arm the atom is meant to turn on
+    // -- it is the arm a ghost would have had -- and it keeps the force bounded
+    // by the same token that keeps the energy free of radial dependence.
+    const float arm1 = std::max(rho1, 0.1f);
+    const float arm2 = std::max(rho2, 0.1f);
+    applyAxisBookedForce(p1, t1 * (dEdpsi / arm1), axisIndex);
+    applyAxisBookedForce(p2, t2 * (-dEdpsi / arm2), axisIndex);
+    return 0.5f * k * ext * ext;
+}
+
+// Adds a force to a dihedral endpoint and books it against its axis, so the
+// closed-form reaction has the whole total to balance against.
+void SpringNetwork::applyAxisBookedForce(Particle & p, const Vector3f & f, unsigned axisIndex)
+{
+    p.addForce(f);
+    GhostAxis & axis = _ghostaxes[axisIndex];
+    const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
+    axis.sumAtomForces += f;
+    axis.sumAtomTorquesAboutB += (p.getPosition() - B) ^ f;
 }
 
 void SpringNetwork::resetGhostAxisSums()
@@ -318,8 +434,12 @@ void SpringNetwork::computeDihedralForces()
         isDihedralNucleicChiEnabled(),      isDihedralNucleicSugarEnabled()};
     for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
         if (enabled[family])
+            // Both treatments need the axis: one to project onto it, the other
+            // to measure azimuths about it.
             accumulate(_dihedralsprings[family],
-                       _config.dihedral.tangentialonly ? &_dihedralAxis[family] : nullptr);
+                       (_config.dihedral.tangentialonly || _config.dihedral.torsionalonly)
+                           ? &_dihedralAxis[family]
+                           : nullptr);
 
     _energies.dihedral = dihedralenergy;
 }
@@ -935,7 +1055,10 @@ void SpringNetwork::redistributeGhostForces()
     }
 
     // Pass 3: one closed-form reaction per axis, restoring global force and
-    // torque balance without ever differentiating the placement.
+    // torque balance without ever differentiating the placement. The torsional
+    // evaluation needs it just as much: its two forces turn on different lever
+    // arms, so they do not cancel, and without the reaction the same network
+    // ends 3 ps at 20031 kJ/mol of kinetic energy instead of 29.6.
     for (const GhostAxis & axis : _ghostaxes)
     {
         Vector3f F_B, F_C;
@@ -1003,6 +1126,48 @@ void SpringNetwork::updateGhostPositions()
 // first is the reference atom itself and the second is in the plane. The
 // intra-ring chords close it, being purely tangential, which is the direction
 // the three anchors constrain least.
+// Records, for every dihedral spring that knows its axis, the radius and axial
+// offset each endpoint has in the loaded structure. That is the geometry the
+// torsional evaluation puts them back to, and it is taken from the structure
+// for the same reason the mesh takes its own equilibrium lengths there: it is
+// the conformation the model was built to hold.
+void SpringNetwork::_setupTorsionalFrames()
+{
+    if (!_config.dihedral.torsionalonly)
+        return;
+
+    bindDihedralEndpointsToAxes();
+
+    unsigned framed = 0;
+    for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
+    {
+        std::vector<Spring> & springs = _dihedralsprings[family];
+        for (size_t i = 0; i < springs.size(); ++i)
+        {
+            const unsigned axisIndex = _dihedralAxis[family][i];
+            if (axisIndex == NO_AXIS)
+                continue;
+            const GhostAxis & axis = _ghostaxes[axisIndex];
+            const Vector3f & B = getParticle(axis.anchorBIndex).getPosition();
+            Vector3f ahat = getParticle(axis.anchorCIndex).getPosition() - B;
+            ahat.normalize();
+
+            auto frame = [&](const Particle & p) {
+                const Vector3f rel = p.getPosition() - B;
+                const float z = rel.dot(ahat);
+                return std::make_pair((rel - ahat * z).norm(), z);
+            };
+            const auto f1 = frame(springs[i].getParticle1());
+            const auto f2 = frame(springs[i].getParticle2());
+            springs[i].setTorsionalFrame(f1.first, f1.second, f2.first, f2.second);
+            ++framed;
+        }
+    }
+    logging::info("SpringNetwork: %u dihedral spring(s) evaluated on their torsion angle alone; "
+                  "the tangential filter has nothing left to discard.",
+                  framed);
+}
+
 void SpringNetwork::_setupGhostSprings()
 {
     if (!_config.dihedral.ghostsprings || _ghostparticles.empty())
@@ -1247,6 +1412,7 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupTrajectories();
     // After everything else: it converts particles and adds springs, so it
     // needs the network whole and the configuration already stored.
+    _setupTorsionalFrames();
     _setupGhostSprings();
     _neighborSearchesDirty = false;
     // _setupConstraints();

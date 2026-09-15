@@ -186,6 +186,23 @@ class DihedralSetting : public SettingBase
     // (omega = sqrt(k/m)), which the algebraic virtual site did not, so the
     // stable timestep is no longer set by the mesh alone. That is the number
     // to measure, not to assume.
+    // Evaluate every dihedral spring on IDEALISED positions: each endpoint
+    // keeps its real azimuth about the axis but is put back at the radius and
+    // axial offset it had when the model was built. The pair distance is then
+    //     d^2 = rho1^2 + rho2^2 + (z1-z2)^2 - 2*rho1*rho2*cos(dpsi)
+    // -- the closed_form_d2 identity the whole ring construction rests on --
+    // which depends on the azimuth difference ALONE.
+    //
+    // That is the point: the energy has no radial dependence left, so there is
+    // nothing for the tangential filter to discard, and nothing to leak. The
+    // filter exists because a spring between real atoms changes its energy
+    // when an atom moves radially while the force that would oppose that is
+    // thrown away; here the energy simply does not see radial motion.
+    //
+    // Supersedes tangentialonly rather than complementing it: turn one on and
+    // the other off.
+    bool torsionalonly;
+
     bool ghostsprings;
 
     // kJ.mol-1.A-2, on the springs tying a ghost to its three anchors. The
@@ -225,10 +242,11 @@ class DihedralSetting : public SettingBase
     double ghostdamping;
 
     DihedralSetting(const std::string & name)
-        : SettingBase(name), tangentialonly(false), ghostsprings(false), ghostspringstiffness(2000.0), ghostmass(1.0),
+        : SettingBase(name), tangentialonly(false), torsionalonly(false), ghostsprings(false), ghostspringstiffness(2000.0), ghostmass(1.0),
           ghostringchords(true), ghostdamping(0.0)
     {
-        _parameterNames = {"tangentialonly",  "ghostsprings",    "ghostspringstiffness",
+        _parameterNames = {"tangentialonly",  "torsionalonly",   "ghostsprings",
+                           "ghostspringstiffness",
                            "ghostmass",       "ghostringchords", "ghostdamping"};
     }
 
@@ -236,6 +254,8 @@ class DihedralSetting : public SettingBase
     {
         if (param == "tangentialonly")
             _parse_bool(tangentialonly, s, param);
+        else if (param == "torsionalonly")
+            _parse_bool(torsionalonly, s, param);
         else if (param == "ghostsprings")
             _parse_bool(ghostsprings, s, param);
         else if (param == "ghostspringstiffness")
@@ -253,6 +273,7 @@ class DihedralSetting : public SettingBase
     void print(std::ostream & os = std::cout) const override
     {
         _mspFormatter.print("tangentialonly", tangentialonly, os);
+        _mspFormatter.print("torsionalonly", torsionalonly, os);
         _mspFormatter.print("ghostsprings", ghostsprings, os);
         _mspFormatter.print("ghostspringstiffness", ghostspringstiffness, os);
         _mspFormatter.print("ghostmass", ghostmass, os);

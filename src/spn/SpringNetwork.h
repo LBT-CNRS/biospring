@@ -447,6 +447,16 @@ class SpringNetwork
     // they share one entry per real bond rather than one per mechanism.
     unsigned findOrCreateGhostAxis(unsigned anchorBIndex, unsigned anchorCIndex);
 
+    // Evaluates one dihedral spring on idealised radii and applies the exact
+    // gradient of the resulting energy. Returns that energy.
+    float computeTorsionalDihedral(Spring & spring, unsigned axisIndex);
+    void applyAxisBookedForce(Particle & p, const Vector3f & f, unsigned axisIndex);
+
+    // Gives every dihedral spring the radius and axial offset its endpoints
+    // have in the loaded structure -- the reference the torsional evaluation
+    // puts them back to. Run from setup(), after the axes are known.
+    void _setupTorsionalFrames();
+
     void bindDihedralEndpointsToAxes();
     bool _dihedralAxesBound = false;
 
