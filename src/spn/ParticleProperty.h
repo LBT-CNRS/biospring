@@ -20,7 +20,7 @@ class ParticleProperty
     ParticleProperty()
         : _mass(1.0), _charge(0.0), _electroncharge(0), _radius(1.0), _epsilon(0.0), _tempfactor(0.0), _occupancy(0.0),
           _hydrophobicity(0.0), _solventaccessibilitysurface(0.0), _transferenergybyaccessiblesurface(0.0),
-          _ischarged(false), _ishydrophobic(false), _burying(1.0)
+          _ischarged(false), _ishydrophobic(false), _burying(1.0), _donorcapacity(0), _acceptorcapacity(0), _antecedentindex(-1), _antecedentindex2(-1)
     {
     }
 
@@ -60,6 +60,51 @@ class ParticleProperty
     float getBurying() const { return _burying; }
     void setBurying(float burying) { _burying = burying; }
 
+    // Hydrogen-bond donor/acceptor CAPACITY: how many bonds this atom can
+    // hold at once in each role, not a yes/no. Chemistry sets it -- a
+    // donatable hydrogen each for a donor (an amino nitrogen has two), a
+    // lone pair each for an acceptor (a carbonyl oxygen has two) -- and it
+    // is read from the .hbond table, whose columns are counts. 0/1 remains
+    // valid and means exactly what it always did, so a table written before
+    // capacities existed keeps its behaviour. A particle can be both (a
+    // Ser/Thr/Tyr hydroxyl donates one and accepts two).
+    unsigned donorCapacity() const { return _donorcapacity; }
+    void setDonorCapacity(unsigned n) { _donorcapacity = n; }
+
+    unsigned acceptorCapacity() const { return _acceptorcapacity; }
+    void setAcceptorCapacity(unsigned n) { _acceptorcapacity = n; }
+
+    bool isDonor() const { return _donorcapacity > 0; }
+    bool isAcceptor() const { return _acceptorcapacity > 0; }
+
+    // Index of the heavy atom this donor/acceptor hangs off, or -1 when the
+    // .hbond table names none. It is what gives a hydrogen bond a direction
+    // without an explicit hydrogen: the antecedent->self vector stands in
+    // for where the H (or the lone pair) points, and the angle between it
+    // and self->partner weights the Morse well (see
+    // forcefield::hydrogen_bond_angular_factor). Measured on a B-DNA duplex,
+    // that weight is ~0.25 on a real Watson-Crick bond and 0.003 on a
+    // stacked same-strand pair that the distance criterion alone accepts.
+    int antecedentIndex() const { return _antecedentindex; }
+    void setAntecedentIndex(int index) { _antecedentindex = index; }
+
+    // A SECOND antecedent, or -1. One is not enough for the commonest donor
+    // there is. A backbone amide nitrogen is planar with two heavy
+    // neighbours, CA and the previous residue's C, and its hydrogen points
+    // opposite their bisector -- 58 degrees away from the CA->N direction a
+    // single antecedent gives. Measured on ubiquitin's alpha helix, that
+    // costs a factor 3.2 on cos^2(theta): weight 0.28 where the real N-H
+    // direction gives 0.91, on bonds whose geometry is ideal.
+    //
+    // With both set, the direction is -(u1 + u2) normalised, which is exact
+    // for any planar sp2 centre -- the protein amide, and equally a guanine
+    // N1 or a thymine N3 sitting between two ring carbons. It reproduces the
+    // true N-H direction to 0.7 degrees on ubiquitin (18.1 against 17.4),
+    // recovering 99 % of the correct weight. This is the geometric form of
+    // the rule DSSP has used since Kabsch & Sander 1983.
+    int antecedentIndex2() const { return _antecedentindex2; }
+    void setAntecedentIndex2(int index) { _antecedentindex2 = index; }
+
   protected:
   private:
     float _mass;
@@ -75,6 +120,10 @@ class ParticleProperty
     bool _ischarged;
     bool _ishydrophobic;
     float _burying;
+    unsigned _donorcapacity;
+    unsigned _acceptorcapacity;
+    int _antecedentindex;
+    int _antecedentindex2;
 };
 
 } // namespace spn

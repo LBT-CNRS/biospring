@@ -3,6 +3,7 @@
 #include "measure.hpp"
 
 #include "forcefield/ForceField.h"
+#include "forcefield/energy/hydrogenbond.hpp"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Lewitt.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias.h"
@@ -89,6 +90,339 @@ void SpringNetwork::computeSpringForces()
     _energies.spring = springenergy;
 }
 
+int SpringNetwork::_anyHydrogenBondPartner(size_t index) const
+{
+    if (index + 1 < _hbDonorOffset.size())
+        for (size_t s = _hbDonorOffset[index]; s < _hbDonorOffset[index + 1]; ++s)
+            if (_hbDonorSlot[s] >= 0)
+                return _hbDonorSlot[s];
+    if (index + 1 < _hbAcceptorOffset.size())
+        for (size_t s = _hbAcceptorOffset[index]; s < _hbAcceptorOffset[index + 1]; ++s)
+            if (_hbAcceptorSlot[s] >= 0)
+                return _hbAcceptorSlot[s];
+    return -1;
+}
+
+size_t SpringNetwork::getHydrogenBondCount() const
+{
+    size_t n = 0;
+    for (int slot : _hbDonorSlot)
+        if (slot >= 0)
+            ++n;
+    return n;
+}
+
+std::array<size_t, 4> SpringNetwork::getHydrogenBondPairCensus() const
+{
+    std::map<std::pair<long, long>, size_t> per_pair;
+    for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
+        for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
+        {
+            const int j = _hbDonorSlot[s];
+            if (j < 0)
+                continue;
+            const Particle & p = _particles[i];
+            const Particle & q = _particles[static_cast<size_t>(j)];
+            const long dres = static_cast<long>(p.getResId()) - static_cast<long>(q.getResId());
+            if (p.getChainName() == q.getChainName() && dres >= -1 && dres <= 1)
+                continue;
+            // Chain folded into the key by its first character: enough to
+            // keep the two strands of a duplex apart.
+            const long a = static_cast<long>(p.getResId()) * 256 +
+                           (p.getChainName().empty() ? 0 : p.getChainName()[0]);
+            const long b = static_cast<long>(q.getResId()) * 256 +
+                           (q.getChainName().empty() ? 0 : q.getChainName()[0]);
+            per_pair[{std::min(a, b), std::max(a, b)}]++;
+        }
+    std::array<size_t, 4> census = {0, 0, 0, 0};
+    for (const auto & entry : per_pair)
+        census[std::min<size_t>(entry.second, 4) - 1]++;
+    return census;
+}
+
+void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
+{
+    std::ofstream out(path, std::ios::app);
+    if (!out)
+    {
+        logging::warning("Cannot open hydrogen bond log '%s'.", path.c_str());
+        return;
+    }
+    out << "# step " << step << "\n";
+    for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
+        for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
+        {
+            const int j = _hbDonorSlot[s];
+            if (j < 0)
+                continue;
+            const Particle & d = _particles[i];
+            const Particle & a = _particles[static_cast<size_t>(j)];
+            const Vector3f v = a.getPosition() - d.getPosition();
+            const float distance = v.norm();
+            // BOTH angular factors, as the force applies them. Reporting only
+            // the donor's would say the acceptor term does nothing, which is
+            // how the previous one-sided version read.
+            float w = 1.0f;
+            if (distance > 1e-6f)
+            {
+                const Vector3f vhat = v / distance;
+                const Vector3f hd = donorDirection(d);
+                if (hd.norm() > 1e-6f)
+                    w *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat));
+                const Vector3f ha = donorDirection(a);
+                if (ha.norm() > 1e-6f)
+                    w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
+            }
+            out << d.getChainName() << ' ' << d.getResId() << ' ' << d.getResName() << ' ' << d.getName() << ' '
+                << a.getChainName() << ' ' << a.getResId() << ' ' << a.getResName() << ' ' << a.getName() << ' '
+                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << '\n';
+        }
+}
+
+bool SpringNetwork::areHydrogenBonded(size_t a, size_t b) const
+{
+    if (a + 1 < _hbDonorOffset.size())
+        for (size_t s = _hbDonorOffset[a]; s < _hbDonorOffset[a + 1]; ++s)
+            if (_hbDonorSlot[s] == static_cast<int>(b))
+                return true;
+    if (b + 1 < _hbDonorOffset.size())
+        for (size_t s = _hbDonorOffset[b]; s < _hbDonorOffset[b + 1]; ++s)
+            if (_hbDonorSlot[s] == static_cast<int>(a))
+                return true;
+    return false;
+}
+
+// Applies the Morse potential to every currently active hydrogen bond --
+// see _assignHydrogenBondPairs, called separately beforehand to (re)build
+// the slots. Walks the DONOR slots, so every bond is seen exactly once and
+// with its direction known, which the angular weight needs.
+//
+// E = M(d) * w(cos t), M the Morse well in the distance between the two
+// heavy atoms and w = max(cos t, 0)^2 the angular weight, t the angle at the
+// donor between (donor - antecedent) and (acceptor - donor). Three bodies
+// carry force, not two: the antecedent enters through cos t alone. With
+// u = donor - antecedent and v = acceptor - donor,
+//
+//     dE/d(acceptor)   = M'(d) w vhat + M(d) w'(c) (uhat - c vhat)/|v|
+//     dE/d(antecedent) = -M(d) w'(c) (vhat - c uhat)/|u|
+//     dE/d(donor)      = -(the other two)      [translation invariance]
+//
+// A donor with no resolved antecedent keeps w = 1 and the old two-body
+// behaviour exactly, so a .hbond table without the fifth column is unchanged
+// by this. A particle can now appear in several bonds at once, so the
+// apply pass stays serial -- it is a genuine write conflict now, not just
+// summation order.
+// The unit vector along which a donor's hydrogen points, or a zero vector
+// when the donor has no antecedent at all.
+//
+// With one antecedent it is simply "away from it". With two it is the sum of
+// the two away-directions, exact for a planar sp2 centre: its three
+// substituents sit at 120 degrees, so the hydrogen lies opposite the
+// bisector of the two heavy bonds. Backbone amide, guanine N1, thymine N3 --
+// all the same geometry.
+//
+// It exists because the direction was computed in three separate places (the
+// force, the candidate ranking, the log) and fixing one of them left the
+// other two reporting the old answer, which read as "the fix does nothing".
+Vector3f SpringNetwork::donorDirection(const Particle & p) const
+{
+    if (p.antecedentIndex() < 0)
+        return Vector3f();
+    const Vector3f u1 = p.getPosition() - _particles[static_cast<size_t>(p.antecedentIndex())].getPosition();
+    const float l1 = u1.norm();
+    if (l1 <= 1e-6f)
+        return Vector3f();
+    Vector3f h = u1 / l1;
+    if (p.antecedentIndex2() >= 0)
+    {
+        const Vector3f u2 = p.getPosition() - _particles[static_cast<size_t>(p.antecedentIndex2())].getPosition();
+        const float l2 = u2.norm();
+        if (l2 > 1e-6f)
+            h = h + u2 / l2;
+    }
+    const float hl = h.norm();
+    return hl > 1e-6f ? h / hl : Vector3f();
+}
+
+void SpringNetwork::computeHydrogenBondForces()
+{
+    struct Bond
+    {
+        size_t donor, acceptor;
+        int antecedent, antecedent2;
+        // The acceptor's own antecedents. A carbonyl oxygen's lone pairs are
+        // no less directional than the donor's hydrogen: measured on
+        // ubiquitin's native helix bonds, the angle between C->O and
+        // O->N(donor) is 25 degrees median, never past 30, so cos^2 about
+        // the C=O direction describes it as well as it describes the donor.
+        int acceptorAntecedent, acceptorAntecedent2;
+    };
+    std::vector<Bond> bonds;
+    bonds.reserve(_hbDonorSlot.size());
+    for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
+        for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
+            if (_hbDonorSlot[s] >= 0)
+                bonds.push_back({i, static_cast<size_t>(_hbDonorSlot[s]), getParticle(i).antecedentIndex(),
+                                 getParticle(i).antecedentIndex2(),
+                                 getParticle(static_cast<size_t>(_hbDonorSlot[s])).antecedentIndex(),
+                                 getParticle(static_cast<size_t>(_hbDonorSlot[s])).antecedentIndex2()});
+
+    // Six slots per bond: two antecedents on each side, the donor, the
+    // acceptor. The angular weight is now a product of two factors, one per
+    // side, so its gradient reaches every one of them.
+    _hydrogenBondForceScratch.resize(bonds.size() * 6);
+    std::vector<float> pairEnergyScratch(bonds.size());
+
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t k = 0; k < bonds.size(); ++k)
+    {
+        const Particle & pd = getParticle(bonds[k].donor);
+        const Particle & pa = getParticle(bonds[k].acceptor);
+        Vector3f v = pa.getPosition() - pd.getPosition();
+        const float distance = v.norm();
+        if (distance < 1e-6f)
+        {
+            _hydrogenBondForceScratch[3 * k + 0] = Vector3f();
+            _hydrogenBondForceScratch[3 * k + 1] = Vector3f();
+            _hydrogenBondForceScratch[3 * k + 2] = Vector3f();
+            pairEnergyScratch[k] = 0.0f;
+            continue;
+        }
+        const Vector3f vhat = v / distance;
+
+        const float morse = _ff->computeHydrogenBondEnergy(distance);
+        const float dmorse = _ff->computeHydrogenBondForceModule(distance);
+
+        // A hydrogen bond is directional at BOTH ends. The donor's hydrogen
+        // points somewhere, and so do the acceptor's lone pairs: measured on
+        // ubiquitin's native helix bonds, the angle between C->O and the
+        // direction of the donor is 25 degrees median and never past 30, so
+        // the same cos^2 form describes it. Weighting only the donor side
+        // overestimates every bond by the factor the acceptor term would have
+        // applied -- about 0.82 on ideal geometry.
+        //
+        // Each side's direction uses the bisector when it has two antecedents
+        // (planar sp2, exact) and "away from the antecedent" when it has one.
+        auto side = [&](int a1, int a2, const Particle & self, Vector3f & hhat, Vector3f & e1, Vector3f & e2,
+                        float & l1, float & l2, float & hlen) {
+            hhat = Vector3f();
+            l1 = l2 = hlen = 0.0f;
+            if (a1 < 0)
+                return false;
+            const Vector3f u1 = self.getPosition() - getParticle(static_cast<size_t>(a1)).getPosition();
+            l1 = u1.norm();
+            if (l1 <= 1e-6f)
+                return false;
+            e1 = u1 / l1;
+            Vector3f h = e1;
+            if (a2 >= 0)
+            {
+                const Vector3f u2 = self.getPosition() - getParticle(static_cast<size_t>(a2)).getPosition();
+                l2 = u2.norm();
+                if (l2 > 1e-6f)
+                {
+                    e2 = u2 / l2;
+                    h = h + e2;
+                }
+            }
+            hlen = h.norm();
+            if (hlen <= 1e-6f)
+                return false;
+            hhat = h / hlen;
+            return true;
+        };
+
+        Vector3f dhat, d1, d2, ahat, a1v, a2v;
+        float dl1 = 0, dl2 = 0, dhlen = 0, al1 = 0, al2 = 0, ahlen = 0;
+        const bool hasD = side(bonds[k].antecedent, bonds[k].antecedent2, pd, dhat, d1, d2, dl1, dl2, dhlen);
+        const bool hasA = side(bonds[k].acceptorAntecedent, bonds[k].acceptorAntecedent2, pa, ahat, a1v, a2v, al1,
+                                al2, ahlen);
+
+        const float cd = hasD ? dhat.dot(vhat) : 1.0f;
+        const float ca = hasA ? ahat.dot(-vhat) : 1.0f;
+        const float wd = hasD ? forcefield::hydrogen_bond_angular_factor(cd) : 1.0f;
+        const float wa = hasA ? forcefield::hydrogen_bond_angular_factor(ca) : 1.0f;
+        const float dwd = hasD ? forcefield::hydrogen_bond_angular_derivative(cd) : 0.0f;
+        const float dwa = hasA ? forcefield::hydrogen_bond_angular_derivative(ca) : 0.0f;
+        const float w = wd * wa;
+
+        // Three sub-terms, each balanced on its OWN atoms rather than letting
+        // one global "donor takes the rest" absorb everything. The acceptor
+        // term acts on the DONOR through the same v that the donor term acts
+        // on the acceptor through, and folding both into one balance puts that
+        // reaction on the wrong atom with the wrong sign -- which is precisely
+        // what the five-atom finite-difference test caught.
+        //
+        // computeHydrogenBondForceModule's own convention is "positive =
+        // attractive, on the FIRST particle" -- here the donor, since v runs
+        // donor -> acceptor.
+        const float conv = static_cast<float>(forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+        Vector3f f_donor, f_acceptor, f_d1, f_d2, f_a1, f_a2;
+
+        // (A) radial, on the pair.
+        const Vector3f radial = vhat * (-dmorse * w);
+        f_acceptor += radial;
+        f_donor -= radial;
+
+        // (B) the donor's angular factor: explicit on its antecedents, its
+        // v-dependence on the acceptor, the donor balancing the three.
+        if (hasD && dwd != 0.0f)
+        {
+            const Vector3f t = vhat - dhat * cd;
+            const float g = morse * wa * dwd * conv / dhlen;
+            f_d1 = (t - d1 * d1.dot(t)) * (g / dl1);
+            if (bonds[k].antecedent2 >= 0 && dl2 > 1e-6f)
+                f_d2 = (t - d2 * d2.dot(t)) * (g / dl2);
+            const Vector3f on_acceptor = (dhat - vhat * cd) * (-morse * wa * dwd * conv / distance);
+            f_acceptor += on_acceptor;
+            f_donor -= (f_d1 + f_d2 + on_acceptor);
+        }
+
+        // (C) the acceptor's angular factor, the same expressions with the
+        // roles swapped: its partner direction is -vhat and its v-dependence
+        // lands on the DONOR, the acceptor balancing the three.
+        if (hasA && dwa != 0.0f)
+        {
+            const Vector3f t = -vhat - ahat * ca;
+            const float g = morse * wd * dwa * conv / ahlen;
+            f_a1 = (t - a1v * a1v.dot(t)) * (g / al1);
+            if (bonds[k].acceptorAntecedent2 >= 0 && al2 > 1e-6f)
+                f_a2 = (t - a2v * a2v.dot(t)) * (g / al2);
+            const Vector3f on_donor = (ahat + vhat * ca) * (-morse * wd * dwa * conv / distance);
+            f_donor += on_donor;
+            f_acceptor -= (f_a1 + f_a2 + on_donor);
+        }
+
+        _hydrogenBondForceScratch[6 * k + 0] = f_d1;
+        _hydrogenBondForceScratch[6 * k + 1] = f_d2;
+        _hydrogenBondForceScratch[6 * k + 2] = f_a1;
+        _hydrogenBondForceScratch[6 * k + 3] = f_a2;
+        _hydrogenBondForceScratch[6 * k + 4] = f_donor;
+        _hydrogenBondForceScratch[6 * k + 5] = f_acceptor;
+        pairEnergyScratch[k] = morse * w;
+    }
+
+    float hbond_energy = 0.0f;
+    for (size_t k = 0; k < bonds.size(); ++k)
+    {
+        if (bonds[k].antecedent >= 0)
+            getParticle(static_cast<size_t>(bonds[k].antecedent)).addForce(_hydrogenBondForceScratch[6 * k + 0]);
+        if (bonds[k].antecedent2 >= 0)
+            getParticle(static_cast<size_t>(bonds[k].antecedent2)).addForce(_hydrogenBondForceScratch[6 * k + 1]);
+        if (bonds[k].acceptorAntecedent >= 0)
+            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent)).addForce(_hydrogenBondForceScratch[6 * k + 2]);
+        if (bonds[k].acceptorAntecedent2 >= 0)
+            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent2)).addForce(_hydrogenBondForceScratch[6 * k + 3]);
+        getParticle(bonds[k].donor).addForce(_hydrogenBondForceScratch[6 * k + 4]);
+        getParticle(bonds[k].acceptor).addForce(_hydrogenBondForceScratch[6 * k + 5]);
+        hbond_energy += pairEnergyScratch[k];
+    }
+
+    _energies.hbond = hbond_energy;
+}
+
 // Calculate forces that apply on dynamic particles.
 void SpringNetwork::computeParticleForces()
 {
@@ -96,6 +430,7 @@ void SpringNetwork::computeParticleForces()
     float steric_energy = 0.0f;
     float imp_energy = 0.0f;
     float hydrophobic_energy = 0.0f;
+    float hbond_core_repulsion_energy = 0.0f;
 
     _resizeNonbondedPairScratch();
 
@@ -129,6 +464,9 @@ void SpringNetwork::computeParticleForces()
         if (isHydrophobicityEnabled() && p.isHydrophobic() && _nsearch.hydrophobic)
             p.addHydrophobicityForce(_hydrophobicPairScratch[i]);
 
+        if (isHydrogenBondEnabled() && (p.isDonor() || p.isAcceptor()) && _nsearch.hbond)
+            p.addHydrogenBondCoreRepulsion(_hydrogenBondCoreRepulsionPairScratch[i]);
+
     }
 
     // Applies the deferred "other side" of each unique nonbonded pair
@@ -139,6 +477,7 @@ void SpringNetwork::computeParticleForces()
     _applyNonbondedPairScratch(_stericPairScratch, steric_energy);
     _applyNonbondedPairScratch(_electrostaticPairScratch, electrostatic_energy);
     _applyNonbondedPairScratch(_hydrophobicPairScratch, hydrophobic_energy);
+    _applyNonbondedPairScratch(_hydrogenBondCoreRepulsionPairScratch, hbond_core_repulsion_energy);
 
     // Sum per-particle energies in particle order to keep results reproducible
     // across OpenMP thread counts.
@@ -149,6 +488,7 @@ void SpringNetwork::computeParticleForces()
         steric_energy += p.getStericEnergy();
         imp_energy += p.getIMPEnergy();
         hydrophobic_energy += p.getHydrophobicityEnergy();
+        hbond_core_repulsion_energy += p.getHydrogenBondCoreRepulsionEnergy();
     }
 
     // The probe is shared by every particle, therefore probe interactions must
@@ -195,6 +535,11 @@ void SpringNetwork::computeParticleForces()
     _energies.steric = steric_energy;
     _energies.imp = imp_energy;
     _energies.hydrophobic = hydrophobic_energy;
+    // computeHydrogenBondForces() (called earlier in computeForces(), before
+    // this method) already set _energies.hbond to the exclusive engaged-pair
+    // energy -- add the always-on core-repulsion contribution on top rather
+    // than overwrite it.
+    _energies.hbond += hbond_core_repulsion_energy;
 }
 
 // Update the positions of the particles.
@@ -245,6 +590,15 @@ void SpringNetwork::computeForces()
 {
     if (isSpringEnabled())
         computeSpringForces();
+    // Outside the isSpringEnabled() guard, unlike every family above: a
+    // hydrogen bond is not a spring of the network. It is re-assigned each
+    // step from the current geometry (see _assignHydrogenBondPairs), so it
+    // has its own switch and its own lifetime.
+    if (isHydrogenBondEnabled())
+    {
+        _assignHydrogenBondPairs();
+        computeHydrogenBondForces();
+    }
     computeParticleForces();
 }
 
@@ -385,6 +739,15 @@ void SpringNetwork::_displayFrameData()
         logging::info("IMP energy: %5.2f kJ.mol-1", _energies.imp);
     if (isHydrophobicityEnabled())
         logging::info("Hydrophobic energy: %5.2f kJ.mol-1", _energies.hydrophobic);
+    if (isHydrogenBondEnabled())
+    {
+        const std::array<size_t, 4> census = getHydrogenBondPairCensus();
+        logging::info("Hydrogen bond energy: %5.2f kJ.mol-1 over %zu bond(s); residue pairs holding "
+                      "1/2/3/4+ bonds: %zu/%zu/%zu/%zu",
+                      _energies.hbond, getHydrogenBondCount(), census[0], census[1], census[2], census[3]);
+        if (!_config.hbond.log.empty())
+            dumpHydrogenBonds(_config.hbond.log, _nbiter);
+    }
     if (isInsertionVectorEnabled())
     {
         logging::info("Insertion angle: %5.2lf °", _insertionVector->getAngle());
@@ -552,6 +915,11 @@ void SpringNetwork::clear()
     _nsearch.steric.reset();
     _nsearch.electrostatic.reset();
     _nsearch.hydrophobic.reset();
+    _nsearch.hbond.reset();
+    _hbDonorSlot.clear();
+    _hbDonorOffset.clear();
+    _hbAcceptorSlot.clear();
+    _hbAcceptorOffset.clear();
     _neighborSearchesDirty = false;
     _insertionVector.reset();
     _probeparticule = Particle();
@@ -652,6 +1020,7 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupSteric();
     _setupElectrostatic();
     _setupHydrophobic();
+    _setupHydrogenBond();
     _setupDensityGrid();
     _setupInsertionVector();
     _setupTrajectories();
@@ -687,6 +1056,43 @@ void SpringNetwork::_setupHydrophobic()
     }
 }
 
+void SpringNetwork::_setupHydrogenBond()
+{
+    if (isHydrogenBondEnabled())
+    {
+        if (getHydrogenBondCutoff() < 1e-6)
+            throw std::runtime_error("Hydrogen bond cutoff must be > 0");
+        // Shared grid: donors and acceptors both query it and filter
+        // candidates by role themselves (see _assignHydrogenBondPairs),
+        // mirroring the steric pattern of one grid filtered per-pair rather
+        // than pre-splitting donors/acceptors into separate grids.
+        const std::vector<size_t> donor_acceptor_particles = _donorAcceptorParticleIndexes();
+        if (!donor_acceptor_particles.empty())
+        {
+            _nsearch.hbond =
+                make_nsearch(_particles, getHydrogenBondCutoff(), donor_acceptor_particles, getNeighborSkin());
+            _excludeProbeFromNeighborSearch(*_nsearch.hbond);
+        }
+
+        // Every particle starts unbonded; bonds are matched dynamically as
+        // the simulation runs (see _assignHydrogenBondPairs). One slot per
+        // donatable hydrogen and one per lone pair, laid out CSR so a
+        // particle's slots are contiguous.
+        const size_t n = _particles.size();
+        _hbDonorOffset.assign(n + 1, 0);
+        _hbAcceptorOffset.assign(n + 1, 0);
+        for (size_t i = 0; i < n; ++i)
+        {
+            _hbDonorOffset[i + 1] = _hbDonorOffset[i] + _particles[i].donorCapacity();
+            _hbAcceptorOffset[i + 1] = _hbAcceptorOffset[i] + _particles[i].acceptorCapacity();
+        }
+        _hbDonorSlot.assign(_hbDonorOffset[n], -1);
+        _hbAcceptorSlot.assign(_hbAcceptorOffset[n], -1);
+
+        logging::info("Hydrogen bond slots: %zu donor, %zu acceptor.", _hbDonorSlot.size(), _hbAcceptorSlot.size());
+    }
+}
+
 void SpringNetwork::_setupForceField()
 {
     const std::string steric = _config.steric.mode;
@@ -703,10 +1109,12 @@ void SpringNetwork::_setupForceField()
     _ff->setStericScale(_config.steric.gridscale);
     _ff->setCoulombScale(_config.electrostatic.scale);
     _ff->setDielectric(_config.electrostatic.dielectric);
+    _ff->setDistanceDependentDielectric(_config.electrostatic.distancedependent);
     _ff->setForceFieldScale(_config.potentialgrid.scale);
     _ff->setSpringScale(_config.spring.scale);
     _ff->setIMPScale(_config.imp.scale);
     _ff->setHydrophobicityScale(_config.hydrophobicity.scale);
+    _ff->setHydrogenBondScale(_config.hbond.scale);
 }
 
 void SpringNetwork::_setupElectrostatic()
@@ -813,6 +1221,198 @@ std::vector<size_t> SpringNetwork::_hydrophobicParticleIndexes() const
     return indexes;
 }
 
+std::vector<size_t> SpringNetwork::_donorAcceptorParticleIndexes() const
+{
+    std::vector<size_t> indexes;
+    indexes.reserve(_particles.size());
+
+    for (size_t i = 0; i < _particles.size(); ++i)
+    {
+        if (_particles[i].isDonor() || _particles[i].isAcceptor())
+            indexes.push_back(i);
+    }
+
+    return indexes;
+}
+
+void SpringNetwork::_assignHydrogenBondPairs()
+{
+    const float cutoff = getHydrogenBondCutoff();
+    const size_t n = _particles.size();
+    if (_hbDonorOffset.size() != n + 1)
+        return;
+
+    // Step 1: free any slot whose bond has drifted beyond the cutoff. Only
+    // the donor side is walked -- the acceptor side is cleared with it, so
+    // the two never disagree.
+    for (size_t i = 0; i < n; ++i)
+        for (size_t sd = _hbDonorOffset[i]; sd < _hbDonorOffset[i + 1]; ++sd)
+        {
+            const int j = _hbDonorSlot[sd];
+            if (j < 0)
+                continue;
+            if (Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j))) <= cutoff)
+                continue;
+            _hbDonorSlot[sd] = -1;
+            for (size_t sa = _hbAcceptorOffset[j]; sa < _hbAcceptorOffset[j + 1]; ++sa)
+                if (_hbAcceptorSlot[sa] == static_cast<int>(i))
+                {
+                    _hbAcceptorSlot[sa] = -1;
+                    break;
+                }
+        }
+
+    auto free_donor = [&](size_t i) {
+        for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
+            if (_hbDonorSlot[s] < 0)
+                return true;
+        return false;
+    };
+    auto free_acceptor = [&](size_t i) {
+        for (size_t s = _hbAcceptorOffset[i]; s < _hbAcceptorOffset[i + 1]; ++s)
+            if (_hbAcceptorSlot[s] < 0)
+                return true;
+        return false;
+    };
+
+    const std::vector<size_t> candidates = _donorAcceptorParticleIndexes();
+
+    // Steps 2 and 3, repeated: propose, then confirm mutual proposals. One
+    // round fills one slot per particle, so as many rounds as the largest
+    // capacity are enough -- 2 or 3 in practice. The loop stops early as
+    // soon as a round confirms nothing, so the common single-slot case
+    // costs exactly what it did before.
+    for (unsigned round = 0; round < 4; ++round)
+    {
+        std::vector<int> nearest(n, -1);
+        // Holds the best bond STRENGTH seen so far, in kJ/mol, so it starts
+        // at zero: a candidate whose angular factor kills it is worth exactly
+        // nothing and must not take a slot from a real partner.
+        std::vector<float> nearest_distance(n, 0.0f);
+
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+        for (size_t k = 0; k < candidates.size(); ++k)
+        {
+            const size_t i = candidates[k];
+            const bool i_donor = free_donor(i);
+            const bool i_acceptor = free_acceptor(i);
+            if (!i_donor && !i_acceptor)
+                continue;
+
+            const Particle & p = getParticle(i);
+            _nsearch.hbond->for_each_neighbor(p, [&](size_t j) {
+                if (isProbeParticle(j))
+                    return;
+
+                // A free donor slot needs a free acceptor slot facing it. A
+                // particle that is both (a hydroxyl) can pair either way,
+                // but never twice with the SAME partner -- that would be one
+                // bond counted as two.
+                const bool roles_match = (i_donor && free_acceptor(j)) || (i_acceptor && free_donor(j));
+                if (!roles_match || areHydrogenBonded(i, j))
+                    return;
+
+                const Particle & q = getParticle(j);
+
+                // A residue's own backbone N and O (or a side chain's own
+                // donor and acceptor atom, e.g. Asn's ND2/OD1) sit at a
+                // fixed, short covalent-geometry distance -- not a real
+                // hydrogen bond, and not necessarily an explicit spring
+                // neighbour either. Without this, it is invariably the
+                // closest candidate and starves the real inter-residue bond.
+                if (p.getResId() == q.getResId() && p.getChainName() == q.getChainName())
+                    return;
+
+                if (isSpringEnabled() && p.isInSpringNeighbors(static_cast<unsigned>(q.getId())))
+                    return;
+
+                const float distance = Particle::distance(p, q);
+                if (distance >= cutoff)
+                    return;
+
+                // Ranked by what the bond is actually WORTH -- the Morse well
+                // times the angular factor -- and not by distance alone.
+                //
+                // Distance alone hands the slot to whichever candidate is
+                // nearest even when the angle says the bond cannot exist, and
+                // the angular factor then reduces it to zero energy and zero
+                // force. It still occupies the slot. Measured on 071 before
+                // this: 47 bonds held, 11 of them with an angular weight of
+                // exactly zero, 43 between residues one or two apart, and NOT
+                // ONE at i,i+-4 -- the neighbours a chain always has nearby
+                // had saturated every donor, so no helical partner could ever
+                // win one. Scoring by the real strength drops them without a
+                // residue-separation rule, which would have thrown away the
+                // legitimate side-chain bonds between adjacent residues too.
+                float weight = 1.0f;
+                if (distance > 1e-6f)
+                {
+                    const Vector3f vhat = (q.getPosition() - p.getPosition()) / distance;
+                    const Vector3f hd = donorDirection(p);
+                    if (hd.norm() > 1e-6f)
+                        weight *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat));
+                    // The acceptor's own geometry decides too: a lone pair
+                    // pointing away forbids the bond as surely as a hydrogen
+                    // pointing away does.
+                    const Vector3f ha = donorDirection(q);
+                    if (ha.norm() > 1e-6f)
+                        weight *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
+                }
+                const float strength = _ff->computeHydrogenBondEnergy(distance) * weight;
+                if (strength < nearest_distance[i])
+                {
+                    nearest_distance[i] = strength;
+                    nearest[i] = static_cast<int>(j);
+                }
+            });
+        }
+
+        // Reciprocal best hit, the same criterion as before -- `nearest` is
+        // fixed by this point, so the outcome does not depend on the
+        // (serial, deterministic) order pairs are confirmed in.
+        unsigned confirmed = 0;
+        for (size_t k = 0; k < candidates.size(); ++k)
+        {
+            const size_t i = candidates[k];
+            const int j = nearest[i];
+            if (j < 0 || nearest[static_cast<size_t>(j)] != static_cast<int>(i))
+                continue;
+            const size_t jj = static_cast<size_t>(j);
+            if (areHydrogenBonded(i, jj))
+                continue;
+
+            // Whichever way round still has both slots free. i first, so a
+            // hydroxyl pair resolves deterministically.
+            size_t donor = i;
+            size_t acceptor = jj;
+            if (!(free_donor(i) && free_acceptor(jj)))
+            {
+                if (!(free_donor(jj) && free_acceptor(i)))
+                    continue;
+                donor = jj;
+                acceptor = i;
+            }
+            for (size_t sd = _hbDonorOffset[donor]; sd < _hbDonorOffset[donor + 1]; ++sd)
+                if (_hbDonorSlot[sd] < 0)
+                {
+                    _hbDonorSlot[sd] = static_cast<int>(acceptor);
+                    break;
+                }
+            for (size_t sa = _hbAcceptorOffset[acceptor]; sa < _hbAcceptorOffset[acceptor + 1]; ++sa)
+                if (_hbAcceptorSlot[sa] < 0)
+                {
+                    _hbAcceptorSlot[sa] = static_cast<int>(donor);
+                    break;
+                }
+            ++confirmed;
+        }
+        if (confirmed == 0)
+            break;
+    }
+}
+
 void SpringNetwork::_excludeProbeFromNeighborSearch(NeighborSearch::Searcher & searcher)
 {
     if (!isProbeEnabled())
@@ -825,7 +1425,7 @@ void SpringNetwork::_excludeProbeFromNeighborSearch(NeighborSearch::Searcher & s
 
 void SpringNetwork::_markNeighborSearchesDirty()
 {
-    if (_nsearch.steric || _nsearch.electrostatic || _nsearch.hydrophobic)
+    if (_nsearch.steric || _nsearch.electrostatic || _nsearch.hydrophobic || _nsearch.hbond)
         _neighborSearchesDirty = true;
 }
 
@@ -840,6 +1440,8 @@ void SpringNetwork::_updateNeighborSearches()
         _nsearch.electrostatic->update();
     if (_nsearch.hydrophobic)
         _nsearch.hydrophobic->update();
+    if (_nsearch.hbond)
+        _nsearch.hbond->update();
 
     _neighborSearchesDirty = false;
 }
@@ -851,6 +1453,7 @@ void SpringNetwork::_resizeNonbondedPairScratch()
     _stericPairScratch.resize(n);
     _electrostaticPairScratch.resize(n);
     _hydrophobicPairScratch.resize(n);
+    _hydrogenBondCoreRepulsionPairScratch.resize(n);
 
     // Clears logical contents but keeps each bucket's capacity, so the
     // simulation loop does not reallocate every step.
@@ -859,6 +1462,8 @@ void SpringNetwork::_resizeNonbondedPairScratch()
     for (auto & bucket : _electrostaticPairScratch)
         bucket.clear();
     for (auto & bucket : _hydrophobicPairScratch)
+        bucket.clear();
+    for (auto & bucket : _hydrogenBondCoreRepulsionPairScratch)
         bucket.clear();
 }
 

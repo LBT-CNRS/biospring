@@ -3,6 +3,7 @@
 
 #include "energy/electrostatic.hpp"
 #include "energy/electrostatic_field.hpp"
+#include "energy/hydrogenbond.hpp"
 #include "energy/hydrophobic.hpp"
 #include "energy/imp.hpp"
 #include "energy/spring.hpp"

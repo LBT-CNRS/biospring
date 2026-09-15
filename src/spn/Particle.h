@@ -38,7 +38,7 @@ class Particle : public ParticleProperty
           _isstatic(false), _name(""), _cgname(""), _resid(0), _resname(""), _chainname(""), _elementname(""),
           _internalstructid(0), _rigidbodyid(0), _isrigid(false), _springneighbors(), _kineticenergy(0.0f),
           _electrostaticenergy(0.0f), _stericenergy(0.0f), _impenergy(0.0f), _hydrophobicityenergy(0.0f),
-          _extid(static_cast<unsigned>(-1)), _id(-1), _springnetwork(nullptr)
+          _hydrogenbondcorerepulsionenergy(0.0f), _extid(static_cast<unsigned>(-1)), _id(-1), _springnetwork(nullptr)
     {
     }
 
@@ -74,6 +74,9 @@ class Particle : public ParticleProperty
 
     void setHydrophobicityEnergy(float energy) { _hydrophobicityenergy = energy; }
     float getHydrophobicityEnergy() const { return _hydrophobicityenergy; }
+
+    void setHydrogenBondCoreRepulsionEnergy(float energy) { _hydrogenbondcorerepulsionenergy = energy; }
+    float getHydrogenBondCoreRepulsionEnergy() const { return _hydrogenbondcorerepulsionenergy; }
 
     void setPosition(const Vector3f & v);
     Vector3f getPosition() const { return _position; }
@@ -139,6 +142,28 @@ class Particle : public ParticleProperty
     void addStericForce(std::vector<DeferredNonbondedContribution> & deferred);
     void addIMPForce();
     void addHydrophobicityForce(std::vector<DeferredNonbondedContribution> & deferred);
+
+    // Always-on, short-range-only repulsive floor (Morse potential,
+    // distance < equilibrium only -- zero elsewhere, matching the true
+    // Morse force which is itself zero exactly at distance=equilibrium, so
+    // no discontinuity is introduced at that boundary) between any
+    // donor/acceptor pair, whether or not either particle is currently
+    // engaged in an exclusive hydrogen bond elsewhere (see
+    // SpringNetwork::_assignHydrogenBondPairs / computeHydrogenBondForces
+    // for that exclusive, attraction-capable mechanism, which already
+    // covers this same repulsive range for a particle's own current
+    // partner -- excluded here to avoid double-counting). Mirrors how
+    // patchy-particle models keep an always-on, isotropic excluded-volume
+    // core entirely separate from the exclusive, directional attractive
+    // patch term: without this, a particle "occupied" elsewhere can drift
+    // arbitrarily close to another donor/acceptor with no force stopping
+    // it, and the sudden appearance of a full attractive+repulsive Morse
+    // force once it finally becomes the nearest available partner is a
+    // real, observed source of instability (confirmed via reproducible
+    // logging: a single-step kinetic-energy spike of several hundred
+    // thousand kJ.mol-1, coinciding exactly with such a hand-off).
+    void addHydrogenBondCoreRepulsion(std::vector<DeferredNonbondedContribution> & deferred);
+
     float addElectrostaticProbeForce(Particle & probe);
     float addStericProbeForce(Particle & probe);
 
@@ -200,6 +225,7 @@ class Particle : public ParticleProperty
     float _stericenergy;
     float _impenergy;
     float _hydrophobicityenergy;
+    float _hydrogenbondcorerepulsionenergy;
 
     unsigned _extid;
     int _id;
