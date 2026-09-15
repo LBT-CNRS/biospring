@@ -108,6 +108,20 @@ file.close()
 #*****************************************************************************#
 
 
+# typetoepsilon.txt and typetotransfer.txt hold AMBER's and IMPALA's own
+# published numbers, which are in kcal -- typetoepsilon has H 0.0157, O 0.2100,
+# C 0.0860, exactly AMBER's kcal/mol table, and the transfer table is literally
+# named transferkcalaa.txt. BioSpring works in kJ/mol: steric.hpp documents
+# "epsilon: particle well depths, in kJ.mol-1" and converts forces with the same
+# GLOBAL_SPRING_FORCE_CONVERT the springs use, which carries no kcal factor.
+#
+# Writing them unconverted, under a header that claims kJ/mol, made the
+# Lennard-Jones well 4.184 times too shallow everywhere the steric term is on.
+# Verified against OpenMM's amber99sb: MET/CA came out at 0.1094 where OpenMM
+# has 0.45773 kJ/mol, and the amide H at 0.0157 against 0.06569 -- the ratio is
+# 4.184 to five digits on both.
+KCAL_TO_KJOULE = 4.184
+
 file = open('amber.ff', 'w')
 
 file.write("#type\tcharge(e)\tradius(A)\tepsilon(kJ.mol-1)\tmass(Da)\ttransferIMP(kJ.mol-1.A-2\n")
@@ -138,7 +152,7 @@ for item in list :
 
 	if typetoepsilon.has_key(type) : 
 		#print str(typetoepsilon[type]) 
-		line += "\t" + str(typetoepsilon[type])
+		line += "\t" + str(typetoepsilon[type] * KCAL_TO_KJOULE)
 	else : 
 		print "typetoepsilon has no key " + type 
 		errorparsing = True
@@ -152,7 +166,7 @@ for item in list :
 
 	if typetotransfer.has_key(type) : 
 		#print str(typetotransfer[type])
-		line += "\t" + str(typetotransfer[type])
+		line += "\t" + str(typetotransfer[type] * KCAL_TO_KJOULE)
 	else : 
 		print "typetotransfer has no key " + type
 		errorparsing = True

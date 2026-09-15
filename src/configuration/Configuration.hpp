@@ -6,6 +6,7 @@
 #include "utils.hpp"
 
 #include <iostream>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -29,7 +30,10 @@ class Configuration
     TrajectorySetting pdbtraj;
     TrajectorySetting xtctraj;
     TrajectorySetting csvsample;
-    GridSetting potentialgrid;
+    // Electrostatic potential map (APBS/OpenDX). Named for which potential
+    // it holds: the old name said only that it was a grid, next to a
+    // densitygrid that is one too.
+    GridSetting electrostaticgrid;
     GridSetting densitygrid;
     ProbeSetting probe;
     RigidBodySetting rigidbody;
@@ -37,7 +41,7 @@ class Configuration
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"),
           electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"),
-          pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), potentialgrid("potentialgrid"),
+          pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"), electrostaticgrid("electrostaticgrid"),
           densitygrid("densitygrid"), probe("probe"), rigidbody("rigidbody")
     {
         _register(sim);
@@ -51,7 +55,7 @@ class Configuration
         _register(pdbtraj);
         _register(xtctraj);
         _register(csvsample);
-        _register(potentialgrid);
+        _register(electrostaticgrid);
         _register(densitygrid);
         _register(probe);
         _register(rigidbody);
@@ -81,7 +85,7 @@ class Configuration
         os << "\n";
         csvsample.print();
         os << "\n";
-        potentialgrid.print();
+        electrostaticgrid.print();
         os << "\n";
         densitygrid.print();
         os << "\n";
@@ -90,13 +94,52 @@ class Configuration
         rigidbody.print();
     }
 
-    bool exists(const std::string & name) { return _allSettingNames.count(name); }
+    // Resolves a deprecated group name to its current one, warning once per
+    // obsolete group. Called from both exists() and setFromString(), because
+    // SafeConfigurationReader validates through exists() before any value is
+    // ever set -- resolving in setFromString alone let the reader reject the
+    // file first.
+    std::string resolveDeprecated(const std::string & param) const
+    {
+        const auto dot = param.find('.');
+        if (dot == std::string::npos)
+            return param;
+        const auto renamed = renamedGroups().find(param.substr(0, dot));
+        if (renamed == renamedGroups().end())
+            return param;
+        static std::set<std::string> warned;
+        if (warned.insert(renamed->first).second)
+            std::cerr << "!! WARNING: '" << renamed->first << ".*' is deprecated, use '" << renamed->second
+                      << ".*' instead (reading '" << param << "')" << std::endl;
+        return renamed->second + param.substr(dot);
+    }
+
+    bool exists(const std::string & name) { return _allSettingNames.count(resolveDeprecated(name)); }
+
+    // Group names that have been renamed, and what they became. An .msp
+    // written before a rename keeps working, with one warning per obsolete
+    // group so the file gets fixed rather than silently carried forever.
+    //
+    // Deliberately short. This is a courtesy for files already in the wild,
+    // not a second naming scheme to maintain: an entry earns its place by
+    // having been a documented option that real files use.
+    static const std::map<std::string, std::string> & renamedGroups()
+    {
+        static const std::map<std::string, std::string> renamed = {
+            // Said only that it was a grid, next to a densitygrid that is one
+            // too. Renamed for which potential it holds.
+            {"potentialgrid", "electrostaticgrid"},
+        };
+        return renamed;
+    }
 
     // Sets a parameter from its full name.
-    void setFromString(const std::string & param, const std::string & value)
+    void setFromString(const std::string & rawparam, const std::string & value)
     {
+        const std::string param = resolveDeprecated(rawparam);
+
         if (not exists(param))
-            throw std::invalid_argument(utils::string::format("invalid parameter '%s'", param.c_str()));
+            throw std::invalid_argument(utils::string::format("invalid parameter '%s'", rawparam.c_str()));
 
         const auto tokens = utils::string::split(param, ".");
         if (tokens.size() != 2)
@@ -128,8 +171,8 @@ class Configuration
             xtctraj.setFromString(name, value);
         else if (group == csvsample.name)
             csvsample.setFromString(name, value);
-        else if (group == potentialgrid.name)
-            potentialgrid.setFromString(name, value);
+        else if (group == electrostaticgrid.name)
+            electrostaticgrid.setFromString(name, value);
         else if (group == densitygrid.name)
             densitygrid.setFromString(name, value);
         else if (group == probe.name)
