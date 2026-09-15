@@ -19,6 +19,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     std::string pathTopology;
     std::string pathForceField;
     std::string pathGroup;
+    std::string pathStaticHydrogenBond;
     std::vector<std::string> pathOutputList;
 
 
@@ -27,6 +28,7 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     float stiffness;
     float charge;
     bool isStatic;
+    bool addStaticDisulfide;
     bool ignoreDuplicates;
     bool ignoreMissing;
     bool writePdbConect;

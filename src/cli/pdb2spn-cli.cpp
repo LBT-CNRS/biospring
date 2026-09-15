@@ -5,6 +5,7 @@
 #include "IO/io.h"
 #include "logging.h"
 #include "reduce/Reducer.h"
+#include "staticbond/StaticBondBuilder.h"
 #include "utils.hpp"
 
 #include <string>
@@ -68,6 +69,28 @@ int main(int argc, char ** argv)
         }
     }
 
+    // Hydrogen bonds and disulfides, from the bonds the structure DECLARES.
+    //
+    // This has to run HERE, before -cutoff adds anything: once a mesh exists
+    // there is no way left to tell a CONECT record from a structural spring,
+    // and retuning afterwards silently softens the mesh instead (measured on
+    // gkinase: 186 mesh springs dropped from 8000 to 60, against the single
+    // bond the file actually declares). It only changes stiffness, so it adds
+    // no particle and invalidates no reference.
+    if (!args.pathStaticHydrogenBond.empty())
+    {
+        logging::status("Retuning declared hydrogen bonds using %s.", args.pathStaticHydrogenBond.c_str());
+        const auto table = biospring::staticbond::readDonorAcceptorTable(args.pathStaticHydrogenBond);
+        biospring::staticbond::retuneHydrogenBondSprings(topology, table,
+                                                         biospring::staticbond::HYDROGEN_BOND_STIFFNESS);
+    }
+
+    if (args.addStaticDisulfide)
+    {
+        logging::status("Retuning declared disulfide bridges.");
+        biospring::staticbond::retuneDisulfideSprings(topology, biospring::staticbond::DISULFIDE_STIFFNESS);
+    }
+
     if (args.cutoff > 0)
     {
         logging::status("Creating springs with distance cutoff %.2f and stiffness %.2f.", args.cutoff, args.stiffness);
@@ -98,8 +121,8 @@ int main(int argc, char ** argv)
 CommandLineArguments::CommandLineArguments(const std::string & name, const argparse::description_t & description,
                                            const std::string & version)
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
-      pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0), isStatic(false),
-      ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false)
+      pathStaticHydrogenBond(""), pathOutputList(0), cutoff(-1.0), stiffness(1.0), charge(0.0), isStatic(false),
+      addStaticDisulfide(false), ignoreDuplicates(false), ignoreMissing(false), writePdbConect(false)
 {
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
@@ -176,7 +199,23 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(static_);
     _parser.add_argument(ignore_duplicate);
     _parser.add_argument(ignore_missing);
+    argparse::Argument static_hbond =
+        argparse::Argument()
+            .name_short("-static-hbond")
+            .name_long("--static-hbond")
+            .description("add a spring for every hydrogen bond already present in the structure, using the "
+                         "given .hbond donor/acceptor table; additive to -cutoff")
+            .metavar("INPUT_FILE")
+            .argument_type(argparse::ArgumentType::PATH_INPUT);
+
+    argparse::Argument static_disulfide = argparse::StoreTrueArgument(
+        "-static-disulfide", "--static-disulfide",
+        "add a spring for every disulfide bridge already present in the structure (cysteine sulfurs within "
+        "2.5 A); additive to -cutoff");
+
     _parser.add_argument(pdbconect);
+    _parser.add_argument(static_hbond);
+    _parser.add_argument(static_disulfide);
 }
 
 void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
@@ -224,6 +263,8 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     ignoreDuplicates = _parser.get_option("--ignore-duplicate").is_set();
     ignoreMissing = _parser.get_option("--ignore-missing").is_set();
     writePdbConect = _parser.get_option("--pdbconect").is_set();
+    pathStaticHydrogenBond = _parser.get_option_value<std::string>("--static-hbond");
+    addStaticDisulfide = _parser.get_option("--static-disulfide").is_set();
 
     // Reduce file and force field should be provided together.
     // Dies if not the case.
