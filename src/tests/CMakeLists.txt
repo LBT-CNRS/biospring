@@ -76,7 +76,6 @@ set(TEST_MODULES
     RigidBody
     RigidBodiesManager
     ReduceRuleReader
-    StaticBondBuilder
     Vector3f
 )
 
