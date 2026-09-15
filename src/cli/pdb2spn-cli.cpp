@@ -401,6 +401,5 @@ void biospring::pdb2spn::reduceToCoarseGrain(topology::Topology & top, const Com
     // AFTER the copy, never before: a Spring holds a Particle&, so one created
     // inside the reducer would be left pointing at the wrong particle here --
     // silently, since its equilibrium length stays correct.
-    reducer.carry_declared_bonds(top);
     logging::info("Number of particles after reduction: %d", top.number_of_particles());
 }
