@@ -174,15 +174,56 @@ class DihedralSetting : public SettingBase
     // from 21x to 1.00.
     bool tangentialonly;
 
-    DihedralSetting(const std::string & name) : SettingBase(name), tangentialonly(false)
+    // Hold each ring ghost with springs instead of re-deriving its position
+    // from its anchors at every step. The ghost is placed ONCE, at load, by
+    // exactly the same rotation as before -- the ring geometry and every
+    // calibrated k/d0 are untouched -- and then becomes an ordinary particle
+    // with a mass, carried along by its rigid body through the springs built
+    // below. updateGhostPositions() and the Rodrigues force redistribution
+    // both stop having anything to do.
+    //
+    // What this trades: a spring-held ghost owns a genuine vibrational mode
+    // (omega = sqrt(k/m)), which the algebraic virtual site did not, so the
+    // stable timestep is no longer set by the mesh alone. That is the number
+    // to measure, not to assume.
+    bool ghostsprings;
+
+    // kJ.mol-1.A-2, on the springs tying a ghost to its three anchors. The
+    // mesh's own default (500) is the natural starting point: the ghost has
+    // to ride its rigid body, not dangle off it.
+    double ghostspringstiffness;
+
+    // Da. Ghosts carried no mass at all as virtual sites; a dynamical one
+    // needs some. Small next to a real atom, so the ring stays light.
+    double ghostmass;
+
+    // Also tie each ring's ghosts to their neighbours around the ring. An
+    // intra-ring chord is purely tangential (100 % azimuthal projection,
+    // against ~10 % for an off-axis bond and exactly 0 % for a spring to an
+    // axis atom), so it stiffens the ring against the one deformation the
+    // three anchor springs leave soft, and it breaks the mirror degeneracy
+    // a ghost lying in the B/C/reference plane would otherwise have.
+    bool ghostringchords;
+
+    DihedralSetting(const std::string & name)
+        : SettingBase(name), tangentialonly(false), ghostsprings(false), ghostspringstiffness(2000.0), ghostmass(1.0),
+          ghostringchords(true)
     {
-        _parameterNames = {"tangentialonly"};
+        _parameterNames = {"tangentialonly", "ghostsprings", "ghostspringstiffness", "ghostmass", "ghostringchords"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
     {
         if (param == "tangentialonly")
             _parse_bool(tangentialonly, s, param);
+        else if (param == "ghostsprings")
+            _parse_bool(ghostsprings, s, param);
+        else if (param == "ghostspringstiffness")
+            utils::string::from_string<decltype(ghostspringstiffness)>(ghostspringstiffness, s);
+        else if (param == "ghostmass")
+            utils::string::from_string<decltype(ghostmass)>(ghostmass, s);
+        else if (param == "ghostringchords")
+            _parse_bool(ghostringchords, s, param);
         else
             logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
     }
@@ -190,6 +231,10 @@ class DihedralSetting : public SettingBase
     void print(std::ostream & os = std::cout) const override
     {
         _mspFormatter.print("tangentialonly", tangentialonly, os);
+        _mspFormatter.print("ghostsprings", ghostsprings, os);
+        _mspFormatter.print("ghostspringstiffness", ghostspringstiffness, os);
+        _mspFormatter.print("ghostmass", ghostmass, os);
+        _mspFormatter.print("ghostringchords", ghostringchords, os);
     }
 };
 

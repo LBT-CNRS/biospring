@@ -23,6 +23,8 @@
 #endif
 
 #include <algorithm>
+#include <map>
+#include <utility>
 #include <iostream>
 #include <limits>
 #include <math.h>
@@ -194,8 +196,13 @@ void SpringNetwork::applyProjectedDihedralForce(Particle & p, const Vector3f & f
     const Vector3f projected = tangentialAboutAxis(p, f, axisIndex);
     p.addForce(projected);
 
+    // A ghost normally needs no booking here: its force accumulates on it and
+    // redistributeGhostForces books the total where it lands. Spring-held, no
+    // such pass exists -- the ghost keeps what it is given, exactly like a real
+    // endpoint -- so it has to be booked here or the axis reaction would
+    // balance against a total that is missing it.
     const unsigned particleIndex = static_cast<unsigned>(p.getId());
-    if (particleIndex < _isGhost.size() && _isGhost[particleIndex])
+    if (!_ghostsAreSpringHeld && particleIndex < _isGhost.size() && _isGhost[particleIndex])
         return;
 
     GhostAxis & axis = _ghostaxes[axisIndex];
@@ -954,6 +961,118 @@ void SpringNetwork::updateGhostPositions()
     }
 }
 
+// Turns every ring ghost into an ordinary dynamical particle held by springs,
+// instead of an algebraic virtual site re-derived from its anchors at every
+// step (dihedral.ghostsprings).
+//
+// The ring geometry is untouched. The ghost keeps the position
+// addGhostParticle already gave it -- the same rotation of its reference atom
+// about the B->C axis, at that atom's own radius and axial offset -- and every
+// d0/k the generator calibrated is used exactly as generated. What changes is
+// only what holds it there afterwards: springs to its rigid body instead of a
+// formula re-applied every step.
+//
+// Three anchor springs per ghost, to B, C and the reference atom, each at the
+// length it has at load. Those are precisely the three points the algebraic
+// placement read, so the spring network is given the same information; what it
+// is not given is the guarantee, and that is the whole of the trade.
+//
+// Their one blind spot is a ghost lying IN the B/C/reference plane: three
+// distances to three coplanar points leave the mirror image just as valid. An
+// n=2 ring is exactly that case -- its two b-side azimuths are 0 and 180, the
+// first is the reference atom itself and the second is in the plane. The
+// intra-ring chords close it, being purely tangential, which is the direction
+// the three anchors constrain least.
+void SpringNetwork::_setupGhostSprings()
+{
+    if (!_config.dihedral.ghostsprings || _ghostparticles.empty())
+        return;
+
+    const float k = static_cast<float>(_config.dihedral.ghostspringstiffness);
+    const float mass = static_cast<float>(_config.dihedral.ghostmass);
+    const size_t nghosts = _ghostparticles.size();
+
+    // Flip every ghost first, in one pass, then rebuild the two membership
+    // lists once. updateParticleState erases from a vector by value, which is
+    // linear, so calling it per ghost would be quadratic in the ring count.
+    for (const GhostParticleBinding & binding : _ghostparticles)
+    {
+        Particle & ghost = getParticle(binding.ownIndex);
+        ghost.setMass(mass);
+        ghost.setStatic(false);
+    }
+    _staticparticules.clear();
+    _dynamicparticules.clear();
+    for (const Particle & p : _particles)
+    {
+        const unsigned id = static_cast<unsigned>(p.getId());
+        if (p.isStatic())
+            addStaticParticle(id);
+        else
+            addDynamicParticle(id);
+    }
+
+    // addSpring rebuilds every particle's spring-neighbour cache whenever the
+    // spring vector moves; make it move once rather than once per doubling.
+    _springs.reserve(_springs.size() + 4 * nghosts);
+    _rebuildSpringNeighbors();
+
+    auto tie = [this, k](unsigned a, unsigned b) -> unsigned {
+        if (a == b || getParticle(a).isInSpringNeighbors(b))
+            return 0;
+        const float d = (getParticle(a).getPosition() - getParticle(b).getPosition()).norm();
+        if (d < 1e-3f) // coincident: no direction to hold, so no spring to build
+            return 0;
+        addSpring(a, b, d, k);
+        return 1;
+    };
+
+    unsigned nanchor = 0;
+    for (const GhostParticleBinding & binding : _ghostparticles)
+    {
+        nanchor += tie(binding.ownIndex, binding.anchorRefIndex);
+        nanchor += tie(binding.ownIndex, binding.anchorBIndex);
+        nanchor += tie(binding.ownIndex, binding.anchorCIndex);
+    }
+
+    unsigned nchord = 0;
+    if (_config.dihedral.ghostringchords)
+    {
+        // One ring side is the set of ghosts sharing an axis AND a reference
+        // atom: they are that one atom replicated at M evenly spaced azimuths.
+        std::map<std::pair<unsigned, unsigned>, std::vector<size_t>> sides;
+        for (size_t i = 0; i < nghosts; ++i)
+            sides[{_ghostparticles[i].axisIndex, _ghostparticles[i].anchorRefIndex}].push_back(i);
+
+        for (auto & entry : sides)
+        {
+            std::vector<size_t> & side = entry.second;
+            if (side.size() < 2)
+                continue;
+            std::sort(side.begin(), side.end(), [this](size_t a, size_t b)
+                      { return _ghostparticles[a].delta_deg < _ghostparticles[b].delta_deg; });
+            for (size_t i = 0; i + 1 < side.size(); ++i)
+                nchord += tie(_ghostparticles[side[i]].ownIndex, _ghostparticles[side[i + 1]].ownIndex);
+            // Close the ring, but only where that is a third distinct chord.
+            if (side.size() > 2)
+                nchord += tie(_ghostparticles[side.back()].ownIndex, _ghostparticles[side.front()].ownIndex);
+        }
+    }
+
+    // The bindings have done their work. Dropping them is what actually stops
+    // updateGhostPositions and the Rodrigues redistribution, since both iterate
+    // this list -- while _ghostaxes, which the tangential filter and the axis
+    // reaction both still need, is a separate vector and stays.
+    _ghostparticles.clear();
+    _ghostForceScratch.clear();
+    _ghostsAreSpringHeld = true;
+
+    logging::info("SpringNetwork: %zu ghost(s) now spring-held at %.1f kJ.mol-1.A-2 and %.2f Da "
+                  "(%u anchor spring(s), %u ring chord(s)); per-step placement and force "
+                  "redistribution are off.",
+                  nghosts, static_cast<double>(k), static_cast<double>(mass), nanchor, nchord);
+}
+
 void SpringNetwork::updateParticleState(unsigned id, bool isStatic) {
     if (isStatic) {
         removeDynamicParticle(id);
@@ -1086,6 +1205,9 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupDensityGrid();
     _setupInsertionVector();
     _setupTrajectories();
+    // After everything else: it converts particles and adds springs, so it
+    // needs the network whole and the configuration already stored.
+    _setupGhostSprings();
     _neighborSearchesDirty = false;
     // _setupConstraints();
     // _setupSelections();

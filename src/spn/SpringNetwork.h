@@ -444,12 +444,28 @@ class SpringNetwork
     void bindDihedralEndpointsToAxes();
     bool _dihedralAxesBound = false;
 
+    // Set by _setupGhostSprings once the ghosts have been converted. Also the
+    // signal to applyProjectedDihedralForce that a ghost endpoint must now be
+    // booked against its axis like a real one: nothing transfers its force any
+    // more, so the axis reaction has to balance against it directly.
+    bool _ghostsAreSpringHeld = false;
+
     // Clears every axis's running totals. Called once a step, before any
     // force is produced, because a real dihedral endpoint books into them
     // during the spring loop -- earlier than redistributeGhostForces.
     void resetGhostAxisSums();
 
+    // Turns every ring ghost from an algebraic virtual site into an ordinary
+    // dynamical particle held by springs (dihedral.ghostsprings). Run once,
+    // from setup(), after the network is loaded and the configuration known.
+    void _setupGhostSprings();
+
   public:
+
+    // Whether ghosts are carried by springs rather than re-placed each step.
+    // Read in the force path, so it is kept as a plain flag rather than a
+    // walk back into the configuration.
+    bool areGhostsSpringHeld() const { return _ghostsAreSpringHeld; }
 
     unsigned getNumberOfSprings() const { return _springs.size(); }
     unsigned getNumberOfParticles() const { return _particles.size(); }
