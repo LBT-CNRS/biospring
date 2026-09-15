@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "Vector3f.h"
+#include "energy/spring.hpp"
 
 namespace biospring
 {
@@ -62,8 +63,29 @@ class ForceField
     virtual float computeStericForceModule(float radius1, float radius2, float epsilon1, float epsilon2,
                                            float distance) const;
 
-    virtual float computeSpringEnergy(float distance, float stiffness, float equilibrium) const;
-    virtual float computeSpringForceModule(float distance, float stiffness, float equilibrium) const;
+    // NOT virtual, and defined here rather than in ForceField.cpp, unlike their
+    // steric neighbours above.
+    //
+    // Those are genuinely polymorphic -- four subclasses override
+    // computeStericEnergy/ForceModule to switch Lennard-Jones variants. These
+    // two never were: no subclass in the tree overrides either, so every spring
+    // force in every step paid an indirect call, and an uninlinable one, to
+    // reach a multiply and a subtraction. A sampling profile of RecA put the
+    // pair at about 4 % of the process's own work, on top of what it cost by
+    // blocking inlining at the call site.
+    //
+    // Making them virtual again would be a deliberate act: a subclass that
+    // needs a different spring law can have it, but it should be added with
+    // the override, not left standing as an option nobody took.
+    float computeSpringEnergy(float distance, float stiffness, float equilibrium) const
+    {
+        return _springscale * spring_energy(distance, stiffness, equilibrium);
+    }
+
+    float computeSpringForceModule(float distance, float stiffness, float equilibrium) const
+    {
+        return _springscale * spring_force_module(distance, stiffness, equilibrium);
+    }
 
     virtual float computeIMPEnergy(float x, float y, float z, float surface, float transfer) const;
     virtual Vector3f computeIMPForceVector(float x, float y, float z, float surface, float transfer) const;

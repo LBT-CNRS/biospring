@@ -11,6 +11,7 @@
 
 #include "forcefield/constants.hpp"
 
+#include <atomic>
 #include <iostream>
 
 #include "grid/PotentialGrid.hpp"
@@ -35,7 +36,20 @@ class InteractorMDDriver : public Interactor
 		inline void setDebug(unsigned debug) { _IMDdebug = debug; }
 		inline void setLog(const char* logfilename) { strcpy(_IMDlogfilename, logfilename); }
 		inline void setForceScale(float forcescale) { _IMDforcescale = forcescale; }
-		
+
+		// One frame every N steps. Written from the simulation thread at
+		// setup and from the interaction thread when a client sends
+		// IMD_TRATE, read from the simulation thread in syncSystemStateData.
+		inline void setTransmissionRate(unsigned rate)
+		{
+			_IMDtransmissionrate.store(rate < 1 ? 1 : rate, std::memory_order_release);
+		}
+		inline unsigned getTransmissionRate() const
+		{
+			return _IMDtransmissionrate.load(std::memory_order_acquire);
+		}
+
+
 		virtual void startInteractionThread() override;
 		virtual bool continueInteractionThread() override { return _isRunning.load(std::memory_order_acquire); }
 		virtual void stopInteractionThread() override { _isRunning.store(false, std::memory_order_release); }
@@ -65,6 +79,12 @@ class InteractorMDDriver : public Interactor
 		int _IMDwait ;
 		int _IMDport ;
 		float     _IMDforcescale ;
+		std::atomic<unsigned> _IMDtransmissionrate{1};
+		// Bumped by the simulation thread each time the state buffers are
+		// refreshed; read by the interaction thread so it sends each frame
+		// once instead of re-sending whatever is in the buffer at 1 kHz.
+		std::atomic<unsigned long long> _stateVersion{0};
+		unsigned long long _lastSentVersion = 0; // interaction thread only
 		IMDEnergies _IMDenergies;
 		int _nbforces;
 		int * _particleforceids; 

@@ -103,6 +103,7 @@ int main(int argc, char ** argv)
     iMDDriver.setLog(args.mddriverParam.logpath.c_str());
     iMDDriver.setWait(args.mddriverParam.wait);
     iMDDriver.setForceScale(args.mddriverParam.forcescale);
+    iMDDriver.setTransmissionRate(args.mddriverParam.transmissionrate);
     iMDDriver.setSpringNetwork(spn);
     spn->addInteractor(&iMDDriver);
 #endif
@@ -231,10 +232,18 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
                                  .default_value("stdout")
                                  .argument_type(argparse::ArgumentType::PATH_OUTPUT);
 
+    argparse::Argument imdrate = argparse::Argument()
+                                     .name_long("--imd-rate")
+                                     .description("Send one frame every N simulation steps (IMD transmission "
+                                                  "rate). A connected client asking for another rate wins.")
+                                     .argument_type(argparse::ArgumentType::INTEGER)
+                                     .default_value("1");
+
     _parser.add_argument(port);
     _parser.add_argument(wait);
     _parser.add_argument(debug);
     _parser.add_argument(log);
+    _parser.add_argument(imdrate);
 #endif // MDDRIVER_SUPPORT
 
 #ifdef FREESASA_SUPPORT
@@ -329,10 +338,16 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     mddriverParam.port = _parser.get_option_value<unsigned>("--port");
     mddriverParam.debug = _parser.get_option_value<unsigned>("--debug");
     mddriverParam.logpath = _parser.get_option_value<std::string>("--log");
+    mddriverParam.transmissionrate = _parser.get_option_value<unsigned>("--imd-rate");
 
     if (mddriverParam.debug > 2)
     {
         logging::die("Debug level should be 0, 1 or 2.");
+    }
+
+    if (mddriverParam.transmissionrate < 1)
+    {
+        logging::die("IMD transmission rate must be at least 1 step.");
     }
 #endif // MDDRIVER_SUPPORT
 

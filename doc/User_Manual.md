@@ -130,6 +130,27 @@ You can simplify the command by creating an alias and run the image with a short
 Or reuse the Makefile in the example directory:  
 Copy the file `example/base.mk` and some of other Makefile in example subdir as template for your own system (see README in example directory for usage)
 
+#### Frame rate on large systems: `--imd-rate`
+
+Every simulation step, BioSpring copies the whole system state into the buffer
+the IMD thread sends. On a large system that copy costs more than the physics:
+measured on 034.VirusCA (37200 particles), 61.55 ms per step of which the copy
+is most, and on a 17338-particle system the same binary runs at 14.17 ms per
+step against 6.37 ms with MDDriver compiled out.
+
+No viewer redraws once per simulation step, so ask for fewer frames:
+
+	biospring -s model.nc -c param.msp --wait --port 8888 --imd-rate 4
+
+sends one frame every 4 steps. On 034.VirusCA that is 43.10 ms per step instead
+of 61.55, and `--imd-rate 10` gives 37.44. The default is 1, which behaves
+exactly as before.
+
+A connected client may set the rate itself through the IMD protocol
+(`IMD_TRATE`); that overrides `--imd-rate` for as long as it is connected.
+Forces and events coming *from* the client are still read every loop, so pulling
+stays as responsive as at rate 1 whatever the frame rate.
+
 #### Lauching VMD
 Start the VMD program (double click on its icon or launch from the command line).
 
