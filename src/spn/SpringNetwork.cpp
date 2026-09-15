@@ -234,6 +234,18 @@ void SpringNetwork::resetGhostAxisSums()
 // Run once, lazily, because it has to happen after every ghost is registered
 // AND every dihedral spring is built, and no single construction path
 // guarantees an ordering of those two.
+// Linear search is fine: this runs at build time, and the number of distinct
+// axes is small next to the number of springs hanging off them (example 072:
+// 6484 ghosts, a few hundred axes).
+unsigned SpringNetwork::findOrCreateGhostAxis(unsigned anchorBIndex, unsigned anchorCIndex)
+{
+    for (unsigned i = 0; i < _ghostaxes.size(); ++i)
+        if (_ghostaxes[i].anchorBIndex == anchorBIndex && _ghostaxes[i].anchorCIndex == anchorCIndex)
+            return i;
+    _ghostaxes.push_back(GhostAxis{anchorBIndex, anchorCIndex, Vector3f(), Vector3f(), Vector3f(), Vector3f()});
+    return static_cast<unsigned>(_ghostaxes.size() - 1);
+}
+
 void SpringNetwork::bindDihedralEndpointsToAxes()
 {
     if (_dihedralAxesBound)
@@ -263,9 +275,20 @@ void SpringNetwork::bindDihedralEndpointsToAxes()
         _dihedralAxis[family].assign(springs.size(), NO_AXIS);
         for (size_t i = 0; i < springs.size(); ++i)
         {
-            const unsigned a1 = ghost_axis(springs[i].getParticle1());
-            const unsigned a2 = ghost_axis(springs[i].getParticle2());
-            const unsigned a = a1 != NO_AXIS ? a1 : a2;
+            // The spring's own axis first, when it carries one: a spring
+            // between two real substituents has no ghost to ask, and asking
+            // its endpoints would answer for some other torsion they happen
+            // to serve. Ring springs carry none and keep answering through
+            // their ghost, exactly as before.
+            unsigned a = NO_AXIS;
+            if (springs[i].hasAxis())
+                a = findOrCreateGhostAxis(springs[i].getAxisB(), springs[i].getAxisC());
+            if (a == NO_AXIS)
+            {
+                const unsigned a1 = ghost_axis(springs[i].getParticle1());
+                const unsigned a2 = ghost_axis(springs[i].getParticle2());
+                a = a1 != NO_AXIS ? a1 : a2;
+            }
             _dihedralAxis[family][i] = a;
             if (a == NO_AXIS)
                 ++unresolved;
@@ -750,11 +773,12 @@ static void addDihedralSpringTo(std::vector<Spring> & collection, std::vector<Pa
 }
 
 void SpringNetwork::addDihedralSpring(unsigned family, unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                                      float dcOffset)
+                                      float dcOffset, unsigned axisB, unsigned axisC)
 {
     if (family >= DIHEDRAL_FAMILY_COUNT)
         throw std::out_of_range("SpringNetwork::addDihedralSpring: dihedral family index out of range");
     addDihedralSpringTo(_dihedralsprings[family], _particles, id1, id2, equilibrium, stiffness, dcOffset);
+    _dihedralsprings[family].back().setAxis(axisB, axisC);
 }
 
 void SpringNetwork::updateSpringState(unsigned id, bool isStatic) {
@@ -821,12 +845,7 @@ unsigned SpringNetwork::addGhostParticle(unsigned placementValue, unsigned ancho
     // axis's accumulator (see GhostAxis). Linear search is fine: this runs
     // once at build time, and the number of distinct axes is small next to
     // the number of ghosts (example 072: 6484 ghosts, a few hundred axes).
-    unsigned axisIndex = 0;
-    for (; axisIndex < _ghostaxes.size(); ++axisIndex)
-        if (_ghostaxes[axisIndex].anchorBIndex == anchorBIndex && _ghostaxes[axisIndex].anchorCIndex == anchorCIndex)
-            break;
-    if (axisIndex == _ghostaxes.size())
-        _ghostaxes.push_back(GhostAxis{anchorBIndex, anchorCIndex, Vector3f(), Vector3f(), Vector3f(), Vector3f()});
+    const unsigned axisIndex = findOrCreateGhostAxis(anchorBIndex, anchorCIndex);
 
     // The tangential filter needs to reach an endpoint's axis from the
     // endpoint alone (see tangentialAboutAxis), so record it per particle

@@ -20,11 +20,19 @@ void NetCDFReader::addDihedralSpringsToSpn(unsigned family)
 {
     const DihedralSpringBuffer & buffer = _dihedralbuffers[family];
     for (size_t i = 0; i < buffer.number_of_springs; ++i)
-        _topology
-            .add_dihedral_spring(family, _topology.get_particle(static_cast<size_t>(buffer.springs[i][0])),
-                                 _topology.get_particle(static_cast<size_t>(buffer.springs[i][1])),
-                                 buffer.springsequilibriums[i], buffer.springsstiffnesses[i])
-            .set_dc_offset(buffer.springsdcoffsets[i]);
+    {
+        topology::Spring & spring =
+            _topology
+                .add_dihedral_spring(family, _topology.get_particle(static_cast<size_t>(buffer.springs[i][0])),
+                                     _topology.get_particle(static_cast<size_t>(buffer.springs[i][1])),
+                                     buffer.springsequilibriums[i], buffer.springsstiffnesses[i])
+                .set_dc_offset(buffer.springsdcoffsets[i]);
+        // -1 on either side means the spring names no axis; the .nc stores
+        // particle indices, which are the topology's own uids here.
+        if (buffer.springsaxis != nullptr && buffer.springsaxis[i][0] >= 0 && buffer.springsaxis[i][1] >= 0)
+            spring.set_axis(_topology.get_particle(static_cast<size_t>(buffer.springsaxis[i][0])).unique_id(),
+                            _topology.get_particle(static_cast<size_t>(buffer.springsaxis[i][1])).unique_id());
+    }
 }
 
 void NetCDFReader::addGhostParticlesToSpn()
@@ -298,6 +306,16 @@ void NetCDFReader::readDihedralSpringGroup(const char * prefix, DihedralSpringBu
         checkNDims(data, 1);
         checkDim(data, 0, n);
         data.getVar(buffer.springsdcoffsets);
+    }
+
+    // Optional for the same reason, and with the same consequence as before
+    // the axis existed: a spring with no axis is applied unfiltered.
+    data = getNcVar((std::string(prefix) + "springsaxis").c_str(), false);
+    if (not data.isNull())
+    {
+        checkNDims(data, 2);
+        checkDim(data, 0, n);
+        data.getVar(buffer.springsaxis);
     }
 }
 

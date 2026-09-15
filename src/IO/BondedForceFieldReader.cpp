@@ -72,9 +72,12 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
 
         if (type == "DIHEDRAL")
     {
-        if (tokens.size() != 9)
+        // 11 tokens when the entry names its own axis, 9 when it does not:
+        // every file written before the axis existed stays valid, and so does
+        // every entry whose spring has a ghost at one end to ask instead.
+        if (tokens.size() != 9 && tokens.size() != 11)
             logging::die("BondedForceFieldReader: line %d: DIHEDRAL expects 9 tokens (type name resname family "
-                         "atom_ref atom_rotant d0 k dc_offset), found %d",
+                         "atom_ref atom_rotant d0 k dc_offset), or 11 with its axis (... axis_b axis_c), found %d",
                          static_cast<int>(line_id), static_cast<int>(tokens.size()));
 
         DihedralEntry entry;
@@ -107,6 +110,11 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         if (!utils::string::from_string(entry.dc_offset, tokens[8]))
             logging::die("BondedForceFieldReader: line %d: invalid dc_offset '%s'", static_cast<int>(line_id),
                          tokens[8].c_str());
+        if (tokens.size() == 11)
+        {
+            entry.axis_b = tokens[9];
+            entry.axis_c = tokens[10];
+        }
         _dihedral.push_back(entry);
     }
     else if (type == "GHOSTPARTICLE")
@@ -349,7 +357,8 @@ unsigned BondedForceFieldReader::_create_ghost_particles(topology::Topology & to
 void BondedForceFieldReader::_add_or_combine_dihedral_spring(topology::SpringCollection & collection,
                                                               topology::Particle & p1, topology::Particle & p2,
                                                               double equilibrium, double stiffness,
-                                                              double dc_offset) const
+                                                              double dc_offset, topology::Particle * axis_b,
+                                                              topology::Particle * axis_c) const
 {
     // Two different Fourier-term ghost-spring groups for the same axis may
     // legitimately pick the same real substituent pair (see
@@ -376,7 +385,10 @@ void BondedForceFieldReader::_add_or_combine_dihedral_spring(topology::SpringCol
 
     if (existing == nullptr)
     {
-        collection.add_spring(p1, p2, equilibrium, stiffness).set_dc_offset(dc_offset);
+        topology::Spring & added = collection.add_spring(p1, p2, equilibrium, stiffness);
+        added.set_dc_offset(dc_offset);
+        if (axis_b != nullptr && axis_c != nullptr)
+            added.set_axis(axis_b->unique_id(), axis_c->unique_id());
     }
     else
     {
@@ -386,6 +398,11 @@ void BondedForceFieldReader::_add_or_combine_dihedral_spring(topology::SpringCol
         existing->set_equilibrium(combined_equilibrium);
         existing->set_stiffness(k1 + k2);
         existing->set_dc_offset(existing->dc_offset() + dc_offset);
+        // Both entries describe the same real pair, so they turn the same
+        // bond: the first axis seen is the axis, and a later one only fills a
+        // gap it left.
+        if (!existing->has_axis() && axis_b != nullptr && axis_c != nullptr)
+            existing->set_axis(axis_b->unique_id(), axis_c->unique_id());
     }
 }
 
@@ -483,8 +500,19 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             // _retune_or_add_spring -- combining in place if another
             // Fourier-term group already added a spring for this exact pair
             // (see _add_or_combine_dihedral_spring).
+            // The axis, when the entry names one, resolved exactly like any
+            // other atom so "+N"/"-C" work here too. A spring whose axis atom
+            // is missing (a chain terminus) keeps no axis rather than a wrong
+            // one: unfiltered is a degraded model, a wrong axis is a broken one.
+            topology::Particle * p_axis_b = nullptr;
+            topology::Particle * p_axis_c = nullptr;
+            if (!entry.axis_b.empty() && !entry.axis_c.empty())
+            {
+                p_axis_b = _resolve_atom(entry.axis_b, residues, index, topology, translation);
+                p_axis_c = _resolve_atom(entry.axis_c, residues, index, topology, translation);
+            }
             _add_or_combine_dihedral_spring(topology.dihedral_springs(entry.family), *p_ref, *p_rot, entry.d0, entry.k,
-                                            entry.dc_offset);
+                                            entry.dc_offset, p_axis_b, p_axis_c);
             nb_dihedral_applied++;
         }
     }

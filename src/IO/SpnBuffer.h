@@ -108,6 +108,11 @@ struct DihedralSpringBuffer
     // far in a version of the .bi.ff written before the correction existed
     // (old .nc files stay readable, see readDihedralSpringGroup).
     float * springsdcoffsets;
+    // The two real atoms of the torsion axis each spring turns, or -1 when it
+    // names none (see spn::Spring::hasAxis). A ring spring leaves this unset,
+    // its ghost being witness enough; a spring between two real substituents
+    // has to carry it, or the tangential filter has no axis to project onto.
+    int (*springsaxis)[2];
 
     ~DihedralSpringBuffer() { clear(); }
 
@@ -120,15 +125,17 @@ struct DihedralSpringBuffer
         delete[] springsstiffnesses;
         delete[] springsequilibriums;
         delete[] springsdcoffsets;
+        delete[] springsaxis;
         springs = nullptr;
         springsstiffnesses = nullptr;
         springsequilibriums = nullptr;
         springsdcoffsets = nullptr;
+        springsaxis = nullptr;
         number_of_springs = 0;
     }
 
     DihedralSpringBuffer()
-        : number_of_springs(0), springs(0), springsstiffnesses(0), springsequilibriums(0), springsdcoffsets(0)
+        : number_of_springs(0), springs(0), springsstiffnesses(0), springsequilibriums(0), springsdcoffsets(0), springsaxis(0)
     {
     }
 
@@ -144,6 +151,9 @@ struct DihedralSpringBuffer
             springsstiffnesses = new float[nSprings]{};
             springsequilibriums = new float[nSprings]{};
             springsdcoffsets = new float[nSprings]{};
+            springsaxis = new int[nSprings][2];
+            for (size_t i = 0; i < nSprings; ++i)
+                springsaxis[i][0] = springsaxis[i][1] = -1;
         }
     }
 
@@ -159,6 +169,8 @@ struct DihedralSpringBuffer
             springsequilibriums[i] = s.getEquilibrium();
             springsstiffnesses[i] = s.getStiffness();
             springsdcoffsets[i] = s.getDcOffset();
+            springsaxis[i][0] = s.hasAxis() ? static_cast<int>(s.getAxisB()) : -1;
+            springsaxis[i][1] = s.hasAxis() ? static_cast<int>(s.getAxisC()) : -1;
         }
     }
 };

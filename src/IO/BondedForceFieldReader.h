@@ -53,6 +53,17 @@ struct DihedralEntry
     // dihedral energy (SpringNetwork::getDihedralEnergy) -- never affects
     // forces, a constant has no gradient.
     double dc_offset;
+    // The torsion's own axis, named the same way as any other atom (bare, or
+    // +/- for the next/previous residue). Optional, and empty when the entry
+    // omits it.
+    //
+    // A ghost knows its axis because it was placed about it, so a spring with a
+    // ghost at either end can be asked. A spring between two REAL substituents
+    // cannot -- nothing about the pair says which bond it turns -- and the
+    // tangential filter needs that bond. Same obstacle, same answer, as the
+    // DIHEDRALAXIS record: the .nc knows springs rather than bonds, so the
+    // bond has to be written down.
+    std::string axis_b, axis_c;
 };
 
 // One massless virtual-site ("GHOSTPARTICLE" line): a ghost particle that
@@ -249,7 +260,8 @@ class BondedForceFieldReader : public ReaderBase
     // contributions are additive, see topology::Spring::_dc_offset).
     void _add_or_combine_dihedral_spring(topology::SpringCollection & collection, topology::Particle & p1,
                                          topology::Particle & p2, double equilibrium, double stiffness,
-                                         double dc_offset) const;
+                                         double dc_offset, topology::Particle * axis_b = nullptr,
+                                         topology::Particle * axis_c = nullptr) const;
 };
 
 } // namespace rigidbodygroup

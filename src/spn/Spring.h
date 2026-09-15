@@ -53,6 +53,17 @@ class Spring
     void setDcOffset(float dcOffset) { _dcOffset = dcOffset; }
     float getDcOffset() const { return _dcOffset; }
 
+    // The two real atoms of the torsion axis this dihedral spring turns, or
+    // NO_AXIS_ATOM when it names none. A ring spring need not: its ghost was
+    // placed about the axis and can be asked. A spring between two real
+    // substituents has no such witness, and the tangential filter needs the
+    // axis to project onto.
+    static constexpr unsigned NO_AXIS_ATOM = static_cast<unsigned>(-1);
+    void setAxis(unsigned b, unsigned c) { _axisB = b; _axisC = c; }
+    unsigned getAxisB() const { return _axisB; }
+    unsigned getAxisC() const { return _axisC; }
+    bool hasAxis() const { return _axisB != NO_AXIS_ATOM && _axisC != NO_AXIS_ATOM; }
+
     void computeEnergy(const biospring::forcefield::ForceField & ff);
     void computeLength();
 
@@ -80,6 +91,8 @@ class Spring
     float _length;
     float _energy;
     float _dcOffset = 0.0f;
+    unsigned _axisB = NO_AXIS_ATOM;
+    unsigned _axisC = NO_AXIS_ATOM;
     unsigned _id;
 };
 

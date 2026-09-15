@@ -42,6 +42,9 @@ static void writeDihedralSpringGroupBinary(NcFile * nc, const std::string & pref
     NcVar dcoffset = nc->addVar(prefix + "springsdcoffset", ncFloat, ndim);
     dcoffset.putAtt("long_name", "Dihedral ghost spring's share of its axis's dihedral-energy correction");
 
+    NcVar axis = nc->addVar(prefix + "springsaxis", ncInt, ssdim);
+    axis.putAtt("long_name", "Dihedral spring's torsion axis, 2 particle ids, -1 when the spring names none");
+
     DihedralSpringBuffer buffer(n);
     buffer.bufferize(source);
 
@@ -49,6 +52,7 @@ static void writeDihedralSpringGroupBinary(NcFile * nc, const std::string & pref
     stiffness.putVar(buffer.springsstiffnesses);
     equilibrium.putVar(buffer.springsequilibriums);
     dcoffset.putVar(buffer.springsdcoffsets);
+    axis.putVar(buffer.springsaxis);
 }
 
 // CDL (text NetCDF) equivalents of the above, split the same way the real
@@ -79,6 +83,7 @@ static void writeDihedralVariablesCDL(std::ostream & os, const std::string & pre
        << "springsequilibrium:long_name = \"Dihedral ghost spring distance equilibrium\";" << std::endl;
     os << std::endl;
     os << "\tfloat   " << prefix << "springsdcoffset(" << prefix << "_number); " << std::endl;
+    os << "\tint     " << prefix << "springsaxis(" << prefix << "_number, dim2); " << std::endl;
     os << "\t        " << prefix
        << "springsdcoffset:long_name = \"Dihedral ghost spring's share of its axis's dihedral-energy correction\";"
        << std::endl;
@@ -114,6 +119,14 @@ static void writeDihedralDataCDL(std::ostream & os, const std::string & prefix,
     for (size_t i = 0; i < n; i++)
     {
         os << source[i].getDcOffset();
+        os << (i == n - 1 ? ";" : ",") << std::endl;
+    }
+    os << "\t" << prefix << "springsaxis = " << std::endl;
+    for (size_t i = 0; i < n; i++)
+    {
+        const bool has = source[i].hasAxis();
+        os << (has ? static_cast<int>(source[i].getAxisB()) : -1) << ", "
+           << (has ? static_cast<int>(source[i].getAxisC()) : -1);
         os << (i == n - 1 ? ";" : ",") << std::endl;
     }
 }

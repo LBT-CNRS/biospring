@@ -257,7 +257,8 @@ class SpringNetwork
     // modelling decision (matching AMBER's scaled 1-4 nonbonded convention)
     // that this feature does not make. See doc/BondedForceFieldSprings.md.
     void addDihedralSpring(unsigned family, unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                           float dcOffset = 0.0f);
+                           float dcOffset = 0.0f, unsigned axisB = Spring::NO_AXIS_ATOM,
+                           unsigned axisC = Spring::NO_AXIS_ATOM);
 
     void updateSpringState(unsigned id, bool isStatic);
     void addStaticSpring(unsigned id) { _staticsprings.push_back(id); }
@@ -441,6 +442,11 @@ class SpringNetwork
 
     // Gives a dihedral endpoint that is a real atom the axis its ghost
     // partner knows. Idempotent, run lazily on the first dihedral step.
+    // The accumulator for one torsion axis (B, C), created on first use. Both
+    // a ghost being registered and a spring naming its own axis land here, so
+    // they share one entry per real bond rather than one per mechanism.
+    unsigned findOrCreateGhostAxis(unsigned anchorBIndex, unsigned anchorCIndex);
+
     void bindDihedralEndpointsToAxes();
     bool _dihedralAxesBound = false;
 

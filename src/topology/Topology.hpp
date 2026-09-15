@@ -519,7 +519,23 @@ class Topology
             {
                 size_t i = _particles.by_uid().at(source.first().unique_id());
                 size_t j = _particles.by_uid().at(source.second().unique_id());
-                spn.addDihedralSpring(family, i, j, source.equilibrium(), source.stiffness(), source.dc_offset());
+                // The axis travels as network indices, not topology uids: the
+                // spring's own endpoints are translated the same way just above.
+                unsigned ab = spn::Spring::NO_AXIS_ATOM;
+                unsigned ac = spn::Spring::NO_AXIS_ATOM;
+                if (source.has_axis())
+                {
+                    const auto & by_uid = _particles.by_uid();
+                    const auto it_b = by_uid.find(source.axis_b());
+                    const auto it_c = by_uid.find(source.axis_c());
+                    if (it_b != by_uid.end() && it_c != by_uid.end())
+                    {
+                        ab = static_cast<unsigned>(it_b->second);
+                        ac = static_cast<unsigned>(it_c->second);
+                    }
+                }
+                spn.addDihedralSpring(family, i, j, source.equilibrium(), source.stiffness(), source.dc_offset(), ab,
+                                      ac);
             }
         }
     }
