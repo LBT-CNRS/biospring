@@ -126,6 +126,77 @@ for resname in RESIDUES:
                     records.append(f"TORSION\t{resname}\t{fam}\t" + "\t".join(names) + f"\t{table_of[tkey]}")
                     per_family[fam] += 1
 
+# ---- impropers -------------------------------------------------------------
+#
+# Same convention as the protein side, and it is the one thing here that cannot
+# be guessed: the FIRST field of the entry is the central atom, and the torsion
+# is emitted as (2, 3, 1, 4) -- central third. Nucleic files key their
+# parameters by type rather than by class, which atoms_of already returns.
+improper_entries = []
+for _e in tables_ff.root.find("PeriodicTorsionForce").findall("Improper"):
+    key = tuple((_e.get(f"type{i}") if tables_ff.keyed_by_type else _e.get(f"class{i}")) or "" for i in (1, 2, 3, 4))
+    terms, i = [], 1
+    while _e.get(f"periodicity{i}") is not None:
+        k = float(_e.get(f"k{i}"))
+        if k != 0.0:
+            terms.append((int(_e.get(f"periodicity{i}")), k, float(_e.get(f"phase{i}"))))
+        i += 1
+    if terms:
+        improper_entries.append((key, terms, sum(1 for c in key if c == "")))
+
+import itertools
+
+for resname in RESIDUES:
+    classes = tables_ff.atoms_of(resname)
+    internal, _ext = tables_ff.bonds_of(resname)
+    if not classes:
+        continue
+    atoms, adj = {}, defaultdict(list)
+    for off in (-1, 0, 1):
+        for n, c in classes.items():
+            atoms[(off, n)] = c
+        for a, b in internal:
+            adj[(off, a)].append((off, b))
+            adj[(off, b)].append((off, a))
+    for off in (-1, 0):
+        adj[(off, "O3'")].append((off + 1, "P"))
+        adj[(off + 1, "P")].append((off, "O3'"))
+
+    def spell(k):
+        off, n = k
+        return ("+" if off > 0 else "-") * abs(off) + n
+
+    for hub in [(0, n) for n in classes]:
+        subs = adj[hub]
+        if len(subs) != 3:
+            continue
+        best = None
+        for (key, terms, nwild) in improper_entries:
+            if key[0] not in ("", atoms[hub]):
+                continue
+            for perm in itertools.permutations(subs):
+                pc = [atoms[k] for k in perm]
+                if all(key[j] in ("", pc[k]) for j, k in ((1, 0), (2, 1), (3, 2))):
+                    if best is None or nwild < best[0]:
+                        best = (nwild, perm, terms)
+                    break
+        if best is None:
+            continue
+        _, perm, terms = best
+        names = tuple(spell(k) for k in (perm[0], perm[1], hub, perm[2]))
+        key2 = (resname, "IMP") + names
+        if key2 in seen:
+            continue
+        seen.add(key2)
+        tkey = tuple(sorted((int(n), round(float(k), 6), round(float(p), 6)) for (n, k, p) in terms))
+        if tkey not in table_of:
+            table_of[tkey] = len(tables)
+            tables.append(tabulate(terms))
+        # Impropers share the PLANARITY family with the protein side: it is
+        # what the enum calls an improper, whatever the chemistry.
+        records.append(f"TORSION\t{resname}\tPLANARITY\t" + "\t".join(names) + f"\t{table_of[tkey]}")
+        per_family["PLANARITY"] += 1
+
 out = [
     f"# AMBER's {KIND} torsion terms, tabulated, one record per four-atom",
     "# quadruplet enumerated from the residue topology.",
