@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdio.h>
+#include <set>
 #include <vector>
 
 #include <iostream>
@@ -456,6 +457,45 @@ class SpringNetwork
     // have in the loaded structure -- the reference the torsional evaluation
     // puts them back to. Run from setup(), after the axes are known.
     void _setupTorsionalFrames();
+
+    // One AMBER torsion, applied as a couple about its own axis. atoms are
+    // (substituent, axis B, axis C, substituent); amplitude is V_n in kJ/mol
+    // for n = 1, 2, 3 and phase the matching gamma in radians, zero amplitude
+    // meaning the harmonic is absent.
+    struct Torsion
+    {
+        unsigned atoms[4];
+        unsigned family;
+        unsigned axisIndex;
+        unsigned table;
+    };
+    std::vector<Torsion> _torsions;
+    // Quadruplets already taken, so a torsion written under both of the
+    // residues it spans is applied once.
+    std::set<std::array<unsigned, 4>> _seenTorsions;
+
+    // Energy and axial torque of one parameter set, tabulated so the force
+    // path carries no trigonometry at all.
+    //
+    // Indexed by the ANGLE, uniformly over [-pi, pi], so the resolution is even
+    // everywhere -- indexing by cos(phi) would save the atan2 but crowd the
+    // bins near 0 and 180 degrees, exactly where several torsions put their
+    // wells. One atan2 per torsion replaces three cosines and three sines.
+    //
+    // Torsions sharing a parameter set share a table: 160 torsion types in the
+    // protein force field collapse to a handful.
+    struct TorsionTable
+    {
+        // BINS intervals over phi in [-pi, pi], so BINS + 1 samples.
+        unsigned bins = 0;
+        std::vector<float> energy; // kJ.mol-1
+        std::vector<float> torque; // kJ.mol-1.rad-1, = -dV/dphi
+    };
+    std::vector<TorsionTable> _torsiontables;
+
+
+    void _setupTorsions();
+    float computeTorsionForces();
 
     void bindDihedralEndpointsToAxes();
     bool _dihedralAxesBound = false;

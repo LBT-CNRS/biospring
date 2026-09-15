@@ -24,7 +24,9 @@
 #endif
 
 #include <algorithm>
+#include <sstream>
 #include <map>
+#include <set>
 #include <utility>
 #include <iostream>
 #include <limits>
@@ -46,6 +48,12 @@ namespace biospring
 {
 namespace spn
 {
+
+// The .bi.ff spelling of each family, in DihedralFamilyIndex order. The same
+// list BondedForceFieldReader keeps; duplicated rather than shared because that
+// reader is a build-time component and this is the runtime.
+static constexpr const char * DIHEDRAL_FAMILY_KEYWORDS_RT[SpringNetwork::DIHEDRAL_FAMILY_COUNT] = {
+    "PHI", "PSI", "OMEGA", "SIDECHAIN", "PLANARITY", "NUCLEIC_BACKBONE", "NUCLEIC_CHI", "NUCLEIC_SUGAR"};
 
 unsigned SpringNetwork::_currentstructid = 0;
 
@@ -441,7 +449,7 @@ void SpringNetwork::computeDihedralForces()
                            ? &_dihedralAxis[family]
                            : nullptr);
 
-    _energies.dihedral = dihedralenergy;
+    _energies.dihedral = dihedralenergy + computeTorsionForces();
 }
 
 // Calculate forces that apply on dynamic particles.
@@ -1168,6 +1176,227 @@ void SpringNetwork::_setupTorsionalFrames()
                   framed);
 }
 
+// Reads a TORSION force field and resolves its four atoms against the loaded
+// network, by residue and name, "+"/"-" naming the next/previous residue just
+// as everywhere else. Resolution is by residue index within a chain, so a
+// torsion missing an atom at a terminus is skipped rather than mis-bound.
+void SpringNetwork::_setupTorsions()
+{
+    const std::string & path = _config.dihedral.torsionfile;
+    if (path.empty())
+        return;
+
+    // residue id -> (atom name -> particle index). Built once.
+    // The reducer renames every atom to a grain name -- the residue's
+    // one-letter code followed by the atom name, MET's N becoming "MN" and
+    // GLN's "QN" -- so both spellings are indexed and either resolves. The
+    // build-time reader never meets this: it works on the topology before the
+    // reduction.
+    std::map<unsigned, std::map<std::string, unsigned>> byResidue;
+    std::map<unsigned, std::string> resName;
+    for (unsigned i = 0; i < getNumberOfParticles(); ++i)
+    {
+        const Particle & p = getParticle(i);
+        const std::string & n = p.getName();
+        byResidue[p.getResId()][n] = i;
+        if (n.size() > 1)
+            byResidue[p.getResId()].emplace(n.substr(1), i);
+        resName[p.getResId()] = p.getResName();
+    }
+
+    std::ifstream in(path);
+    if (!in)
+        logging::die("SpringNetwork: cannot open torsion file '%s'", path.c_str());
+
+    auto resolve = [&](unsigned resid, const std::string & name, unsigned & out) {
+        int offset = 0;
+        std::string bare = name;
+        if (!name.empty() && (name[0] == '+' || name[0] == '-'))
+        {
+            offset = name[0] == '+' ? 1 : -1;
+            bare = name.substr(1);
+        }
+        const auto r = byResidue.find(static_cast<unsigned>(static_cast<int>(resid) + offset));
+        if (r == byResidue.end())
+            return false;
+        const auto a = r->second.find(bare);
+        if (a == r->second.end())
+            return false;
+        out = a->second;
+        return true;
+    };
+
+    unsigned applied = 0, skipped = 0, lineno = 0;
+    std::string line;
+    while (std::getline(in, line))
+    {
+        ++lineno;
+        if (line.empty() || line[0] == '#')
+            continue;
+        std::istringstream ss(line);
+        std::string kind;
+        if (!(ss >> kind))
+            continue;
+
+        if (kind == "TORSIONTABLE")
+        {
+            unsigned id = 0, bins = 0;
+            if (!(ss >> id >> bins) || bins == 0)
+                logging::die("SpringNetwork: torsion file line %u: malformed TORSIONTABLE", lineno);
+            if (_torsiontables.size() <= id)
+                _torsiontables.resize(id + 1);
+            TorsionTable & tab = _torsiontables[id];
+            tab.bins = bins;
+            tab.energy.resize(bins + 1);
+            tab.torque.resize(bins + 1);
+            for (unsigned b = 0; b <= bins; ++b)
+                if (!(ss >> tab.energy[b] >> tab.torque[b]))
+                    logging::die("SpringNetwork: torsion file line %u: TORSIONTABLE %u is short at sample %u",
+                                 lineno, id, b);
+            continue;
+        }
+        if (kind != "TORSION")
+            continue;
+
+        std::string resname, family, names[4];
+        unsigned table = 0;
+        if (!(ss >> resname >> family >> names[0] >> names[1] >> names[2] >> names[3] >> table))
+            logging::die("SpringNetwork: torsion file line %u is malformed", lineno);
+        if (table >= _torsiontables.size() || _torsiontables[table].bins == 0)
+            logging::die("SpringNetwork: torsion file line %u refers to table %u, which was never given", lineno,
+                         table);
+
+        unsigned fam = DIHEDRAL_FAMILY_COUNT;
+        for (unsigned f = 0; f < DIHEDRAL_FAMILY_COUNT; ++f)
+            if (family == DIHEDRAL_FAMILY_KEYWORDS_RT[f])
+                fam = f;
+        if (fam == DIHEDRAL_FAMILY_COUNT)
+            logging::die("SpringNetwork: torsion file line %u names an unknown family '%s'", lineno, family.c_str());
+
+        for (const auto & r : resName)
+        {
+            if (r.second != resname)
+                continue;
+            Torsion t;
+            t.family = fam;
+            t.table = table;
+            bool ok = true;
+            for (unsigned k = 0; k < 4 && ok; ++k)
+                ok = resolve(r.first, names[k], t.atoms[k]);
+            if (!ok)
+            {
+                ++skipped;
+                continue;
+            }
+            // A torsion spanning two residues is written under each of them,
+            // so the same four atoms can arrive twice; applying it twice would
+            // double its torque. Keyed on the quadruplet itself, either way
+            // round, since a torsion and its reverse are one torsion.
+            std::array<unsigned, 4> q{t.atoms[0], t.atoms[1], t.atoms[2], t.atoms[3]};
+            const std::array<unsigned, 4> rev{t.atoms[3], t.atoms[2], t.atoms[1], t.atoms[0]};
+            if (rev < q)
+                q = rev;
+            if (!_seenTorsions.insert(q).second)
+                continue;
+
+            t.axisIndex = findOrCreateGhostAxis(t.atoms[1], t.atoms[2]);
+            _torsions.push_back(t);
+            ++applied;
+        }
+    }
+    logging::info("SpringNetwork: %u torsion(s) applied as a couple about their own axis, from %zu "
+                  "tabulated parameter set(s) in '%s' (%u skipped for a missing atom); no ring, no "
+                  "ghost, no spring.",
+                  applied, _torsiontables.size(), path.c_str(), skipped);
+}
+
+// AMBER's own V(phi), applied as a couple.
+//
+// V(phi) = sum_n V_n * (1 + cos(n*phi - gamma_n)), so the torque about the axis
+// is -dV/dphi = sum_n n*V_n*sin(n*phi - gamma_n). A rigid side answers to that
+// axial torque and to nothing else, which is why handing it to one atom per
+// side is exact here rather than a distribution choice: the mesh has already
+// removed every other freedom. The reaction on the two axis atoms is left to
+// the same closed-form pass that serves the rings.
+float SpringNetwork::computeTorsionForces()
+{
+    if (_torsions.empty())
+        return 0.0f;
+
+    const bool enabled[DIHEDRAL_FAMILY_COUNT] = {
+        isDihedralPhiEnabled(),        isDihedralPsiEnabled(),           isDihedralOmegaEnabled(),
+        isDihedralChiEnabled(),        isDihedralPlanarityEnabled(),     isDihedralNucleicBackboneEnabled(),
+        isDihedralNucleicChiEnabled(), isDihedralNucleicSugarEnabled()};
+
+    const float PI = static_cast<float>(M_PI);
+    const float unit = _ff->getSpringScale() * static_cast<float>(forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+    float energy = 0.0f;
+
+    for (const Torsion & t : _torsions)
+    {
+        if (!enabled[t.family])
+            continue;
+
+        Particle & p1 = getParticle(t.atoms[0]);
+        Particle & p2 = getParticle(t.atoms[1]);
+        Particle & p3 = getParticle(t.atoms[2]);
+        Particle & p4 = getParticle(t.atoms[3]);
+
+        const Vector3f b1 = p2.getPosition() - p1.getPosition();
+        const Vector3f b2 = p3.getPosition() - p2.getPosition();
+        const Vector3f b3 = p4.getPosition() - p3.getPosition();
+
+        const Vector3f n1 = b1 ^ b2;
+        const Vector3f n2 = b2 ^ b3;
+        const float n1sq = n1.dot(n1);
+        const float n2sq = n2.dot(n2);
+        const float b2len = b2.norm();
+        if (n1sq < 1e-12f || n2sq < 1e-12f || b2len < 1e-6f)
+            continue; // three atoms in line: the dihedral is not defined
+
+        const float phi = std::atan2(b2len * b1.dot(n2), n1.dot(n2));
+
+        // One atan2, one index, two lerps: the harmonics were summed once,
+        // offline, and the table holds both what the energy is worth and how
+        // hard it pulls.
+        const TorsionTable & tab = _torsiontables[t.table];
+        const float x = (phi + PI) / (2.0f * PI) * static_cast<float>(tab.bins);
+        const unsigned b = std::min(static_cast<unsigned>(std::max(x, 0.0f)), tab.bins - 1);
+        const float f = x - static_cast<float>(b);
+        energy += tab.energy[b] + f * (tab.energy[b + 1] - tab.energy[b]);
+        const float torque = tab.torque[b] + f * (tab.torque[b + 1] - tab.torque[b]);
+        if (torque == 0.0f)
+            continue;
+
+        // The exact gradient of phi, on all four atoms. A couple on the two
+        // outer ones carries the same AXIAL torque and would be exact if the
+        // two sides were rigid -- the mesh at 500 kJ.mol-1.A-2 is not, and the
+        // difference measurably displaced the backbone by 3 degrees. This
+        // costs a handful of cross products, needs no reaction on the axis and
+        // conserves momentum by construction: the four forces sum to zero
+        // identically, since F2 and F3 are built from F1 and F4.
+        const float scale = unit * torque;
+        const Vector3f F1 = n1 * (-scale * b2len / n1sq);
+        const Vector3f F4 = n2 * (scale * b2len / n2sq);
+        const float inv = 1.0f / (b2len * b2len);
+        const float c1 = b1.dot(b2) * inv;
+        const float c3 = b3.dot(b2) * inv;
+        // Signs matter here and are not guessable: the decomposition is written
+        // in terms of r_ij = r_i - r_j and r_kl = r_k - r_l, which are the
+        // NEGATIVES of b1 and b3 as spelled above. Checked against a finite
+        // difference of phi itself -- 2.7e-10 -- after the other sign
+        // convention passed the sum-to-zero test while being wrong by 5 rad/A.
+        const Vector3f F2 = F1 * (-(c1 + 1.0f)) + F4 * c3;
+        const Vector3f F3 = F1 * c1 - F4 * (c3 + 1.0f);
+
+        p1.addForce(F1);
+        p2.addForce(F2);
+        p3.addForce(F3);
+        p4.addForce(F4);
+    }
+    return energy;
+}
+
 void SpringNetwork::_setupGhostSprings()
 {
     if (!_config.dihedral.ghostsprings || _ghostparticles.empty())
@@ -1412,6 +1641,7 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupTrajectories();
     // After everything else: it converts particles and adds springs, so it
     // needs the network whole and the configuration already stored.
+    _setupTorsions();
     _setupTorsionalFrames();
     _setupGhostSprings();
     _neighborSearchesDirty = false;
