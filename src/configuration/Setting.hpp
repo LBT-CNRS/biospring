@@ -203,15 +203,6 @@ class DihedralSetting : public SettingBase
     // the other off.
     bool torsionalonly;
 
-    // Path to a TORSION force field, applied INSTEAD of the dihedral springs.
-    //
-    // The mesh leaves a torsion as the only freedom its two sides have, and a
-    // rigid side answers to nothing but the axial torque -- so AMBER's own
-    // V(phi) can be used directly and its torque applied as a couple on one
-    // atom per side. That is exact for a rigid side, not an approximation, and
-    // it needs no ring, no ghost and no spring: one dihedral angle, one
-    // analytic sum, two forces.
-    std::string torsionfile;
 
     bool ghostsprings;
 
@@ -252,10 +243,10 @@ class DihedralSetting : public SettingBase
     double ghostdamping;
 
     DihedralSetting(const std::string & name)
-        : SettingBase(name), tangentialonly(false), torsionalonly(false), torsionfile(), ghostsprings(false), ghostspringstiffness(2000.0), ghostmass(1.0),
+        : SettingBase(name), tangentialonly(false), torsionalonly(false), ghostsprings(false), ghostspringstiffness(2000.0), ghostmass(1.0),
           ghostringchords(true), ghostdamping(0.0)
     {
-        _parameterNames = {"tangentialonly",  "torsionalonly",   "torsionfile",     "ghostsprings",
+        _parameterNames = {"tangentialonly",  "torsionalonly",   "ghostsprings",
                            "ghostspringstiffness",
                            "ghostmass",       "ghostringchords", "ghostdamping"};
     }
@@ -266,8 +257,6 @@ class DihedralSetting : public SettingBase
             _parse_bool(tangentialonly, s, param);
         else if (param == "torsionalonly")
             _parse_bool(torsionalonly, s, param);
-        else if (param == "torsionfile")
-            torsionfile = s;
         else if (param == "ghostsprings")
             _parse_bool(ghostsprings, s, param);
         else if (param == "ghostspringstiffness")
@@ -286,7 +275,6 @@ class DihedralSetting : public SettingBase
     {
         _mspFormatter.print("tangentialonly", tangentialonly, os);
         _mspFormatter.print("torsionalonly", torsionalonly, os);
-        _mspFormatter.print("torsionfile", torsionfile, os);
         _mspFormatter.print("ghostsprings", ghostsprings, os);
         _mspFormatter.print("ghostspringstiffness", ghostspringstiffness, os);
         _mspFormatter.print("ghostmass", ghostmass, os);

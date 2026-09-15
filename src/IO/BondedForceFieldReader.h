@@ -66,6 +66,29 @@ struct DihedralEntry
     std::string axis_b, axis_c;
 };
 
+// One AMBER torsion ("TORSION" line): the four atoms it acts on and the table
+// that holds its energy and torque. Nothing is summed over substituent pairs,
+// so no phase origin is chosen and no sign convention is guessed -- the record
+// is AMBER's own quadruplet, and the table AMBER's own V(phi) sampled once.
+struct TorsionEntry
+{
+    std::string resname;
+    DihedralFamily family;
+    std::string atoms[4];
+    unsigned table;
+};
+
+// One tabulated parameter set ("TORSIONTABLE" line): energy in kJ.mol-1 and
+// torque (-dV/dphi) in kJ.mol-1.rad-1, sampled at bins + 1 points over
+// [-pi, pi]. Torsions sharing a parameter set share a table -- the protein
+// force field has 891 torsions and 30 tables.
+struct TorsionTableEntry
+{
+    unsigned bins = 0;
+    std::vector<float> energy;
+    std::vector<float> torque;
+};
+
 // One massless virtual-site ("GHOSTPARTICLE" line): a ghost particle that
 // does not correspond to any real PDB atom, placed algebraically from 3
 // real anchor atoms (atom_B, atom_C -- the dihedral axis -- and atom_ref,
@@ -184,6 +207,8 @@ class BondedForceFieldReader : public ReaderBase
 
   protected:
     std::vector<DihedralEntry> _dihedral;
+    std::vector<TorsionEntry> _torsion;
+    std::vector<TorsionTableEntry> _torsiontables;
     std::vector<GhostParticleEntry> _ghostparticles;
 
     using ResidueParticleIndices = std::vector<size_t>;

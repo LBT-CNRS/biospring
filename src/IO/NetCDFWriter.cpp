@@ -278,6 +278,59 @@ NcFile * NetCDFWriter::safeOpenBinary()
     return nc;
 }
 
+// AMBER's torsions and the tables they index. Two dimensions rather than one:
+// a torsion names four atoms, a table holds bins + 1 samples, and every table
+// in one file shares a bin count -- the generator emits them together.
+static void writeTorsionGroupBinary(NcFile * nc, const std::vector<biospring::spn::SpringNetwork::Torsion> & torsions,
+                                    const std::vector<biospring::spn::SpringNetwork::TorsionTable> & tables)
+{
+    if (torsions.empty() || tables.empty())
+        return;
+
+    NcDim quad = nc->addDim("torsionquad", 4);
+    NcDim tnum = nc->addDim("torsion_number", torsions.size());
+    NcDim tabnum = nc->addDim("torsiontable_number", tables.size());
+    NcDim binnum = nc->addDim("torsionbin_number", tables[0].energy.size());
+
+    std::vector<NcDim> adim{tnum, quad};
+    NcVar atoms = nc->addVar("torsionatoms", ncInt, adim);
+    atoms.putAtt("long_name", "Torsion's four particle ids, the middle two being its axis");
+    NcVar fam = nc->addVar("torsionfamily", ncInt, tnum);
+    fam.putAtt("long_name", "Torsion's dihedral family (see spn::SpringNetwork::DihedralFamilyIndex)");
+    NcVar tab = nc->addVar("torsiontable", ncInt, tnum);
+    tab.putAtt("long_name", "Index of the table holding this torsion's energy and torque");
+
+    std::vector<NcDim> tdim{tabnum, binnum};
+    NcVar te = nc->addVar("torsiontableenergy", ncFloat, tdim);
+    te.putAtt("units", "kJ.mol-1");
+    te.putAtt("long_name", "Torsion energy, sampled uniformly over phi in [-pi, pi]");
+    NcVar tt = nc->addVar("torsiontabletorque", ncFloat, tdim);
+    tt.putAtt("units", "kJ.mol-1.rad-1");
+    tt.putAtt("long_name", "Torsion torque (-dV/dphi), sampled on the same grid");
+
+    const size_t n = torsions.size(), nb = tables[0].energy.size();
+    std::vector<int> a(n * 4), f(n), t(n);
+    for (size_t i = 0; i < n; ++i)
+    {
+        for (unsigned k = 0; k < 4; ++k)
+            a[i * 4 + k] = static_cast<int>(torsions[i].atoms[k]);
+        f[i] = static_cast<int>(torsions[i].family);
+        t[i] = static_cast<int>(torsions[i].table);
+    }
+    std::vector<float> e(tables.size() * nb), q(tables.size() * nb);
+    for (size_t i = 0; i < tables.size(); ++i)
+        for (size_t b = 0; b < nb; ++b)
+        {
+            e[i * nb + b] = b < tables[i].energy.size() ? tables[i].energy[b] : 0.0f;
+            q[i * nb + b] = b < tables[i].torque.size() ? tables[i].torque[b] : 0.0f;
+        }
+    atoms.putVar(a.data());
+    fam.putVar(f.data());
+    tab.putVar(t.data());
+    te.putVar(e.data());
+    tt.putVar(q.data());
+}
+
 void NetCDFWriter::writeBinary()
 {
     NcFile * nc = safeOpenBinary();
@@ -408,6 +461,7 @@ void NetCDFWriter::writeBinary()
             _spn->getDihedralSprings(family));
 
     writeGhostParticleGroupBinary(nc, _spn->getGhostParticles());
+    writeTorsionGroupBinary(nc, _spn->getTorsions(), _spn->getTorsionTables());
 
     delete nc;
 }

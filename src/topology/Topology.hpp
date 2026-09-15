@@ -23,6 +23,24 @@ namespace topology
 
 class Topology
 {
+  public:
+    // AMBER's torsions, applied to the four atoms they name rather than
+    // through any spring. A torsion is not a distance term and shares none of
+    // a spring's fields, so it is kept beside them rather than among them.
+    struct Torsion
+    {
+        pid_t atoms[4];
+        unsigned family;
+        unsigned table;
+    };
+    struct TorsionTable
+    {
+        unsigned bins = 0;
+        std::vector<float> energy; // kJ.mol-1
+        std::vector<float> torque; // kJ.mol-1.rad-1, = -dV/dphi
+    };
+
+
   protected:
     // The particles in the topology.
     ParticleCollection _particles;
@@ -59,6 +77,9 @@ class Topology
     using DihedralFamilyIndex = spn::SpringNetwork::DihedralFamilyIndex;
     static constexpr unsigned DIHEDRAL_FAMILY_COUNT = spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT;
     std::array<SpringCollection, DIHEDRAL_FAMILY_COUNT> _dihedral_springs;
+
+    std::vector<Torsion> _torsions;
+    std::vector<TorsionTable> _torsiontables;
 
     // std::array has no "fill with N copies of this value" constructor, and
     // SpringCollection isn't default-constructible (it holds the particle
@@ -509,6 +530,31 @@ class Topology
             spn.addSpring(i, j, source.equilibrium(), source.stiffness());
         }
 
+        // Copies the torsions, whose tables travel with them: a torsion is
+        // useless without the curve it indexes.
+        {
+            std::vector<std::array<std::vector<float>, 2>> tabs;
+            tabs.reserve(_torsiontables.size());
+            for (const TorsionTable & t : _torsiontables)
+                tabs.push_back({t.energy, t.torque});
+            spn.setTorsionTables(tabs);
+            const auto & by_uid = _particles.by_uid();
+            for (const Torsion & t : _torsions)
+            {
+                unsigned idx[4];
+                bool ok = true;
+                for (unsigned k = 0; k < 4 && ok; ++k)
+                {
+                    const auto it = by_uid.find(t.atoms[k]);
+                    ok = it != by_uid.end();
+                    if (ok)
+                        idx[k] = static_cast<unsigned>(it->second);
+                }
+                if (ok)
+                    spn.addTorsion(t.family, idx[0], idx[1], idx[2], idx[3], t.table);
+            }
+        }
+
         // Copies dihedral ghost springs, one family at a time (see the
         // _dihedral_springs member comment above for why these stay
         // separate from _springs) -- into the same family index on the
@@ -539,6 +585,16 @@ class Topology
             }
         }
     }
+
+    // AMBER torsions and the tables they index (see the Torsion member).
+    void add_torsion(unsigned family, const Particle & p1, const Particle & p2, const Particle & p3,
+                     const Particle & p4, unsigned table)
+    {
+        _torsions.push_back(Torsion{{p1.unique_id(), p2.unique_id(), p3.unique_id(), p4.unique_id()}, family, table});
+    }
+    void set_torsion_tables(std::vector<TorsionTable> tables) { _torsiontables = std::move(tables); }
+    const std::vector<Torsion> & torsions() const { return _torsions; }
+    const std::vector<TorsionTable> & torsion_tables() const { return _torsiontables; }
 
   protected:
     // Copies `other`'s particles to this topology.

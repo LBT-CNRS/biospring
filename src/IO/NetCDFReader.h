@@ -42,6 +42,7 @@ class NetCDFReader : public TopologyReaderBase
     // readDihedralSpringGroup: an old .nc file, or one with no ghost
     // particles, simply has none of these variables).
     void readGhostParticles();
+    void readTorsions();
 
     void readParticles();
     void readNumberOfParticles();

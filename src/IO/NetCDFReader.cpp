@@ -129,6 +129,7 @@ void NetCDFReader::read()
         // constraint relative to the spring/dihedral steps above.
         readGhostParticles();
         addGhostParticlesToSpn();
+        readTorsions();
     }
     catch (netCDF::exceptions::NcException & e)
     {
@@ -317,6 +318,50 @@ void NetCDFReader::readDihedralSpringGroup(const char * prefix, DihedralSpringBu
         checkDim(data, 0, n);
         data.getVar(buffer.springsaxis);
     }
+}
+
+// Optional at every hop, like everything else added since: a .nc written
+// before torsions existed simply has no torsion variables, and the model is
+// then the one it always was.
+void NetCDFReader::readTorsions()
+{
+    netCDF::NcVar atoms = getNcVar("torsionatoms", false);
+    if (atoms.isNull())
+        return;
+    netCDF::NcVar fam = getNcVar("torsionfamily", false);
+    netCDF::NcVar tab = getNcVar("torsiontable", false);
+    netCDF::NcVar te = getNcVar("torsiontableenergy", false);
+    netCDF::NcVar tt = getNcVar("torsiontabletorque", false);
+    if (fam.isNull() || tab.isNull() || te.isNull() || tt.isNull())
+        logging::die("NetCDFReader: the file has torsions but not the tables they index");
+
+    const size_t n = atoms.getDim(0).getSize();
+    const size_t ntab = te.getDim(0).getSize();
+    const size_t nb = te.getDim(1).getSize();
+
+    std::vector<float> e(ntab * nb), q(ntab * nb);
+    te.getVar(e.data());
+    tt.getVar(q.data());
+    std::vector<topology::Topology::TorsionTable> tables(ntab);
+    for (size_t i = 0; i < ntab; ++i)
+    {
+        tables[i].bins = static_cast<unsigned>(nb - 1);
+        tables[i].energy.assign(e.begin() + static_cast<long>(i * nb), e.begin() + static_cast<long>((i + 1) * nb));
+        tables[i].torque.assign(q.begin() + static_cast<long>(i * nb), q.begin() + static_cast<long>((i + 1) * nb));
+    }
+    _topology.set_torsion_tables(std::move(tables));
+
+    std::vector<int> a(n * 4), f(n), t(n);
+    atoms.getVar(a.data());
+    fam.getVar(f.data());
+    tab.getVar(t.data());
+    for (size_t i = 0; i < n; ++i)
+        _topology.add_torsion(static_cast<unsigned>(f[i]), _topology.get_particle(static_cast<size_t>(a[i * 4])),
+                              _topology.get_particle(static_cast<size_t>(a[i * 4 + 1])),
+                              _topology.get_particle(static_cast<size_t>(a[i * 4 + 2])),
+                              _topology.get_particle(static_cast<size_t>(a[i * 4 + 3])),
+                              static_cast<unsigned>(t[i]));
+    logging::info("NetCDFReader: read %zu torsion(s) over %zu table(s) of %zu samples.", n, ntab, nb);
 }
 
 void NetCDFReader::readGhostParticles()

@@ -185,6 +185,22 @@ class SpringNetwork
     // are what governs the sugar pucker -- the single lever selecting the A
     // or B helical form -- so its energy has to be readable, and switchable,
     // on its own.
+    struct Torsion
+    {
+        unsigned atoms[4];
+        unsigned family;
+        unsigned axisIndex;
+        unsigned table;
+    };
+
+    struct TorsionTable
+    {
+        // BINS intervals over phi in [-pi, pi], so BINS + 1 samples.
+        unsigned bins = 0;
+        std::vector<float> energy; // kJ.mol-1
+        std::vector<float> torque; // kJ.mol-1.rad-1, = -dV/dphi
+    };
+
     enum DihedralFamilyIndex
     {
         DIHEDRAL_PHI = 0,
@@ -462,17 +478,7 @@ class SpringNetwork
     // (substituent, axis B, axis C, substituent); amplitude is V_n in kJ/mol
     // for n = 1, 2, 3 and phase the matching gamma in radians, zero amplitude
     // meaning the harmonic is absent.
-    struct Torsion
-    {
-        unsigned atoms[4];
-        unsigned family;
-        unsigned axisIndex;
-        unsigned table;
-    };
     std::vector<Torsion> _torsions;
-    // Quadruplets already taken, so a torsion written under both of the
-    // residues it spans is applied once.
-    std::set<std::array<unsigned, 4>> _seenTorsions;
 
     // Energy and axial torque of one parameter set, tabulated so the force
     // path carries no trigonometry at all.
@@ -484,18 +490,37 @@ class SpringNetwork
     //
     // Torsions sharing a parameter set share a table: 160 torsion types in the
     // protein force field collapse to a handful.
-    struct TorsionTable
-    {
-        // BINS intervals over phi in [-pi, pi], so BINS + 1 samples.
-        unsigned bins = 0;
-        std::vector<float> energy; // kJ.mol-1
-        std::vector<float> torque; // kJ.mol-1.rad-1, = -dV/dphi
-    };
     std::vector<TorsionTable> _torsiontables;
 
 
-    void _setupTorsions();
     float computeTorsionForces();
+
+  public:
+    // Filled from the topology at build time (see Topology::to_spn). The
+    // tables come first: a torsion is useless without the curve it indexes.
+    void setTorsionTables(const std::vector<std::array<std::vector<float>, 2>> & tables)
+    {
+        _torsiontables.clear();
+        _torsiontables.reserve(tables.size());
+        for (const auto & t : tables)
+        {
+            TorsionTable tab;
+            tab.energy = t[0];
+            tab.torque = t[1];
+            tab.bins = tab.energy.empty() ? 0u : static_cast<unsigned>(tab.energy.size() - 1);
+            _torsiontables.push_back(std::move(tab));
+        }
+    }
+    void addTorsion(unsigned family, unsigned a1, unsigned a2, unsigned a3, unsigned a4, unsigned table)
+    {
+        if (table >= _torsiontables.size() || _torsiontables[table].bins == 0)
+            throw std::out_of_range("SpringNetwork::addTorsion: torsion refers to a table that was never given");
+        _torsions.push_back(Torsion{{a1, a2, a3, a4}, family, 0u, table});
+    }
+    const std::vector<Torsion> & getTorsions() const { return _torsions; }
+    const std::vector<TorsionTable> & getTorsionTables() const { return _torsiontables; }
+
+  private:
 
     void bindDihedralEndpointsToAxes();
     bool _dihedralAxesBound = false;

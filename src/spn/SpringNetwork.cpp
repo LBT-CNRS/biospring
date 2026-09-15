@@ -49,12 +49,6 @@ namespace biospring
 namespace spn
 {
 
-// The .bi.ff spelling of each family, in DihedralFamilyIndex order. The same
-// list BondedForceFieldReader keeps; duplicated rather than shared because that
-// reader is a build-time component and this is the runtime.
-static constexpr const char * DIHEDRAL_FAMILY_KEYWORDS_RT[SpringNetwork::DIHEDRAL_FAMILY_COUNT] = {
-    "PHI", "PSI", "OMEGA", "SIDECHAIN", "PLANARITY", "NUCLEIC_BACKBONE", "NUCLEIC_CHI", "NUCLEIC_SUGAR"};
-
 unsigned SpringNetwork::_currentstructid = 0;
 
 SpringNetwork::~SpringNetwork() {}
@@ -1176,140 +1170,6 @@ void SpringNetwork::_setupTorsionalFrames()
                   framed);
 }
 
-// Reads a TORSION force field and resolves its four atoms against the loaded
-// network, by residue and name, "+"/"-" naming the next/previous residue just
-// as everywhere else. Resolution is by residue index within a chain, so a
-// torsion missing an atom at a terminus is skipped rather than mis-bound.
-void SpringNetwork::_setupTorsions()
-{
-    const std::string & path = _config.dihedral.torsionfile;
-    if (path.empty())
-        return;
-
-    // residue id -> (atom name -> particle index). Built once.
-    // The reducer renames every atom to a grain name -- the residue's
-    // one-letter code followed by the atom name, MET's N becoming "MN" and
-    // GLN's "QN" -- so both spellings are indexed and either resolves. The
-    // build-time reader never meets this: it works on the topology before the
-    // reduction.
-    std::map<unsigned, std::map<std::string, unsigned>> byResidue;
-    std::map<unsigned, std::string> resName;
-    for (unsigned i = 0; i < getNumberOfParticles(); ++i)
-    {
-        const Particle & p = getParticle(i);
-        const std::string & n = p.getName();
-        byResidue[p.getResId()][n] = i;
-        if (n.size() > 1)
-            byResidue[p.getResId()].emplace(n.substr(1), i);
-        resName[p.getResId()] = p.getResName();
-    }
-
-    std::ifstream in(path);
-    if (!in)
-        logging::die("SpringNetwork: cannot open torsion file '%s'", path.c_str());
-
-    auto resolve = [&](unsigned resid, const std::string & name, unsigned & out) {
-        int offset = 0;
-        std::string bare = name;
-        if (!name.empty() && (name[0] == '+' || name[0] == '-'))
-        {
-            offset = name[0] == '+' ? 1 : -1;
-            bare = name.substr(1);
-        }
-        const auto r = byResidue.find(static_cast<unsigned>(static_cast<int>(resid) + offset));
-        if (r == byResidue.end())
-            return false;
-        const auto a = r->second.find(bare);
-        if (a == r->second.end())
-            return false;
-        out = a->second;
-        return true;
-    };
-
-    unsigned applied = 0, skipped = 0, lineno = 0;
-    std::string line;
-    while (std::getline(in, line))
-    {
-        ++lineno;
-        if (line.empty() || line[0] == '#')
-            continue;
-        std::istringstream ss(line);
-        std::string kind;
-        if (!(ss >> kind))
-            continue;
-
-        if (kind == "TORSIONTABLE")
-        {
-            unsigned id = 0, bins = 0;
-            if (!(ss >> id >> bins) || bins == 0)
-                logging::die("SpringNetwork: torsion file line %u: malformed TORSIONTABLE", lineno);
-            if (_torsiontables.size() <= id)
-                _torsiontables.resize(id + 1);
-            TorsionTable & tab = _torsiontables[id];
-            tab.bins = bins;
-            tab.energy.resize(bins + 1);
-            tab.torque.resize(bins + 1);
-            for (unsigned b = 0; b <= bins; ++b)
-                if (!(ss >> tab.energy[b] >> tab.torque[b]))
-                    logging::die("SpringNetwork: torsion file line %u: TORSIONTABLE %u is short at sample %u",
-                                 lineno, id, b);
-            continue;
-        }
-        if (kind != "TORSION")
-            continue;
-
-        std::string resname, family, names[4];
-        unsigned table = 0;
-        if (!(ss >> resname >> family >> names[0] >> names[1] >> names[2] >> names[3] >> table))
-            logging::die("SpringNetwork: torsion file line %u is malformed", lineno);
-        if (table >= _torsiontables.size() || _torsiontables[table].bins == 0)
-            logging::die("SpringNetwork: torsion file line %u refers to table %u, which was never given", lineno,
-                         table);
-
-        unsigned fam = DIHEDRAL_FAMILY_COUNT;
-        for (unsigned f = 0; f < DIHEDRAL_FAMILY_COUNT; ++f)
-            if (family == DIHEDRAL_FAMILY_KEYWORDS_RT[f])
-                fam = f;
-        if (fam == DIHEDRAL_FAMILY_COUNT)
-            logging::die("SpringNetwork: torsion file line %u names an unknown family '%s'", lineno, family.c_str());
-
-        for (const auto & r : resName)
-        {
-            if (r.second != resname)
-                continue;
-            Torsion t;
-            t.family = fam;
-            t.table = table;
-            bool ok = true;
-            for (unsigned k = 0; k < 4 && ok; ++k)
-                ok = resolve(r.first, names[k], t.atoms[k]);
-            if (!ok)
-            {
-                ++skipped;
-                continue;
-            }
-            // A torsion spanning two residues is written under each of them,
-            // so the same four atoms can arrive twice; applying it twice would
-            // double its torque. Keyed on the quadruplet itself, either way
-            // round, since a torsion and its reverse are one torsion.
-            std::array<unsigned, 4> q{t.atoms[0], t.atoms[1], t.atoms[2], t.atoms[3]};
-            const std::array<unsigned, 4> rev{t.atoms[3], t.atoms[2], t.atoms[1], t.atoms[0]};
-            if (rev < q)
-                q = rev;
-            if (!_seenTorsions.insert(q).second)
-                continue;
-
-            t.axisIndex = findOrCreateGhostAxis(t.atoms[1], t.atoms[2]);
-            _torsions.push_back(t);
-            ++applied;
-        }
-    }
-    logging::info("SpringNetwork: %u torsion(s) applied as a couple about their own axis, from %zu "
-                  "tabulated parameter set(s) in '%s' (%u skipped for a missing atom); no ring, no "
-                  "ghost, no spring.",
-                  applied, _torsiontables.size(), path.c_str(), skipped);
-}
-
 // AMBER's own V(phi), applied as a couple.
 //
 // V(phi) = sum_n V_n * (1 + cos(n*phi - gamma_n)), so the torque about the axis
@@ -1641,7 +1501,6 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupTrajectories();
     // After everything else: it converts particles and adds springs, so it
     // needs the network whole and the configuration already stored.
-    _setupTorsions();
     _setupTorsionalFrames();
     _setupGhostSprings();
     _neighborSearchesDirty = false;

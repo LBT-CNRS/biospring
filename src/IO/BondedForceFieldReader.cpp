@@ -117,6 +117,56 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         }
         _dihedral.push_back(entry);
     }
+    else if (type == "TORSIONTABLE")
+    {
+        // <id> <bins> then 2*(bins+1) numbers, energy and torque interleaved.
+        if (tokens.size() < 3)
+            logging::die("BondedForceFieldReader: line %d: TORSIONTABLE expects an id and a bin count",
+                         static_cast<int>(line_id));
+        unsigned id = 0, bins = 0;
+        if (!utils::string::from_string(id, tokens[1]) || !utils::string::from_string(bins, tokens[2]) || bins == 0)
+            logging::die("BondedForceFieldReader: line %d: TORSIONTABLE has an invalid id or bin count",
+                         static_cast<int>(line_id));
+        if (tokens.size() != 3 + 2 * (bins + 1))
+            logging::die("BondedForceFieldReader: line %d: TORSIONTABLE %u declares %u bins, so %d values were "
+                         "expected and %d found",
+                         static_cast<int>(line_id), id, bins, static_cast<int>(2 * (bins + 1)),
+                         static_cast<int>(tokens.size()) - 3);
+        if (_torsiontables.size() <= id)
+            _torsiontables.resize(id + 1);
+        TorsionTableEntry & tab = _torsiontables[id];
+        tab.bins = bins;
+        tab.energy.resize(bins + 1);
+        tab.torque.resize(bins + 1);
+        for (unsigned b = 0; b <= bins; ++b)
+            if (!utils::string::from_string(tab.energy[b], tokens[3 + 2 * b]) ||
+                !utils::string::from_string(tab.torque[b], tokens[4 + 2 * b]))
+                logging::die("BondedForceFieldReader: line %d: TORSIONTABLE %u has a non-numeric sample at %u",
+                             static_cast<int>(line_id), id, b);
+    }
+    else if (type == "TORSION")
+    {
+        if (tokens.size() != 8)
+            logging::die("BondedForceFieldReader: line %d: TORSION expects 8 tokens (type resname family "
+                         "atom1 atom2 atom3 atom4 table), found %d",
+                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
+        TorsionEntry entry;
+        entry.resname = tokens[1];
+        unsigned family_id = spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT;
+        for (unsigned f = 0; f < spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++f)
+            if (tokens[2] == DIHEDRAL_FAMILY_KEYWORDS[f])
+                family_id = f;
+        if (family_id == spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT)
+            logging::die("BondedForceFieldReader: line %d: invalid TORSION family '%s'", static_cast<int>(line_id),
+                         tokens[2].c_str());
+        entry.family = static_cast<DihedralFamily>(family_id);
+        for (unsigned k = 0; k < 4; ++k)
+            entry.atoms[k] = tokens[3 + k];
+        if (!utils::string::from_string(entry.table, tokens[7]))
+            logging::die("BondedForceFieldReader: line %d: invalid TORSION table index '%s'",
+                         static_cast<int>(line_id), tokens[7].c_str());
+        _torsion.push_back(entry);
+    }
     else if (type == "GHOSTPARTICLE")
     {
         if (tokens.size() != 9)
@@ -144,7 +194,7 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
     else
     {
         logging::die("BondedForceFieldReader: line %d: unknown entry type '%s' (expected "
-                     "GHOSTPARTICLE or DIHEDRAL)",
+                     "GHOSTPARTICLE, DIHEDRAL, TORSION or TORSIONTABLE)",
                      static_cast<int>(line_id), type.c_str());
     }
 }
@@ -165,8 +215,9 @@ void BondedForceFieldReader::read()
     }
     close();
 
-    logging::info("BondedForceFieldReader: read %zu ghost particle and %zu dihedral rule(s).",
-                 _ghostparticles.size(), _dihedral.size());
+    logging::info("BondedForceFieldReader: read %zu ghost particle, %zu dihedral rule(s) and %zu torsion(s) "
+                 "over %zu table(s).",
+                 _ghostparticles.size(), _dihedral.size(), _torsion.size(), _torsiontables.size());
 }
 
 std::vector<BondedForceFieldReader::ResidueParticleIndices>
@@ -458,6 +509,30 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
 
     unsigned nb_dihedral_applied = 0;
     unsigned nb_ghostparticles_created = 0;
+    unsigned nb_torsions_applied = 0;
+
+    // The tables travel with the torsions and are given once, before any of
+    // them: a torsion is useless without the curve it indexes.
+    if (!_torsiontables.empty())
+    {
+        std::vector<topology::Topology::TorsionTable> tabs;
+        tabs.reserve(_torsiontables.size());
+        for (const TorsionTableEntry & e : _torsiontables)
+        {
+            topology::Topology::TorsionTable t;
+            t.bins = e.bins;
+            t.energy = e.energy;
+            t.torque = e.torque;
+            tabs.push_back(std::move(t));
+        }
+        topology.set_torsion_tables(std::move(tabs));
+    }
+
+    // A torsion spanning two residues is written under each of them, so the
+    // same four atoms arrive twice; applying it twice would double its torque.
+    // Keyed on the quadruplet either way round, a torsion and its reverse
+    // being one torsion.
+    std::set<std::array<size_t, 4>> seen_torsions;
 
     // Only worth creating ghost particles at all if some dihedral family is
     // actually enabled -- otherwise every DIHEDRAL entry that would use them
@@ -471,6 +546,35 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
 
         if (enableGhostParticles)
             nb_ghostparticles_created += _create_ghost_particles(topology, residues, index, resname, translation);
+
+        for (const TorsionEntry & entry : _torsion)
+        {
+            if (entry.resname != resname)
+                continue;
+            const bool gates[GATE_COUNT] = {enableDihedralBackbone, enableDihedralSidechain, enableDihedralPlanarity};
+            if (!gates[DIHEDRAL_FAMILY_GATES[entry.family]])
+                continue;
+
+            topology::Particle * p[4] = {nullptr, nullptr, nullptr, nullptr};
+            bool resolved = true;
+            for (unsigned k = 0; k < 4 && resolved; ++k)
+            {
+                p[k] = _resolve_atom(entry.atoms[k], residues, index, topology, translation);
+                resolved = p[k] != nullptr;
+            }
+            if (!resolved)
+                continue; // a chain terminus: the torsion simply does not exist there
+
+            std::array<size_t, 4> q{p[0]->unique_id(), p[1]->unique_id(), p[2]->unique_id(), p[3]->unique_id()};
+            const std::array<size_t, 4> rev{q[3], q[2], q[1], q[0]};
+            if (rev < q)
+                q = rev;
+            if (!seen_torsions.insert(q).second)
+                continue;
+
+            topology.add_torsion(entry.family, *p[0], *p[1], *p[2], *p[3], entry.table);
+            nb_torsions_applied++;
+        }
 
         for (const DihedralEntry & entry : _dihedral)
         {
@@ -517,8 +621,9 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
         }
     }
 
-    logging::info("BondedForceFieldReader: applied %u dihedral spring(s), created %u ghost particle(s).",
-                 nb_dihedral_applied, nb_ghostparticles_created);
+    logging::info("BondedForceFieldReader: applied %u dihedral spring(s), created %u ghost particle(s), "
+                 "applied %u torsion(s) over %zu table(s).",
+                 nb_dihedral_applied, nb_ghostparticles_created, nb_torsions_applied, _torsiontables.size());
 }
 
 } // namespace rigidbodygroup
