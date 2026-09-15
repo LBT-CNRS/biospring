@@ -460,6 +460,15 @@ class SpringNetwork
     // from setup(), after the network is loaded and the configuration known.
     void _setupGhostSprings();
 
+    // Drains the energy the tangential filter pumps into a spring-held ghost,
+    // and only into it. No-op unless dihedral.ghostdamping is set.
+    void applyGhostDamping();
+
+    // The spring-held ghosts, so the damping pass walks them directly instead
+    // of testing every dynamic particle for ghost-ness once a step.
+    std::vector<unsigned> _springHeldGhosts;
+    float _ghostDamping = 0.0f;
+
   public:
 
     // Whether ghosts are carried by springs rather than re-placed each step.

@@ -205,11 +205,31 @@ class DihedralSetting : public SettingBase
     // a ghost lying in the B/C/reference plane would otherwise have.
     bool ghostringchords;
 
+    // Da.fs-1, drained from the ghosts and from nothing else.
+    //
+    // The tangential filter is a projection, not a gradient, so it does net
+    // work around a cycle. A ghost re-derived from its anchors has no cycle to
+    // go round -- it owns no coordinate -- and the filter can only subtract
+    // from it. A spring-held ghost does, and pumps: on ubiquitin, 4000 steps
+    // at 1 fs with k=500 and 1 Da, the kinetic energy ends at 47358 kJ/mol
+    // filtered against 1.93 unfiltered.
+    //
+    // Damping the ghosts alone drains exactly that, and costs the real system
+    // nothing: a ghost is fictitious, so friction on it is not friction on the
+    // protein. It is the alternative to pushing the anchors stiff enough that
+    // the cycle becomes small, which works but forces a ghost mass heavy
+    // enough to distort the very torsion being modelled.
+    //
+    // Scale: critical damping of the ghost mode is 2*sqrt(k*m), with k in
+    // Da.fs-2 (kJ.mol-1.A-2 x 1e-4) -- 0.89 Da.fs-1 at k=2000 and 1 Da.
+    double ghostdamping;
+
     DihedralSetting(const std::string & name)
         : SettingBase(name), tangentialonly(false), ghostsprings(false), ghostspringstiffness(2000.0), ghostmass(1.0),
-          ghostringchords(true)
+          ghostringchords(true), ghostdamping(0.0)
     {
-        _parameterNames = {"tangentialonly", "ghostsprings", "ghostspringstiffness", "ghostmass", "ghostringchords"};
+        _parameterNames = {"tangentialonly",  "ghostsprings",    "ghostspringstiffness",
+                           "ghostmass",       "ghostringchords", "ghostdamping"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -224,6 +244,8 @@ class DihedralSetting : public SettingBase
             utils::string::from_string<decltype(ghostmass)>(ghostmass, s);
         else if (param == "ghostringchords")
             _parse_bool(ghostringchords, s, param);
+        else if (param == "ghostdamping")
+            utils::string::from_string<decltype(ghostdamping)>(ghostdamping, s);
         else
             logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
     }
@@ -235,6 +257,7 @@ class DihedralSetting : public SettingBase
         _mspFormatter.print("ghostspringstiffness", ghostspringstiffness, os);
         _mspFormatter.print("ghostmass", ghostmass, os);
         _mspFormatter.print("ghostringchords", ghostringchords, os);
+        _mspFormatter.print("ghostdamping", ghostdamping, os);
     }
 };
 

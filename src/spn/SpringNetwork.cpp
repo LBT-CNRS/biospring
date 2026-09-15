@@ -475,6 +475,7 @@ void SpringNetwork::computeStep()
 
     computeForces();
     redistributeGhostForces();
+    applyGhostDamping();
 
     if (isConstraintEnabled())
         applyConstraints();
@@ -1063,14 +1064,34 @@ void SpringNetwork::_setupGhostSprings()
     // updateGhostPositions and the Rodrigues redistribution, since both iterate
     // this list -- while _ghostaxes, which the tangential filter and the axis
     // reaction both still need, is a separate vector and stays.
+    _springHeldGhosts.reserve(nghosts);
+    for (const GhostParticleBinding & binding : _ghostparticles)
+        _springHeldGhosts.push_back(binding.ownIndex);
+
     _ghostparticles.clear();
     _ghostForceScratch.clear();
     _ghostsAreSpringHeld = true;
+    _ghostDamping = static_cast<float>(_config.dihedral.ghostdamping);
 
     logging::info("SpringNetwork: %zu ghost(s) now spring-held at %.1f kJ.mol-1.A-2 and %.2f Da "
                   "(%u anchor spring(s), %u ring chord(s)); per-step placement and force "
                   "redistribution are off.",
                   nghosts, static_cast<double>(k), static_cast<double>(mass), nanchor, nchord);
+}
+
+// Friction on the ghosts alone. Applied after redistributeGhostForces, so it
+// acts on everything a ghost has been given -- its ring spring's filtered
+// share included, which is what the filter pumps through.
+//
+// Friction on a fictitious particle is not friction on the protein: no real
+// atom is touched here, and the mesh keeps whatever global viscosity.value it
+// was given. What leaves is the work the projection put in.
+void SpringNetwork::applyGhostDamping()
+{
+    if (_ghostDamping <= 0.0f)
+        return;
+    for (const unsigned id : _springHeldGhosts)
+        getParticle(id).applyViscosity(_ghostDamping);
 }
 
 void SpringNetwork::updateParticleState(unsigned id, bool isStatic) {
