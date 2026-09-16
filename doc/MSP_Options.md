@@ -102,7 +102,32 @@ keeps the same behaviour.
 * **dihedralchi.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for every side-chain
 chi1-4 dihedral (the SIDECHAIN family in the `.bi.ff`).
 * **dihedralplanarity.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the PLANARITY
-impropers that keep aromatic rings and the His hub flat.
+impropers.
+
+  These are not a refinement on top of the mesh, and they are not only about aromatic rings.
+  Displace an sp2 hub by `z` out of its three substituents' plane: the three 1-3 distances do
+  not change at all, and each bond changes by `z^2/2r`. Every pairwise distance among those
+  four atoms is therefore an **even** function of `z`, stationary at `z = 0`, so a spring
+  network's energy is `O(z^4)` -- it has no second-order stiffness in that mode at all, at any
+  `--stiffness`. An improper's energy is `O(z^2)`.
+
+  The mesh only holds a plane where the group is over-determined by a neighbour off it: a
+  closed ring, or two overlapping `.rbody` groups. Where it is not -- a carboxylate, whose two
+  oxygens appear in no other group -- the impropers are the only term doing the work.
+  Ubiquitin, deviation from planarity in degrees, median (max), against OpenMM/amber99sb:
+
+  | hub | AMBER | on, k=500 | on, k=100 | on, k=50 | off, k=500 | off, k=100 | off, k=50 |
+  |---|---|---|---|---|---|---|---|
+  | Asp CG | 0.02 | 0.04 | 0.03 | 0.02 | 6.20 | 17.35 | 24.31 |
+  | Glu CD | 0.05 | 0.05 | 0.03 | 0.07 | 4.98 | 8.16 | 12.23 |
+  | backbone C | 0.58 | 0.49 | 0.50 | 0.40 | 2.37 | 2.30 | 1.91 |
+  | aromatic, Arg CZ, Asn/Gln | 0.04 | 0.02 | -- | -- | 0.01 | -- | -- |
+
+  With the impropers on, planarity is **independent of `--stiffness`**; without them it is the
+  mesh's job and it degrades as the mesh softens. That is what makes lowering `--stiffness`
+  safe (see the next section). Widening the `.rbody` group instead was measured and rejected:
+  it restores the plane but freezes the terminal torsion, because nothing beyond the hub's
+  substituents can be reached without crossing the rotatable bond.
 
 **These settings isolate a family's contribution; they do not undo the model.** Turning every
 one of them off does *not* reproduce a topology built without the corresponding `pdb2spn`
@@ -118,6 +143,57 @@ Bonds and valence angles have no `.msp` switch and no `pdb2spn` flag of their ow
 held by the `--rigidbody` mesh at `--stiffness`. See `073.BondedStages`' README in the
 Biospring-Example repository for
 why the model is built that way, and for the `--stiffness` value it needs.
+
+### Choosing `--stiffness` and `simulation.timestep`
+
+The mesh is what limits the timestep -- verified, not assumed: with every torsion family
+disabled the ceiling is unchanged (10 fs either way at k = 50), and `dt` tracks `1/sqrt(k)`
+across the whole range. So the two settings are one choice, and the only question is how much
+well fidelity a softer mesh costs.
+
+Measured by perturbing every chi1 (protein) or glycosidic chi (nucleic) by +40 deg off AMBER's
+own bonded minimum, quenching 40 ps at `viscosity.value = 0.1`, and comparing every torsion
+against OpenMM. `dt` is the largest value that survived 40 ps; cost is relative to the first
+row at equal simulated time.
+
+Ubiquitin, 1228 particles, against amber99sb:
+
+| `--stiffness` (kJ.mol-1.A-2) | `timestep` (fs) | cost | median (deg) | p95 | within 10 deg | bond drift (A) |
+|---|---|---|---|---|---|---|
+| 500 | 3 | 1.00 | 0.85 | 7.27 | 96.2 % | 0.0013 |
+| **250** | **4** | **0.75** | **1.15** | 9.98 | **95.0 %** | 0.0022 |
+| 100 | 6 | 0.50 | 1.96 | 12.99 | 90.9 % | 0.0050 |
+| 50 | 10 | 0.30 | 2.80 | 19.29 | 80.3 % | 0.0204 |
+| 25 | 12 | 0.25 | 4.03 | 23.71 | 62.4 % | 0.0175 |
+
+B-DNA duplex, 1270 particles, against amber14/DNA.OL15:
+
+| `--stiffness` (kJ.mol-1.A-2) | `timestep` (fs) | cost | median (deg) | p95 | within 10 deg | bond drift (A) |
+|---|---|---|---|---|---|---|
+| 8000 | 0.5 | 1.00 | 0.84 | 5.76 | 100.0 % | 0.0008 |
+| **2000** | **1** | **0.50** | **1.43** | 8.34 | **98.9 %** | 0.0016 |
+| 500 | 2 | 0.25 | 1.81 | 12.50 | 86.0 % | 0.0051 |
+| 250 | 3 | 0.17 | 2.50 | 14.51 | 77.4 % | 0.0110 |
+| 100 | 4 | 0.12 | 3.48 | 20.96 | 75.5 % | 0.0219 |
+
+**Recommended: 250 kJ.mol-1.A-2 at 4 fs for protein, 2000 at 1 fs for nucleic** -- a quarter
+and a half off the cost respectively, for about one degree of median well error. Going further
+is a real trade rather than a free one: at k = 100 the protein still holds 90.9 % of its wells
+for half the cost again, and below k = 50 the model stops reproducing the landscape.
+
+Two things do *not* limit how far `--stiffness` can drop. The torsions do not: the timestep
+ceiling is the same with them disabled. Planarity does not either, as long as the PLANARITY
+impropers are on -- see `dihedralplanarity.enable` above, where the deviation is flat at
+0.02-0.07 deg from k = 500 down to k = 50. What degrades is the mesh's grip on the torsion
+wells themselves, and nothing else compensates for that.
+
+Finally, `--rigidbody` takes every mesh spring's rest length from the **input structure's own
+distances** (`RigidBodyBuilder` passes -1.0, meaning "use the current one"). Whatever geometry
+the input has is thereby declared to be equilibrium. A torsion about a single bond does not
+care, but a ring coordinate does: on an unminimised B-DNA the furanose pucker was frozen at
+the input's value, putting nu1 31.6 deg off AMBER while raising `--stiffness` made it *worse*
+(42.5 deg at k = 8000). Relax the structure under AMBER's bonded terms before building the
+`.nc`, or the numbers above do not apply.
 * **dihedral.tangentialonly = 0** *(boolean)* Project each ghost ring's reaction onto the
 tangential direction about its own axis before it reaches the real atoms, so a torsion pushes a
 substituent only *around* that axis -- which is exactly what AMBER's dihedral force does
