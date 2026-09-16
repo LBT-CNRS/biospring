@@ -226,8 +226,11 @@ impropers are on -- see `dihedralplanarity.enable` above, where the deviation is
 0.02-0.07 deg from k = 500 down to k = 50. What degrades is the mesh's grip on the torsion
 wells themselves, and nothing else compensates for that.
 
-Note that `pdb2spn`'s own `-stiffness` default is still 1.0, which is not a usable value for a
-rigid-body mesh: pass it explicitly.
+`pdb2spn` applies this by itself: with `-rigidbody` and no explicit `-stiffness`, the default
+is 650 rather than the generic 1.0, which suits a soft elastic network built from a distance
+cutoff and does not hold a bond here, let alone a valence angle. An explicit `-stiffness` is
+honoured whatever it says, so nothing that already passes one changes behaviour, and a
+`-cutoff` network keeps its own 1.0.
 
 Finally, `--rigidbody` takes every mesh spring's rest length from the **input structure's own
 distances** (`RigidBodyBuilder` passes -1.0, meaning "use the current one"). Whatever geometry

@@ -37,7 +37,9 @@ const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "file instead of a distance cutoff: every pairwise spring within each",
     "matching group is created directly (see data/reducerules/*.rbody).",
     "Exclusive with -cutoff/--cutoff -- the two are incompatible strategies",
-    "for building the spring network. Uses -stiffness/--stiffness as-is.",
+    "for building the spring network. Raises the default -stiffness/--stiffness",
+    "to 650 kJ.mol-1.A-2, the measured working value for a rigid-body mesh (see",
+    "doc/MSP_Options.md); an explicit -stiffness is always honoured as-is.",
     "If -grp/--grp is also given, it is reused to translate renamed atoms",
     "back to their original name (it must be an all-atom identity mapping,",
     "one atom per rule, like amber.grp -- not a real coarse-grain reduction).",
@@ -57,6 +59,9 @@ namespace biospring
 {
 namespace pdb2spn
 {
+
+// The default -stiffness when -rigidbody is used, in kJ.mol-1.A-2.
+static constexpr float RIGIDBODY_DEFAULT_STIFFNESS = 650.0f;
 
 int main(int argc, char ** argv)
 {
@@ -297,7 +302,8 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument stiffness = argparse::Argument()
                                        .name_short("-stiffness")
                                        .name_long("--stiffness")
-                                       .description("spring stiffness, in kJ.mol-1.A-2")
+                                       .description("spring stiffness, in kJ.mol-1.A-2 (default 1.0 for a "
+                                                    "-cutoff network, 650 with -rigidbody)")
                                        .argument_type(argparse::ArgumentType::REAL)
                                        .default_value("1.0");
 
@@ -398,6 +404,21 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
         std::string message = "Invalid argument: --stiffness must be a float (got '" +
                               _parser.get_option_value<std::string>("--stiffness") + "')";
         _parser.die(message);
+    }
+
+    // A rigid-body mesh needs a stiffness of its own order. The generic
+    // default of 1.0 kJ.mol-1.A-2 suits a soft elastic network built from a
+    // distance cutoff and is meaningless here -- it does not hold a bond, let
+    // alone a valence angle. 650 is the measured working value: it keeps each
+    // system's best timestep (3 fs on a protein, 2 fs on a nucleic acid) and
+    // is within 0.1 deg of the best achievable well fidelity on both. See
+    // doc/MSP_Options.md for the measurement and for when to depart from it.
+    //
+    // Only the default moves. An explicit -stiffness is honoured whatever it
+    // says, so nothing that already passes one changes behaviour.
+    if (!pathRigidBody.empty() && !_parser.get_option("--stiffness").is_set())
+    {
+        stiffness = RIGIDBODY_DEFAULT_STIFFNESS;
     }
 
     isStatic = _parser.get_option("--static").is_set();
