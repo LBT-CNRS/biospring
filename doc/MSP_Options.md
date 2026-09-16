@@ -151,41 +151,83 @@ disabled the ceiling is unchanged (10 fs either way at k = 50), and `dt` tracks 
 across the whole range. So the two settings are one choice, and the only question is how much
 well fidelity a softer mesh costs.
 
+**Use 650 kJ.mol-1.A-2, with `simulation.timestep = 3.0` on a protein and `2.0` on a nucleic
+acid.** The rest of this section is how that was arrived at, and when to depart from it.
+
 Measured by perturbing every chi1 (protein) or glycosidic chi (nucleic) by +40 deg off AMBER's
 own bonded minimum, quenching 40 ps at `viscosity.value = 0.1`, and comparing every torsion
-against OpenMM. `dt` is the largest value that survived 40 ps; cost is relative to the first
-row at equal simulated time.
+against OpenMM. `dt` is the largest value that survived 40 ps; cost is relative to the
+recommended row at equal simulated time.
 
-Ubiquitin, 1228 particles, against amber99sb:
+**What is being scored, and what is not.** A rotamer turns about a single bond and the mesh
+must simply be rigid enough not to deform in its place. A furanose pucker is not a rotamer:
+`nu1`, `nu2` and `delta` are ring coordinates, set by the ring's own bonds and angles, so the
+mesh is their only support and they keep rewarding stiffness indefinitely -- see
+`generate_ring_bonded.py`, which is the real answer to them. They are therefore reported apart:
+the rotamers are the target, and the ring only has to stay a chemically sound furanose.
+
+Ubiquitin, 1228 particles, against amber99sb. Its rings (Phe, Tyr, Trp, His, Pro) carry no
+measured torsion -- chi2 turns about a single bond -- so there is nothing to separate:
 
 | `--stiffness` (kJ.mol-1.A-2) | `timestep` (fs) | cost | median (deg) | p95 | within 10 deg | bond drift (A) |
 |---|---|---|---|---|---|---|
+| 250 | 4 | 0.75 | 1.15 | 9.98 | 95.0 % | 0.0022 |
 | 500 | 3 | 1.00 | 0.85 | 7.27 | 96.2 % | 0.0013 |
-| **250** | **4** | **0.75** | **1.15** | 9.98 | **95.0 %** | 0.0022 |
-| 100 | 6 | 0.50 | 1.96 | 12.99 | 90.9 % | 0.0050 |
-| 50 | 10 | 0.30 | 2.80 | 19.29 | 80.3 % | 0.0204 |
-| 25 | 12 | 0.25 | 4.03 | 23.71 | 62.4 % | 0.0175 |
+| **650** | **3** | **1.00** | **0.75** | 6.99 | **96.6 %** | 0.0010 |
+| 800 | 3 | 1.00 | 0.66 | 6.77 | 96.6 % | 0.0008 |
+| 1200 | 2 | 1.50 | 0.82 | 7.13 | 96.6 % | 0.0006 |
+| 1600 | 2 | 1.50 | 0.80 | 7.01 | 96.6 % | 0.0005 |
 
-B-DNA duplex, 1270 particles, against amber14/DNA.OL15:
+The protein has an interior optimum at 800: it is the last value that still runs at 3 fs, and
+above it the timestep halves while the wells stop improving. 650 gives up 0.09 deg of median
+for nothing else.
 
-| `--stiffness` (kJ.mol-1.A-2) | `timestep` (fs) | cost | median (deg) | p95 | within 10 deg | bond drift (A) |
+B-DNA duplex, 1270 particles, against amber14/DNA.OL15 -- rotamers (alpha, beta, gamma,
+epsilon, zeta, chi; 252 angles) apart from the ring:
+
+| `--stiffness` | `timestep` | cost | rotamers, median | within 10 deg | ring bonds (A) | ring angles (deg) |
 |---|---|---|---|---|---|---|
-| 8000 | 0.5 | 1.00 | 0.84 | 5.76 | 100.0 % | 0.0008 |
-| **2000** | **1** | **0.50** | **1.43** | 8.34 | **98.9 %** | 0.0016 |
-| 500 | 2 | 0.25 | 1.81 | 12.50 | 86.0 % | 0.0051 |
-| 250 | 3 | 0.17 | 2.50 | 14.51 | 77.4 % | 0.0110 |
-| 100 | 4 | 0.12 | 3.48 | 20.96 | 75.5 % | 0.0219 |
+| 250 | 3 | 0.67 | 2.00 | 94.0 % | 0.0266 | 7.90 |
+| 500 | 2 | 1.00 | 1.40 | 94.4 % | 0.0163 | 7.51 |
+| **650** | **2** | **1.00** | **1.30** | **93.7 %** | **0.0128** | 7.46 |
+| 1000 | 1.5 | 1.33 | 1.17 | 94.4 % | 0.0087 | 7.33 |
+| 2000 | 1 | 2.00 | 0.94 | 98.4 % | 0.0057 | 6.85 |
+| 8000 | 0.5 | 4.00 | 0.67 | 100.0 % | 0.0028 | 5.80 |
+| *AMBER itself* | | | | | *0.0013* | *5.12* |
 
-**Recommended: 250 kJ.mol-1.A-2 at 4 fs for protein, 2000 at 1 fs for nucleic** -- a quarter
-and a half off the cost respectively, for about one degree of median well error. Going further
-is a real trade rather than a free one: at k = 100 the protein still holds 90.9 % of its wells
-for half the cost again, and below k = 50 the model stops reproducing the landscape.
+RNA hairpin, 389 particles, against amber14/RNA.OL3:
+
+| `--stiffness` | `timestep` | cost | rotamers, median | within 10 deg | ring bonds (A) | ring angles (deg) |
+|---|---|---|---|---|---|---|
+| 500 | 2 | 1.00 | 1.64 | 100.0 % | 0.0092 | 7.19 |
+| **650** | **2** | **1.00** | **1.52** | **100.0 %** | **0.0079** | 6.48 |
+| 1000 | 1.5 | 1.33 | 1.28 | 100.0 % | 0.0065 | 5.65 |
+| 2000 | 1 | 2.00 | 1.06 | 100.0 % | 0.0045 | 3.88 |
+| *AMBER itself* | | | | | *0.0004* | |
+
+The nucleic rotamers are flat over the whole usable range -- 93.7 to 94.4 % on DNA from k = 100
+to 500, and a clean 100 % on RNA from 500 to 2000 -- so there is no interior optimum there,
+only a trade: everything that still improves with stiffness is the ring. RNA's ring is the
+tighter of the two at equal k (0.0079 A against 0.0128) because the 2'-OH gives C2' one more
+substituent, hence more 1-3 springs holding the ring closed.
+
+So 650 is optimal nowhere and measurably worse nowhere, and it removes the need for three
+values: it keeps each system's best timestep (3 fs and 2 fs), costs the protein 0.09 deg
+against its own optimum, and holds the DNA ring 25 % tighter than 500 does.
+
+**Depart from it** when the sugar pucker itself is the object of study: the ring wants 2000
+(DNA 98.4 % of its ring coordinates, RNA 100 %) at half the speed. The right fix is the ring's
+real bonded terms rather than a stiffer mesh -- with them, k = 250 beats k = 2000 at three
+times the timestep.
 
 Two things do *not* limit how far `--stiffness` can drop. The torsions do not: the timestep
 ceiling is the same with them disabled. Planarity does not either, as long as the PLANARITY
 impropers are on -- see `dihedralplanarity.enable` above, where the deviation is flat at
 0.02-0.07 deg from k = 500 down to k = 50. What degrades is the mesh's grip on the torsion
 wells themselves, and nothing else compensates for that.
+
+Note that `pdb2spn`'s own `-stiffness` default is still 1.0, which is not a usable value for a
+rigid-body mesh: pass it explicitly.
 
 Finally, `--rigidbody` takes every mesh spring's rest length from the **input structure's own
 distances** (`RigidBodyBuilder` passes -1.0, meaning "use the current one"). Whatever geometry
