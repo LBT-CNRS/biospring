@@ -103,7 +103,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 			unsigned ncellstotal = 0;    // 0 = never measured
 			cl_int4 ncells = {{0, 0, 0, 0}};
 			cl_float4 origin = {{0.0f, 0.0f, 0.0f, 0.0f}};
-			float width = 0.0f;          // this term's cutoff
+			float cutoff = 0.0f;         // what this term asked for
+			float width = 0.0f;          // the cells actually built; >= cutoff
 		};
 
 		// Walks the device's cell list the way a force kernel has to, and

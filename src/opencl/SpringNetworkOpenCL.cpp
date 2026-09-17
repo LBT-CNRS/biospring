@@ -663,7 +663,14 @@ bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float cutoff)
 		for (int d = 0; d < 3; ++d)
 			{
 			if (!std::isfinite(p[d]))
-				return false;   // a diverged run: _syncParticlesFromDevice reports it
+				{
+				// _syncParticlesFromDevice reports this properly, with the
+				// particle's id, at the end of the step. Here there is nothing
+				// to measure: invalidate rather than leave a frame that no
+				// longer describes anything.
+				grid.ncellstotal = 0;
+				return false;
+				}
 			if (p[d] < lo[d]) lo[d] = p[d];
 			if (p[d] > hi[d]) hi[d] = p[d];
 			}
@@ -675,32 +682,73 @@ bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float cutoff)
 	// is also the stencil's reach, so a particle in the outermost ring still
 	// has its full neighbourhood inside the grid.
 	const int MARGIN_CELLS = 2;
-	cl_int4 ncells;
-	long total = 1;
-	for (int d = 0; d < 3; ++d)
-		{
-		const int n = static_cast<int>(std::floor((hi[d] - lo[d]) / cutoff)) + 1 + 2 * MARGIN_CELLS;
-		ncells.s[d] = n;
-		total *= n;
-		}
-	ncells.s[3] = 0;
-
-	// An elongated structure with a short cutoff can ask for an absurd number of
-	// cells. Refusing is better than allocating it: the caller falls back to
-	// whatever it does without a grid, and says so.
 	const long CELL_LIMIT = 8L * 1024L * 1024L;
-	if (total <= 0 || total > CELL_LIMIT)
+
+	// A cell WIDER than the cutoff is still correct: the 3x3x3 stencil then
+	// covers more than the cutoff asks for, and the distance test each term
+	// makes anyway drops the surplus. Only narrower would be wrong. So a box
+	// too big for the cell count is answered by widening the cells rather than
+	// by refusing to build -- which degrades towards brute force, slowly and
+	// correctly, instead of leaving a term with no neighbour structure and no
+	// way to know it.
+	//
+	// It is not reached by a healthy structure: the largest example here is
+	// 034's capsid, a 292 A cube, which asks for 68921 cells of 8 A against the
+	// 8M below. It is reached by a diverging one, and then saying so is worth
+	// more than the grid.
+	float width = cutoff;
+	cl_int4 ncells;
+	long total = 0;
+	for (int attempt = 0; attempt < 64; ++attempt)
 		{
-		BIOSPRING_WARN_ONCE("OpenCL cell list: the structure's box needs %ld cells of %.2f A, "
-		                    "beyond the %ld this build allocates; the grid is not used.",
-		                    total, cutoff, CELL_LIMIT);
+		total = 1;
+		bool overflowed = false;
+		for (int d = 0; d < 3; ++d)
+			{
+			const double span = (hi[d] - lo[d]) / width;
+			if (!(span < static_cast<double>(CELL_LIMIT)))
+				{
+				overflowed = true;
+				break;
+				}
+			const int n = static_cast<int>(std::floor(span)) + 1 + 2 * MARGIN_CELLS;
+			ncells.s[d] = n;
+			total *= n;
+			if (total > CELL_LIMIT)
+				{
+				overflowed = true;
+				break;
+				}
+			}
+		if (!overflowed)
+			break;
+		width *= 2.0f;
+		total = 0;
+		}
+
+	if (total <= 0)
+		{
+		// 64 doublings and still too big means the coordinates are not a
+		// structure any more.
+		BIOSPRING_WARN_ONCE("OpenCL cell list: no grid fits the coordinates (extent %.3g x %.3g x %.3g A); "
+		                    "the structure has almost certainly diverged.",
+		                    hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+		grid.ncellstotal = 0;
 		return false;
 		}
 
+	if (width != cutoff)
+		BIOSPRING_WARN_ONCE("OpenCL cell list: the structure's box needs cells of %.2f A rather than the "
+		                    "%.2f A cutoff asks for, to stay under %ld cells. Still exact, and slower: "
+		                    "each walk sifts (%.1f)^3 times as many candidates.",
+		                    width, cutoff, CELL_LIMIT, width / cutoff);
+
+	ncells.s[3] = 0;
 	for (int d = 0; d < 3; ++d)
-		grid.origin.s[d] = lo[d] - MARGIN_CELLS * cutoff;
+		grid.origin.s[d] = lo[d] - MARGIN_CELLS * width;
 	grid.origin.s[3] = 0.0f;
-	grid.width = cutoff;
+	grid.cutoff = cutoff;
+	grid.width = width;
 	grid.ncells = ncells;
 
 	const unsigned ncellstotal = static_cast<unsigned>(total);
@@ -786,8 +834,12 @@ bool SpringNetworkOpenCL::_buildCellList(CellGrid & grid, float cutoff)
 	{
 	// A first call, a cutoff that changed under us (the .msp can be reloaded
 	// mid-run), or a structure that has outgrown its frame.
-	if (grid.ncellstotal == 0 || grid.width != cutoff || !_frameStillHolds(grid))
+	if (grid.ncellstotal == 0 || grid.cutoff != cutoff || !_frameStillHolds(grid))
 		{
+		// _measureCellGrid invalidates the grid when it cannot measure one, so
+		// a term that consults it afterwards sees "no grid" rather than last
+		// step's cells over this step's positions -- which is the one outcome
+		// worse than having no grid at all, being wrong without saying so.
 		if (!_measureCellGrid(grid, cutoff))
 			return false;
 		}

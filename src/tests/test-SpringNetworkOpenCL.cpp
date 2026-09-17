@@ -319,6 +319,12 @@ TEST(SpringNetworkOpenCL, EachTermGetsACellListAtItsOwnCutoff)
     // A grid per term, each with the cell width its own cutoff asks for. If
     // these ever come back equal, the grids have been merged again and the
     // shortest-range term is paying the longest one's volume.
+    EXPECT_FLOAT_EQ(gpu.stericCells().cutoff, 6.0f);
+    EXPECT_FLOAT_EQ(gpu.electrostaticCells().cutoff, 14.0f);
+    EXPECT_FLOAT_EQ(gpu.hydrophobicCells().cutoff, 10.0f);
+
+    // A 40 A cloud is nowhere near the cell limit, so the cells built are the
+    // cells asked for. Widening is the divergence path, not this one.
     EXPECT_FLOAT_EQ(gpu.stericCells().width, 6.0f);
     EXPECT_FLOAT_EQ(gpu.electrostaticCells().width, 14.0f);
     EXPECT_FLOAT_EQ(gpu.hydrophobicCells().width, 10.0f);
@@ -352,5 +358,75 @@ TEST(SpringNetworkOpenCL, EachTermGetsACellListAtItsOwnCutoff)
 
         // Guards against passing because nothing is near anything.
         EXPECT_GT(pairs, 500u) << "the cloud is too sparse for " << term.name << " to mean anything";
+    }
+}
+
+// What happens when the structure no longer fits the grid.
+//
+// The CPU never faces this: its grid is an unordered_map keyed by cell
+// coordinate (grid/InfiniteGrid.hpp), so cells exist only where particles are
+// and a structure can go anywhere. A device cannot hash cheaply, so its grid is
+// an array over a measured box, and the box can be outgrown.
+//
+// A cell WIDER than the cutoff is still exact -- the 3x3x3 stencil then covers
+// more than asked and the distance test drops the surplus -- so the answer to a
+// box too big is wider cells, not no grid. This drives it with a cutoff of 1 A
+// and one particle 5000 A away, which asks for 1.25e11 cells of 1 A and gets
+// cells of 32 instead. The neighbour sets must still be exactly the O(N^2) ones:
+// degrading towards brute force has to stay correct, or it is not a degradation
+// but a bug with a warning attached.
+TEST(SpringNetworkOpenCL, TooBigABoxWidensTheCellsAndStaysExact)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 200;
+    const float CUTOFF = 1.0f;
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration config;
+
+    unsigned state = 7u;
+    const auto next = [&state]() {
+        state = state * 1103515245u + 12345u;
+        return static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff);
+    };
+    for (unsigned i = 0; i < N; ++i)
+    {
+        spn::Particle p;
+        p.setPosition(Vector3f(next() * 6.0f, next() * 6.0f, next() * 6.0f));
+        p.setMass(12.0f);
+        gpu.addParticle(p);
+    }
+    // The one that blows the box out.
+    spn::Particle far;
+    far.setPosition(Vector3f(5000.0f, 5000.0f, 5000.0f));
+    far.setMass(12.0f);
+    gpu.addParticle(far);
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = 1;
+    config.sim.timestep = 0.1;
+    config.spring.enable = false;
+    config.steric.enable = true;
+    config.steric.cutoff = CUTOFF;
+    config.electrostatic.enable = false;
+    config.hydrophobicity.enable = false;
+    gpu.setup(config);
+    gpu.run();
+
+    const SpringNetworkOpenCL::CellGrid & grid = gpu.stericCells();
+    ASSERT_GT(grid.ncellstotal, 0u) << "the grid was refused outright instead of widening";
+    EXPECT_FLOAT_EQ(grid.cutoff, CUTOFF) << "the requested cutoff was not kept";
+    EXPECT_GT(grid.width, CUTOFF) << "the cells were not widened, so the box cannot have fitted";
+
+    // And it is still the right answer.
+    for (unsigned i = 0; i < N + 1; ++i)
+    {
+        std::vector<unsigned> found = gpu.neighborsFromCellList(grid, i, CUTOFF);
+        std::vector<unsigned> expected = neighborsByBruteForce(gpu, i, CUTOFF);
+        std::sort(found.begin(), found.end());
+        std::sort(expected.begin(), expected.end());
+        ASSERT_EQ(found, expected) << "widened cells gave the wrong neighbours for particle " << i;
     }
 }
