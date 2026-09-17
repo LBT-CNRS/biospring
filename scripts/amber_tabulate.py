@@ -75,6 +75,10 @@ def tabulate(terms):
 tables, table_of = [], {}
 records, seen = [], set()
 per_family = defaultdict(int)
+# Torsions kept under an owner that still names an unusual neighbour atom
+# (see the UNIVERSAL filter below). Expected to stay at zero; reported so it
+# cannot become a silent exception.
+unconstrained = 0
 
 for res in G.residues:
     if res.name not in WANTED:
@@ -118,10 +122,39 @@ for res in G.residues:
                     # the emitted file was not byte-reproducible because of it.
                     owners = sorted({a.residue for a in (a1, a2, a3, a4)},
                                     key=lambda r: r.index)
+                    spellings = []
                     for owner in owners:
                         names = tuple(name_for(x, owner.index) for x in (a1, a2, a3, a4))
                         if any(len(n) - len(n.lstrip("+-")) > 1 for n in names):
                             continue  # more than one residue away: not addressable
+                        spellings.append((owner, names))
+
+                    # A record carries the residue name of its OWNER only: the
+                    # format cannot say what the neighbour must be. So a "+X"
+                    # or "-X" naming an atom that only some residue types have
+                    # fires on every neighbour that happens to have that name.
+                    # Measured on 072: ALA's copy of proline's own
+                    # C(i-1)-N-CD-CG spelled "C +N +CD +CG" and fired on every
+                    # Glu, Gln and Arg that followed an alanine -- seven of
+                    # them, each a torsion across atoms 3.9 to 5.0 A apart,
+                    # plus the matching planarity improper and two omegas.
+                    # Restricting the neighbour reference to the four atoms
+                    # EVERY residue has drops exactly those copies, and never
+                    # the torsion: the residue that owns the unusual atoms
+                    # spells them locally and keeps its own copy (proline's
+                    # "-C N CD CG" survives, and it is the correct one).
+                    UNIVERSAL = {"N", "CA", "C", "O"}
+                    safe = [(o, n) for (o, n) in spellings
+                            if all(x.lstrip("+-") in UNIVERSAL
+                                   for x in n if x[0] in "+-")]
+                    # A torsion whose every spelling reaches for an unusual
+                    # neighbour atom would vanish entirely; keep the one with
+                    # the most local atoms rather than lose the term.
+                    if not safe and spellings:
+                        safe = [max(spellings,
+                                    key=lambda s: sum(1 for x in s[1] if x[0] not in "+-"))]
+                        unconstrained += 1
+                    for owner, names in safe:
                         key = (owner.name,) + names
                         if key in seen:
                             continue
@@ -184,10 +217,23 @@ for res in G.residues:
         _, perm, terms = best
         quad = (perm[0], perm[1], hub, perm[2])
         owners = sorted({a.residue for a in quad}, key=lambda r: r.index)
+        spellings = []
         for owner in owners:
             names = tuple(name_for(x, owner.index) for x in quad)
             if any(len(n) - len(n.lstrip("+-")) > 1 for n in names):
                 continue
+            spellings.append((owner, names))
+        # Same neighbour-reference rule as the proper torsions above: proline's
+        # ring-nitrogen improper spelled from the previous residue reads
+        # "C +CD +N +CA" and fires on any Glu, Gln or Arg that follows.
+        safe = [(o, n) for (o, n) in spellings
+                if all(x.lstrip("+-") in {"N", "CA", "C", "O"}
+                       for x in n if x[0] in "+-")]
+        if not safe and spellings:
+            safe = [max(spellings,
+                        key=lambda s: sum(1 for x in s[1] if x[0] not in "+-"))]
+            unconstrained += 1
+        for owner, names in safe:
             key = ("IMP", owner.name) + names
             if key in seen:
                 continue
@@ -225,5 +271,7 @@ open(OUT, "w").write("\n".join(out) + "\n")
 print(f"\n  {len(records)} torsions, {len(tables)} tables de {BINS} intervalles")
 for fam, n in sorted(per_family.items()):
     print(f"    {fam:<12s} {n:5d}")
+if unconstrained:
+    print(f"    {'(voisin non contraint)':<12s} {unconstrained:5d}")
 print(f"\n  erreur d'interpolation la pire : {worst:.4f} kJ/mol")
 print(f"  -> {OUT}")
