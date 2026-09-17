@@ -14,9 +14,14 @@ typedef struct{
 //
 // Every non-bonded term needs the same thing: given a particle, the handful of
 // particles close enough to matter. The CPU answers it with an infinite grid of
-// cells (nsearch.hpp); this is the device's version of the same structure, and
-// it is shared -- the steric and the electrostatic terms differ in their force
-// law and in their cutoff, not in who is near whom.
+// cells (nsearch.hpp); this is the device's version of the same structure.
+//
+// ONE GRID PER TERM, not one shared. The cell width IS the cutoff, and the
+// three cutoffs differ -- steric 8 A, electrostatic 16, hydrophobicity 15 by
+// default -- so a shared grid at the longest of them would make the shortest
+// term walk the longest one's volume, eight times the candidates for the same
+// answer. The kernels below take the frame as arguments for exactly that
+// reason: the same code bins into whichever grid it is handed.
 //
 // Built as a linked list per cell rather than a sorted array, after the method
 // in Marcus Bannerman's OpenCL course (exercise 3, "sorting particles"): each
@@ -70,9 +75,10 @@ __kernel void binParticles(const __global float4 * positions,
 	const uint c = biospring_cell_of(positions[p], origin, cellwidth, ncells);
 	if (c == BIOSPRING_EMPTY_CELL)
 		{
-		// Outside the box: linked to nothing, and no cell points at it. It is
-		// then invisible to every neighbour walk, which is why the host rebuilds
-		// the box rather than letting particles drift out of it.
+		// Outside the frame: linked to nothing, and no cell points at it, so it
+		// is invisible to every neighbour walk. The host checks for this before
+		// binning -- see _frameStillHolds -- and remeasures rather than letting
+		// it happen; reaching here at all means the frame was already stale.
 		nextincell[p] = BIOSPRING_EMPTY_CELL;
 		return;
 		}

@@ -90,8 +90,11 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particlemasses;
     delete[] _particledynamic;
     delete[] _springsocl;
-    delete[] _cellhead;
-    delete[] _nextincell;
+    for (CellGrid * g : {&_stericcells, &_electrostaticcells, &_hydrophobiccells})
+        {
+        delete[] g->head;
+        delete[] g->next;
+        }
     delete[] _contextproperties;
     }
 
@@ -472,9 +475,7 @@ void SpringNetworkOpenCL::idleRun()
 	// positions read back last step occupy, which is one step stale -- hence the
 	// cell of margin _buildCellList adds, the same reason the CPU's grid carries
 	// a skin.
-	const float cellcutoff = _cellListCutoff();
-	if (cellcutoff > 0.0f)
-		_buildCellList(cellcutoff);
+	_updateCellLists();
 
 	cl_ulong startTime;
 	cl_ulong endTime;
@@ -621,32 +622,35 @@ void SpringNetworkOpenCL::run()
 	}
 
 
-// The cutoff one grid has to resolve for every enabled non-bonded term.
+// Refreshes the grid of every enabled non-bonded term, each at its own cutoff.
 //
-// One grid, not one per term: what differs between the steric and the
-// electrostatic is the force law and the range, not who is near whom. Sized to
-// the largest range, a cell walk finds every pair either of them can need, and
-// each term drops what is beyond its own cutoff -- which it has to do anyway,
-// since a cell is a box and a cutoff is a sphere.
-float SpringNetworkOpenCL::_cellListCutoff() const
+// A term that is off gets no grid: the cheapest neighbour search is the one
+// that does not run.
+void SpringNetworkOpenCL::_updateCellLists()
 	{
-	float cutoff = 0.0f;
 	if (isStericEnabled())
-		cutoff = std::max(cutoff, getStericCutoff());
+		_buildCellList(_stericcells, getStericCutoff());
 	if (isAnyElectrostaticEnabled())
-		cutoff = std::max(cutoff, getElectrostaticCutoff());
-	return cutoff;
+		_buildCellList(_electrostaticcells, getElectrostaticCutoff());
+	if (isHydrophobicityEnabled())
+		_buildCellList(_hydrophobiccells, getHydrophobicCutoff());
 	}
 
 
-// Measures the box the particles currently occupy, sizes a grid of cells of
-// `cutoff` to it, and fills the linked lists.
+// Sizes the grid to the box the particles currently occupy.
 //
-// The box is remeasured rather than fixed once: this is not a periodic
-// simulation, the structure translates and swells, and a particle that leaves
-// the grid is invisible to every neighbour walk (see binParticles). Measuring
-// costs one pass over the positions already read back for the sync.
-bool SpringNetworkOpenCL::_buildCellList(float cutoff)
+// THIS is what "building the grid" means, and it is not what happens every
+// step. The cells, their width and the origin they are counted from are a
+// fixed frame; what moves is which cell each particle is in, and that is
+// _binParticlesIntoCells below. Conflating the two costs a pass over every
+// position, every step, to answer a question that is almost always no.
+//
+// Remeasured rather than fixed for the whole run, though: this is not a
+// periodic simulation, the structure translates and swells, and a particle
+// outside the grid is invisible to every neighbour walk. The device says when
+// that has happened (see binParticles), so the pass below runs on the first
+// step and then only when someone has actually left.
+bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float cutoff)
 	{
 	if (_nbparticlesocl == 0 || cutoff <= 0.0f)
 		return false;
@@ -665,15 +669,18 @@ bool SpringNetworkOpenCL::_buildCellList(float cutoff)
 			}
 		}
 
-	// One cell of margin on each side, so a particle sitting exactly on the
-	// upper face still falls inside, and so does one that moves a little before
-	// the next rebuild.
+	// Margin on each side, in whole cells. It is what buys the frame its
+	// lifetime: a structure has to expand by this much before anything leaves
+	// and the pass above runs again. Two cells rather than one because a cell
+	// is also the stencil's reach, so a particle in the outermost ring still
+	// has its full neighbourhood inside the grid.
+	const int MARGIN_CELLS = 2;
 	cl_int4 ncells;
 	long total = 1;
 	for (int d = 0; d < 3; ++d)
 		{
-		const int n = static_cast<int>(std::floor((hi[d] - lo[d]) / cutoff)) + 3;
-		(d == 0 ? ncells.s[0] : d == 1 ? ncells.s[1] : ncells.s[2]) = n;
+		const int n = static_cast<int>(std::floor((hi[d] - lo[d]) / cutoff)) + 1 + 2 * MARGIN_CELLS;
+		ncells.s[d] = n;
 		total *= n;
 		}
 	ncells.s[3] = 0;
@@ -690,52 +697,102 @@ bool SpringNetworkOpenCL::_buildCellList(float cutoff)
 		return false;
 		}
 
-	_cellorigin.s[0] = lo[0] - cutoff;
-	_cellorigin.s[1] = lo[1] - cutoff;
-	_cellorigin.s[2] = lo[2] - cutoff;
-	_cellorigin.s[3] = 0.0f;
-	_cellwidth = cutoff;
-	_ncells = ncells;
+	for (int d = 0; d < 3; ++d)
+		grid.origin.s[d] = lo[d] - MARGIN_CELLS * cutoff;
+	grid.origin.s[3] = 0.0f;
+	grid.width = cutoff;
+	grid.ncells = ncells;
 
 	const unsigned ncellstotal = static_cast<unsigned>(total);
-	if (ncellstotal != _ncellstotal)
+	if (ncellstotal != grid.ncellstotal)
 		{
-		delete[] _cellhead;
-		_cellhead = new unsigned[ncellstotal];
-		_ncellstotal = ncellstotal;
-		_cellHeadBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-		                             sizeof(unsigned) * ncellstotal, _cellhead, &_err);
+		delete[] grid.head;
+		grid.head = new unsigned[ncellstotal];
+		grid.ncellstotal = ncellstotal;
+		grid.headbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+		                             sizeof(unsigned) * ncellstotal, grid.head, &_err);
 		checkErr("Buffer::Buffer(cellhead)");
 		}
-	if (_nextincell == nullptr)
+	if (grid.next == nullptr)
 		{
-		_nextincell = new unsigned[_nbparticlesocl];
-		_nextInCellBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-		                               sizeof(unsigned) * _nbparticlesocl, _nextincell, &_err);
+		grid.next = new unsigned[_nbparticlesocl];
+		grid.nextbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+		                               sizeof(unsigned) * _nbparticlesocl, grid.next, &_err);
 		checkErr("Buffer::Buffer(nextincell)");
 		}
 
+	return true;
+	}
+
+
+// Puts every particle in the cell it is in now. This is the per-step work, and
+// all of it: two kernel launches over a frame that does not move.
+void SpringNetworkOpenCL::_binParticlesIntoCells(CellGrid & grid)
+	{
 	const unsigned wg = WORK_GROUP_SIZE;
-	const unsigned cellglobal = (ncellstotal / wg) * wg + wg;
-	_kernelblankcells.setArg(0, ncellstotal);
-	_kernelblankcells.setArg(1, _cellHeadBuffer);
+
+	const unsigned cellglobal = (grid.ncellstotal / wg) * wg + wg;
+	_kernelblankcells.setArg(0, grid.ncellstotal);
+	_kernelblankcells.setArg(1, grid.headbuffer);
 	_err = _queue.enqueueNDRangeKernel(_kernelblankcells, cl::NullRange,
 	                                   cl::NDRange(cellglobal), cl::NDRange(wg));
 	checkErr("enqueueNDRangeKernel(blankCells)");
 
 	const unsigned partglobal = (_nbparticlesocl / wg) * wg + wg;
 	_kernelbinparticles.setArg(0, _inoutPositionBuffer);
-	_kernelbinparticles.setArg(1, _cellorigin);
-	_kernelbinparticles.setArg(2, _cellwidth);
-	_kernelbinparticles.setArg(3, _ncells);
-	_kernelbinparticles.setArg(4, _cellHeadBuffer);
-	_kernelbinparticles.setArg(5, _nextInCellBuffer);
+	_kernelbinparticles.setArg(1, grid.origin);
+	_kernelbinparticles.setArg(2, grid.width);
+	_kernelbinparticles.setArg(3, grid.ncells);
+	_kernelbinparticles.setArg(4, grid.headbuffer);
+	_kernelbinparticles.setArg(5, grid.nextbuffer);
 	_kernelbinparticles.setArg(6, _nbparticlesocl);
 	_err = _queue.enqueueNDRangeKernel(_kernelbinparticles, cl::NullRange,
 	                                   cl::NDRange(partglobal), cl::NDRange(wg));
 	checkErr("enqueueNDRangeKernel(binParticles)");
-	_queue.finish();
+	}
 
+
+// Whether the frame still contains every particle.
+//
+// Asked on the HOST, over the positions _syncParticlesFromDevice has already
+// read back, because that is free and asking the device is not. The first
+// version of this had binParticles raise a flag in a one-int buffer, which the
+// host then read: correct, and slower than what it replaced -- two blocking
+// four-byte transfers per grid per step cost more than a pass over 2811
+// positions already in cache. Measured on 072: 0.40 ms a step per grid that
+// way against 0.22 ms with the pass.
+bool SpringNetworkOpenCL::_frameStillHolds(const CellGrid & grid) const
+	{
+	if (grid.ncellstotal == 0)
+		return false;
+
+	for (unsigned i = 0; i < _nbparticlesocl; ++i)
+		{
+		const float p[3] = {_particlepositions[i].x, _particlepositions[i].y, _particlepositions[i].z};
+		for (int d = 0; d < 3; ++d)
+			{
+			const float local = (p[d] - grid.origin.s[d]) / grid.width;
+			if (!(local >= 0.0f) || local >= static_cast<float>(grid.ncells.s[d]))
+				return false;   // outside, or not a number at all
+			}
+		}
+	return true;
+	}
+
+
+// Re-places the particles in the grid, measuring a new frame only when the one
+// in hand no longer holds them.
+bool SpringNetworkOpenCL::_buildCellList(CellGrid & grid, float cutoff)
+	{
+	// A first call, a cutoff that changed under us (the .msp can be reloaded
+	// mid-run), or a structure that has outgrown its frame.
+	if (grid.ncellstotal == 0 || grid.width != cutoff || !_frameStillHolds(grid))
+		{
+		if (!_measureCellGrid(grid, cutoff))
+			return false;
+		}
+
+	_binParticlesIntoCells(grid);
 	return true;
 	}
 
@@ -747,25 +804,26 @@ bool SpringNetworkOpenCL::_buildCellList(float cutoff)
 // is in one of the 27 cells, and some of what is in them is beyond it. The
 // distance test is what makes the answer exact, and a force kernel has to make
 // the same one.
-std::vector<unsigned> SpringNetworkOpenCL::neighborsFromCellList(unsigned i, float cutoff)
+std::vector<unsigned> SpringNetworkOpenCL::neighborsFromCellList(const CellGrid & grid, unsigned i,
+                                                                float cutoff)
 	{
 	std::vector<unsigned> neighbors;
-	if (_ncellstotal == 0 || i >= _nbparticlesocl)
+	if (grid.ncellstotal == 0 || i >= _nbparticlesocl)
 		return neighbors;
 
 	// The device owns these between rebuilds; read them rather than trusting
 	// the host mirror to be coherent.
-	_err = _queue.enqueueReadBuffer(_cellHeadBuffer, CL_TRUE, 0,
-	                                sizeof(unsigned) * _ncellstotal, _cellhead);
+	_err = _queue.enqueueReadBuffer(grid.headbuffer, CL_TRUE, 0,
+	                                sizeof(unsigned) * grid.ncellstotal, grid.head);
 	checkErr("enqueueReadBuffer(cellhead)");
-	_err = _queue.enqueueReadBuffer(_nextInCellBuffer, CL_TRUE, 0,
-	                                sizeof(unsigned) * _nbparticlesocl, _nextincell);
+	_err = _queue.enqueueReadBuffer(grid.nextbuffer, CL_TRUE, 0,
+	                                sizeof(unsigned) * _nbparticlesocl, grid.next);
 	checkErr("enqueueReadBuffer(nextincell)");
 
 	const float4 & here = _particlepositions[i];
-	const int cx = static_cast<int>(std::floor((here.x - _cellorigin.s[0]) / _cellwidth));
-	const int cy = static_cast<int>(std::floor((here.y - _cellorigin.s[1]) / _cellwidth));
-	const int cz = static_cast<int>(std::floor((here.z - _cellorigin.s[2]) / _cellwidth));
+	const int cx = static_cast<int>(std::floor((here.x - grid.origin.s[0]) / grid.width));
+	const int cy = static_cast<int>(std::floor((here.y - grid.origin.s[1]) / grid.width));
+	const int cz = static_cast<int>(std::floor((here.z - grid.origin.s[2]) / grid.width));
 
 	const float cutoffsq = cutoff * cutoff;
 	for (int dz = -1; dz <= 1; ++dz)
@@ -775,11 +833,11 @@ std::vector<unsigned> SpringNetworkOpenCL::neighborsFromCellList(unsigned i, flo
 				const int x = cx + dx, y = cy + dy, z = cz + dz;
 				// No periodicity: a stencil cell outside the grid is simply not
 				// there, never the cell on the opposite face.
-				if (x < 0 || y < 0 || z < 0 || x >= _ncells.s[0] || y >= _ncells.s[1] || z >= _ncells.s[2])
+				if (x < 0 || y < 0 || z < 0 || x >= grid.ncells.s[0] || y >= grid.ncells.s[1] || z >= grid.ncells.s[2])
 					continue;
 
-				const unsigned cell = static_cast<unsigned>((z * _ncells.s[1] + y) * _ncells.s[0] + x);
-				for (unsigned p = _cellhead[cell]; p != EMPTY_CELL; p = _nextincell[p])
+				const unsigned cell = static_cast<unsigned>((z * grid.ncells.s[1] + y) * grid.ncells.s[0] + x);
+				for (unsigned p = grid.head[cell]; p != EMPTY_CELL; p = grid.next[p])
 					{
 					if (p == i)
 						continue;

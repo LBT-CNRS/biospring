@@ -246,7 +246,7 @@ TEST(SpringNetworkOpenCL, HoldsStaticParticlesTheWayTheCPUDoes)
 namespace
 {
 void buildParticleCloud(spn::SpringNetwork & network, configuration::Configuration & config,
-                        unsigned n, float extent, float cutoff)
+                        unsigned n, float extent)
 {
     // A fixed sequence rather than a random one: a test that fails only on
     // some seeds is a test nobody can act on.
@@ -274,57 +274,83 @@ void buildParticleCloud(spn::SpringNetwork & network, configuration::Configurati
     config.sim.nbsteps = 1;
     config.sim.timestep = 0.1;
     config.spring.enable = false;
-    // The grid is sized by the enabled non-bonded terms; steric alone is enough
-    // to ask for one.
+
+    // Three terms, three DIFFERENT cutoffs. That is the whole point of a grid
+    // per term: the cell width is the cutoff, so a single grid at the longest
+    // of them makes the shortest term walk eight times the volume it needs.
     config.steric.enable = true;
-    config.steric.cutoff = cutoff;
-    config.electrostatic.enable = false;
+    config.steric.cutoff = 6.0;
+    config.electrostatic.enable = true;
+    config.electrostatic.cutoff = 14.0;
+    config.hydrophobicity.enable = true;
+    config.hydrophobicity.cutoff = 10.0;
 
     network.setup(config);
 }
+
+// The O(N^2) answer, which is what "near" means.
+std::vector<unsigned> neighborsByBruteForce(const spn::SpringNetwork & network, unsigned i, float cutoff)
+{
+    std::vector<unsigned> expected;
+    for (unsigned j = 0; j < network.getNumberOfParticles(); ++j)
+    {
+        if (j == i)
+            continue;
+        if ((network.getParticle(i).getPosition() - network.getParticle(j).getPosition()).norm() <= cutoff)
+            expected.push_back(j);
+    }
+    return expected;
+}
 } // namespace
 
-TEST(SpringNetworkOpenCL, CellListFindsExactlyTheNeighborsWithinTheCutoff)
+TEST(SpringNetworkOpenCL, EachTermGetsACellListAtItsOwnCutoff)
 {
     if (!hasOpenCLDevice())
         GTEST_SKIP() << "no OpenCL device available on this machine";
 
     const unsigned N = 400;
     const float EXTENT = 40.0f;
-    const float CUTOFF = 8.0f;
 
     SpringNetworkOpenCL gpu;
     configuration::Configuration config;
-    buildParticleCloud(gpu, config, N, EXTENT, CUTOFF);
+    buildParticleCloud(gpu, config, N, EXTENT);
     gpu.run();
 
-    ASSERT_GT(gpu.cellListWidth(), 0.0f) << "no cell list was built at all";
+    // A grid per term, each with the cell width its own cutoff asks for. If
+    // these ever come back equal, the grids have been merged again and the
+    // shortest-range term is paying the longest one's volume.
+    EXPECT_FLOAT_EQ(gpu.stericCells().width, 6.0f);
+    EXPECT_FLOAT_EQ(gpu.electrostaticCells().width, 14.0f);
+    EXPECT_FLOAT_EQ(gpu.hydrophobicCells().width, 10.0f);
 
-    // The O(N^2) answer, which is the definition.
-    size_t pairs = 0;
-    for (unsigned i = 0; i < N; ++i)
+    struct Term { const char * name; const SpringNetworkOpenCL::CellGrid * grid; float cutoff; };
+    const Term terms[] = {
+        {"steric", &gpu.stericCells(), 6.0f},
+        {"electrostatic", &gpu.electrostaticCells(), 14.0f},
+        {"hydrophobic", &gpu.hydrophobicCells(), 10.0f},
+    };
+
+    for (const Term & term : terms)
     {
-        std::vector<unsigned> expected;
-        for (unsigned j = 0; j < N; ++j)
+        ASSERT_GT(term.grid->ncellstotal, 0u) << "no cell list was built for " << term.name;
+
+        size_t pairs = 0;
+        for (unsigned i = 0; i < N; ++i)
         {
-            if (j == i)
-                continue;
-            if ((gpu.getParticle(i).getPosition() - gpu.getParticle(j).getPosition()).norm() <= CUTOFF)
-                expected.push_back(j);
+            std::vector<unsigned> found = gpu.neighborsFromCellList(*term.grid, i, term.cutoff);
+            std::vector<unsigned> expected = neighborsByBruteForce(gpu, i, term.cutoff);
+            std::sort(found.begin(), found.end());
+            std::sort(expected.begin(), expected.end());
+
+            // Duplicates matter as much as omissions: a particle counted twice
+            // is a force applied twice, and the linked list makes that possible
+            // if a stencil ever visits the same cell more than once.
+            ASSERT_EQ(found, expected)
+                << term.name << "'s cell list disagrees with the O(N^2) answer for particle " << i;
+            pairs += expected.size();
         }
 
-        std::vector<unsigned> found = gpu.neighborsFromCellList(i, CUTOFF);
-        std::sort(found.begin(), found.end());
-        std::sort(expected.begin(), expected.end());
-
-        // Duplicates matter as much as omissions: a particle counted twice is a
-        // force applied twice, and the linked list makes that possible if a
-        // stencil ever visits the same cell more than once.
-        ASSERT_EQ(found, expected) << "the cell list disagrees with the O(N^2) answer for particle " << i;
-        pairs += expected.size();
+        // Guards against passing because nothing is near anything.
+        EXPECT_GT(pairs, 500u) << "the cloud is too sparse for " << term.name << " to mean anything";
     }
-
-    // Guards against the test passing because nothing is near anything: with
-    // 400 particles in a 40 A cube and an 8 A cutoff there is plenty.
-    EXPECT_GT(pairs, 2000u) << "the cloud is too sparse for this test to mean anything";
 }

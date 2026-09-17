@@ -91,6 +91,21 @@ class SpringNetworkOpenCL : public SpringNetwork
 		virtual void initRun();
 		virtual void endRun();
 
+		// A cell list: the linked-list grid of biospring.cl, plus the frame it
+		// is counted in. One per non-bonded term -- see the members below for
+		// why the cell width has to be that term's own cutoff.
+		struct CellGrid
+		{
+			cl::Buffer headbuffer;       // one head per cell
+			cl::Buffer nextbuffer;       // one successor per particle
+			unsigned * head = nullptr;
+			unsigned * next = nullptr;
+			unsigned ncellstotal = 0;    // 0 = never measured
+			cl_int4 ncells = {{0, 0, 0, 0}};
+			cl_float4 origin = {{0.0f, 0.0f, 0.0f, 0.0f}};
+			float width = 0.0f;          // this term's cutoff
+		};
+
 		// Walks the device's cell list the way a force kernel has to, and
 		// returns the particles within `cutoff` of particle `i`.
 		//
@@ -102,10 +117,14 @@ class SpringNetworkOpenCL : public SpringNetwork
 		//
 		// Empty when no grid has been built -- no non-bonded term is enabled,
 		// or the box needed more cells than this build allocates.
-		std::vector<unsigned> neighborsFromCellList(unsigned i, float cutoff);
+		std::vector<unsigned> neighborsFromCellList(const CellGrid & grid, unsigned i,
+		                                            float cutoff);
 
-		// The cell width of the grid currently built, or 0 if there is none.
-		float cellListWidth() const { return _ncellstotal == 0 ? 0.0f : _cellwidth; }
+		// The grid of a given term, for the parity test to walk. Each term has
+		// its own; see the CellGrid declaration for why.
+		const CellGrid & stericCells() const { return _stericcells; }
+		const CellGrid & electrostaticCells() const { return _electrostaticcells; }
+		const CellGrid & hydrophobicCells() const { return _hydrophobiccells; }
 
 
 
@@ -176,36 +195,48 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::KernelFunctor _kernelfunctorexternal;
 
 		// ------------------------------------------------------------------
-		// Cell list
+		// Cell lists
 		// ------------------------------------------------------------------
 		//
-		// The device's answer to "which particles are near this one", shared by
-		// every non-bonded term: they differ in their force law and their
-		// cutoff, not in who is near whom. See biospring.cl for the structure
-		// (a linked list per cell, after Bannerman's exercise 3).
+		// The device's answer to "which particles are near this one". See
+		// biospring.cl for the structure: a linked list per cell, after
+		// Bannerman's exercise 3.
 		//
-		// The grid is rebuilt from the box the particles currently occupy, so
-		// the origin and the cell counts are recomputed rather than fixed.
+		// ONE PER TERM, because the cell width IS the cutoff and the three
+		// cutoffs differ -- steric 8 A, electrostatic 16, hydrophobicity 15 by
+		// default. A single grid at the longest of them would make the shortest
+		// term walk the longest one's volume: 27 cells of 16 A is 110592 A^3
+		// against 13824, so at protein density the steric term would sift some
+		// 7400 candidates to find the ~144 within its own 8 A. Eight times the
+		// work for the same answer. Binning is O(N) with one atomic, walking is
+		// O(N x candidates), so a second bin pass is the cheap side of that
+		// trade.
+		//
 		// Must match BIOSPRING_EMPTY_CELL in biospring.cl.
 		static const unsigned EMPTY_CELL = static_cast<unsigned>(-1);
 
-		cl::Buffer _cellHeadBuffer;      // one head per cell
-		cl::Buffer _nextInCellBuffer;    // one successor per particle
-		unsigned * _cellhead = nullptr;
-		unsigned * _nextincell = nullptr;
-		unsigned _ncellstotal = 0;       // 0 = no grid built yet
-		cl_int4 _ncells = {{0, 0, 0, 0}};
-		cl_float4 _cellorigin = {{0.0f, 0.0f, 0.0f, 0.0f}};
-		float _cellwidth = 0.0f;
+		CellGrid _stericcells;
+		CellGrid _electrostaticcells;
+		CellGrid _hydrophobiccells;
 
-		// Measures the box, sizes the grid to it and fills the cell list.
-		// Returns false when there is nothing to bin, or when the cutoff makes
-		// no grid possible.
-		bool _buildCellList(float cutoff);
+		// Two different things, deliberately not one function.
+		//
+		// The GRID -- the cells, their width, the origin they are counted from
+		// -- is a frame, and it does not move every step. What moves is which
+		// cell each particle is in. Measuring the frame costs a pass over every
+		// position; placing the particles in it costs two kernel launches. Only
+		// the second is per-step work.
+		//
+		// The frame is remeasured when the device reports that a particle fell
+		// outside it, which is a four-byte read rather than that pass.
+		bool _measureCellGrid(CellGrid & grid, float cutoff);
+		void _binParticlesIntoCells(CellGrid & grid);
+		bool _frameStillHolds(const CellGrid & grid) const;
+		bool _buildCellList(CellGrid & grid, float cutoff);
 
-		// The cutoff the grid must resolve: the largest one among the enabled
-		// non-bonded terms, since one grid serves them all.
-		float _cellListCutoff() const;
+		// Refreshes the grid of every enabled non-bonded term.
+		void _updateCellLists();
+
 
 
 		cl::CommandQueue _queue;
