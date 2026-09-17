@@ -35,6 +35,29 @@ class PDBReader : public TopologyReaderBase
         return (record == "CONECT");
     }
 
+    // SSBOND is the PDB's OWN record for a disulfide bridge and LINK its own
+    // record for any other bond between two residues; both were ignored, so a
+    // file declaring its bridges the standard way -- GKinase.1S4Q.pdb does --
+    // came in with no bond at all, and only a hand-added CONECT worked.
+    //
+    // Unlike CONECT they name atoms by residue rather than by serial, and they
+    // sit in the header, BEFORE the atoms they refer to. So they are collected
+    // while reading and resolved once every atom is known.
+    struct ResidueAtomRef
+    {
+        std::string chain;
+        int residue_id = 0;
+        std::string name;
+    };
+
+    static bool isSSBondLine(const std::string & line) { return line.compare(0, 6, "SSBOND") == 0; }
+    static bool isLinkLine(const std::string & line) { return line.compare(0, 6, "LINK  ") == 0; }
+
+    // Both return false on a line too short or malformed to read, which is
+    // warned about and skipped rather than thrown.
+    static bool parseSSBondLine(const std::string & line, ResidueAtomRef & first, ResidueAtomRef & second);
+    static bool parseLinkLine(const std::string & line, ResidueAtomRef & first, ResidueAtomRef & second);
+
     void read();
     void updatePositions();
     int getIdFromExtid(size_t extid) const;
@@ -44,8 +67,12 @@ class PDBReader : public TopologyReaderBase
     bool isInFilter(const char * const filter) const { return isInFilter(std::string(filter)); }
 
   protected:
+    // Adds one spring per collected SSBOND/LINK, once every atom is known.
+    void _resolveResidueBonds();
+
     std::map<int, size_t> _extidtoindex;
     std::vector<std::string> _atomfilter;
+    std::vector<std::pair<ResidueAtomRef, ResidueAtomRef>> _residue_bonds;
 };
 
 #endif

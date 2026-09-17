@@ -9,6 +9,7 @@
 #include "logging.h"
 #include "reduce/Reducer.h"
 #include "rigidbodygroup/RigidBodyBuilder.h"
+#include "staticbond/StaticBondBuilder.h"
 #include "utils.hpp"
 
 #include <optional>
@@ -30,8 +31,16 @@ const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "  .pdb : Protein Data Bank file",
     "  .pqr : PQR file",
     "",
-    "When the output is a PDB file, -pdbconect/--pdbconect adds CONECT",
-    "records at the end of the PDB to visualize the springs of the network.",
+    "An input PDB's CONECT records are ALWAYS read, and each becomes a spring",
+    "at -stiffness/--stiffness. There is no option to turn that off: a bond the",
+    "file declares is an input, like a coordinate. -static-hbond/--static-hbond",
+    "and -static-disulfide/--static-disulfide do not create any of those springs",
+    "-- they only replace -stiffness with the force constant the declared bond's",
+    "chemistry calls for.",
+    "",
+    "When the OUTPUT is a PDB file, -pdbconect/--pdbconect adds CONECT records",
+    "at the end of it to visualize the springs of the network. It governs",
+    "writing only, and never whether the input's own CONECT records are read.",
     "",
     "-rigidbody/--rigidbody creates springs from a .rbody rigid-body-group",
     "file instead of a distance cutoff: every pairwise spring within each",
@@ -95,6 +104,28 @@ int main(int argc, char ** argv)
             auto & spring = topology.get_spring(i);
             spring.set_stiffness(args.stiffness);
         }
+    }
+
+    // Hydrogen bonds and disulfides, from the bonds the structure DECLARES.
+    //
+    // This has to run HERE, before -cutoff or -rigidbody adds anything: once a
+    // mesh exists there is no way left to tell a CONECT record from a
+    // structural spring, and retuning afterwards silently softens the mesh
+    // instead (measured on gkinase: 186 mesh springs dropped from 8000 to 60,
+    // against the single bond the file actually declares). It only changes
+    // stiffness, so it adds no particle and invalidates no reference.
+    if (!args.pathStaticHydrogenBond.empty())
+    {
+        logging::status("Retuning declared hydrogen bonds using %s.", args.pathStaticHydrogenBond.c_str());
+        const auto table = biospring::staticbond::readDonorAcceptorTable(args.pathStaticHydrogenBond);
+        biospring::staticbond::retuneHydrogenBondSprings(topology, table,
+                                                         biospring::staticbond::HYDROGEN_BOND_STIFFNESS);
+    }
+
+    if (args.addStaticDisulfide)
+    {
+        logging::status("Retuning declared disulfide bridges.");
+        biospring::staticbond::retuneDisulfideSprings(topology, biospring::staticbond::DISULFIDE_STIFFNESS);
     }
 
     // Parsed here rather than inside buildSprings so the file is read once,
@@ -187,8 +218,8 @@ int main(int argc, char ** argv)
 CommandLineArguments::CommandLineArguments(const std::string & name, const argparse::description_t & description,
                                            const std::string & version)
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
-      pathRigidBody(""), pathBondedInteraction(""), pathOutputList(0), cutoff(-1.0),
-      stiffness(1.0), charge(0.0), isStatic(false), ignoreDuplicates(false),
+      pathRigidBody(""), pathBondedInteraction(""), pathStaticHydrogenBond(""), pathOutputList(0), cutoff(-1.0),
+      stiffness(1.0), charge(0.0), isStatic(false), addStaticDisulfide(false), ignoreDuplicates(false),
       ignoreMissing(false), writePdbConect(false), dihedral(false), dihedralBackbone(false),
       dihedralSidechain(false), dihedralPlanarity(false)
 {
@@ -334,7 +365,25 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(static_);
     _parser.add_argument(ignore_duplicate);
     _parser.add_argument(ignore_missing);
+    argparse::Argument static_hbond =
+        argparse::Argument()
+            .name_short("-static-hbond")
+            .name_long("--static-hbond")
+            .description("give every bond the structure DECLARES between a donor and an acceptor of the "
+                         "given .hbond table the force constant of a hydrogen bond (60 kJ.mol-1.A-2) "
+                         "instead of -stiffness; creates no spring and searches for nothing")
+            .metavar("INPUT_FILE")
+            .argument_type(argparse::ArgumentType::PATH_INPUT);
+
+    argparse::Argument static_disulfide = argparse::StoreTrueArgument(
+        "-static-disulfide", "--static-disulfide",
+        "give every bond the structure DECLARES between two cysteine sulfurs the force constant of a "
+        "disulfide bridge (1389.1 kJ.mol-1.A-2) instead of -stiffness; creates no spring and searches "
+        "for nothing");
+
     _parser.add_argument(pdbconect);
+    _parser.add_argument(static_hbond);
+    _parser.add_argument(static_disulfide);
 }
 
 void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
@@ -416,6 +465,8 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     ignoreDuplicates = _parser.get_option("--ignore-duplicate").is_set();
     ignoreMissing = _parser.get_option("--ignore-missing").is_set();
     writePdbConect = _parser.get_option("--pdbconect").is_set();
+    pathStaticHydrogenBond = _parser.get_option_value<std::string>("--static-hbond");
+    addStaticDisulfide = _parser.get_option("--static-disulfide").is_set();
     dihedral = _parser.get_option("--dihedral").is_set();
     dihedralBackbone = _parser.get_option("--dihedralbackbone").is_set();
     dihedralSidechain = _parser.get_option("--dihedralsidechain").is_set();

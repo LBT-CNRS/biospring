@@ -1,9 +1,12 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <set>
 #include <string>
+#include <utility>
 
 #include "IO/io.h"
+#include "IO/ReduceRuleReader.h"
 #include "reduce/Reducer.h"
 #include "measure.hpp"
 #include "topology.hpp"
@@ -81,20 +84,111 @@ TEST_F(TestReducer, initialize_rules)
     EXPECT_EQ(reducer.rules().size(), 20);
 }
 
+// A declared bond -- a PDB CONECT record -- must survive reduction AND the
+// assignment pdb2spn makes immediately after it.
+//
+// This is the test that was missing, and its absence let a real bug through.
+// A Spring holds a Particle&, not an index, so any spring that outlives a
+// replacement of the particle list points at whatever landed at its old
+// position. The failure is SILENT: the spring keeps its equilibrium length and
+// simply joins two different atoms. Measured on 074's duplex, 48 base-pair
+// springs with a correct r0 of 2.7-3.3 A ended up on atoms 5 to 12 A apart,
+// which at mesh stiffness threw the structure to 1e8 A.
+//
+// The invariant that catches it: a carried spring's equilibrium is the length
+// it was declared with, so it must still equal the distance between the two
+// particles it joins. Every other check -- spring count, equilibrium value,
+// even the endpoints' residue ids -- passes while the bond is wrong.
+TEST_F(TestReducer, declared_bonds_survive_reduction_and_the_assignment)
+{
+    // Learn first which grains this model actually keeps: most residues here
+    // lose one, and a bond whose end lands in a dropped grain is correctly
+    // discarded -- which would make this test pass for the wrong reason.
+    std::set<std::pair<int, std::string>> kept;
+    {
+        biospring::reduce::Reducer probe(topology);
+        probe.initialize_forcefield(path_forcefield);
+        probe.initialize_rules(path_reduce_rules);
+        probe.reduce();
+        const auto & reduced = probe.target_topology();
+        for (size_t i = 0; i < reduced.number_of_particles(); ++i)
+        {
+            const auto & p = reduced.get_particle(i).properties();
+            kept.insert({p.residue_id(), p.name()});
+        }
+    }
+    ASSERT_FALSE(kept.empty());
+
+    // Two atoms whose grains both survive, in residues far enough apart that
+    // they cannot merge into one grain.
+    biospring::reduce::ReduceRuleReader rules_reader(path_reduce_rules);
+    rules_reader.read();
+    const auto all_rules = rules_reader.rules();
+    auto grain_of = [&](const biospring::topology::Particle & particle) -> std::string
+    {
+        const auto & p = particle.properties();
+        const auto rules = all_rules.get_rules_for_residue(p.residue_name());
+        for (size_t r = 0; r < rules.size(); ++r)
+            if (rules[r].hasAtomNamed(p.name()))
+                return rules[r].getName();
+        return "";
+    };
+
+    size_t first = topology.number_of_particles(), second = topology.number_of_particles();
+    int first_residue = -1;
+    for (size_t i = 0; i < topology.number_of_particles(); ++i)
+    {
+        const auto & p = topology.get_particle(i).properties();
+        const std::string grain = grain_of(topology.get_particle(i));
+        if (grain.empty() || kept.find({p.residue_id(), grain}) == kept.end())
+            continue;
+        if (first == topology.number_of_particles())
+        {
+            first = i;
+            first_residue = p.residue_id();
+        }
+        else if (p.residue_id() > first_residue + 4)
+        {
+            second = i;
+            break;
+        }
+    }
+    ASSERT_LT(first, topology.number_of_particles());
+    ASSERT_LT(second, topology.number_of_particles());
+    topology.add_spring(topology.get_particle(first), topology.get_particle(second));
+    ASSERT_EQ(topology.number_of_springs(), 1u);
+
+    biospring::reduce::Reducer reducer(topology);
+    reducer.initialize_forcefield(path_forcefield);
+    reducer.initialize_rules(path_reduce_rules);
+    reducer.reduce();
+
+    // Exactly what pdb2spn does, assignment included -- and the assignment is
+    // where this used to break. Topology::operator= kept its own springs
+    // whenever the two particle counts happened to match, while
+    // _copy_particles replaced, in place, the very list those springs hold
+    // references into. Equal counts say nothing about equal ordering, and the
+    // reducer emits grains in rule order.
+    topology = reducer.target_topology();
+
+    {
+        std::set<biospring::topology::pid_t> uids;
+        size_t dup = 0;
+        for (size_t i = 0; i < topology.number_of_particles(); ++i)
+            if (!uids.insert(topology.get_particle(i).unique_id()).second)
+                ++dup;
+        EXPECT_EQ(dup, 0u) << "the reduced topology reuses particle unique ids, which is what the .nc "
+                              "writer resolves spring endpoints through";
+    }
+    ASSERT_EQ(topology.number_of_springs(), 1u) << "the declared bond was lost by reduction";
+    const auto & spring = topology.get_spring(0);
+    EXPECT_NEAR(spring.equilibrium(), biospring::measure::distance(spring.first(), spring.second()), 1e-3)
+        << "the spring kept its length but moved to different atoms";
+}
+
 // -- Main function  ----------------------------------------------------------
 int main(int argc, char * argv[])
 {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
-
-// A declared bond -- a PDB CONECT record -- must survive reduction AND the
-// copy pdb2spn makes immediately after it.
-//
-// This is the test that was missing, and its absence let a real bug through.
-// A Spring holds a Particle&, so one created inside the reducer points into
-// storage the copy leaves behind. The failure is SILENT: the spring keeps its
-// equilibrium length and simply joins two different atoms. Measured on 074's
-// duplex, 48 base-pair springs with a correct r0 of 2.7-3.3 A ended up on
-// atoms 5 to 12 A apart, which at mesh stiffness threw the structure to 1e8 A.
-//
