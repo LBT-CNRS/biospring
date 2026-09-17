@@ -91,6 +91,22 @@ class SpringNetworkOpenCL : public SpringNetwork
 		virtual void initRun();
 		virtual void endRun();
 
+		// Walks the device's cell list the way a force kernel has to, and
+		// returns the particles within `cutoff` of particle `i`.
+		//
+		// Public because it is what makes the grid testable. A neighbour
+		// structure that quietly misses pairs does not crash and does not look
+		// wrong: it just makes every term built on it too weak, by an amount
+		// nothing reports. The parity test compares this against the O(N^2)
+		// answer, which is the only way to see it.
+		//
+		// Empty when no grid has been built -- no non-bonded term is enabled,
+		// or the box needed more cells than this build allocates.
+		std::vector<unsigned> neighborsFromCellList(unsigned i, float cutoff);
+
+		// The cell width of the grid currently built, or 0 if there is none.
+		float cellListWidth() const { return _ncellstotal == 0 ? 0.0f : _cellwidth; }
+
 
 
 		cl::Context * getContext() ;
@@ -151,11 +167,45 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelintegration;
 		cl::Kernel _kerneldamping;
 		cl::Kernel _kernelexternal;
+		cl::Kernel _kernelblankcells;
+		cl::Kernel _kernelbinparticles;
 
 		cl::KernelFunctor _kernelfunctorspring;
 		cl::KernelFunctor _kernelfunctordamping;
 		cl::KernelFunctor _kernelfunctorintegration;
 		cl::KernelFunctor _kernelfunctorexternal;
+
+		// ------------------------------------------------------------------
+		// Cell list
+		// ------------------------------------------------------------------
+		//
+		// The device's answer to "which particles are near this one", shared by
+		// every non-bonded term: they differ in their force law and their
+		// cutoff, not in who is near whom. See biospring.cl for the structure
+		// (a linked list per cell, after Bannerman's exercise 3).
+		//
+		// The grid is rebuilt from the box the particles currently occupy, so
+		// the origin and the cell counts are recomputed rather than fixed.
+		// Must match BIOSPRING_EMPTY_CELL in biospring.cl.
+		static const unsigned EMPTY_CELL = static_cast<unsigned>(-1);
+
+		cl::Buffer _cellHeadBuffer;      // one head per cell
+		cl::Buffer _nextInCellBuffer;    // one successor per particle
+		unsigned * _cellhead = nullptr;
+		unsigned * _nextincell = nullptr;
+		unsigned _ncellstotal = 0;       // 0 = no grid built yet
+		cl_int4 _ncells = {{0, 0, 0, 0}};
+		cl_float4 _cellorigin = {{0.0f, 0.0f, 0.0f, 0.0f}};
+		float _cellwidth = 0.0f;
+
+		// Measures the box, sizes the grid to it and fills the cell list.
+		// Returns false when there is nothing to bin, or when the cutoff makes
+		// no grid possible.
+		bool _buildCellList(float cutoff);
+
+		// The cutoff the grid must resolve: the largest one among the enabled
+		// non-bonded terms, since one grid serves them all.
+		float _cellListCutoff() const;
 
 
 		cl::CommandQueue _queue;

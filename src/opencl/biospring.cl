@@ -1,10 +1,86 @@
 #pragma OPENCL EXTENSION cl_khr_byte_addressable_store : enable
+#pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
 
 typedef struct{
 	unsigned id1,id2;
 	float equilibrium;
 	float stiffness;
 	} Springocl;
+
+
+// ============================================================================
+// Cell list
+// ============================================================================
+//
+// Every non-bonded term needs the same thing: given a particle, the handful of
+// particles close enough to matter. The CPU answers it with an infinite grid of
+// cells (nsearch.hpp); this is the device's version of the same structure, and
+// it is shared -- the steric and the electrostatic terms differ in their force
+// law and in their cutoff, not in who is near whom.
+//
+// Built as a linked list per cell rather than a sorted array, after the method
+// in Marcus Bannerman's OpenCL course (exercise 3, "sorting particles"): each
+// particle atomically exchanges itself into its cell's head and keeps whatever
+// was there as its own successor. One atomic per particle, no counting pass, no
+// sort, and the build is O(N) with nothing to size in advance.
+//
+//   cellhead[c] -- the last particle binned into cell c, or EMPTY
+//   nextincell[p] -- the particle binned into p's cell just before it, or EMPTY
+//
+// Two things the course's version does not need and this one does. Its
+// particles live in [0,1) with a periodic box; a protein sits wherever the PDB
+// put it, so cells are indexed from an origin the host recomputes, and a
+// stencil that falls outside the grid is skipped instead of wrapped.
+
+#define BIOSPRING_EMPTY_CELL ((uint)-1)
+
+// Which cell a position falls in. Returns the flat index, or BIOSPRING_EMPTY_CELL
+// when the position is outside the grid -- which happens between two rebuilds,
+// since a particle keeps moving after the box was measured.
+inline uint biospring_cell_of(const float4 position, const float4 origin,
+                              const float cellwidth, const int4 ncells)
+	{
+	int x = (int)floor((position.x - origin.x) / cellwidth);
+	int y = (int)floor((position.y - origin.y) / cellwidth);
+	int z = (int)floor((position.z - origin.z) / cellwidth);
+
+	if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)
+		return BIOSPRING_EMPTY_CELL;
+
+	return (uint)((z * ncells.y + y) * ncells.x + x);
+	}
+
+
+__kernel void blankCells(const uint ncellstotal, __global uint * cellhead)
+	{
+	const uint c = get_global_id(0);
+	if (c < ncellstotal)
+		cellhead[c] = BIOSPRING_EMPTY_CELL;
+	}
+
+
+__kernel void binParticles(const __global float4 * positions,
+                           const float4 origin, const float cellwidth, const int4 ncells,
+                           __global uint * cellhead, __global uint * nextincell,
+                           const uint N)
+	{
+	const uint p = get_global_id(0);
+	if (p >= N) return;
+
+	const uint c = biospring_cell_of(positions[p], origin, cellwidth, ncells);
+	if (c == BIOSPRING_EMPTY_CELL)
+		{
+		// Outside the box: linked to nothing, and no cell points at it. It is
+		// then invisible to every neighbour walk, which is why the host rebuilds
+		// the box rather than letting particles drift out of it.
+		nextincell[p] = BIOSPRING_EMPTY_CELL;
+		return;
+		}
+
+	// Atomic: several particles land in the same cell in the same instant, and
+	// a plain read-modify-write loses all but one of them.
+	nextincell[p] = atom_xchg(cellhead + c, p);
+	}
 
 __kernel void linearstericprobeonparticle(const __global float4 * positions,const __global float * radii,  __global float4 * forces, const uint probeid, const float proberadius,  const uint N, const float unitscale)
 	{

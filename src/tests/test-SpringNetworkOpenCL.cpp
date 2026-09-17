@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "Particle.h"
@@ -226,4 +227,104 @@ TEST(SpringNetworkOpenCL, HoldsStaticParticlesTheWayTheCPUDoes)
         const Vector3f delta = cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition();
         EXPECT_LT(delta.norm(), 5.0e-3f) << "particle " << i << " ended up elsewhere on the GPU";
     }
+}
+
+// ---------------------------------------------------------------------------
+// The cell list
+// ---------------------------------------------------------------------------
+//
+// A neighbour structure that quietly misses pairs does not crash and does not
+// look wrong. It makes every term built on it too weak, by an amount nothing
+// reports -- so the only honest test is against the O(N^2) answer, which is
+// what "near" means.
+//
+// What this exercises that a regular lattice would not: a cloud whose extent is
+// not a whole number of cells, particles in the corner cells (whose stencil
+// falls outside the grid and must be clipped rather than wrapped, since nothing
+// here is periodic), and cells holding several particles at once -- which is
+// where the atomic exchange in binParticles earns its keep.
+namespace
+{
+void buildParticleCloud(spn::SpringNetwork & network, configuration::Configuration & config,
+                        unsigned n, float extent, float cutoff)
+{
+    // A fixed sequence rather than a random one: a test that fails only on
+    // some seeds is a test nobody can act on.
+    unsigned state = 12345u;
+    const auto next = [&state]() {
+        state = state * 1103515245u + 12345u;
+        return static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff);
+    };
+
+    for (unsigned i = 0; i < n; ++i)
+    {
+        spn::Particle p;
+        // Deliberately off-origin and partly negative: cells are indexed from a
+        // measured origin, and a version that assumed positive coordinates
+        // would pass on a structure that happens to sit in the first octant.
+        p.setPosition(Vector3f(next() * extent - 0.35f * extent,
+                               next() * extent - 0.35f * extent,
+                               next() * extent - 0.35f * extent));
+        p.setMass(12.0f);
+        p.setRadius(1.9f);
+        network.addParticle(p);
+    }
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = 1;
+    config.sim.timestep = 0.1;
+    config.spring.enable = false;
+    // The grid is sized by the enabled non-bonded terms; steric alone is enough
+    // to ask for one.
+    config.steric.enable = true;
+    config.steric.cutoff = cutoff;
+    config.electrostatic.enable = false;
+
+    network.setup(config);
+}
+} // namespace
+
+TEST(SpringNetworkOpenCL, CellListFindsExactlyTheNeighborsWithinTheCutoff)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 400;
+    const float EXTENT = 40.0f;
+    const float CUTOFF = 8.0f;
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration config;
+    buildParticleCloud(gpu, config, N, EXTENT, CUTOFF);
+    gpu.run();
+
+    ASSERT_GT(gpu.cellListWidth(), 0.0f) << "no cell list was built at all";
+
+    // The O(N^2) answer, which is the definition.
+    size_t pairs = 0;
+    for (unsigned i = 0; i < N; ++i)
+    {
+        std::vector<unsigned> expected;
+        for (unsigned j = 0; j < N; ++j)
+        {
+            if (j == i)
+                continue;
+            if ((gpu.getParticle(i).getPosition() - gpu.getParticle(j).getPosition()).norm() <= CUTOFF)
+                expected.push_back(j);
+        }
+
+        std::vector<unsigned> found = gpu.neighborsFromCellList(i, CUTOFF);
+        std::sort(found.begin(), found.end());
+        std::sort(expected.begin(), expected.end());
+
+        // Duplicates matter as much as omissions: a particle counted twice is a
+        // force applied twice, and the linked list makes that possible if a
+        // stencil ever visits the same cell more than once.
+        ASSERT_EQ(found, expected) << "the cell list disagrees with the O(N^2) answer for particle " << i;
+        pairs += expected.size();
+    }
+
+    // Guards against the test passing because nothing is near anything: with
+    // 400 particles in a 40 A cube and an 8 A cutoff there is plenty.
+    EXPECT_GT(pairs, 2000u) << "the cloud is too sparse for this test to mean anything";
 }

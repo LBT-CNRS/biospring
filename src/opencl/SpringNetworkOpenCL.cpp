@@ -90,6 +90,8 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particlemasses;
     delete[] _particledynamic;
     delete[] _springsocl;
+    delete[] _cellhead;
+    delete[] _nextincell;
     delete[] _contextproperties;
     }
 
@@ -341,6 +343,14 @@ void SpringNetworkOpenCL::createBuffer()
 	_kernelfunctorintegration = _kernelintegration.bind(_queue, cl::NDRange(globalsize), cl::NDRange(WORK_GROUP_SIZE));
 	checkErr("Kernel::Kernel()");
 
+	// The cell-list kernels are enqueued by hand rather than through a bound
+	// functor: their global size follows the cell count, which changes with the
+	// box, while a functor fixes its NDRange when it is bound.
+	_kernelblankcells = cl::Kernel(_program, "blankCells", &_err);
+	checkErr("Kernel::Kernel()");
+	_kernelbinparticles = cl::Kernel(_program, "binParticles", &_err);
+	checkErr("Kernel::Kernel()");
+
 	}
 
 void SpringNetworkOpenCL::InitOcl()
@@ -457,6 +467,14 @@ void SpringNetworkOpenCL::idleRun()
 	// Before the kernels: this is the state whose spring energy the CPU
 	// reports for this step (see _springEnergyOfCurrentState).
 	_springenergybeforestep = _springEnergyOfCurrentState();
+
+	// The neighbour structure the non-bonded terms need. Built from the box the
+	// positions read back last step occupy, which is one step stale -- hence the
+	// cell of margin _buildCellList adds, the same reason the CPU's grid carries
+	// a skin.
+	const float cellcutoff = _cellListCutoff();
+	if (cellcutoff > 0.0f)
+		_buildCellList(cellcutoff);
 
 	cl_ulong startTime;
 	cl_ulong endTime;
@@ -600,6 +618,180 @@ void SpringNetworkOpenCL::run()
 			}
 		}
 	endRun();
+	}
+
+
+// The cutoff one grid has to resolve for every enabled non-bonded term.
+//
+// One grid, not one per term: what differs between the steric and the
+// electrostatic is the force law and the range, not who is near whom. Sized to
+// the largest range, a cell walk finds every pair either of them can need, and
+// each term drops what is beyond its own cutoff -- which it has to do anyway,
+// since a cell is a box and a cutoff is a sphere.
+float SpringNetworkOpenCL::_cellListCutoff() const
+	{
+	float cutoff = 0.0f;
+	if (isStericEnabled())
+		cutoff = std::max(cutoff, getStericCutoff());
+	if (isAnyElectrostaticEnabled())
+		cutoff = std::max(cutoff, getElectrostaticCutoff());
+	return cutoff;
+	}
+
+
+// Measures the box the particles currently occupy, sizes a grid of cells of
+// `cutoff` to it, and fills the linked lists.
+//
+// The box is remeasured rather than fixed once: this is not a periodic
+// simulation, the structure translates and swells, and a particle that leaves
+// the grid is invisible to every neighbour walk (see binParticles). Measuring
+// costs one pass over the positions already read back for the sync.
+bool SpringNetworkOpenCL::_buildCellList(float cutoff)
+	{
+	if (_nbparticlesocl == 0 || cutoff <= 0.0f)
+		return false;
+
+	float lo[3] = {_particlepositions[0].x, _particlepositions[0].y, _particlepositions[0].z};
+	float hi[3] = {lo[0], lo[1], lo[2]};
+	for (unsigned i = 1; i < _nbparticlesocl; ++i)
+		{
+		const float p[3] = {_particlepositions[i].x, _particlepositions[i].y, _particlepositions[i].z};
+		for (int d = 0; d < 3; ++d)
+			{
+			if (!std::isfinite(p[d]))
+				return false;   // a diverged run: _syncParticlesFromDevice reports it
+			if (p[d] < lo[d]) lo[d] = p[d];
+			if (p[d] > hi[d]) hi[d] = p[d];
+			}
+		}
+
+	// One cell of margin on each side, so a particle sitting exactly on the
+	// upper face still falls inside, and so does one that moves a little before
+	// the next rebuild.
+	cl_int4 ncells;
+	long total = 1;
+	for (int d = 0; d < 3; ++d)
+		{
+		const int n = static_cast<int>(std::floor((hi[d] - lo[d]) / cutoff)) + 3;
+		(d == 0 ? ncells.s[0] : d == 1 ? ncells.s[1] : ncells.s[2]) = n;
+		total *= n;
+		}
+	ncells.s[3] = 0;
+
+	// An elongated structure with a short cutoff can ask for an absurd number of
+	// cells. Refusing is better than allocating it: the caller falls back to
+	// whatever it does without a grid, and says so.
+	const long CELL_LIMIT = 8L * 1024L * 1024L;
+	if (total <= 0 || total > CELL_LIMIT)
+		{
+		BIOSPRING_WARN_ONCE("OpenCL cell list: the structure's box needs %ld cells of %.2f A, "
+		                    "beyond the %ld this build allocates; the grid is not used.",
+		                    total, cutoff, CELL_LIMIT);
+		return false;
+		}
+
+	_cellorigin.s[0] = lo[0] - cutoff;
+	_cellorigin.s[1] = lo[1] - cutoff;
+	_cellorigin.s[2] = lo[2] - cutoff;
+	_cellorigin.s[3] = 0.0f;
+	_cellwidth = cutoff;
+	_ncells = ncells;
+
+	const unsigned ncellstotal = static_cast<unsigned>(total);
+	if (ncellstotal != _ncellstotal)
+		{
+		delete[] _cellhead;
+		_cellhead = new unsigned[ncellstotal];
+		_ncellstotal = ncellstotal;
+		_cellHeadBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+		                             sizeof(unsigned) * ncellstotal, _cellhead, &_err);
+		checkErr("Buffer::Buffer(cellhead)");
+		}
+	if (_nextincell == nullptr)
+		{
+		_nextincell = new unsigned[_nbparticlesocl];
+		_nextInCellBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+		                               sizeof(unsigned) * _nbparticlesocl, _nextincell, &_err);
+		checkErr("Buffer::Buffer(nextincell)");
+		}
+
+	const unsigned wg = WORK_GROUP_SIZE;
+	const unsigned cellglobal = (ncellstotal / wg) * wg + wg;
+	_kernelblankcells.setArg(0, ncellstotal);
+	_kernelblankcells.setArg(1, _cellHeadBuffer);
+	_err = _queue.enqueueNDRangeKernel(_kernelblankcells, cl::NullRange,
+	                                   cl::NDRange(cellglobal), cl::NDRange(wg));
+	checkErr("enqueueNDRangeKernel(blankCells)");
+
+	const unsigned partglobal = (_nbparticlesocl / wg) * wg + wg;
+	_kernelbinparticles.setArg(0, _inoutPositionBuffer);
+	_kernelbinparticles.setArg(1, _cellorigin);
+	_kernelbinparticles.setArg(2, _cellwidth);
+	_kernelbinparticles.setArg(3, _ncells);
+	_kernelbinparticles.setArg(4, _cellHeadBuffer);
+	_kernelbinparticles.setArg(5, _nextInCellBuffer);
+	_kernelbinparticles.setArg(6, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelbinparticles, cl::NullRange,
+	                                   cl::NDRange(partglobal), cl::NDRange(wg));
+	checkErr("enqueueNDRangeKernel(binParticles)");
+	_queue.finish();
+
+	return true;
+	}
+
+
+// The 3x3x3 stencil around a particle's own cell, filtered to `cutoff`.
+//
+// A cell is a box of side `cutoff` and a cutoff is a sphere of radius `cutoff`,
+// so the stencil is necessary and not sufficient: everything within the cutoff
+// is in one of the 27 cells, and some of what is in them is beyond it. The
+// distance test is what makes the answer exact, and a force kernel has to make
+// the same one.
+std::vector<unsigned> SpringNetworkOpenCL::neighborsFromCellList(unsigned i, float cutoff)
+	{
+	std::vector<unsigned> neighbors;
+	if (_ncellstotal == 0 || i >= _nbparticlesocl)
+		return neighbors;
+
+	// The device owns these between rebuilds; read them rather than trusting
+	// the host mirror to be coherent.
+	_err = _queue.enqueueReadBuffer(_cellHeadBuffer, CL_TRUE, 0,
+	                                sizeof(unsigned) * _ncellstotal, _cellhead);
+	checkErr("enqueueReadBuffer(cellhead)");
+	_err = _queue.enqueueReadBuffer(_nextInCellBuffer, CL_TRUE, 0,
+	                                sizeof(unsigned) * _nbparticlesocl, _nextincell);
+	checkErr("enqueueReadBuffer(nextincell)");
+
+	const float4 & here = _particlepositions[i];
+	const int cx = static_cast<int>(std::floor((here.x - _cellorigin.s[0]) / _cellwidth));
+	const int cy = static_cast<int>(std::floor((here.y - _cellorigin.s[1]) / _cellwidth));
+	const int cz = static_cast<int>(std::floor((here.z - _cellorigin.s[2]) / _cellwidth));
+
+	const float cutoffsq = cutoff * cutoff;
+	for (int dz = -1; dz <= 1; ++dz)
+		for (int dy = -1; dy <= 1; ++dy)
+			for (int dx = -1; dx <= 1; ++dx)
+				{
+				const int x = cx + dx, y = cy + dy, z = cz + dz;
+				// No periodicity: a stencil cell outside the grid is simply not
+				// there, never the cell on the opposite face.
+				if (x < 0 || y < 0 || z < 0 || x >= _ncells.s[0] || y >= _ncells.s[1] || z >= _ncells.s[2])
+					continue;
+
+				const unsigned cell = static_cast<unsigned>((z * _ncells.s[1] + y) * _ncells.s[0] + x);
+				for (unsigned p = _cellhead[cell]; p != EMPTY_CELL; p = _nextincell[p])
+					{
+					if (p == i)
+						continue;
+					const float ddx = _particlepositions[p].x - here.x;
+					const float ddy = _particlepositions[p].y - here.y;
+					const float ddz = _particlepositions[p].z - here.z;
+					if (ddx * ddx + ddy * ddy + ddz * ddz <= cutoffsq)
+						neighbors.push_back(p);
+					}
+				}
+
+	return neighbors;
 	}
 
 
