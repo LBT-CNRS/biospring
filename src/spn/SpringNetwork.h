@@ -645,7 +645,12 @@ class SpringNetwork
     bool _isTimeToLogData() const { return static_cast<unsigned>(_nbiter) % (static_cast<unsigned>(getSampleRate())) == 0; }
 
     // Displays current frame informations on logging channel.
-    void _displayFrameData();
+    //
+    // Virtual because a backend that does not evaluate every term must not
+    // print the ones it skipped: the OpenCL one computes springs and nothing
+    // else, and reporting "Steric energy: 0.00" for a run whose .msp enables
+    // steric would be a measurement, not a blank.
+    virtual void _displayFrameData();
 
     // Calculates frame rate.
     void _updateFrameRate();

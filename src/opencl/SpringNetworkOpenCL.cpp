@@ -454,6 +454,10 @@ double totaltime=0.0;
 
 void SpringNetworkOpenCL::idleRun()
 	{
+	// Before the kernels: this is the state whose spring energy the CPU
+	// reports for this step (see _springEnergyOfCurrentState).
+	_springenergybeforestep = _springEnergyOfCurrentState();
+
 	cl_ulong startTime;
 	cl_ulong endTime;
 	#ifdef OPENGL_SUPPORT
@@ -544,7 +548,10 @@ void SpringNetworkOpenCL::idleRun()
 	// input, on a run that was doing real work.
 	_syncParticlesFromDevice();
 
+	// SpringNetwork::idleRun() calls _resetEnergies(), so the energies have to
+	// be filled after it, not before.
 	SpringNetwork::idleRun();
+	_computeEnergiesFromDeviceState();
 
 	#ifdef OPENGL_SUPPORT
 		//Release the VBOs so OpenGL can play with them
@@ -577,12 +584,112 @@ void SpringNetworkOpenCL::endRun()
 void SpringNetworkOpenCL::run()
 	{
 	initRun();
+	_warnAboutTermsTheDeviceIgnores();
 	while (!isEnd())
 		{
 		idleRun();
 
+		// The same cadence as SpringNetwork::run(), and for the same reason:
+		// without it a --opencl run printed its kernel timings and nothing
+		// else, so neither the energies nor the framerate could be compared
+		// against a CPU run of the same .msp.
+		if (_isTimeToLogData())
+			{
+			_updateFrameRate();
+			_displayFrameData();
+			}
 		}
 	endRun();
+	}
+
+
+// The spring energy of the state the device is ABOUT to integrate.
+//
+// Called before the kernels, because that is the state the CPU reports for the
+// same step: SpringNetwork::computeStep() evaluates the springs in
+// computeForces() and only then integrates in updateParticlePositions(). Taken
+// after the kernels instead, the two backends are a step apart -- which at a
+// timestep of 4 fs against this mesh's ~17 fs fastest mode is a quarter of an
+// oscillation, and reads as a 15 % disagreement on a quantity that is in fact
+// identical. Measured on a deliberately strained ubiquitin: 200.86 against
+// 229.15 kJ/mol at step 100 when offset, and the kinetic energies agreeing to
+// 0.1 % all the while, which is what gave the offset away.
+//
+// It cannot be read from Spring::getEnergy() either: that returns a value
+// cached from the spring's cached _length, and only computeLength() refreshes
+// it -- the kernel never touches a Spring object.
+//
+// No force is applied here. The kernels do that; this only measures.
+float SpringNetworkOpenCL::_springEnergyOfCurrentState()
+	{
+	float springenergy = 0.0f;
+	for (size_t i = 0; i < _dynamicsprings.size(); ++i)
+		{
+		Spring & spring = getSpring(_dynamicsprings[i]);
+		spring.computeLength();
+		spring.computeEnergy(*_ff);
+		springenergy += spring.getEnergy();
+		}
+	return springenergy;
+	}
+
+
+// The kinetic energy of the velocities the device just returned, by the
+// formula Particle::_integrateForce uses -- and from the same side of the
+// integration as the CPU, which writes it there.
+void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
+	{
+	_energies.spring = _springenergybeforestep;
+
+	float kinetic = 0.0f;
+	for (size_t i = 0; i < _dynamicparticules.size(); ++i)
+		{
+		const Particle & p = getParticle(_dynamicparticules[i]);
+		const float v = p.getVelocity().norm();
+		kinetic += 0.5f * p.getMass() * v * v *
+		           biospring::forcefield::GLOBAL_KINETIC_ENERGY_CONVERT;
+		}
+	_energies.kinetic = kinetic;
+	}
+
+
+void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
+	{
+	// biospring.cl has four kernels: spring, damping, external, integration.
+	// Everything else a .msp can switch on is simply not evaluated on this
+	// path, and used to be so without a word -- the run looked like the CPU's
+	// and was a different model.
+	std::string ignored;
+	const auto add = [&ignored](const char * name) {
+		if (!ignored.empty())
+			ignored += ", ";
+		ignored += name;
+	};
+	if (isStericEnabled())          add("steric");
+	if (isAnyElectrostaticEnabled()) add("coulomb");
+	if (isHydrophobicityEnabled())  add("hydrophobicity");
+	if (isIMPEnabled())             add("impala");
+	if (isInsertionVectorEnabled()) add("insertionvector");
+	if (isRigidBodyEnabled())       add("rigidbody");
+
+	if (!ignored.empty())
+		biospring::logging::warning(
+		    "OpenCL backend: %s enabled in the configuration but NOT evaluated on the device -- "
+		    "it computes springs, damping, external forces and the integration, nothing else. "
+		    "The reported energies cover only what it evaluated.",
+		    ignored.c_str());
+	}
+
+
+// Only the terms biospring.cl evaluates, so that an enabled-but-unevaluated
+// term reads as absent rather than as a measured zero.
+void SpringNetworkOpenCL::_displayFrameData()
+	{
+	biospring::logging::info("Step: %5d", _nbiter);
+	biospring::logging::info("Framerate: %5.2f", _framerate);
+	biospring::logging::info("Kinetic energy: %5.2f kJ.mol-1", _energies.kinetic);
+	if (isSpringEnabled())
+		biospring::logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
 	}
 
 

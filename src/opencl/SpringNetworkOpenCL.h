@@ -173,6 +173,27 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 		void computeParticleToSpringIndexes();
 		void _syncParticlesFromDevice();
+
+		// The kernels replace computeForces(), which is where the CPU fills
+		// _energies as a by-product of evaluating each term. Nothing did so
+		// here, so a GPU run reported no energy at all -- not zero, absent --
+		// and there was no way to compare the two backends on anything but
+		// coordinates. These recompute what the device actually evaluated,
+		// each from the same side of the integration as the CPU.
+		float _springEnergyOfCurrentState();
+		void _computeEnergiesFromDeviceState();
+
+		// Measured before the kernels run, reported after (_resetEnergies sits
+		// between the two).
+		float _springenergybeforestep = 0.0f;
+
+		// Says once, at startup, which terms the .msp turns on that the device
+		// does not evaluate. Silence there means a --opencl run quietly
+		// computes different physics from the same .msp.
+		void _warnAboutTermsTheDeviceIgnores() const;
+
+		// Prints only what this backend measured (see SpringNetwork's).
+		virtual void _displayFrameData();
 		void wrappingOcl();
 		void InitOcl();
 		void createBuffer();
