@@ -9,6 +9,7 @@
 
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Particle.h"
@@ -25,6 +26,21 @@ namespace reduce
 {
 
 using ParticleContainer = std::vector<topology::Particle>;
+
+// A grain, together with the unique ids of the source particles it was built
+// from. The provenance is what lets springs survive the reduction: a spring
+// joins two source ATOMS, and after reduction it must join the two GRAINS
+// those atoms ended up in (see Reducer::_carry_springs_over).
+//
+// The uids are usable as a key because a plain Particle copy preserves
+// unique_id() -- only ParticleCollection::push_back, which goes through
+// Particle::copy(), issues a new one. So they still identify particles of
+// `_source_topology` here, and can never collide with the target's own.
+struct ReducedGrain
+{
+    topology::Particle grain;
+    std::vector<topology::pid_t> member_uids;
+};
 
 //
 // Storage of reduction to coarse grain parameters.
@@ -53,7 +69,8 @@ class GrainBuilder
     const forcefield::ForceField & _forcefield;
     bool _ignore_duplicate_particles;
     bool _ignore_missing_particles;
-    Grain _grain; // output grain
+    Grain _grain;                                // output grain
+    std::vector<topology::pid_t> _member_uids;   // source particles it was built from
     bool _grain_built;
     bool _warn_when_empty;
     // Set from _check_not_empty, which is const.
@@ -63,7 +80,8 @@ class GrainBuilder
     GrainBuilder(const ParticleContainer & input_particles, const ReduceRule & rule,
                  const forcefield::ForceField & forcefield)
         : _input_particles(input_particles), _rule(rule), _forcefield(forcefield), _ignore_duplicate_particles(false),
-          _ignore_missing_particles(false), _grain(), _grain_built(false), _warn_when_empty(true), _was_empty(false)
+          _ignore_missing_particles(false), _grain(), _member_uids(), _grain_built(false), _warn_when_empty(true),
+          _was_empty(false)
     {
     }
 
@@ -95,6 +113,9 @@ class GrainBuilder
         return _grain;
     }
 
+    // Unique ids of the source particles this grain aggregates.
+    const std::vector<topology::pid_t> & member_uids(void) const { return _member_uids; }
+
     // =============================================================================
     // Main methods.
     // =============================================================================
@@ -116,6 +137,12 @@ class GrainBuilder
 
         // Creates the grain.
         _grain = _create_grain(grain_particles);
+
+        _member_uids.clear();
+        _member_uids.reserve(grain_particles.size());
+        for (const topology::Particle & p : grain_particles)
+            _member_uids.push_back(p.unique_id());
+
         _grain_built = true;
 
         return true;
@@ -281,13 +308,14 @@ class ResidueReducer
     // Main methods.
     // =============================================================================
 
-    // Returns a vector of grains representing the residue.
-    std::vector<topology::Particle> build(void) const
+    // Returns a vector of grains representing the residue, each carrying the
+    // source particles it was built from.
+    std::vector<ReducedGrain> build(void) const
     {
         // Displays warnings if some particles are present in the residue but not in the rule.
         _check_unknown_particles();
 
-        std::vector<topology::Particle> grains;
+        std::vector<ReducedGrain> grains;
 
         // A grain name can appear in several rules, one per accepted spelling
         // of its atoms (amber.dna.grp takes OP1 or O1P for dOP1, H5' or H5'1
@@ -307,7 +335,7 @@ class ResidueReducer
             bool success = grain_builder.build();
             if (success)
             {
-                grains.push_back(grain_builder.grain());
+                grains.push_back({grain_builder.grain(), grain_builder.member_uids()});
                 built.insert(rule.name());
             }
             else if (grain_builder.was_empty())
@@ -408,12 +436,26 @@ class Reducer
 
         ParticleGroups residues = _group_particles_by_residue(_source_topology.particles().data());
 
+        // Where each source particle ended up. Built as the grains are added
+        // so the target index is simply the collection's size at that point.
+        std::unordered_map<topology::pid_t, size_t> source_to_target;
+
         for (const ParticleContainer & residue : residues)
         {
-            ParticleContainer grains = _reduce_residue(residue);
-            _target_topology.particles().push_back(grains);
+            for (const ReducedGrain & reduced : _reduce_residue(residue))
+            {
+                const size_t target_index = _target_topology.number_of_particles();
+                _target_topology.add_particle(reduced.grain);
+
+                // An atom claimed by two rules producing different grains is
+                // ambiguous; the first grain wins, which is arbitrary but
+                // stable. emplace() keeps the first, insert_or_assign would not.
+                for (topology::pid_t uid : reduced.member_uids)
+                    source_to_target.emplace(uid, target_index);
+            }
         }
 
+        _carry_springs_over(source_to_target);
     }
 
 
@@ -438,7 +480,55 @@ class Reducer
     }
 
   protected:
-    std::vector<topology::Particle> _reduce_residue(const ParticleContainer & residue) const
+    // Re-draws the source topology's springs between the grains its atoms
+    // ended up in.
+    //
+    // The source's springs are the ones parsed from the input file -- in
+    // practice the CONECT records of a coarse-grained PDB, which Topology's
+    // assignment operator goes out of its way to preserve. They are stored as
+    // references to source particles, and the reduction replaces the particle
+    // list wholesale: grains come out in rule order, which has no relation to
+    // the input's atom order. Carrying them over by position, as used to
+    // happen, left every one of them on an unrelated pair of grains --
+    // silently, because a spring's stored equilibrium stays whatever it was.
+    //
+    // The equilibrium is recomputed (-1.0 = "use the current distance")
+    // rather than carried over: a grain sits at its members' centroid, so the
+    // atom-atom distance the source spring stored is not the grain-grain
+    // distance. When the reduction is a 1:1 renaming -- the martinize case,
+    // and every all-atom .grp here -- the centroid of a single atom is that
+    // atom, and the recomputed value is the stored one.
+    void _carry_springs_over(const std::unordered_map<topology::pid_t, size_t> & source_to_target)
+    {
+        if (_source_topology.number_of_springs() == 0)
+            return;
+
+        for (const topology::Spring & source : _source_topology.springs())
+        {
+            const auto first = source_to_target.find(source.first().unique_id());
+            const auto second = source_to_target.find(source.second().unique_id());
+
+            // An endpoint no rule claimed, or both endpoints swallowed by the
+            // same grain: there is no spring left to draw.
+            if (first == source_to_target.end() || second == source_to_target.end() ||
+                first->second == second->second)
+                continue;
+
+            try
+            {
+                _target_topology.add_spring(first->second, second->second, -1.0, source.stiffness());
+            }
+            // Two source springs can collapse onto the same pair of grains.
+            catch (const topology::SpringAlreadyExistsException &)
+            {
+            }
+        }
+
+        logging::info("Kept %zu of the input topology's %zu springs through reduction",
+                      _target_topology.number_of_springs(), _source_topology.number_of_springs());
+    }
+
+    std::vector<ReducedGrain> _reduce_residue(const ParticleContainer & residue) const
     {
         const auto & rules = _rules.get_rules_for_residue(residue[0].properties().residue_name());
 
