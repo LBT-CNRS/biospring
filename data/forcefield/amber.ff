@@ -346,14 +346,6 @@ YN	-0.4157	1.824	0.711280	14.01	0.468608	0.0
 YO	-0.5679	1.6612	0.878640	16.0	0.168615	0.0
 YOH	-0.5579	1.721	0.880314	16.0	0.168615	0.0
 YCG	-0.0011	1.908	0.359824	12.01	-0.056066	0.0
-#
-# ACE and NME caps. amber.grp has mapped their atoms to these 12 types since
-# 8be6533, but the types themselves were never added here -- so every capped
-# structure silently carried caps with no charge, no radius, no epsilon and
-# no MASS (1 Da, phosphorus-style). Found on 2026-08-19 by checking that
-# every type a .grp names exists in the .nbi.ff: 417 types against 406.
-# Values from amber99sb.xml like the rest of this file, charges summing to
-# 0.0000 e per cap as they must.
 XC	0.5972	1.9080	0.359824	12.011	0.000000	0.0
 XO	-0.5679	1.6612	0.878640	15.999	0.000000	0.0
 XCH3	-0.3662	1.9080	0.457730	12.011	0.000000	0.0

@@ -5,6 +5,11 @@
 #include "SpringNetworkOpenCL.h"
 #include "IO/PDBTrajectoryWriter.h"
 #include "IO/CSVSampleWriter.h"
+#include "KernelSource.h"
+#include <cmath>
+#include "logging.h"
+
+#include <fstream>
 
 
 #include "Spring.h"
@@ -45,7 +50,7 @@ using biospring::spn::SpringNetwork;
 SpringNetworkOpenCL::SpringNetworkOpenCL()
     : SpringNetwork(), _springparticlesindexes(nullptr), _nbparticlesocl(0), _nbspringsocl(0),
       _particlepositions(nullptr), _particlevelocities(nullptr), _particleforces(nullptr),
-      _particleexternalforces(nullptr), _particletospringindexes(nullptr), _springsocl(nullptr),
+      _particleexternalforces(nullptr), _particlemasses(nullptr), _particledynamic(nullptr), _particletospringindexes(nullptr), _springsocl(nullptr),
       _err(CL_SUCCESS), _contextproperties(nullptr)
     {
     getOpenCLRessources();
@@ -82,6 +87,8 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particleforces;
     delete[] _particleexternalforces;
     delete[] _particletospringindexes;
+    delete[] _particlemasses;
+    delete[] _particledynamic;
     delete[] _springsocl;
     delete[] _contextproperties;
     }
@@ -173,18 +180,42 @@ void SpringNetworkOpenCL::createBuffer()
 		checkErr( "Buffer::Buffer() 3");
 
 
-		_inSpringBuffer=cl::Buffer(
-						  _context,
-						  CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
-						  sizeof(Springocl)*_nbspringsocl,
-						  _springsocl,
-						  &_err);
-		checkErr( "Buffer::Buffer() 4");
+		// A network with no spring at all is legitimate -- several examples are
+		// pure steric or electrostatic -- but OpenCL rejects a zero-sized
+		// buffer, and the C++ wrapper turns that into an exception nobody
+		// catches. The backend used to abort() on those, with
+		// "cl::Error: clCreateBuffer" and nothing to say which buffer.
+		if (_nbspringsocl > 0)
+			{
+			_inSpringBuffer=cl::Buffer(
+							  _context,
+							  CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+							  sizeof(Springocl)*_nbspringsocl,
+							  _springsocl,
+							  &_err);
+			checkErr( "Buffer::Buffer() 4");
+			}
+
+		_inMassBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(float)*_nbparticlesocl,
+								 _particlemasses,
+								 &_err);
+		checkErr( "Buffer::Buffer() mass");
+
+		_inDynamicBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(int)*_nbparticlesocl,
+								 _particledynamic,
+								 &_err);
+		checkErr( "Buffer::Buffer() dynamic state");
 
 		_inSpringIndexesBuffer=cl::Buffer(
 								 _context,
 								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
-								 sizeof(int)*_nbparticlesocl,
+								 sizeof(int)*(_nbparticlesocl+1),
 								 _particletospringindexes,
 								 &_err);
 
@@ -226,11 +257,31 @@ void SpringNetworkOpenCL::createBuffer()
 	_queue=cl::CommandQueue(_context, _devices[0], CL_QUEUE_PROFILING_ENABLE, &_err);
 	checkErr("CommandQueue::CommandQueue()");
 
-	ifstream _file("biospring.cl");
-	_err=_file.is_open() ? CL_SUCCESS:-1;
-	checkErr("biospring.cl");
+	// The kernel text is compiled into the binary (see KernelSource.h), so
+	// there is nothing to find on disk and nothing that depends on the
+	// directory biospring was launched from.
+	//
+	// This used to be ifstream("biospring.cl") guarded by
+	//     _err = _file.is_open() ? CL_SUCCESS : -1;
+	// and -1 is the value of CL_DEVICE_NOT_FOUND, so a kernel file the process
+	// could not open announced itself as a machine with no GPU. The device had
+	// been found and reported by name two screens earlier.
+	std::string prog(biospring::opencl::KERNEL_SOURCE);
 
-	std::string prog(std::istreambuf_iterator<char>(_file),(std::istreambuf_iterator<char>()));
+	// Still allow a file, for editing the kernel without rebuilding. If one is
+	// named and cannot be read, that is what gets reported.
+	if (const char * kernelpath = getenv("BIOSPRING_OPENCL_KERNEL"))
+	{
+		std::ifstream _file(kernelpath);
+		if (!_file.is_open())
+		{
+			std::cerr << "ERROR: BIOSPRING_OPENCL_KERNEL names '" << kernelpath
+			          << "', which cannot be read." << std::endl;
+			exit(EXIT_FAILURE);
+		}
+		prog.assign(std::istreambuf_iterator<char>(_file), std::istreambuf_iterator<char>());
+		std::cerr << "Using OpenCL kernel source from " << kernelpath << std::endl;
+	}
 
 	try
 		{
@@ -255,16 +306,24 @@ void SpringNetworkOpenCL::createBuffer()
 		}
 
 
-	printf("done building program\n");
-	cerr << "Build Status: " << _program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(_devices[0]) << endl;
-	cerr << "Build Options:\t" << _program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(_devices[0]) << endl;
-	cerr << "Build Log:\t " << _program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(_devices[0]) << endl;
+	// The build log is what tells you why a kernel would not compile, so it is
+	// printed when the build fails -- and only then. It used to go to stderr on
+	// every successful run, alongside the status, the options and a bare
+	// "globalsize" integer, which is how a real diagnostic gets ignored.
+	if (_program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(_devices[0]) != CL_BUILD_SUCCESS)
+		{
+		cerr << "ERROR: could not build the OpenCL kernels." << endl;
+		cerr << "Build status: " << _program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(_devices[0]) << endl;
+		cerr << "Build options: " << _program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(_devices[0]) << endl;
+		cerr << "Build log:" << endl
+		     << _program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(_devices[0]) << endl;
+		exit(EXIT_FAILURE);
+		}
 
 	checkErr("Program::build()");
 	unsigned workgroupsize=WORK_GROUP_SIZE;
 	unsigned globalsize=(_nbparticlesocl/workgroupsize)*(workgroupsize)+workgroupsize;
 
-	cout<<globalsize<<endl;
 	_kernelspring=cl::Kernel(_program, "spring", &_err);
 	_kernelfunctorspring = _kernelspring.bind(_queue, cl::NDRange(globalsize), cl::NDRange(WORK_GROUP_SIZE));
 	checkErr("Kernel::Kernel()");
@@ -282,12 +341,10 @@ void SpringNetworkOpenCL::createBuffer()
 	_kernelfunctorintegration = _kernelintegration.bind(_queue, cl::NDRange(globalsize), cl::NDRange(WORK_GROUP_SIZE));
 	checkErr("Kernel::Kernel()");
 
-	cerr<<__FUNCTION__<<" end"<<endl;
 	}
 
 void SpringNetworkOpenCL::InitOcl()
 	{
-	cerr<<__FUNCTION__<<" start"<<endl;
 
 
 	#ifdef OPENGL_SUPPORT
@@ -366,7 +423,6 @@ void SpringNetworkOpenCL::InitOcl()
 		_contextproperties[1] = (cl_context_properties)(_platforms[0])();
 		_contextproperties[2] = 0;
 
-		cerr<<__FUNCTION__<<" test"<<endl;
 		_context=cl::Context(CL_DEVICE_TYPE_GPU,_contextproperties,NULL,NULL,&_err);
 		checkErr( "Context::Context()");
 	#endif
@@ -379,40 +435,13 @@ void SpringNetworkOpenCL::InitOcl()
 
 void SpringNetworkOpenCL::wrappingOcl()
 	{
-	cerr<<__FUNCTION__<<" start"<<endl;
 	computeOpenCLPositions();
-	//computeRandomSet();
-	for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		cout<<"x "<<_particlepositions[i].x<<" y "<<_particlepositions[i].y<<" z " <<_particlepositions[i].z<<std::endl;
-		}
-
-		for(unsigned i=0;i<_nbspringsocl;i++)
-		{
-		cout<<"id1 "<<_springsocl[i].id1<<" id2 "<<_springsocl[i].id2<<" stiffness " <<_springsocl[i].stiffness<<" equilibrium " <<_springsocl[i].equilibrium<<std::endl;
-		}
-
-		computeOpenCLVelocities();
-		for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		cout<<"vx "<<_particlevelocities[i].x<<" vy "<<_particlevelocities[i].y<<" vz " <<_particlevelocities[i].z<<std::endl;
-		}
-
-		computeOpenCLForces();
-		for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		cout<<"fx "<<_particleforces[i].x<<" fy "<<_particleforces[i].y<<" fz " <<_particleforces[i].z<<std::endl;
-		}
-
-		computeOpenCLSprings();
-
-		computeParticleToSpringIndexes();
-
-		for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		std::cout<<"Indexes "<<i<<" "<<_particletospringindexes[i]<<std::endl;
-		}
-	cerr<<__FUNCTION__<<" end"<<endl;
+	computeOpenCLVelocities();
+	computeOpenCLForces();
+	computeOpenCLMasses();
+	computeOpenCLDynamicState();
+	computeOpenCLSprings();
+	computeParticleToSpringIndexes();
 	}
 
 double springtime=0.0;
@@ -436,7 +465,17 @@ void SpringNetworkOpenCL::idleRun()
 		_queue.finish();
 	#endif
 
+    // Exactly what the CPU folds into a spring force: the force field's spring
+    // scale and the kJ.mol-1.A-1 -> Da.A.fs-2 conversion. The kernel calls the
+    // same biospring_spring_force_module() with it, so the two sides cannot
+    // disagree about the magnitude. Only the conversion used to be passed,
+    // which made the GPU spring.scale times too weak.
+    // Nothing to gather from when there is no spring, and the buffer the kernel
+    // would read does not exist.
+    if (_nbspringsocl > 0)
+    {
     const float springForceScale =
+        getForceField()->getSpringScale() *
         static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
     _event = _kernelfunctorspring(_inoutPositionBuffer, _inSpringBuffer,
                                  _inSpringIndexesBuffer, _inoutForceBuffer,
@@ -446,7 +485,8 @@ void SpringNetworkOpenCL::idleRun()
 
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	springtime=(endTime-startTime)*1.0E-9;
+	springtime+=(endTime-startTime)*1.0E-9;
+    }
 
 
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
@@ -455,22 +495,22 @@ void SpringNetworkOpenCL::idleRun()
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	dampingtime=(endTime-startTime)*1.0E-9;
+	dampingtime+=(endTime-startTime)*1.0E-9;
 
 
 	_event=_kernelfunctorexternal(_inoutForceBuffer,_inExternalForceBuffer,_nbparticlesocl);
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	integrationtime=(endTime-startTime)*1.0E-9;
+	integrationtime+=(endTime-startTime)*1.0E-9;
 
     _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
-                                      _inoutForceBuffer, getTimeStep(),
-                                      _nbparticlesocl);
+                                      _inoutForceBuffer, _inMassBuffer, _inDynamicBuffer,
+                                      getTimeStep(), _nbparticlesocl);
 	_event.wait();
 	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	externalforcetime=(endTime-startTime)*1.0E-9;
+	externalforcetime+=(endTime-startTime)*1.0E-9;
 
 	_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_TRUE, 0,
         sizeof(float4) * _nbparticlesocl, _particlevelocities);
@@ -494,25 +534,21 @@ void SpringNetworkOpenCL::idleRun()
 
 
 
+	// Copy the device's answer back into the Particle objects before the base
+	// class runs its bookkeeping, because everything downstream of here reads
+	// particles, not our float4 arrays: _writeNextStep() and its PDB/XTC/CSV
+	// writers, the energies, the interactors.
+	//
+	// Without this the GPU path computed correctly and reported the structure
+	// it started from -- every frame of every trajectory identical to the
+	// input, on a run that was doing real work.
+	_syncParticlesFromDevice();
+
 	SpringNetwork::idleRun();
-	totaltime=springtime+dampingtime+integrationtime+externalforcetime;
-
-	std::cout <<"Output particles :" << std::endl;
-	for(unsigned i=0;i<_nbparticlesocl;i++)
-		{
-		cout<<"x "<<_particlepositions[i].x<<" y "<<_particlepositions[i].y<<" z " <<_particlepositions[i].z<<std::endl;
-		cout<<"vx "<<_particlevelocities[i].x<<" vy "<<_particlevelocities[i].y<<" vz " <<_particlevelocities[i].z<<std::endl;
-		cout<<"fx "<<_particleforces[i].x<<" fy "<<_particleforces[i].y<<" fz " <<_particleforces[i].z<<std::endl;
-		}
-
-	std::cout<<"Times: "<<totaltime<<"( spring : "<<springtime<<", damping : "<<dampingtime<<", integration : "<<integrationtime<<", external : "<<externalforcetime<<")"<< std::endl;
-
-	//usleep(10);
 
 	#ifdef OPENGL_SUPPORT
 		//Release the VBOs so OpenGL can play with them
 		_err = _queue.enqueueReleaseGLObjects(&_allvbos, NULL, &_event);
-		//printf("release gl: %s\n", oclErrorString(err));
 		_queue.finish();
 	#endif
 	}
@@ -523,6 +559,18 @@ void SpringNetworkOpenCL::initRun()
 	InitOcl();
 	wrappingOcl();
 	createBuffer();
+	}
+
+// One summary for the run instead of one line of raw timings on stdout for
+// every step, which is what idleRun() used to do. The four counters are
+// accumulated there rather than overwritten, so these are run totals.
+void SpringNetworkOpenCL::endRun()
+	{
+	totaltime=springtime+dampingtime+integrationtime+externalforcetime;
+	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
+	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
+	         <<", external: "<<externalforcetime<<" )"<<std::endl;
+	SpringNetwork::endRun();
 	}
 
 
@@ -546,22 +594,64 @@ void SpringNetworkOpenCL::convertSpringtoSpringocl(const Spring & spin, Springoc
 	spout.stiffness=spin.getStiffness();
 	spout.equilibrium=spin.getEquilibrium();
 	}
+// Device -> host. The reverse of computeOpenCLPositions()/Velocities().
+void SpringNetworkOpenCL::_syncParticlesFromDevice()
+	{
+	const unsigned n = SpringNetwork::getNumberOfParticles();
+	for (unsigned i = 0; i < n; ++i)
+		{
+		Particle & particle = SpringNetwork::getParticle(i);
+		const float x = _particlepositions[i].x;
+		const float y = _particlepositions[i].y;
+		const float z = _particlepositions[i].z;
+
+		// The same check SpringNetwork::updateParticlePositions makes after
+		// integrating, and for the same reason. It lives there, inside the CPU
+		// integrator, which this path replaces wholesale: the kernel integrates
+		// instead, so without this the two backends disagree on what a diverged
+		// run does -- the CPU stops and says which particle went, the GPU
+		// carries on silently. Measured on 074.DNADuplex at dt = 8 fs, the CPU
+		// exited 1 with the message and the GPU exited 0.
+		//
+		// Only the dynamic particles, as on the CPU: a static one is never
+		// integrated, so it cannot be sent non-finite by the integrator.
+		//
+		// It costs nothing worth counting -- measured at 0.98x to 1.05x on
+		// systems from 1525 to 37200 dynamic particles, i.e. inside the noise.
+		// isfinite on a float is a comparison against the exponent mask, the
+		// value has just been read into a register, and the branch is never
+		// taken.
+		if (particle.isDynamic() && (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)))
+			biospring::logging::die("Found non-finite position for particle %d.", particle.getId());
+
+		particle.setPosition(Vector3f(x, y, z));
+		particle.setVelocity(Vector3f(_particlevelocities[i].x, _particlevelocities[i].y,
+		                              _particlevelocities[i].z));
+		}
+	}
+
 void SpringNetworkOpenCL::computeParticleToSpringIndexes()
     {
-    cerr << __FUNCTION__ << " start" << endl;
+    // A CSR offset array: N+1 entries, where entry i is where particle i's
+    // springs begin and entry i+1 is where they end. A particle with no spring
+    // has start == end and its loop simply does not run.
+    //
+    // This used to be N entries with -1 meaning "no spring", and the kernel
+    // read the NEXT particle's entry to find where to stop. So a particle
+    // whose successor had no springs got an end index of -1 and contributed
+    // nothing, and the last particle fell back to the PARTICLE count used as
+    // a SPRING index. Offsets remove both cases rather than guarding them.
     delete[] _particletospringindexes;
-    _particletospringindexes = new int[_nbparticlesocl];
-    std::fill_n(_particletospringindexes, _nbparticlesocl, -1);
+    _particletospringindexes = new int[_nbparticlesocl + 1];
 
-    // Springs are grouped by id1 by computeOpenCLSprings(). Keep the first
-    // spring index for each particle, including the final group.
-    for (unsigned i = 0; i < _nbspringsocl; ++i)
+    unsigned springIndex = 0;
+    for (unsigned particleId = 0; particleId < _nbparticlesocl; ++particleId)
         {
-        const unsigned particleId = _springsocl[i].id1;
-        if (particleId < _nbparticlesocl && _particletospringindexes[particleId] < 0)
-            _particletospringindexes[particleId] = static_cast<int>(i);
+        _particletospringindexes[particleId] = static_cast<int>(springIndex);
+        while (springIndex < _nbspringsocl && _springsocl[springIndex].id1 == particleId)
+            ++springIndex;
         }
-    cerr << __FUNCTION__ << " end" << endl;
+    _particletospringindexes[_nbparticlesocl] = static_cast<int>(springIndex);
     }
 
 float SpringNetworkOpenCL::distance (const float4 p1,const float4 p2)
@@ -577,7 +667,6 @@ float SpringNetworkOpenCL::distance (const float4 p1,const float4 p2)
 
 void SpringNetworkOpenCL::computeOpenCLSprings()
     {
-    cerr << __FUNCTION__ << " start" << endl;
 
     const unsigned particleCount = SpringNetwork::getNumberOfParticles();
     const unsigned springCount = SpringNetwork::getNumberOfSprings();
@@ -615,12 +704,10 @@ void SpringNetworkOpenCL::computeOpenCLSprings()
         for (const Springocl & spring : particleSprings)
             _springsocl[springIndex++] = spring;
 
-    cerr << __FUNCTION__ << " end" << endl;
     }
 
 void SpringNetworkOpenCL::computeOpenCLPositions()
 		{
-		cerr<<__FUNCTION__<<" start"<<endl;
 
 		_nbparticlesocl=SpringNetwork::getNumberOfParticles();
 		delete[] _particlepositions;
@@ -636,11 +723,38 @@ void SpringNetworkOpenCL::computeOpenCLPositions()
 			_particlepositions[i].z=v.getZ();
 			_particlepositions[i].w=1.0f;
 			}
-		cerr<<__FUNCTION__<<" end"<<endl;
 
 
 
 		}
+
+// The integration kernel divides the force by the mass, exactly as
+// Particle::_integrateForce does. Before this buffer existed it did not, so
+// the GPU integrated every particle as if it weighed 1 Da -- invisible on a
+// toy system where that is true, wrong on any real structure.
+void SpringNetworkOpenCL::computeOpenCLMasses()
+	{
+	delete[] _particlemasses;
+	_particlemasses = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		_particlemasses[i] = SpringNetwork::getParticle(i).getMass();
+	}
+
+// The CPU integrates only the particles on its dynamic list, and a static one
+// is left entirely alone -- not moved, and not even force-reset, since
+// resetForce() sits inside that same loop. The kernel had no notion of any of
+// this: it walked every particle and used the mass as its only filter, which
+// reproduces the CPU only because every static particle in today's examples is
+// a massless ghost. pdb2spn --static freezes particles WITHOUT touching their
+// mass, so a network built that way would have the GPU moving what the CPU
+// holds.
+void SpringNetworkOpenCL::computeOpenCLDynamicState()
+	{
+	delete[] _particledynamic;
+	_particledynamic = _nbparticlesocl == 0 ? nullptr : new int[_nbparticlesocl];
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		_particledynamic[i] = SpringNetwork::getParticle(i).isDynamic() ? 1 : 0;
+	}
 
 void SpringNetworkOpenCL::computeOpenCLForces()
 {
@@ -711,7 +825,6 @@ void SpringNetworkOpenCL::computeRandomSet()
 
 void SpringNetworkOpenCL::getParticlePosition(unsigned i, float position[3]) const
 	{
-	cerr<<"getParticlePosition i"<<i<<endl;
 	position[0]=_particlepositions[i].x;
 	position[1]=_particlepositions[i].y;
 	position[2]=_particlepositions[i].z;

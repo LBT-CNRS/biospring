@@ -22,7 +22,7 @@ void CSVSampleWriter::write()
         if (_spn->isStericEnabled())
             _ostream << "\t"
                      << "Steric energy (kJ.mol-1)";
-        if (_spn->isElectrostaticEnabled())
+        if (_spn->isAnyElectrostaticEnabled())
             _ostream << "\t"
                      << "Electrostatic energy (kJ.mol-1)";
         if (_spn->isIMPEnabled())
@@ -42,7 +42,7 @@ void CSVSampleWriter::write()
         _ostream << "\t" << _spn->getSpringEnergy();
     if (_spn->isStericEnabled())
         _ostream << "\t" << _spn->getStericEnergy();
-    if (_spn->isElectrostaticEnabled())
+    if (_spn->isAnyElectrostaticEnabled())
         _ostream << "\t" << _spn->getElectrostaticEnergy();
     if (_spn->isIMPEnabled())
         _ostream << "\t" << _spn->getIMPEnergy();

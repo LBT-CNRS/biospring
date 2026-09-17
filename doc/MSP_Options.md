@@ -284,16 +284,26 @@ calculation
 * **coulomb.dielectric = 1.0** *(dimensionless, float)* Relative dielectric constant used in
 Coulomb's equation.
 ---
-* **potentialgrid.enable = 0** *(boolean)* Enable APBS potential grid.
-* **potentialgrid.path = ""** *(string)* Name of the APBS potential grid file in OpenDX format.
-* **potentialgrid.scale = 1** *(dimensionless factor, float)* Multiplier applied to electrostatic
-forces derived from the potential grid.
+* **electrostaticgrid.enable = 0** *(boolean)* Enable the APBS electrostatic potential grid.
+Renamed from `potentialgrid`, which said only that it was a grid: `densitygrid` below is one
+too. An .msp still using the old name keeps working and prints one deprecation warning per
+obsolete group.
+* **electrostaticgrid.path = ""** *(string)* Name of the APBS potential grid file in OpenDX format.
+* **electrostaticgrid.scale = 1** *(dimensionless factor, float)* Multiplier applied to electrostatic
+forces derived from the grid.
+
+`electrostaticgrid` and `coulomb` are independent and may be combined: a receptor built with
+`pdb2spn --charge 0.0` contributes only through the map, while explicitly charged particles
+(ions, say) feel the map *and* each other pairwise, with no double counting. Pairwise cost
+scales with the number of *charged* particles, not the total. Before this was fixed, enabling
+the grid alone silently produced no electrostatics at all: its gate was Coulomb's own flag,
+so the DX file was never even read.
 ---
 * **densitygrid.enable = 0** *(boolean)* Enable density grid.
 * **densitygrid.path = ""** *(string)* Name of the density grid file in OpenDX format.
 * **densitygrid.scale = 1** *(dimensionless factor, float)* Multiplier applied to forces derived
 from the density grid (e.g. a SAXS/cryoEM-derived envelope). Independent from steric.gridscale
-and potentialgrid.scale.
+and electrostaticgrid.scale.
 
 Implicit Membrane (IMPALA)
 -----------------

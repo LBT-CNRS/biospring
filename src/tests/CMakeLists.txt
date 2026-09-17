@@ -89,6 +89,13 @@ if(FREESASA_SUPPORT)
     add_test_module(InteractorFreeSASA)
 endif()
 
+# The CPU/OpenCL comparison only exists when the OpenCL backend is built. It
+# skips itself at run time when no device answers, so it is safe on a build
+# machine that has the headers but no GPU.
+if(OPENCL_SUPPORT)
+    add_test_module(SpringNetworkOpenCL)
+endif()
+
 add_subdirectory(grid)
 add_subdirectory(regression)
 add_subdirectory(topology)

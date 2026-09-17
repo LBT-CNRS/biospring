@@ -21,7 +21,7 @@ void CSVTrajectoryWriter::write_header()
     if (_topology.isStericEnabled())
         _ostream << "\t"
                  << "Steric energy (kJ.mol-1)";
-    if (_topology.isElectrostaticEnabled())
+    if (_topology.isAnyElectrostaticEnabled())
         _ostream << "\t"
                  << "Electrostatic energy (kJ.mol-1)";
     if (_topology.isIMPEnabled())
@@ -43,7 +43,7 @@ void CSVTrajectoryWriter::write_step()
         _ostream << "\t" << _topology.getSpringEnergy();
     if (_topology.isStericEnabled())
         _ostream << "\t" << _topology.getStericEnergy();
-    if (_topology.isElectrostaticEnabled())
+    if (_topology.isAnyElectrostaticEnabled())
         _ostream << "\t" << _topology.getElectrostaticEnergy();
     if (_topology.isIMPEnabled())
         _ostream << "\t" << _topology.getIMPEnergy();

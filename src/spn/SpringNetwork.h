@@ -45,7 +45,10 @@ class SpringNetwork
   private:
     struct Grids
     {
-        grid::PotentialGrid potential;
+        // PotentialGrid is the container type -- a scalar field with its
+        // gradient -- not a statement about which potential. Both members
+        // are one, so each is named for what it actually holds.
+        grid::PotentialGrid electrostatic;
         grid::PotentialGrid density;
     };
 
@@ -245,8 +248,8 @@ class SpringNetwork
     // ================================================================================
 
     // Gets/Sets potential grid.
-    biospring::grid::PotentialGrid & getPotentialGrid() { return _grids.potential; }
-    const biospring::grid::PotentialGrid & getPotentialGrid() const { return _grids.potential; }
+    biospring::grid::PotentialGrid & getElectrostaticGrid() { return _grids.electrostatic; }
+    const biospring::grid::PotentialGrid & getElectrostaticGrid() const { return _grids.electrostatic; }
 
     // Gets/Sets density grid.
     biospring::grid::PotentialGrid & getDensityGrid() { return _grids.density; }
@@ -309,7 +312,7 @@ class SpringNetwork
 
     // Steric force scale (also pushed into the ForceField via setStericScale,
     // see SpringNetwork::setup). Named getGridScale for historical reasons;
-    // despite the name it has nothing to do with potentialgrid or
+    // despite the name it has nothing to do with electrostaticgrid or
     // densitygrid, which have their own independent scale (see
     // ForceField::getForceFieldScale and getDensityGridScale below).
     float getGridScale() const { return _config.steric.gridscale; }
@@ -339,9 +342,25 @@ class SpringNetwork
     bool isDihedralNucleicSugarEnabled() const { return _config.dihedralnucleicsugar.enable; }
     bool isViscosityEnabled() const { return _config.viscosity.enable; }
     bool isStericEnabled() const { return _config.steric.enable; }
-    bool isElectrostaticEnabled() const { return _config.electrostatic.enable; }
+    // True when ANY electrostatic term is on, which is not the same thing as
+    // the pairwise-Coulomb flag. This used to return _config.electrostatic.enable
+    // -- Coulomb's own flag -- and it gates both the setup and the force
+    // application, so a configuration asking for the potential grid alone got
+    // no electrostatics at all: _setupElectrostatic returned before reading the
+    // DX file, and computeParticleForces never reached
+    // addElectrostaticFieldForce.
+    //
+    // Example 011.DNAseI ships exactly that combination (coulomb.enable = 0,
+    // electrostaticgrid.enable = 1) and is built around steering an ion through the
+    // map. Measured before this fix: turning the map off changed the ion's
+    // displacement by nothing at all, 0.3419 A either way, because it was never
+    // loaded. The demo steered nothing.
+    bool isAnyElectrostaticEnabled() const
+    {
+        return _config.electrostatic.enable || _config.electrostaticgrid.enable;
+    }
     bool isElectrostaticCoulombEnabled() const { return _config.electrostatic.enable; }
-    bool isElectrostaticFieldEnabled() const { return _config.potentialgrid.enable; }
+    bool isElectrostaticFieldEnabled() const { return _config.electrostaticgrid.enable; }
     bool isIMPEnabled() const { return _config.imp.enable; }
     bool isDensityGridEnabled() const { return _config.densitygrid.enable; }
     bool isConstraintEnabled() const { return _constraintenabled; }
