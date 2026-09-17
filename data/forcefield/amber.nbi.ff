@@ -14,6 +14,28 @@
 #   diff <(grep -vE '^#|^$' amber.ff) <(grep -vE '^#|^$' amber.nbi.ff)
 #
 #type	charge(e)	radius(A)	epsilon(kJ.mol-1)		mass(g.mol-1)	transferIMP(kJ.mol-1.A-2)	Hydrophobicity
+#
+# SHG, THG1 and YHH -- the hydroxyl hydrogens of serine, threonine and tyrosine
+# -- carry the Lennard-Jones parameters of AMBER's amide hydrogen (R* 0.6 A,
+# epsilon 0.065689 kJ/mol) instead of AMBER's own 0/0.
+#
+# AMBER really does give type HO no Lennard-Jones at all, and can afford to:
+# its exclusion list removes every 1-2 and 1-3 pair and scales 1-4 down, so a
+# hydroxyl hydrogen never meets an acceptor without a term that holds it off.
+# BioSpring excludes the pairs its SPRING network joins (Particle.cpp, guarded
+# by spring.enable) and nothing else, so two residues' atoms are never
+# excluded from each other. A hydroxyl hydrogen at +0.41 e then faces a
+# carboxylate oxygen at -0.80 e with no repulsion whatsoever, and the Coulomb
+# term diverges as 1/r while the springs holding the rest of the residue only
+# grow as r. Measured on example 072: 21 such hydrogens, 136 attractive pairs
+# that no spring joins, the closest THR82:HG1 -- GLU69:OE1 at 1.653 A pulling
+# with 171 kJ.mol-1.A-1. The run reached 3.2e21 kJ/mol at every timestep from
+# 4 fs down to 0.5 fs; with this floor it settles at 283 kJ/mol.
+#
+# The honest alternative is to exclude 1-4 pairs properly, which needs a
+# chemical bond graph BioSpring does not keep. Until then this floor is what
+# makes --rigidbody usable with coulomb.enable.
+#
 AC	0.5973	1.908	0.359824	12.01	-0.056066	0.0
 ACA	0.0337	1.908	0.457730	12.01	-0.439320	0.0
 ACB	-0.1825	1.908	0.457730	12.01	-0.439320	0.0
@@ -260,7 +282,7 @@ SH	0.2719	0.6	0.065689	1.008	0.151461	0.0
 SHA	0.0843	1.387	0.065689	1.008	-0.166105	0.0
 SHB2	0.0352	1.387	0.065689	1.008	-0.166105	0.0
 SHB3	0.0352	1.387	0.065689	1.008	-0.166105	0.0
-SHG	0.4275	0.0	0.000000	1.008	0.151461	0.0
+SHG	0.4275	0.6	0.065689	1.008	0.151461	0.0
 SN	-0.4157	1.824	0.711280	14.01	0.468608	0.0
 SO	-0.5679	1.6612	0.878640	16.0	0.168615	0.0
 SOG	-0.6546	1.721	0.880314	16.0	0.168615	0.0
@@ -271,7 +293,7 @@ TCG2	-0.2438	1.908	0.457730	12.01	-0.439320	0.0
 TH	0.2719	0.6	0.065689	1.008	0.151461	0.0
 THA	0.1007	1.387	0.065689	1.008	-0.166105	0.0
 THB	0.0043	1.387	0.065689	1.008	-0.166105	0.0
-THG1	0.4102	0.0	0.000000	1.008	0.151461	0.0
+THG1	0.4102	0.6	0.065689	1.008	0.151461	0.0
 THG21	0.0642	1.487	0.065689	1.008	-0.166105	0.0
 THG22	0.0642	1.487	0.065689	1.008	-0.166105	0.0
 THG23	0.0642	1.487	0.065689	1.008	-0.166105	0.0
@@ -334,7 +356,7 @@ YHD1	0.1699	1.459	0.062760	1.008	-0.166105	0.0
 YHD2	0.1699	1.459	0.062760	1.008	-0.166105	0.0
 YHE1	0.1656	1.459	0.062760	1.008	-0.166105	0.0
 YHE2	0.1656	1.459	0.062760	1.008	-0.166105	0.0
-YHH	0.3992	0.0	0.000000	1.008	0.151461	0.0
+YHH	0.3992	0.6	0.065689	1.008	0.151461	0.0
 YN	-0.4157	1.824	0.711280	14.01	0.468608	0.0
 YO	-0.5679	1.6612	0.878640	16.0	0.168615	0.0
 YOH	-0.5579	1.721	0.880314	16.0	0.168615	0.0
