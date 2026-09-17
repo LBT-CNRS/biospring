@@ -99,8 +99,8 @@ void SpringNetwork::computeSpringForces()
 }
 
 // The DIHEDRAL family switches gate the tabulated torsions, which is all this
-// term is now: the ghost-particle rings the families were named for are gone,
-// and so is the spring collection per family.
+// term is now: there is no spring collection per family any more, only the
+// tables the families index into.
 void SpringNetwork::computeDihedralForces()
 {
     _energies.dihedral = computeTorsionForces();

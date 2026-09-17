@@ -37,27 +37,10 @@ class Spring
     // The spring constant of the spring.
     double _stiffness;
 
-    // Only meaningful for a dihedral ghost-ghost spring (see
-    // BioSpring's DihedralEntry/generate_bonded_forcefield.py): this
-    // spring's share of its axis's exact dihedral-energy correction (ring
-    // construction artifact minus AMBER's own real DC), in kJ.mol-1. Zero
-    // for every other spring. Never affects forces (a constant has zero
-    // gradient) -- see spn::SpringNetwork::computeDihedralForces, which
-    // subtracts it from each dihedral spring's own energy when reporting
-    // the total.
-    double _dc_offset = 0.0;
-
-    // The unique ids of the two atoms of the torsion axis this dihedral spring
-    // turns, or NO_AXIS_ATOM when the spring does not name one. A ghost knows
-    // its axis because it was placed about it; a spring between two real
-    // substituents does not, and the tangential filter needs it.
-    static constexpr pid_t NO_AXIS_ATOM = static_cast<pid_t>(-1);
-    pid_t _axis_b = NO_AXIS_ATOM;
-    pid_t _axis_c = NO_AXIS_ATOM;
+    // (see
 
     // The spring identifier is made of the two unique ids of its particles.
     sid_t _uid;
-
 
   public:
     // Initializes a spring with the given particles, equilibrium length, and
@@ -94,28 +77,6 @@ class Spring
     double stiffness() const { return _stiffness; }
     void set_stiffness(double stiffness) { _stiffness = stiffness; }
 
-    // Gets/Sets the torsion axis (see _axis_b's own comment). Unset means the
-    // spring names no axis, which is the normal case for a ring whose ghost
-    // can be asked instead.
-    pid_t axis_b() const { return _axis_b; }
-    pid_t axis_c() const { return _axis_c; }
-    bool has_axis() const { return _axis_b != NO_AXIS_ATOM && _axis_c != NO_AXIS_ATOM; }
-    Spring & set_axis(pid_t b, pid_t c)
-    {
-        _axis_b = b;
-        _axis_c = c;
-        return *this;
-    }
-
-    // Gets/Sets the dihedral-energy correction (see _dc_offset's own comment).
-    double dc_offset() const { return _dc_offset; }
-    Spring & set_dc_offset(double dc_offset)
-    {
-        _dc_offset = dc_offset;
-        return *this;
-    }
-
-
     // ================================================================================
     // Methods.
     // ================================================================================
@@ -127,7 +88,6 @@ class Spring
     // identifiers of the two particles.
     sid_t uid() const { return unique_id(); }
     sid_t unique_id() const { return _uid; }
-
 
     // =============================================================================
     // Identifier generation.
@@ -143,6 +103,5 @@ class Spring
 
 } // namespace topology
 } // namespace biospring
-
 
 #endif // __TOPOLOGY_SPRING_HPP__

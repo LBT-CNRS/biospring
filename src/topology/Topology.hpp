@@ -48,20 +48,6 @@ class Topology
     // The springs in the topology.
     SpringCollection _springs;
 
-    // Ghost-spring collections for dihedral torsions, kept separate from
-    // _springs (rather than tagging individual Spring objects) so each
-    // family stays identifiable through serialization (.nc I/O) without
-    // touching Spring/SpringCollection at all -- see
-    // doc/BondedForceFieldSprings.md, Section 3.2. Which families are
-    // actually built is decided once, at build time, by
-    // BondedForceFieldReader::buildSprings's enableDihedral* parameters
-    // (see -dihedralbackbone/-dihedralsidechain in pdb2spn-cli.cpp) -- PHI/
-    // PSI/OMEGA are always built together under -dihedralbackbone (kept as
-    // three separate collections here purely so SpringNetwork can enable/
-    // disable each independently at runtime, see its dihedral.phi/psi/
-    // omega .msp settings). A dihedral ghost spring is always a new
-    // addition (never a retune of a real 1-2/1-3 spring), so unlike
-    // _springs these are never populated by RigidBodyBuilder.
     // One collection per family, indexed by the family itself rather than
     // held as parallel members. Adding a family used to mean repeating the
     // same declaration/clear/copy/convert lines here and in four other
@@ -147,8 +133,8 @@ class Topology
     // silently turn every Spring's cached Particle& (a real C++ reference,
     // not an index) into a dangling one (read back as garbage -- huge
     // unique_id, empty name -- the exact failure mode found and fixed by
-    // reserving before --rigidbody/ghost-particle creation, see
-    // BondedForceFieldReader and pdb2spn-cli.cpp's call site).
+    // reserving before --rigidbody's spring creation, see
+    // pdb2spn-cli.cpp's call site).
     //
     // A second, subtler instance of the same problem (found later, via a
     // real Fs-peptide PDB with CONECT records -- ubiquitin.pdb has none,
@@ -163,8 +149,8 @@ class Topology
     // copy constructor), clear this topology's own containers, reserve on
     // the now-empty (so reservation itself can never invalidate anything)
     // particle buffer, then replay the snapshot back in through the same
-    // index-based re-resolution _copy_particles/_copy_springs/
-    // _copy_ghost_particles already use for copying -- never lets
+    // index-based re-resolution _copy_particles/_copy_springs already use
+    // for copying -- never lets
     // _particles grow again once anything actually references it.
     void reserve_particles(size_t n)
     {
@@ -345,13 +331,7 @@ class Topology
         // Removes all springs and particles from the SpringNetwork.
         spn.clear();
 
-        // Copies particles. Ghost particles (see add_ghost_particle) are
-        // never copied via the regular spn::Particle path: their 3 anchors
-        // must already exist on the SpringNetwork side (true here, since
-        // they were always added earlier in `_particles` -- a ghost's
-        // anchors are real PDB atoms, always created before any ghost
-        // referencing them), so their spn-side indices are resolved via
-        // the same by_uid() lookup already used for springs below.
+        // Copies particles.
         for (const topology::Particle & source : _particles)
         {
             spn::Particle target;
@@ -460,8 +440,7 @@ class Topology
             // before merging), so the same spring can already exist.
             try
             {
-                dst.add_spring(_particles[i], _particles[j], source.equilibrium(), source.stiffness())
-                    .set_dc_offset(source.dc_offset());
+                dst.add_spring(_particles[i], _particles[j], source.equilibrium(), source.stiffness());
             }
             catch (const SpringAlreadyExistsException & e)
             {

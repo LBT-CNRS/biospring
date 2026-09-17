@@ -114,7 +114,9 @@ TEST(Configuration, deprecated_amber_steric_mode_maps_to_the_current_name)
 // dihedral.tangentialonly was added, so it is worth a test that goes through
 // the real parse path rather than touching the field directly. That setting is
 // gone with the ghost rings; the invariant is not, so the test now rides a
-// family switch, which is the same shape.
+// family switch, which is the same shape. Note it builds Configuration
+// directly: defaultConfiguration() sets these eight to true deliberately, so
+// the false seen here is the raw constructor's, not what BioSpring runs with.
 TEST(Configuration, dihedral_family_switch_survives_the_parse_path)
 {
     Configuration config;

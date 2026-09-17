@@ -43,44 +43,6 @@ class Spring
 
     float getEnergy() const { return _energy; }
 
-    // Only meaningful for a dihedral ghost-ghost spring: this spring's
-    // share of its axis's exact dihedral-energy correction (ring
-    // construction artifact minus AMBER's own real DC -- see
-    // topology::Spring::_dc_offset and scripts/generate_bonded_forcefield.py's
-    // calibrate_ring). Zero for every other spring. Never affects forces (a
-    // constant has zero gradient) -- SpringNetwork::computeDihedralForces
-    // subtracts it from this spring's own energy when accumulating the total.
-    void setDcOffset(float dcOffset) { _dcOffset = dcOffset; }
-    float getDcOffset() const { return _dcOffset; }
-
-    // The two real atoms of the torsion axis this dihedral spring turns, or
-    // NO_AXIS_ATOM when it names none. A ring spring need not: its ghost was
-    // placed about the axis and can be asked. A spring between two real
-    // substituents has no such witness, and the tangential filter needs the
-    // axis to project onto.
-    static constexpr unsigned NO_AXIS_ATOM = static_cast<unsigned>(-1);
-    void setAxis(unsigned b, unsigned c) { _axisB = b; _axisC = c; }
-    unsigned getAxisB() const { return _axisB; }
-    unsigned getAxisC() const { return _axisC; }
-    bool hasAxis() const { return _axisB != NO_AXIS_ATOM && _axisC != NO_AXIS_ATOM; }
-
-    // Each endpoint's distance from the axis and position along it, as the
-    // model was built. With these the spring can be evaluated on IDEALISED
-    // positions -- real azimuth, reference radius -- so its energy depends on
-    // the torsion angle alone (see SpringNetwork::computeTorsionalDihedral).
-    void setTorsionalFrame(float rho1, float z1, float rho2, float z2)
-    {
-        _rho1 = rho1;
-        _z1 = z1;
-        _rho2 = rho2;
-        _z2 = z2;
-    }
-    float getRho1() const { return _rho1; }
-    float getRho2() const { return _rho2; }
-    float getZ1() const { return _z1; }
-    float getZ2() const { return _z2; }
-    bool hasTorsionalFrame() const { return _rho1 >= 0.0f && _rho2 >= 0.0f; }
-
     void computeEnergy(const biospring::forcefield::ForceField & ff);
     void computeLength();
 
@@ -89,13 +51,7 @@ class Spring
     // possible without concurrently modifying particles.
     //
     // `ignoreDynamicState`: bypasses the "skip if both endpoints are
-    // non-dynamic" early exit (see the .cpp). Needed for dihedral ghost-ghost
-    // springs (SpringNetwork::computeDihedralForces): both endpoints are
-    // always static/massless virtual sites (spn::GhostParticle) by design,
-    // so that guard's original intent -- skip pointless work between two
-    // real, frozen atoms -- does not apply: the force/energy still matters
-    // here and gets redistributed onto the ghosts' real, dynamic anchors
-    // afterward (SpringNetwork::redistributeGhostForces).
+    // non-dynamic" early exit (see the .cpp).
     Vector3f computeForce(const biospring::forcefield::ForceField & ff, bool ignoreDynamicState = false);
 
     void applyForceToParticle(const biospring::forcefield::ForceField & ff);
@@ -107,13 +63,6 @@ class Spring
     float _stiffness;
     float _length;
     float _energy;
-    float _dcOffset = 0.0f;
-    float _rho1 = -1.0f;
-    float _z1 = 0.0f;
-    float _rho2 = -1.0f;
-    float _z2 = 0.0f;
-    unsigned _axisB = NO_AXIS_ATOM;
-    unsigned _axisC = NO_AXIS_ATOM;
     unsigned _id;
 };
 

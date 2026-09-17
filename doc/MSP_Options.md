@@ -91,9 +91,9 @@ time, by pdb2spn/editspn/mergespn's own `--cutoff` option (see there), not rebui
 this value.
 ---
 ---
-* **dihedralphi.enable = 1** *(boolean)* Runtime debug on/off for phi (backbone) dihedral ghost
-springs, independently of psi/omega/chi. Only meaningful if the topology was actually built with
-`-dihedralbackbone` (or `-dihedral`) in the first place -- a family not built has no springs to
+* **dihedralphi.enable = 1** *(boolean)* Runtime on/off for the phi (backbone) torsions,
+independently of psi/omega/chi. Only meaningful if the topology was actually built with
+`-dihedralbackbone` (or `-dihedral`) in the first place -- a family not built has no torsions to
 enable/disable either way. Defaults to enabled so an `.msp` written before this setting existed
 keeps the same behaviour.
 * **dihedralpsi.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the psi axis.
@@ -103,6 +103,14 @@ keeps the same behaviour.
 chi1-4 dihedral (the SIDECHAIN family in the `.bi.ff`).
 * **dihedralplanarity.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the PLANARITY
 impropers.
+* **dihedralnucleicbackbone.enable = 1** *(boolean)* Same, for a nucleotide's alpha..zeta.
+* **dihedralnucleicchi.enable = 1** *(boolean)* Same, for the glycosidic torsion and RNA's
+2'-OH rotor.
+* **dihedralnucleicsugar.enable = 1** *(boolean)* Same, for the four furanose ring bonds. A
+family of its own rather than part of the nucleic backbone, because those bonds carry the sugar
+pucker -- the single lever choosing the A or B helical form -- so its energy has to be readable,
+and switchable, on its own. At build time it is opted in by `-dihedralbackbone`, not by
+`-dihedralsidechain`: the chain runs *through* the ring (C4'-C3').
 
   These are not a refinement on top of the mesh, and they are not only about aromatic rings.
   Displace an sp2 hub by `z` out of its three substituents' plane: the three 1-3 distances do
@@ -129,11 +137,14 @@ impropers.
   it restores the plane but freezes the terminal torsion, because nothing beyond the hub's
   substituents can be reached without crossing the rotatable bond.
 
-**These settings isolate a family's contribution; they do not undo the model.** Turning every
-one of them off does *not* reproduce a topology built without the corresponding `pdb2spn`
-flags: a family not requested at build time never gets a spring, a ghost particle or a NetCDF
-entry, so nothing at runtime can bring it back -- and what you get instead is the rigid body
-still carrying every ghost particle the disabled families created.
+**All eight default to enabled** (`defaultConfiguration()` sets them so deliberately): they are
+an opt-OUT knob for isolating one family's contribution, not an opt-in feature switch, so
+`-rigidbody ... -dihedral` needs nothing in the `.msp` to apply every family.
+
+**They isolate a family's contribution; they do not undo the model.** Turning every one of them
+off does *not* reproduce a topology built without the corresponding `pdb2spn` flags: a family
+not requested at build time never gets a torsion or a NetCDF entry, so nothing at runtime can
+bring it back.
 
 To compare a rigid-body model against a bonded one, **build one `.nc` per stage**
 (`--rigidbody` alone, then `+ --dihedral`) rather than toggling one `.nc` at runtime. See
@@ -239,27 +250,6 @@ care, but a ring coordinate does: on an unminimised B-DNA the furanose pucker wa
 the input's value, putting nu1 31.6 deg off AMBER while raising `--stiffness` made it *worse*
 (42.5 deg at k = 8000). Relax the structure under AMBER's bonded terms before building the
 `.nc`, or the numbers above do not apply.
-* **dihedral.tangentialonly = 0** *(boolean)* Project each ghost ring's reaction onto the
-tangential direction about its own axis before it reaches the real atoms, so a torsion pushes a
-substituent only *around* that axis -- which is exactly what AMBER's dihedral force does
-(`F` is along `r_ij x r_jk`, hence perpendicular to both the axis and the i-j-k plane). What the
-projection drops carries no torque about the axis at all, so the torque is preserved exactly;
-the reaction on the two axis atoms is then balanced against zero rather than against the ghost
-totals, which is what keeps the discarded part from simply reappearing there.
-
-Measured on ubiquitin, this is not a small correction: 96.4 % of the force the rings apply
-(99.8 % median) is radial or axial and merely deforms the rigid-body mesh. With the projection,
-spring energy after 20000 steps falls from 442.90 to 0.80 kJ/mol, and per-atom agreement with
-AMBER's own dihedral forces goes from a correlation of 0.000 to 0.650. Because the leak does not
-scale with `--stiffness` while the mesh's resistance does, it is what forces a stiff mesh: with
-the projection, stiffness can drop from 8000 to 500 and the timestep rise from 1.0 to 4.0 fs,
-with *better* geometry at equal simulated time (CA-RMSD 1.60 -> 1.48 A over 20 ps).
-
-Off by default: it changes the forces of an existing model, so it is opted into rather than
-imposed. **Known limit**: the torque is right in total and in direction, but it is delivered
-concentrated -- on 936 of 937 axes the ring pushes fewer substituents than AMBER (1.35 against
-4.92 on average), so the force on the atoms it does push is about 2.4x too large.
-
 * **viscosity.enable = 0** *(boolean)* Enables a damping factor on the particles.
 * **viscosity.value = 1.0** *(Da.fs-1, float)* Damping factor.
 

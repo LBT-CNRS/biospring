@@ -70,54 +70,7 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
 
     const std::string & type = tokens[0];
 
-        if (type == "DIHEDRAL")
-    {
-        // 11 tokens when the entry names its own axis, 9 when it does not:
-        // every file written before the axis existed stays valid, and so does
-        // every entry whose spring has a ghost at one end to ask instead.
-        if (tokens.size() != 9 && tokens.size() != 11)
-            logging::die("BondedForceFieldReader: line %d: DIHEDRAL expects 9 tokens (type name resname family "
-                         "atom_ref atom_rotant d0 k dc_offset), or 11 with its axis (... axis_b axis_c), found %d",
-                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
-
-        DihedralEntry entry;
-        entry.resname = tokens[2];
-        const std::string & family = tokens[3];
-        unsigned family_id = spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT;
-        for (unsigned f = 0; f < spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++f)
-            if (family == DIHEDRAL_FAMILY_KEYWORDS[f])
-            {
-                family_id = f;
-                break;
-            }
-        if (family_id == spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT)
-        {
-            std::string expected;
-            for (unsigned f = 0; f < spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++f)
-                expected += (f == 0 ? "" : ", ") + std::string(DIHEDRAL_FAMILY_KEYWORDS[f]);
-            logging::die("BondedForceFieldReader: line %d: invalid DIHEDRAL family '%s' (expected one of %s)",
-                         static_cast<int>(line_id), family.c_str(), expected.c_str());
-        }
-        entry.family = static_cast<DihedralFamily>(family_id);
-        entry.atom_ref = tokens[4];
-        entry.atom_rotant = tokens[5];
-        if (!utils::string::from_string(entry.d0, tokens[6]))
-            logging::die("BondedForceFieldReader: line %d: invalid d0 '%s'", static_cast<int>(line_id),
-                         tokens[6].c_str());
-        if (!utils::string::from_string(entry.k, tokens[7]))
-            logging::die("BondedForceFieldReader: line %d: invalid k '%s'", static_cast<int>(line_id),
-                         tokens[7].c_str());
-        if (!utils::string::from_string(entry.dc_offset, tokens[8]))
-            logging::die("BondedForceFieldReader: line %d: invalid dc_offset '%s'", static_cast<int>(line_id),
-                         tokens[8].c_str());
-        if (tokens.size() == 11)
-        {
-            entry.axis_b = tokens[9];
-            entry.axis_c = tokens[10];
-        }
-        _dihedral.push_back(entry);
-    }
-    else if (type == "TORSIONTABLE")
+    if (type == "TORSIONTABLE")
     {
         // <id> <bins> then 2*(bins+1) numbers, energy and torque interleaved.
         if (tokens.size() < 3)
@@ -167,34 +120,10 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
                          static_cast<int>(line_id), tokens[7].c_str());
         _torsion.push_back(entry);
     }
-    else if (type == "GHOSTPARTICLE")
-    {
-        if (tokens.size() != 9)
-            logging::die("BondedForceFieldReader: line %d: GHOSTPARTICLE expects 9 tokens (type name resname atom_B "
-                         "atom_C atom_ref r theta delta), found %d",
-                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
-
-        GhostParticleEntry entry;
-        entry.name = tokens[1];
-        entry.resname = tokens[2];
-        entry.atom_B = tokens[3];
-        entry.atom_C = tokens[4];
-        entry.atom_ref = tokens[5];
-        if (!utils::string::from_string(entry.r, tokens[6]))
-            logging::die("BondedForceFieldReader: line %d: invalid r '%s'", static_cast<int>(line_id),
-                         tokens[6].c_str());
-        if (!utils::string::from_string(entry.theta_deg, tokens[7]))
-            logging::die("BondedForceFieldReader: line %d: invalid theta '%s'", static_cast<int>(line_id),
-                         tokens[7].c_str());
-        if (!utils::string::from_string(entry.delta_deg, tokens[8]))
-            logging::die("BondedForceFieldReader: line %d: invalid delta '%s'", static_cast<int>(line_id),
-                         tokens[8].c_str());
-        _ghostparticles.push_back(entry);
-    }
     else
     {
         logging::die("BondedForceFieldReader: line %d: unknown entry type '%s' (expected "
-                     "GHOSTPARTICLE, DIHEDRAL, TORSION or TORSIONTABLE)",
+                     "TORSION or TORSIONTABLE)",
                      static_cast<int>(line_id), type.c_str());
     }
 }
@@ -215,9 +144,8 @@ void BondedForceFieldReader::read()
     }
     close();
 
-    logging::info("BondedForceFieldReader: read %zu ghost particle, %zu dihedral rule(s) and %zu torsion(s) "
-                 "over %zu table(s).",
-                 _ghostparticles.size(), _dihedral.size(), _torsion.size(), _torsiontables.size());
+    logging::info("BondedForceFieldReader: read %zu torsion(s) over %zu table(s).", _torsion.size(),
+                  _torsiontables.size());
 }
 
 std::vector<BondedForceFieldReader::ResidueParticleIndices>
@@ -327,53 +255,6 @@ void BondedForceFieldReader::_check_translation_is_one_atom_per_rule(
                          rule.getName().c_str(), rule.getResidueName().c_str(), rule.number_of_atoms());
 }
 
-topology::Spring * BondedForceFieldReader::_find_spring(topology::SpringCollection & collection,
-                                                         const topology::Particle & p1,
-                                                         const topology::Particle & p2) const
-{
-    if (!collection.exists(p1, p2))
-        return nullptr;
-
-    try
-    {
-        return &collection.at_uid(topology::Spring::generate_uid(p1, p2));
-    }
-    catch (const std::out_of_range &)
-    {
-        return &collection.at_uid(topology::Spring::generate_uid(p2, p1));
-    }
-}
-
-bool BondedForceFieldReader::_existing_equilibrium(topology::Topology & topology, const topology::Particle & p1,
-                                                    const topology::Particle & p2, double & equilibrium) const
-{
-    topology::Spring * existing = _find_spring(topology.springs(), p1, p2);
-    if (existing == nullptr)
-        return false;
-    equilibrium = existing->equilibrium();
-    return true;
-}
-
-void BondedForceFieldReader::_retune_or_add_spring(topology::Topology & topology, topology::Particle & p1,
-                                                    topology::Particle & p2, double equilibrium, double stiffness,
-                                                    const char * kind) const
-{
-    topology::Spring * existing = _find_spring(topology.springs(), p1, p2);
-
-    if (existing != nullptr)
-    {
-        existing->set_equilibrium(equilibrium);
-        existing->set_stiffness(stiffness);
-    }
-    else
-    {
-        logging::info("BondedForceFieldReader: no pre-existing --rigidbody spring for %s pair %s-%s, adding a new "
-                     "one.",
-                     kind, p1.properties().name().c_str(), p2.properties().name().c_str());
-        topology.add_spring(p1, p2, equilibrium, stiffness);
-    }
-}
-
 void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                                           const reduce::ReduceRuleContainer * translation,
                                           bool enableDihedralBackbone, bool enableDihedralSidechain,
@@ -382,14 +263,8 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
     if (translation != nullptr)
         _check_translation_is_one_atom_per_rule(*translation);
 
-    // Non-const: _create_ghost_particles appends each newly-created ghost's
-    // index to residues[index] so later DIHEDRAL entries in the same
-    // residue can resolve it exactly like a real atom (see its own
-    // comment in the header).
     std::vector<ResidueParticleIndices> residues = _group_particles_by_residue(topology);
 
-    unsigned nb_dihedral_applied = 0;
-    unsigned nb_ghostparticles_created = 0;
     unsigned nb_torsions_applied = 0;
 
     // The tables travel with the torsions and are given once, before any of
@@ -414,12 +289,6 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
     // Keyed on the quadruplet either way round, a torsion and its reverse
     // being one torsion.
     std::set<std::array<size_t, 4>> seen_torsions;
-
-    // Only worth creating ghost particles at all if some dihedral family is
-    // actually enabled -- otherwise every DIHEDRAL entry that would use them
-    // is skipped anyway (see the family_enabled check below), and they'd
-    // just be dead, unused particles sitting in the topology.
-    const bool enableGhostParticles = enableDihedralBackbone || enableDihedralSidechain;
 
     for (size_t index = 0; index < residues.size(); index++)
     {

@@ -51,10 +51,10 @@ class SpringNetwork
 
     struct Energies
     {
-        // The --rigidbody/ENM mesh's own energy. The dihedral ghost rings
-        // keep a dedicated channel instead of being folded in here, since
-        // "spring energy" is only a meaningful, self-contained quantity for
-        // a plain ENM/rigid-body network.
+        // The --rigidbody/ENM mesh's own energy. The torsions keep a
+        // dedicated channel instead of being folded in here, since "spring
+        // energy" is only a meaningful, self-contained quantity for a plain
+        // ENM/rigid-body network.
         float spring = 0.0f;
         float dihedral = 0.0f;
         float electrostatic = 0.0f;
@@ -286,9 +286,6 @@ class SpringNetwork
     // Returns the list of springs.
     const std::vector<Spring> & getSprings() const { return _springs; }
 
-    // One dihedral ghost-spring family's list is reached by index only, via
-    // getDihedralSprings(family) above.
-
     // Returns ith spring in spring list.
     std::vector<Spring>::const_reference getSpring(unsigned index) const { return _springs[index]; }
     std::vector<Spring>::reference getSpring(unsigned index) { return _springs[index]; }
@@ -328,9 +325,10 @@ class SpringNetwork
     float getNeighborSkin() const { return _config.sim.neighborskin; }
 
     bool isSpringEnabled() const { return _config.spring.enable; }
-    // Per-family runtime debug toggles for the dihedral ghost springs that
-    // -dihedral* already decided, at build time, to create (see
-    // Configuration.hpp's own comment on these settings).
+    // Per-family runtime toggles for the torsions that -dihedral* already
+    // decided, at build time, to apply. All eight default to enabled (see
+    // defaultConfiguration()): an opt-OUT knob for isolating one family's
+    // contribution, not an opt-in feature switch.
     bool isDihedralPhiEnabled() const { return _config.dihedralphi.enable; }
     bool isDihedralPsiEnabled() const { return _config.dihedralpsi.enable; }
     bool isDihedralOmegaEnabled() const { return _config.dihedralomega.enable; }

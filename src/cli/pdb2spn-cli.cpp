@@ -44,15 +44,15 @@ const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "back to their original name (it must be an all-atom identity mapping,",
     "one atom per rule, like amber.grp -- not a real coarse-grain reduction).",
     "",
-    "-bondedinteraction/--bondedinteraction reads a .bi.ff file (real or",
-    "ghost-spring parameters translated from a real force field, e.g. AMBER)",
-    "on top of -rigidbody/--rigidbody's springs, but applies none of it by",
-    "itself: -dihedralbackbone/--dihedralbackbone and",
-    "-dihedralsidechain/--dihedralsidechain (dihedral ghost springs added on",
-    "top, one flag per proper-dihedral family) each independently opt in;",
-    "-dihedral/--dihedral is a shorthand for both dihedral flags together.",
-    "The rigid mesh keeps bonds and angles at the uniform -stiffness value;",
-    "the dihedral wells are what -bondedinteraction adds on top.",
+    "-bondedinteraction/--bondedinteraction reads a .bi.ff file: AMBER's",
+    "torsion terms, tabulated over the dihedral angle. It applies none of",
+    "it by itself -- -dihedralbackbone/--dihedralbackbone,",
+    "-dihedralsidechain/--dihedralsidechain and",
+    "-dihedralplanarity/--dihedralplanarity each opt one group of families",
+    "in, and -dihedral/--dihedral is the shorthand for all three, which is",
+    "every family. The rigid mesh keeps bonds and angles at the uniform",
+    "-stiffness value; the torsion wells are what -bondedinteraction adds",
+    "on top.",
     "",};
 
 namespace biospring
@@ -257,7 +257,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
         argparse::Argument()
             .name_short("-bondedinteraction")
             .name_long("--bondedinteraction")
-            .description("bonded interaction parameter file: virtual/ghost dihedral spring parameters "
+            .description("bonded interaction parameter file: AMBER's torsion terms, tabulated "
                           "translated from a real force field (e.g. AMBER), a .bi.ff file. "
                           "Applies none of it by itself -- see -dihedralbackbone/"
                           "-dihedralsidechain (or -dihedral, a shorthand for both dihedral flags), each an "
@@ -267,24 +267,26 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
 
     argparse::Argument dihedral_ = argparse::StoreTrueArgument(
         "-dihedral", "--dihedral",
-        "with -bondedinteraction, add all dihedral ghost springs on top of -rigidbody's mesh -- shorthand for "
+        "with -bondedinteraction, apply every torsion family on top of -rigidbody's mesh -- shorthand for "
         "-dihedralbackbone, -dihedralsidechain and -dihedralplanarity together. Bonds and angles stay at "
         "-rigidbody's uniform value; only the dihedral wells become real. Has no effect without "
         "-bondedinteraction");
 
     argparse::Argument dihedralbackbone_ = argparse::StoreTrueArgument(
         "-dihedralbackbone", "--dihedralbackbone",
-        "with -bondedinteraction, add backbone (phi/psi/omega) dihedral ghost springs only; has no effect without "
+        "with -bondedinteraction, apply the backbone families only (phi/psi/omega, and the nucleic "
+        "backbone and sugar); has no effect without "
         "-bondedinteraction");
 
     argparse::Argument dihedralsidechain_ = argparse::StoreTrueArgument(
         "-dihedralsidechain", "--dihedralsidechain",
-        "with -bondedinteraction, add side-chain (chi1-4) dihedral ghost springs only; has no effect without "
+        "with -bondedinteraction, apply the side-chain families only (chi1-4, and the nucleic chi); "
+        "has no effect without "
         "-bondedinteraction");
 
     argparse::Argument dihedralplanarity_ = argparse::StoreTrueArgument(
         "-dihedralplanarity", "--dihedralplanarity",
-        "with -bondedinteraction, add PLANARITY improper ghost springs (aromatic-ring/His hub planarity) only; "
+        "with -bondedinteraction, apply the PLANARITY impropers only; "
         "has no effect without -bondedinteraction");
 
     argparse::Argument stiffness = argparse::Argument()
@@ -509,7 +511,7 @@ void biospring::pdb2spn::CommandLineArguments::printArgumentValues() const
         logging::info("    rigid-body groups: %s", pathRigidBody.c_str());
         if (!pathBondedInteraction.empty())
         {
-            logging::info("    bonded interaction (dihedral ghost springs): %s",
+            logging::info("    bonded interaction (tabulated torsions): %s",
                           pathBondedInteraction.c_str());
             logging::info("        dihedral backbone: %s", dihedralBackbone ? "enabled" : "disabled");
             logging::info("        dihedral sidechain: %s", dihedralSidechain ? "enabled" : "disabled");

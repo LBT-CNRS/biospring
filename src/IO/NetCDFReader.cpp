@@ -32,8 +32,8 @@ void NetCDFReader::addParticlesToSpn()
         p.properties().set_dynamic((_pbuffer.dynamic_states[i] == 0) ? false : true);
         p.properties().set_mass(_pbuffer.masses[i]);
 
-        // Ghost (virtual-site) particles are deliberately massless and static
-        // -- see spn::GhostParticle -- so this guard against an accidental
+        // A deliberately massless, static particle is legitimate, so this
+        // guard against an accidental
         // zero mass only applies to dynamic particles, whose mass actually
         // matters for integration.
         if (p.properties().is_dynamic() && std::abs(p.properties().mass()) < 1e-6)
