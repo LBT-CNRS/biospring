@@ -25,7 +25,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bonded_axes as BA
-import generate_bonded_forcefield as G
+import amber_protein_tables as G
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT,
@@ -113,7 +113,11 @@ for res in G.residues:
                     # showed it: recorded under the chain's ALA spacer, it never
                     # fired on a proline that follows anything else. The runtime
                     # drops the duplicate once both resolve to the same atoms.
-                    owners = {a.residue for a in (a1, a2, a3, a4)}
+                    # sorted, not a bare set: a set of residue objects iterates
+                    # in id()-based hash order, which changes between runs, and
+                    # the emitted file was not byte-reproducible because of it.
+                    owners = sorted({a.residue for a in (a1, a2, a3, a4)},
+                                    key=lambda r: r.index)
                     for owner in owners:
                         names = tuple(name_for(x, owner.index) for x in (a1, a2, a3, a4))
                         if any(len(n) - len(n.lstrip("+-")) > 1 for n in names):
@@ -179,7 +183,7 @@ for res in G.residues:
             continue
         _, perm, terms = best
         quad = (perm[0], perm[1], hub, perm[2])
-        owners = {a.residue for a in quad}
+        owners = sorted({a.residue for a in quad}, key=lambda r: r.index)
         for owner in owners:
             names = tuple(name_for(x, owner.index) for x in quad)
             if any(len(n) - len(n.lstrip("+-")) > 1 for n in names):

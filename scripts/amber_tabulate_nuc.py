@@ -18,7 +18,7 @@ from collections import defaultdict
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import generate_nucleic_forcefield as N
+import amber_nucleic_tables as N
 
 KIND = (sys.argv[1] if len(sys.argv) > 1 else "DNA").upper()
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
