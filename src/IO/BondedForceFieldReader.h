@@ -191,19 +191,6 @@ class BondedForceFieldReader : public ReaderBase
                       bool enableDihedralBackbone, bool enableDihedralSidechain,
                       bool enableDihedralPlanarity) const;
 
-    // Upper bound on how many ghost particles buildSprings will create for
-    // `topology` (a residue-name match only, not a full anchor resolution
-    // -- some may still be skipped for an unresolved anchor, e.g. a
-    // chain-terminus residue, so this can overcount, never undercount).
-    // MUST be called (and the result reserved via
-    // Topology::reserve_particles) before any spring exists anywhere in
-    // `topology` -- see Topology::reserve_particles's own comment for why:
-    // ghost particle creation grows the particle vector, and any
-    // reallocation silently invalidates every Spring's Particle&
-    // reference created so far (that includes --rigidbody's springs,
-    // built before -bondedinteraction ever runs -- see pdb2spn-cli.cpp's
-    // call site, placed before RigidBodyBuilder for exactly this reason).
-    size_t countExpectedGhostParticles(const topology::Topology & topology) const;
 
   protected:
     std::vector<DihedralEntry> _dihedral;
@@ -216,23 +203,6 @@ class BondedForceFieldReader : public ReaderBase
     void _parse_line(const std::string & line, size_t line_id);
 
     std::vector<ResidueParticleIndices> _group_particles_by_residue(const topology::Topology & topology) const;
-
-    // Creates the topology::Particle ghosts described by every
-    // GhostParticleEntry matching `resname`, resolving their 3 anchors the
-    // same way DIHEDRAL entries do (via _resolve_atom, so the same
-    // +/- cross-residue convention applies). Each newly-created ghost's
-    // index is appended to `residues[index]` so later DIHEDRAL entries in
-    // the same residue can resolve a ghost particle's name exactly like a
-    // real atom's, via the ordinary _resolve_atom lookup -- no separate
-    // resolution path is needed. residues is intentionally non-const:
-    // creating a particle changes topology.number_of_particles(), which is
-    // exactly why this mutates the local grouping instead of the
-    // once-computed groups staying accurate on their own.
-    // Returns the number of ghost particles actually created (for
-    // buildSprings's summary log -- see the .cpp).
-    unsigned _create_ghost_particles(topology::Topology & topology, std::vector<ResidueParticleIndices> & residues,
-                                     size_t index, const std::string & resname,
-                                     const reduce::ReduceRuleContainer * translation) const;
 
     // Resolves a single (possibly +/- prefixed) atom name relative to the
     // residue at `index`. Returns nullptr if the neighbour residue does not

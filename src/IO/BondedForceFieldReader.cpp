@@ -354,109 +354,6 @@ bool BondedForceFieldReader::_existing_equilibrium(topology::Topology & topology
     return true;
 }
 
-unsigned BondedForceFieldReader::_create_ghost_particles(topology::Topology & topology,
-                                                          std::vector<ResidueParticleIndices> & residues,
-                                                          size_t index, const std::string & resname,
-                                                          const reduce::ReduceRuleContainer * translation) const
-{
-    unsigned nb_created = 0;
-    for (const GhostParticleEntry & entry : _ghostparticles)
-    {
-        if (entry.resname != resname)
-            continue;
-
-        topology::Particle * anchor_b = _resolve_atom(entry.atom_B, residues, index, topology, translation);
-        topology::Particle * anchor_c = _resolve_atom(entry.atom_C, residues, index, topology, translation);
-        topology::Particle * anchor_ref = _resolve_atom(entry.atom_ref, residues, index, topology, translation);
-        if (anchor_b == nullptr || anchor_c == nullptr || anchor_ref == nullptr)
-        {
-            logging::warning("BondedForceFieldReader: GHOSTPARTICLE %s %s has an unresolved anchor (%s/%s/%s), "
-                             "skipped.",
-                             resname.c_str(), entry.name.c_str(), entry.atom_B.c_str(), entry.atom_C.c_str(),
-                             entry.atom_ref.c_str());
-            continue;
-        }
-
-        // Belongs to the same residue the GHOSTPARTICLE rule matched
-        // (residues[index][0]'s own identity), not necessarily anchor_B's:
-        // a ghost's anchors may include a +/- cross-residue atom, but the
-        // ghost itself is a property of the residue the .bi.ff rule was
-        // written for.
-        const topology::ParticleProperties & residue_properties = topology.get_particle(residues[index][0]).properties();
-
-        topology::ParticleProperties properties;
-        properties.set_name(entry.name);
-        properties.set_residue_name(residue_properties.residue_name());
-        properties.set_chain_name(residue_properties.chain_name());
-        properties.set_residue_id(residue_properties.residue_id());
-        properties.set_static(true);
-        properties.set_mass(0.0f);
-
-        topology::Particle ghost_template(properties);
-        // Every GHOSTPARTICLE line in a .bi.ff is a dihedral-ring ghost:
-        // the rotated image of its reference atom.
-        topology.add_ghost_particle(ghost_template, *anchor_b, *anchor_c, *anchor_ref, entry.r, entry.theta_deg,
-                                    entry.delta_deg,
-                                    static_cast<unsigned>(spn::GhostPlacement::AxisRotation));
-
-        residues[index].push_back(topology.number_of_particles() - 1);
-        nb_created++;
-    }
-    return nb_created;
-}
-
-void BondedForceFieldReader::_add_or_combine_dihedral_spring(topology::SpringCollection & collection,
-                                                              topology::Particle & p1, topology::Particle & p2,
-                                                              double equilibrium, double stiffness,
-                                                              double dc_offset, topology::Particle * axis_b,
-                                                              topology::Particle * axis_c) const
-{
-    // Two different Fourier-term ghost-spring groups for the same axis may
-    // legitimately pick the same real substituent pair (see
-    // doc/BondedForceFieldSprings.md, "Choosing substituents when fewer are
-    // needed than exist" -- the choice of which real atoms a secondary term
-    // uses is explicit per case, not guaranteed disjoint from the dominant
-    // term's grid). Since both are quadratic in the same pair distance,
-    // their combined contribution is *exactly* one equivalent spring:
-    // 0.5*k1*(x-d1)^2 + 0.5*k2*(x-d2)^2 = 0.5*(k1+k2)*(x-d_combined)^2 + const,
-    // with d_combined = (k1*d1 + k2*d2) / (k1+k2) -- so a collision is
-    // combined here rather than rejected or silently overwritten.
-    //
-    // NOTE: that "+const" (= k1*k2/(2*(k1+k2)) * (d1-d2)^2, from completing
-    // the square) is a genuine part of the two original springs' combined
-    // energy that the merged single-spring representation cannot reproduce
-    // on its own -- currently NOT folded into dc_offset below (unlike the
-    // ring-construction artifact, which is). Harmless today: no current
-    // DIHEDRAL axis ever produces two groups targeting the same real pair
-    // (verified empirically, zero collisions across all generated data), so
-    // this branch is never actually exercised -- but if a future axis ever
-    // does hit it, the combined spring's reported energy would be short by
-    // exactly that dropped constant.
-    topology::Spring * existing = _find_spring(collection, p1, p2);
-
-    if (existing == nullptr)
-    {
-        topology::Spring & added = collection.add_spring(p1, p2, equilibrium, stiffness);
-        added.set_dc_offset(dc_offset);
-        if (axis_b != nullptr && axis_c != nullptr)
-            added.set_axis(axis_b->unique_id(), axis_c->unique_id());
-    }
-    else
-    {
-        const double k1 = existing->stiffness();
-        const double k2 = stiffness;
-        const double combined_equilibrium = (k1 * existing->equilibrium() + k2 * equilibrium) / (k1 + k2);
-        existing->set_equilibrium(combined_equilibrium);
-        existing->set_stiffness(k1 + k2);
-        existing->set_dc_offset(existing->dc_offset() + dc_offset);
-        // Both entries describe the same real pair, so they turn the same
-        // bond: the first axis seen is the axis, and a later one only fills a
-        // gap it left.
-        if (!existing->has_axis() && axis_b != nullptr && axis_c != nullptr)
-            existing->set_axis(axis_b->unique_id(), axis_c->unique_id());
-    }
-}
-
 void BondedForceFieldReader::_retune_or_add_spring(topology::Topology & topology, topology::Particle & p1,
                                                     topology::Particle & p2, double equilibrium, double stiffness,
                                                     const char * kind) const
@@ -475,22 +372,6 @@ void BondedForceFieldReader::_retune_or_add_spring(topology::Topology & topology
                      kind, p1.properties().name().c_str(), p2.properties().name().c_str());
         topology.add_spring(p1, p2, equilibrium, stiffness);
     }
-}
-
-size_t BondedForceFieldReader::countExpectedGhostParticles(const topology::Topology & topology) const
-{
-    const std::vector<ResidueParticleIndices> residues = _group_particles_by_residue(topology);
-    size_t count = 0;
-    for (const ResidueParticleIndices & residue : residues)
-    {
-        if (residue.empty())
-            continue;
-        const std::string resname = topology.get_particle(residue[0]).properties().residue_name();
-        for (const GhostParticleEntry & entry : _ghostparticles)
-            if (entry.resname == resname)
-                count++;
-    }
-    return count;
 }
 
 void BondedForceFieldReader::buildSprings(topology::Topology & topology,
@@ -544,9 +425,6 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
     {
         const std::string resname = topology.get_particle(residues[index][0]).properties().residue_name();
 
-        if (enableGhostParticles)
-            nb_ghostparticles_created += _create_ghost_particles(topology, residues, index, resname, translation);
-
         for (const TorsionEntry & entry : _torsion)
         {
             if (entry.resname != resname)
@@ -575,55 +453,10 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             topology.add_torsion(entry.family, *p[0], *p[1], *p[2], *p[3], entry.table);
             nb_torsions_applied++;
         }
-
-        for (const DihedralEntry & entry : _dihedral)
-        {
-            if (entry.resname != resname)
-                continue;
-
-            // PHI/PSI/OMEGA are all still gated by the single
-            // enableDihedralBackbone flag at build time (see buildSprings's
-            // own comment) -- they only gain independent control at runtime,
-            // via SpringNetwork's dihedral.phi/psi/omega .msp settings.
-            // Hence the indirection: several families share one build flag,
-            // so the mapping is a table (DIHEDRAL_FAMILY_GATES) rather than
-            // one flag per family.
-            const bool build_gates[GATE_COUNT] = {enableDihedralBackbone, enableDihedralSidechain,
-                                                  enableDihedralPlanarity};
-            if (!build_gates[DIHEDRAL_FAMILY_GATES[entry.family]])
-                continue;
-
-            topology::Particle * p_ref = _resolve_atom(entry.atom_ref, residues, index, topology, translation);
-            topology::Particle * p_rot = _resolve_atom(entry.atom_rotant, residues, index, topology, translation);
-            if (p_ref == nullptr || p_rot == nullptr)
-                continue;
-
-            // A ghost spring is always a new addition (see DihedralEntry's
-            // comment): never a retune of a real --rigidbody spring, so
-            // this goes straight to the family's own collection instead of
-            // _retune_or_add_spring -- combining in place if another
-            // Fourier-term group already added a spring for this exact pair
-            // (see _add_or_combine_dihedral_spring).
-            // The axis, when the entry names one, resolved exactly like any
-            // other atom so "+N"/"-C" work here too. A spring whose axis atom
-            // is missing (a chain terminus) keeps no axis rather than a wrong
-            // one: unfiltered is a degraded model, a wrong axis is a broken one.
-            topology::Particle * p_axis_b = nullptr;
-            topology::Particle * p_axis_c = nullptr;
-            if (!entry.axis_b.empty() && !entry.axis_c.empty())
-            {
-                p_axis_b = _resolve_atom(entry.axis_b, residues, index, topology, translation);
-                p_axis_c = _resolve_atom(entry.axis_c, residues, index, topology, translation);
-            }
-            _add_or_combine_dihedral_spring(topology.dihedral_springs(entry.family), *p_ref, *p_rot, entry.d0, entry.k,
-                                            entry.dc_offset, p_axis_b, p_axis_c);
-            nb_dihedral_applied++;
-        }
     }
 
-    logging::info("BondedForceFieldReader: applied %u dihedral spring(s), created %u ghost particle(s), "
-                 "applied %u torsion(s) over %zu table(s).",
-                 nb_dihedral_applied, nb_ghostparticles_created, nb_torsions_applied, _torsiontables.size());
+    logging::info("BondedForceFieldReader: applied %u torsion(s) over %zu table(s).", nb_torsions_applied,
+                  _torsiontables.size());
 }
 
 } // namespace rigidbodygroup

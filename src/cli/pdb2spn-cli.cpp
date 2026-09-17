@@ -97,25 +97,13 @@ int main(int argc, char ** argv)
         }
     }
 
-    // Reads the .bi.ff file (parsing only, no Spring/particle interaction
-    // yet) and reserves enough particle capacity for every ghost particle
-    // it might create, BEFORE any Spring exists anywhere in `topology`
-    // (cutoff-, CONECT-, or --rigidbody-created -- all of those hold a
-    // real Particle& reference, not an index; see
-    // Topology::reserve_particles's own comment). Building ghost particles
-    // this early would be wrong (their anchors need --rigidbody/--grp
-    // resolution first), but reserving capacity only needs to know an
-    // upper bound on how many will eventually be added, which the parsed
-    // (not yet applied) file already tells us.
+    // Parsed here rather than inside buildSprings so the file is read once,
+    // before any spring exists.
     std::optional<biospring::rigidbodygroup::BondedForceFieldReader> bondedReader;
     if (!args.pathBondedInteraction.empty())
     {
         bondedReader.emplace(args.pathBondedInteraction);
         bondedReader->read();
-        size_t expected_ghosts = bondedReader->countExpectedGhostParticles(topology);
-        topology.reserve_particles(topology.number_of_particles() + expected_ghosts);
-        logging::info("Reserved capacity for up to %zu ghost particle(s) before any spring is created.",
-                      expected_ghosts);
     }
 
     if (args.cutoff > 0)

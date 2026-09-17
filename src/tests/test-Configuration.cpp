@@ -112,20 +112,22 @@ TEST(Configuration, deprecated_amber_steric_mode_maps_to_the_current_name)
 // .msp line is swallowed in silence -- the setting stays at its default and
 // nothing in the output says so. That is exactly what happened when
 // dihedral.tangentialonly was added, so it is worth a test that goes through
-// the real parse path rather than touching the field directly.
-TEST(Configuration, dihedral_tangentialonly_survives_the_parse_path)
+// the real parse path rather than touching the field directly. That setting is
+// gone with the ghost rings; the invariant is not, so the test now rides a
+// family switch, which is the same shape.
+TEST(Configuration, dihedral_family_switch_survives_the_parse_path)
 {
     Configuration config;
-    EXPECT_FALSE(config.dihedral.tangentialonly);
+    EXPECT_FALSE(config.dihedralphi.enable);
 
-    config.setFromString("dihedral.tangentialonly", "1");
-    EXPECT_TRUE(config.dihedral.tangentialonly);
+    config.setFromString("dihedralphi.enable", "1");
+    EXPECT_TRUE(config.dihedralphi.enable);
 
-    config.setFromString("dihedral.tangentialonly", "0");
-    EXPECT_FALSE(config.dihedral.tangentialonly);
+    config.setFromString("dihedralphi.enable", "0");
+    EXPECT_FALSE(config.dihedralphi.enable);
 
     // A group that is registered but misspelled must still be refused.
-    EXPECT_THROW(config.setFromString("dihedral.tangential", "1"), std::exception);
+    EXPECT_THROW(config.setFromString("dihedralphi.enabl", "1"), std::exception);
 }
 
 // -- Main function  ----------------------------------------------------------

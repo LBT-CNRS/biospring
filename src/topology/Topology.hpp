@@ -76,74 +76,26 @@ class Topology
     // remove.
     using DihedralFamilyIndex = spn::SpringNetwork::DihedralFamilyIndex;
     static constexpr unsigned DIHEDRAL_FAMILY_COUNT = spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT;
-    std::array<SpringCollection, DIHEDRAL_FAMILY_COUNT> _dihedral_springs;
-
     std::vector<Torsion> _torsions;
     std::vector<TorsionTable> _torsiontables;
 
-    // std::array has no "fill with N copies of this value" constructor, and
-    // SpringCollection isn't default-constructible (it holds the particle
-    // collection its springs index into), so the array can't just be
-    // default-initialized in the member-init list. Built element by element
-    // from the family count instead of restating one SpringCollection
-    // (_particles) per family in each constructor.
-    template <std::size_t... Is>
-    static std::array<SpringCollection, DIHEDRAL_FAMILY_COUNT>
-    _make_dihedral_springs(ParticleCollection & particles, std::index_sequence<Is...>)
-    {
-        return {(static_cast<void>(Is), SpringCollection(particles))...};
-    }
-    static std::array<SpringCollection, DIHEDRAL_FAMILY_COUNT> _make_dihedral_springs(ParticleCollection & particles)
-    {
-        return _make_dihedral_springs(particles, std::make_index_sequence<DIHEDRAL_FAMILY_COUNT>{});
-    }
-
-  public:
-    // Binds a ghost (massless virtual-site) Particle -- created by
-    // add_ghost_particle below, never 1:1 with a PDB atom -- to its 3 real
-    // anchor particles (by unique id, not by index: unlike SpringNetwork's
-    // particle vector, Topology's ParticleCollection can be reordered by
-    // remove_particle, so a uid-keyed lookup via ParticleCollection::at_uid
-    // stays correct even then) and its 3 calibrated placement parameters.
-    // See spn::GhostParticle for the placement/force-redistribution
-    // formulas this drives, applied once the topology is converted to a
-    // SpringNetwork (see to_spring_network below).
-    struct GhostParticleInfo
-    {
-        pid_t anchor_B_uid;
-        pid_t anchor_C_uid;
-        pid_t anchor_ref_uid;
-        double r;
-        double theta_deg;
-        double delta_deg;
-        // Which construction places this ghost -- see spn::GhostPlacement.
-        // The two use disjoint parameters (axial reads r and ignores the
-        // reference atom; rotation reads the reference atom and delta and
-        // ignores r/theta), so this cannot be inferred from the values and
-        // is carried explicitly, including through the .nc.
-        unsigned placement;
-    };
-
   protected:
-    std::unordered_map<pid_t, GhostParticleInfo> _ghost_particles;
-
   public:
     // =============================================================================
     // Initialization methods.
     // =============================================================================
 
     Topology()
-        : _springs(_particles), _dihedral_springs(_make_dihedral_springs(_particles))
+        : _springs(_particles)
     {
     }
 
     // Copy constructor.
     Topology(const Topology & other)
-        : _springs(_particles), _dihedral_springs(_make_dihedral_springs(_particles))
+        : _springs(_particles)
     {
         _copy_particles(other);
         _copy_springs(other);
-        _copy_ghost_particles(other);
     }
 
     // Assignment operator.
@@ -164,13 +116,10 @@ class Topology
         if (_particles.size() != other._particles.size())
         {
             _springs.clear();
-            for (auto & family : _dihedral_springs)
-                family.clear();
         }
 
         _copy_particles(other);
         _copy_springs(other);
-        _copy_ghost_particles(other);
 
         return *this;
     }
@@ -219,10 +168,7 @@ class Topology
     // _particles grow again once anything actually references it.
     void reserve_particles(size_t n)
     {
-        bool no_dihedral = true;
-        for (const auto & family : _dihedral_springs)
-            no_dihedral = no_dihedral && family.size() == 0;
-        if (_springs.size() == 0 && no_dihedral && _ghost_particles.empty())
+        if (_springs.size() == 0)
         {
             _particles.data().reserve(n);
             return;
@@ -231,54 +177,9 @@ class Topology
         Topology snapshot(*this);
         _particles.clear();
         _springs.clear();
-        for (auto & family : _dihedral_springs)
-            family.clear();
-        _ghost_particles.clear();
         _particles.data().reserve(n);
         _copy_particles(snapshot);
         _copy_springs(snapshot);
-        _copy_ghost_particles(snapshot);
-    }
-
-    // Adds a ghost (massless virtual-site) particle -- the first case
-    // where Topology creates a particle with no 1:1 PDB atom behind it.
-    // `particle` carries this ghost's own name/resname/residue_id/
-    // chain_name (typically copied from `anchor_B`'s, since a ghost
-    // conceptually belongs to the same residue as its anchors); its
-    // position is not set here (to_spring_network/BondedForceFieldReader
-    // compute it from the anchors via spn::GhostParticle::computePosition
-    // once all 3 anchors are known to actually be resolved). Returns the
-    // newly-added particle (with its own freshly-minted unique id, see
-    // Particle::copy()/ParticleCollection::push_back).
-    Particle & add_ghost_particle(const Particle & particle, const Particle & anchor_B, const Particle & anchor_C,
-                                  const Particle & anchor_ref, double r, double theta_deg, double delta_deg,
-                                  unsigned placement)
-    {
-        _particles.push_back(particle);
-        Particle & added = _particles[_particles.size() - 1];
-        _ghost_particles[added.unique_id()] =
-            GhostParticleInfo{anchor_B.unique_id(), anchor_C.unique_id(), anchor_ref.unique_id(), r, theta_deg,
-                              delta_deg, placement};
-        return added;
-    }
-
-    bool is_ghost_particle(pid_t uid) const { return _ghost_particles.find(uid) != _ghost_particles.end(); }
-
-    const GhostParticleInfo & get_ghost_particle_info(pid_t uid) const { return _ghost_particles.at(uid); }
-
-    // Registers ghost-particle info for a particle that already exists (by index)
-    // in the collection, without creating a new one. Used by NetCDFReader, which
-    // reads ghost particles as regular particles first (see addParticlesToSpn())
-    // and only learns which ones are ghosts, and their anchors, from a separate
-    // buffer read afterwards.
-    void register_ghost_particle(size_t particle_index, size_t anchor_B_index, size_t anchor_C_index,
-                                  size_t anchor_ref_index, double r, double theta_deg, double delta_deg,
-                                  unsigned placement)
-    {
-        pid_t particle_uid = _particles[particle_index].unique_id();
-        _ghost_particles[particle_uid] = GhostParticleInfo{
-            _particles[anchor_B_index].unique_id(), _particles[anchor_C_index].unique_id(),
-            _particles[anchor_ref_index].unique_id(), r, theta_deg, delta_deg, placement};
     }
 
     // =============================================================================
@@ -295,19 +196,6 @@ class Topology
     auto & add_spring(size_t p1, size_t p2, double equilibrium = -1.0, double stiffness = 1.0)
     {
         return _springs.add_spring(_particles[p1], _particles[p2], equilibrium, stiffness);
-    }
-
-    // Creates a dihedral ghost spring between two real substituent atoms
-    // (never a real 1-2 bond) -- one per DIHEDRAL entry, in the family the
-    // entry names (a spn::SpringNetwork::DihedralFamilyIndex, resolved by
-    // BondedForceFieldReader::buildSprings). See the _dihedral_springs
-    // member comment above.
-    auto & add_dihedral_spring(unsigned family, Particle & p1, Particle & p2, double equilibrium = -1.0,
-                               double stiffness = 1.0)
-    {
-        // .at(), not [] -- see dihedral_springs() below for why the index is
-        // range-checked.
-        return _dihedral_springs.at(family).add_spring(p1, p2, equilibrium, stiffness);
     }
 
     // Adds springs between all particles within a cutoff distance.
@@ -409,14 +297,6 @@ class Topology
     auto & springs() { return _springs; }
     const auto & springs() const { return _springs; }
 
-    // One dihedral family's collection, by
-    // spn::SpringNetwork::DihedralFamilyIndex. Range-checked: a family
-    // index is routinely computed (parsed from a .bi.ff, walked over in a
-    // loop) rather than written out literally, so an out-of-range one is a
-    // real possibility and reads as garbage rather than failing.
-    auto & dihedral_springs(unsigned family) { return _dihedral_springs.at(family); }
-    const auto & dihedral_springs(unsigned family) const { return _dihedral_springs.at(family); }
-
     auto & get_spring(size_t position) { return _springs[position]; }
     const auto & get_spring(size_t position) const { return _springs[position]; }
 
@@ -474,18 +354,6 @@ class Topology
         // the same by_uid() lookup already used for springs below.
         for (const topology::Particle & source : _particles)
         {
-            if (is_ghost_particle(source.unique_id()))
-            {
-                const GhostParticleInfo & info = get_ghost_particle_info(source.unique_id());
-                const unsigned anchor_b_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_B_uid));
-                const unsigned anchor_c_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_C_uid));
-                const unsigned anchor_ref_index = static_cast<unsigned>(_particles.by_uid().at(info.anchor_ref_uid));
-                spn.addGhostParticle(info.placement, anchor_b_index, anchor_c_index, anchor_ref_index,
-                                     static_cast<float>(info.r),
-                                    static_cast<float>(info.theta_deg), static_cast<float>(info.delta_deg));
-                continue;
-            }
-
             spn::Particle target;
             target.setName(source.properties().name());
             target.setResName(source.properties().residue_name());
@@ -555,35 +423,6 @@ class Topology
             }
         }
 
-        // Copies dihedral ghost springs, one family at a time (see the
-        // _dihedral_springs member comment above for why these stay
-        // separate from _springs) -- into the same family index on the
-        // network side, which is the very index these are stored under.
-        for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
-        {
-            for (const topology::Spring & source : _dihedral_springs[family])
-            {
-                size_t i = _particles.by_uid().at(source.first().unique_id());
-                size_t j = _particles.by_uid().at(source.second().unique_id());
-                // The axis travels as network indices, not topology uids: the
-                // spring's own endpoints are translated the same way just above.
-                unsigned ab = spn::Spring::NO_AXIS_ATOM;
-                unsigned ac = spn::Spring::NO_AXIS_ATOM;
-                if (source.has_axis())
-                {
-                    const auto & by_uid = _particles.by_uid();
-                    const auto it_b = by_uid.find(source.axis_b());
-                    const auto it_c = by_uid.find(source.axis_c());
-                    if (it_b != by_uid.end() && it_c != by_uid.end())
-                    {
-                        ab = static_cast<unsigned>(it_b->second);
-                        ac = static_cast<unsigned>(it_c->second);
-                    }
-                }
-                spn.addDihedralSpring(family, i, j, source.equilibrium(), source.stiffness(), source.dc_offset(), ab,
-                                      ac);
-            }
-        }
     }
 
     // AMBER torsions and the tables they index (see the Torsion member).
@@ -646,33 +485,8 @@ class Topology
     void _copy_springs(const Topology & other, size_t offset = 0)
     {
         _copy_spring_collection(_springs, other._springs, other._particles, offset);
-        for (unsigned family = 0; family < DIHEDRAL_FAMILY_COUNT; ++family)
-            _copy_spring_collection(_dihedral_springs[family], other._dihedral_springs[family], other._particles,
-                                    offset);
     }
 
-    // Copies `other`'s ghost-particle bindings to this topology. Same uid
-    // problem as _copy_springs above (see its note): `other`'s ghost/anchor
-    // unique ids only resolve to a *position* in `other._particles`, which
-    // must be re-looked-up in `this->_particles` (already copied, same
-    // order, by _copy_particles) to get the corresponding fresh unique id.
-    void _copy_ghost_particles(const Topology & other)
-    {
-        _ghost_particles.clear();
-        for (const auto & [old_ghost_uid, info] : other._ghost_particles)
-        {
-            size_t ghost_index = other._particles.by_uid().at(old_ghost_uid);
-            size_t b_index = other._particles.by_uid().at(info.anchor_B_uid);
-            size_t c_index = other._particles.by_uid().at(info.anchor_C_uid);
-            size_t ref_index = other._particles.by_uid().at(info.anchor_ref_uid);
-
-            pid_t new_ghost_uid = _particles[ghost_index].unique_id();
-            _ghost_particles[new_ghost_uid] =
-                GhostParticleInfo{_particles[b_index].unique_id(), _particles[c_index].unique_id(),
-                                  _particles[ref_index].unique_id(), info.r, info.theta_deg, info.delta_deg,
-                                  info.placement};
-        }
-    }
 };
 
 } // namespace topology

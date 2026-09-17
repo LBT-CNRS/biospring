@@ -16,37 +16,6 @@ void NetCDFReader::addSpringsToSpn()
     }
 }
 
-void NetCDFReader::addDihedralSpringsToSpn(unsigned family)
-{
-    const DihedralSpringBuffer & buffer = _dihedralbuffers[family];
-    for (size_t i = 0; i < buffer.number_of_springs; ++i)
-    {
-        topology::Spring & spring =
-            _topology
-                .add_dihedral_spring(family, _topology.get_particle(static_cast<size_t>(buffer.springs[i][0])),
-                                     _topology.get_particle(static_cast<size_t>(buffer.springs[i][1])),
-                                     buffer.springsequilibriums[i], buffer.springsstiffnesses[i])
-                .set_dc_offset(buffer.springsdcoffsets[i]);
-        // -1 on either side means the spring names no axis; the .nc stores
-        // particle indices, which are the topology's own uids here.
-        if (buffer.springsaxis != nullptr && buffer.springsaxis[i][0] >= 0 && buffer.springsaxis[i][1] >= 0)
-            spring.set_axis(_topology.get_particle(static_cast<size_t>(buffer.springsaxis[i][0])).unique_id(),
-                            _topology.get_particle(static_cast<size_t>(buffer.springsaxis[i][1])).unique_id());
-    }
-}
-
-void NetCDFReader::addGhostParticlesToSpn()
-{
-    for (size_t i = 0; i < _ghostparticlebuffer.number_of_ghostparticles; ++i)
-        _topology.register_ghost_particle(
-            static_cast<size_t>(_ghostparticlebuffer.ownindices[i]),
-            static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][0]),
-            static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][1]),
-            static_cast<size_t>(_ghostparticlebuffer.anchorindices[i][2]), _ghostparticlebuffer.rs[i],
-            _ghostparticlebuffer.thetas[i], _ghostparticlebuffer.deltas[i],
-            static_cast<unsigned>(_ghostparticlebuffer.placements[i]));
-}
-
 void NetCDFReader::addParticlesToSpn()
 {
     char buf[5] = "";
@@ -115,20 +84,6 @@ void NetCDFReader::read()
         readSprings();
         addSpringsToSpn();
 
-        for (unsigned family = 0; family < biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++family)
-        {
-            readDihedralSpringGroup(biospring::spn::SpringNetwork::DIHEDRAL_FAMILY_NAMES[family],
-                                    _dihedralbuffers[family]);
-            addDihedralSpringsToSpn(family);
-        }
-
-        // Ghost particles already exist as regular particles at this point
-        // (added by addParticlesToSpn() above, in file order) -- this only
-        // registers which ones are ghosts and their anchor/placement info,
-        // so it must run after addParticlesToSpn() but has no other ordering
-        // constraint relative to the spring/dihedral steps above.
-        readGhostParticles();
-        addGhostParticlesToSpn();
         readTorsions();
     }
     catch (netCDF::exceptions::NcException & e)
@@ -258,68 +213,6 @@ void NetCDFReader::readSprings()
     }
 }
 
-void NetCDFReader::readDihedralSpringGroup(const char * prefix, DihedralSpringBuffer & buffer)
-{
-    // A dihedral ghost-spring family's dimension is entirely optional: an
-    // older .nc file (written before dihedral support existed), or one
-    // where this particular family happened to be empty, simply doesn't
-    // have it -- silently leave `buffer` at zero springs rather than warn
-    // (unlike the real springs' dimension, whose absence is unusual enough
-    // to warrant a warning).
-    const std::string number_dim = std::string(prefix) + "_number";
-    netCDF::NcDim dim = _file->getDim(number_dim);
-    if (dim.isNull())
-    {
-        buffer.initialize(0);
-        return;
-    }
-
-    const size_t n = dim.getSize();
-    buffer.initialize(n);
-    if (n == 0)
-        return;
-
-    netCDF::NcVar data;
-
-    data = getNcVar((std::string(prefix) + "springs").c_str());
-    checkNDims(data, 2);
-    checkDim(data, 0, n);
-    checkDim(data, 1, 2);
-    data.getVar(buffer.springs);
-
-    data = getNcVar((std::string(prefix) + "springsstiffness").c_str());
-    checkNDims(data, 1);
-    checkDim(data, 0, n);
-    data.getVar(buffer.springsstiffnesses);
-
-    data = getNcVar((std::string(prefix) + "springsequilibrium").c_str());
-    checkNDims(data, 1);
-    checkDim(data, 0, n);
-    data.getVar(buffer.springsequilibriums);
-
-    // Optional: a .nc file written before this correction existed simply
-    // doesn't have it -- buffer.springsdcoffsets stays zero-initialized
-    // (initialize() already zeroes it), so those springs just report their
-    // raw (uncorrected) energy, same as before this feature existed.
-    data = getNcVar((std::string(prefix) + "springsdcoffset").c_str(), false);
-    if (not data.isNull())
-    {
-        checkNDims(data, 1);
-        checkDim(data, 0, n);
-        data.getVar(buffer.springsdcoffsets);
-    }
-
-    // Optional for the same reason, and with the same consequence as before
-    // the axis existed: a spring with no axis is applied unfiltered.
-    data = getNcVar((std::string(prefix) + "springsaxis").c_str(), false);
-    if (not data.isNull())
-    {
-        checkNDims(data, 2);
-        checkDim(data, 0, n);
-        data.getVar(buffer.springsaxis);
-    }
-}
-
 // Optional at every hop, like everything else added since: a .nc written
 // before torsions existed simply has no torsion variables, and the model is
 // then the one it always was.
@@ -362,57 +255,6 @@ void NetCDFReader::readTorsions()
                               _topology.get_particle(static_cast<size_t>(a[i * 4 + 3])),
                               static_cast<unsigned>(t[i]));
     logging::info("NetCDFReader: read %zu torsion(s) over %zu table(s) of %zu samples.", n, ntab, nb);
-}
-
-void NetCDFReader::readGhostParticles()
-{
-    // Entirely optional, same convention as readDihedralSpringGroup: an
-    // older .nc file, or one with no ghost particles at write time, simply
-    // doesn't have this dimension -- silently leave the buffer empty.
-    netCDF::NcDim dim = _file->getDim("ghostparticle_number");
-    if (dim.isNull())
-    {
-        _ghostparticlebuffer.initialize(0);
-        return;
-    }
-
-    const size_t n = dim.getSize();
-    _ghostparticlebuffer.initialize(n);
-    if (n == 0)
-        return;
-
-    netCDF::NcVar data;
-
-    data = getNcVar("ghostparticleownindex");
-    checkNDims(data, 1);
-    checkDim(data, 0, n);
-    data.getVar(_ghostparticlebuffer.ownindices);
-
-    data = getNcVar("ghostparticleanchorindices");
-    checkNDims(data, 2);
-    checkDim(data, 0, n);
-    checkDim(data, 1, 3);
-    data.getVar(_ghostparticlebuffer.anchorindices);
-
-    data = getNcVar("ghostparticler");
-    checkNDims(data, 1);
-    checkDim(data, 0, n);
-    data.getVar(_ghostparticlebuffer.rs);
-
-    data = getNcVar("ghostparticletheta");
-    checkNDims(data, 1);
-    checkDim(data, 0, n);
-    data.getVar(_ghostparticlebuffer.thetas);
-
-    data = getNcVar("ghostparticledelta");
-    checkNDims(data, 1);
-    checkDim(data, 0, n);
-    data.getVar(_ghostparticlebuffer.deltas);
-
-    data = getNcVar("ghostparticleplacement");
-    checkNDims(data, 1);
-    checkDim(data, 0, n);
-    data.getVar(_ghostparticlebuffer.placements);
 }
 
 void NetCDFReader::readNumberOfParticles()

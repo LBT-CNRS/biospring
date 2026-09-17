@@ -15,13 +15,13 @@
 #include "timeit.hpp"
 
 #include "Constraint.h"
-#include "GhostParticle.h"
 #include "InsertionVector.h"
 #include "interactor/Interactor.h"
 #include "Particle.h"
 #include "Selection.h"
 #include "Spring.h"
 #include "Vector3f.h"
+
 #include <cstdlib>
 #include <cstring>
 #include <stdio.h>
@@ -32,7 +32,6 @@
 #include <memory>
 #include <utility>
 
-class Interactor;
 class SpringNetworkViewer;
 namespace biospring
 {
@@ -113,8 +112,7 @@ class SpringNetwork
     SpringNetwork()
         : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
-          _dynamicsprings(), _dihedralsprings(),
-          _ghostparticles(),
+          _dynamicsprings(),
           _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
           _hydrophobicPairScratch(), _energies(), _nsearch(),
           _neighborSearchesDirty(false),
@@ -189,7 +187,6 @@ class SpringNetwork
     {
         unsigned atoms[4];
         unsigned family;
-        unsigned axisIndex;
         unsigned table;
     };
 
@@ -225,7 +222,6 @@ class SpringNetwork
     // Read-only view of one family's springs, for NetCDF I/O.
     const std::vector<Spring> & getDihedralSprings(unsigned family) const
     {
-        return _dihedralsprings[family];
     }
 
     float getDihedralEnergy() const { return _energies.dihedral; }
@@ -263,20 +259,6 @@ class SpringNetwork
     // Adds a spring to the network.
     void addSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
 
-    // Adds a dihedral ghost spring to the network -- always a new spring
-    // (unlike addSpring, never checked against existing spring-neighbours),
-    // and deliberately not registered as a spring-neighbour: a ghost spring
-    // connects two real substituent atoms that are a real 1-4 pair (never a
-    // real 1-2/1-3 bond), and BioSpring's nonbonded exclusion is driven
-    // entirely by spring-neighbour membership (see Particle::isInSpringNeighbors) --
-    // registering ghost springs there would silently exclude 1-4 pairs from
-    // nonbonded forces as a side effect, which is a separate physical
-    // modelling decision (matching AMBER's scaled 1-4 nonbonded convention)
-    // that this feature does not make. See doc/BondedForceFieldSprings.md.
-    void addDihedralSpring(unsigned family, unsigned id1, unsigned id2, float equilibrium, float stiffness,
-                           float dcOffset = 0.0f, unsigned axisB = Spring::NO_AXIS_ATOM,
-                           unsigned axisC = Spring::NO_AXIS_ATOM);
-
     void updateSpringState(unsigned id, bool isStatic);
     void addStaticSpring(unsigned id) { _staticsprings.push_back(id); }
     void addDynamicSpring(unsigned id) { _dynamicsprings.push_back(id); }
@@ -285,37 +267,6 @@ class SpringNetwork
 
     // Adds a particle to the network.
     void addParticle(const Particle & p);
-
-    // Adds a massless virtual-site ("ghost") particle to the network,
-    // bound to 3 already-added real anchor particles (by index -- see
-    // GhostParticle.h for why an index, not a pointer/reference, is used).
-    // Must be called during the same "add every particle" phase as
-    // addParticle (before any spring is added -- enforced the same way,
-    // via addParticle's own check), and anchorBIndex/anchorCIndex/
-    // anchorRefIndex must already refer to previously-added particles.
-    // Creates the ghost's own Particle entry (isStatic()=true, mass=0,
-    // initial position placed from the anchors' current positions) and
-    // returns its index. See redistributeGhostForces/updateGhostPositions
-    // for the two per-step operations this binding drives.
-    unsigned addGhostParticle(unsigned placement, unsigned anchorBIndex, unsigned anchorCIndex,
-                              unsigned anchorRefIndex, float r,
-                              float theta_deg, float delta_deg);
-
-    // Redistributes every ghost particle's currently accumulated force
-    // (from ordinary spring force computation, e.g. a dihedral ghost
-    // spring between two ghost particles) onto its 3 anchors, then resets
-    // the ghost's own force to zero (it is static, so it never reaches
-    // updateParticlePositions's normal per-dynamic-particle resetForce()).
-    // Called once per step, right after computeForces().
-    void redistributeGhostForces();
-
-    // Recomputes every ghost particle's position from its 3 anchors'
-    // CURRENT positions. Called once per step, right after
-    // updateParticlePositions() (i.e. after the anchors themselves have
-    // been integrated).
-    void updateGhostPositions();
-
-    const std::vector<GhostParticleBinding> & getGhostParticles() const { return _ghostparticles; }
 
     void updateParticleState(unsigned id, bool isStatic);
     void addStaticParticle(unsigned id) { _staticparticules.push_back(id); }
@@ -448,31 +399,6 @@ class SpringNetwork
     float _computeSpringCollectionForces(std::vector<Spring> & springs, bool ignoreDynamicState,
                                          bool subtractDcOffset, const std::vector<unsigned> * axes = nullptr);
 
-    // Keeps only what turns a particle about its ghost axis. See the
-    // definition for why the dihedral term, not the ghost mechanism, is
-    // where this belongs.
-    Vector3f tangentialAboutAxis(const Particle & p, const Vector3f & f, unsigned axisIndex) const;
-
-    // Applies a dihedral spring's force to one endpoint, filtered, and books
-    // it against that endpoint's axis when the endpoint is a real atom.
-    void applyProjectedDihedralForce(Particle & p, const Vector3f & f, unsigned axisIndex);
-
-    // Gives a dihedral endpoint that is a real atom the axis its ghost
-    // partner knows. Idempotent, run lazily on the first dihedral step.
-    // The accumulator for one torsion axis (B, C), created on first use. Both
-    // a ghost being registered and a spring naming its own axis land here, so
-    // they share one entry per real bond rather than one per mechanism.
-    unsigned findOrCreateGhostAxis(unsigned anchorBIndex, unsigned anchorCIndex);
-
-    // Evaluates one dihedral spring on idealised radii and applies the exact
-    // gradient of the resulting energy. Returns that energy.
-    float computeTorsionalDihedral(Spring & spring, unsigned axisIndex);
-    void applyAxisBookedForce(Particle & p, const Vector3f & f, unsigned axisIndex);
-
-    // Gives every dihedral spring the radius and axial offset its endpoints
-    // have in the loaded structure -- the reference the torsional evaluation
-    // puts them back to. Run from setup(), after the axes are known.
-    void _setupTorsionalFrames();
 
     // One AMBER torsion, applied as a couple about its own axis. atoms are
     // (substituent, axis B, axis C, substituent); amplitude is V_n in kJ/mol
@@ -515,47 +441,16 @@ class SpringNetwork
     {
         if (table >= _torsiontables.size() || _torsiontables[table].bins == 0)
             throw std::out_of_range("SpringNetwork::addTorsion: torsion refers to a table that was never given");
-        _torsions.push_back(Torsion{{a1, a2, a3, a4}, family, 0u, table});
+        _torsions.push_back(Torsion{{a1, a2, a3, a4}, family, table});
     }
     const std::vector<Torsion> & getTorsions() const { return _torsions; }
     const std::vector<TorsionTable> & getTorsionTables() const { return _torsiontables; }
 
   private:
 
-    void bindDihedralEndpointsToAxes();
     bool _dihedralAxesBound = false;
 
-    // Set by _setupGhostSprings once the ghosts have been converted. Also the
-    // signal to applyProjectedDihedralForce that a ghost endpoint must now be
-    // booked against its axis like a real one: nothing transfers its force any
-    // more, so the axis reaction has to balance against it directly.
-    bool _ghostsAreSpringHeld = false;
-
-    // Clears every axis's running totals. Called once a step, before any
-    // force is produced, because a real dihedral endpoint books into them
-    // during the spring loop -- earlier than redistributeGhostForces.
-    void resetGhostAxisSums();
-
-    // Turns every ring ghost from an algebraic virtual site into an ordinary
-    // dynamical particle held by springs (dihedral.ghostsprings). Run once,
-    // from setup(), after the network is loaded and the configuration known.
-    void _setupGhostSprings();
-
-    // Drains the energy the tangential filter pumps into a spring-held ghost,
-    // and only into it. No-op unless dihedral.ghostdamping is set.
-    void applyGhostDamping();
-
-    // The spring-held ghosts, so the damping pass walks them directly instead
-    // of testing every dynamic particle for ghost-ness once a step.
-    std::vector<unsigned> _springHeldGhosts;
-    float _ghostDamping = 0.0f;
-
   public:
-
-    // Whether ghosts are carried by springs rather than re-placed each step.
-    // Read in the force path, so it is kept as a plain flag rather than a
-    // walk back into the configuration.
-    bool areGhostsSpringHeld() const { return _ghostsAreSpringHeld; }
 
     unsigned getNumberOfSprings() const { return _springs.size(); }
     unsigned getNumberOfParticles() const { return _particles.size(); }
@@ -669,78 +564,9 @@ class SpringNetwork
     std::vector<unsigned> _staticsprings;
     std::vector<unsigned> _dynamicsprings;
 
-    // Dihedral ghost springs, kept in their own arrays (rather than tagged
-    // entries in _springs) so each family stays identifiable for NetCDF I/O
-    // (see getDihedralPhiSprings etc.) without touching Spring/_springs at
-    // all. Which families are BUILT is a build-time decision (see
-    // -dihedral/--dihedral in pdb2spn-cli.cpp: PHI/PSI/OMEGA are always
-    // built together); which of the built ones are actually APPLIED at
-    // runtime is independently gated in computeDihedralForces by this
-    // Configuration's dihedral.phi/psi/omega/chi settings, on top of the
-    // same isSpringEnabled() master switch regular springs use. Always
-    // fully iterated when enabled (no static/dynamic split): a ghost
-    // spring connecting two fully static particles is an unusual, not a
-    // performance-critical, case.
-    // Indexed by family rather than held as parallel members, for the same
-    // reason topology::Topology is: a new family used to mean repeating the
-    // same declaration, clear, accumulate, add and clear-all lines here too.
-    std::array<std::vector<Spring>, DIHEDRAL_FAMILY_COUNT> _dihedralsprings;
-
-    // Ghost (massless virtual-site) particle bindings -- see
-    // GhostParticle.h. Each entry's own Particle lives in _particles like
-    // any other (isStatic()=true, mass=0); this only records which 3
-    // anchor particles (by index) drive its position/force.
-    std::vector<GhostParticleBinding> _ghostparticles;
-
     // One force contribution per dynamic spring. Reused between steps to avoid
     // allocations in the simulation loop and to keep OpenMP writes disjoint.
     std::vector<Vector3f> _springForceScratch;
-
-    // One anchor-force triple per ghost, filled in parallel by
-    // redistributeGhostForces' Jacobian pass, then accumulated serially
-    // (anchors are heavily shared -- up to 62 ghosts per anchor on
-    // example 072 -- so they must not be written concurrently). Same
-    // parallel-compute/serial-accumulate split as _springForceScratch.
-    struct GhostForceContribution
-    {
-        Vector3f F_B;
-        Vector3f F_C;
-        Vector3f F_Ref;
-    };
-    std::vector<GhostForceContribution> _ghostForceScratch;
-
-    // One entry per distinct (B, C) ghost axis. The reaction owed to the
-    // two axis atoms is reconstructed once per axis from the running
-    // force/torque totals of every ghost hanging off it -- see
-    // GhostParticle::redistributeAxisReaction, which is only valid over
-    // complete spring pairs, hence per axis rather than per ghost.
-    struct GhostAxis
-    {
-        unsigned anchorBIndex;
-        unsigned anchorCIndex;
-        Vector3f sumGhostForces;
-        Vector3f sumGhostTorquesAboutB;
-        Vector3f sumAtomForces;
-        Vector3f sumAtomTorquesAboutB;
-    };
-    std::vector<GhostAxis> _ghostaxes;
-
-    // particle index -> the ghost axis it belongs to, NO_AXIS for every
-    // particle that belongs to none. Indexed by particle rather than by ghost
-    // binding on purpose: the tangential filter is applied where a dihedral
-    // spring produces its force, and that endpoint need not be a ghost.
-    static constexpr unsigned NO_AXIS = static_cast<unsigned>(-1);
-    std::vector<unsigned> _axisOfParticle;
-
-    // Which particles are ghosts. A ghost's dihedral force is booked against
-    // its axis by redistributeGhostForces when it is transferred; a real atom
-    // used as a dihedral endpoint has no such pass and must be booked where
-    // the force is applied (see applyProjectedDihedralForce).
-    std::vector<bool> _isGhost;
-
-    // The ghost axis of each dihedral spring, parallel to _dihedralsprings.
-    // Per spring rather than per particle: see bindDihedralEndpointsToAxes.
-    std::array<std::vector<unsigned>, DIHEDRAL_FAMILY_COUNT> _dihedralAxis;
 
     // One bucket per dynamic-particle-loop index, filled while computing
     // nonbonded pair interactions in parallel: each pair is evaluated once,
