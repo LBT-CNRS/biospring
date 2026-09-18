@@ -93,6 +93,15 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particleradii;
     delete[] _particleepsilons;
     delete[] _particlehydrophobicities;
+    delete[] _torsionatoms;
+    delete[] _torsiontable;
+    delete[] _torsionfamily;
+    delete[] _torsiontableenergy;
+    delete[] _torsiontabletorque;
+    delete[] _torsionoffsets;
+    delete[] _torsionentries;
+    delete[] _springenergyper;
+    delete[] _torsionenergyper;
     delete[] _particledynamic;
     delete[] _springsocl;
     for (CellGrid * g : {&_stericcells, &_electrostaticcells, &_hydrophobiccells})
@@ -246,6 +255,48 @@ void SpringNetworkOpenCL::createBuffer()
 								 &_err);
 		checkErr( "Buffer::Buffer() hydrophobicity");
 
+		_springenergyper = new float[_nbparticlesocl];
+		_torsionenergyper = new float[_nbparticlesocl];
+		for (unsigned i = 0; i < _nbparticlesocl; ++i)
+			_springenergyper[i] = _torsionenergyper[i] = 0.0f;
+		_springEnergyBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+		                                 sizeof(float) * _nbparticlesocl, _springenergyper, &_err);
+		checkErr("Buffer::Buffer() spring energy");
+		_torsionEnergyBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+		                                  sizeof(float) * _nbparticlesocl, _torsionenergyper, &_err);
+		checkErr("Buffer::Buffer() torsion energy");
+
+		// OpenCL rejects a zero-sized buffer, and a network with no torsion at
+		// all is the common case -- every example without --dihedral.
+		if (_nbtorsionsocl > 0)
+			{
+			const unsigned samples = _torsionbins + 1;
+			const unsigned ntables = _torsiontableenergy == nullptr ? 0
+			    : static_cast<unsigned>(getTorsionTables().size());
+			_inTorsionAtomsBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+			                                   sizeof(cl_uint4) * _nbtorsionsocl, _torsionatoms, &_err);
+			checkErr("Buffer::Buffer() torsion atoms");
+			_inTorsionTableBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+			                                   sizeof(unsigned) * _nbtorsionsocl, _torsiontable, &_err);
+			checkErr("Buffer::Buffer() torsion table");
+			_inTorsionFamilyBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+			                                    sizeof(unsigned) * _nbtorsionsocl, _torsionfamily, &_err);
+			checkErr("Buffer::Buffer() torsion family");
+			_inTorsionEnergyBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+			                                    sizeof(float) * ntables * samples, _torsiontableenergy, &_err);
+			checkErr("Buffer::Buffer() torsion energy");
+			_inTorsionTorqueBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+			                                    sizeof(float) * ntables * samples, _torsiontabletorque, &_err);
+			checkErr("Buffer::Buffer() torsion torque");
+			_inTorsionOffsetsBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+			                                     sizeof(int) * (_nbparticlesocl + 1), _torsionoffsets, &_err);
+			checkErr("Buffer::Buffer() torsion offsets");
+			_inTorsionEntriesBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+			                                     sizeof(unsigned) * (_nbtorsionentries == 0 ? 1 : _nbtorsionentries),
+			                                     _torsionentries, &_err);
+			checkErr("Buffer::Buffer() torsion entries");
+			}
+
 	_inDynamicBuffer=cl::Buffer(
 								 _context,
 								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
@@ -396,6 +447,8 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kernelhydrophobic = cl::Kernel(_program, "hydrophobic", &_err);
 	checkErr("Kernel::Kernel()");
+	_kerneltorsion = cl::Kernel(_program, "torsion", &_err);
+	checkErr("Kernel::Kernel()");
 
 	}
 
@@ -498,6 +551,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLCharges();
 	computeOpenCLStericParameters();
 	computeOpenCLHydrophobicity();
+	computeOpenCLTorsions();
 	computeOpenCLDynamicState();
 	computeOpenCLSprings();
 	computeParticleToSpringIndexes();
@@ -506,6 +560,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 double springtime=0.0;
 double electrostatictime=0.0;
 double sterictime=0.0;
+double torsiontime=0.0;
 double hydrophobictime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
@@ -516,9 +571,14 @@ double totaltime=0.0;
 
 void SpringNetworkOpenCL::idleRun()
 	{
-	// Before the kernels: this is the state whose spring energy the CPU
-	// reports for this step (see _springEnergyOfCurrentState).
-	_springenergybeforestep = _springEnergyOfCurrentState();
+	// The spring and torsion kernels write their energy as they go, from the
+	// pre-integration positions -- which is the state the CPU reports for this
+	// step. What is NOT free is reading it back, so the flag says whether this
+	// step's energies will actually be looked at.
+	//
+	// _nbiter is still the previous step's here: SpringNetwork::idleRun()
+	// increments it below, and run() tests _isTimeToLogData() after that.
+	_measuringthisstep = _willLogAfterThisStep();
 
 	// The neighbour structure the non-bonded terms need. Built from the box the
 	// positions read back last step occupy, which is one step stale -- hence the
@@ -551,6 +611,7 @@ void SpringNetworkOpenCL::idleRun()
         static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
     _event = _kernelfunctorspring(_inoutPositionBuffer, _inSpringBuffer,
                                  _inSpringIndexesBuffer, _inoutForceBuffer,
+                                 _springEnergyBuffer,
                                  _nbparticlesocl, springForceScale);
 	_event.wait();
 
@@ -560,6 +621,41 @@ void SpringNetworkOpenCL::idleRun()
 	springtime+=(endTime-startTime)*1.0E-9;
     }
 
+
+    // Tabulated torsions, over the spring term's own gate: the CPU computes
+    // them inside `if (isSpringEnabled())`, right after the springs.
+    if (isSpringEnabled() && _nbtorsionsocl > 0)
+        {
+        const unsigned wg = WORK_GROUP_SIZE;
+        const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+        const float unit = getForceField()->getSpringScale()
+                         * static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+
+        unsigned a = 0;
+        _kerneltorsion.setArg(a++, _inoutPositionBuffer);
+        _kerneltorsion.setArg(a++, _inoutForceBuffer);
+        _kerneltorsion.setArg(a++, _torsionEnergyBuffer);
+        _kerneltorsion.setArg(a++, _inTorsionAtomsBuffer);
+        _kerneltorsion.setArg(a++, _inTorsionTableBuffer);
+        _kerneltorsion.setArg(a++, _inTorsionFamilyBuffer);
+        _kerneltorsion.setArg(a++, _inTorsionEnergyBuffer);
+        _kerneltorsion.setArg(a++, _inTorsionTorqueBuffer);
+        _kerneltorsion.setArg(a++, _torsionbins);
+        _kerneltorsion.setArg(a++, _inTorsionOffsetsBuffer);
+        _kerneltorsion.setArg(a++, _inTorsionEntriesBuffer);
+        _kerneltorsion.setArg(a++, _torsionFamilyMask());
+        _kerneltorsion.setArg(a++, static_cast<float>(M_PI));
+        _kerneltorsion.setArg(a++, unit);
+        _kerneltorsion.setArg(a++, _nbparticlesocl);
+
+        _err = _queue.enqueueNDRangeKernel(_kerneltorsion, cl::NullRange,
+                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(torsion)");
+        _event.wait();
+        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        torsiontime += (endTime - startTime) * 1.0E-9;
+        }
 
     // Steric, over its own cell list. Before Coulomb only because that is the
     // order SpringNetwork::computeForces uses; the two accumulate into the same
@@ -759,8 +855,9 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+sterictime+electrostatictime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+torsiontime+sterictime+electrostatictime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
+	         <<", torsion: "<<torsiontime
 	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
 	         <<", hydrophobic: "<<hydrophobictime
@@ -1075,34 +1172,118 @@ std::vector<unsigned> SpringNetworkOpenCL::neighborsFromCellList(const CellGrid 
 	}
 
 
-// The spring energy of the state the device is ABOUT to integrate.
+// Flattens the torsions and builds the CSR from each particle to the torsions
+// it takes part in.
 //
-// Called before the kernels, because that is the state the CPU reports for the
-// same step: SpringNetwork::computeStep() evaluates the springs in
-// computeForces() and only then integrates in updateParticlePositions(). Taken
-// after the kernels instead, the two backends are a step apart -- which at a
-// timestep of 4 fs against this mesh's ~17 fs fastest mode is a quarter of an
-// oscillation, and reads as a 15 % disagreement on a quantity that is in fact
-// identical. Measured on a deliberately strained ubiquitin: 200.86 against
-// 229.15 kJ/mol at step 100 when offset, and the kinetic energies agreeing to
-// 0.1 % all the while, which is what gave the offset away.
-//
-// It cannot be read from Spring::getEnergy() either: that returns a value
-// cached from the spring's cached _length, and only computeLength() refreshes
-// it -- the kernel never touches a Spring object.
-//
-// No force is applied here. The kernels do that; this only measures.
-float SpringNetworkOpenCL::_springEnergyOfCurrentState()
+// The tables are stored one after another, each bins + 1 samples long, so a
+// torsion's table is at torsiontable[ti] * (bins + 1). Every table in a file
+// shares its bin count -- the generator emits them together -- which is what
+// lets one stride serve them all.
+void SpringNetworkOpenCL::computeOpenCLTorsions()
 	{
-	float springenergy = 0.0f;
-	for (size_t i = 0; i < _dynamicsprings.size(); ++i)
+	delete[] _torsionatoms;   _torsionatoms = nullptr;
+	delete[] _torsiontable;   _torsiontable = nullptr;
+	delete[] _torsionfamily;  _torsionfamily = nullptr;
+	delete[] _torsiontableenergy; _torsiontableenergy = nullptr;
+	delete[] _torsiontabletorque; _torsiontabletorque = nullptr;
+	delete[] _torsionoffsets; _torsionoffsets = nullptr;
+	delete[] _torsionentries; _torsionentries = nullptr;
+
+	const std::vector<Torsion> & torsions = getTorsions();
+	const std::vector<TorsionTable> & tables = getTorsionTables();
+	_nbtorsionsocl = static_cast<unsigned>(torsions.size());
+	_nbtorsionentries = 0;
+	_torsionbins = tables.empty() ? 0 : tables[0].bins;
+	if (_nbtorsionsocl == 0 || tables.empty() || _torsionbins == 0)
+		return;
+
+	_torsionatoms = new cl_uint4[_nbtorsionsocl];
+	_torsiontable = new unsigned[_nbtorsionsocl];
+	_torsionfamily = new unsigned[_nbtorsionsocl];
+	for (unsigned i = 0; i < _nbtorsionsocl; ++i)
 		{
-		Spring & spring = getSpring(_dynamicsprings[i]);
-		spring.computeLength();
-		spring.computeEnergy(*_ff);
-		springenergy += spring.getEnergy();
+		_torsionatoms[i].s[0] = torsions[i].atoms[0];
+		_torsionatoms[i].s[1] = torsions[i].atoms[1];
+		_torsionatoms[i].s[2] = torsions[i].atoms[2];
+		_torsionatoms[i].s[3] = torsions[i].atoms[3];
+		_torsiontable[i] = torsions[i].table;
+		_torsionfamily[i] = torsions[i].family;
 		}
-	return springenergy;
+
+	const unsigned samples = _torsionbins + 1;
+	_torsiontableenergy = new float[tables.size() * samples];
+	_torsiontabletorque = new float[tables.size() * samples];
+	for (size_t t = 0; t < tables.size(); ++t)
+		{
+		// A table shorter than the stride would make the kernel read the next
+		// one's first samples as its own last, which is a wrong force and not a
+		// crash. Refuse rather than truncate.
+		if (tables[t].bins != _torsionbins || tables[t].energy.size() < samples
+		    || tables[t].torque.size() < samples)
+			{
+			biospring::logging::warning("OpenCL torsions: table %zu has %u bins against %u, or too few "
+			                            "samples; torsions are not evaluated on the device.",
+			                            t, tables[t].bins, _torsionbins);
+			_nbtorsionsocl = 0;
+			return;
+			}
+		for (unsigned k = 0; k < samples; ++k)
+			{
+			_torsiontableenergy[t * samples + k] = tables[t].energy[k];
+			_torsiontabletorque[t * samples + k] = tables[t].torque[k];
+			}
+		}
+
+	// The CSR: count, then fill.
+	std::vector<unsigned> counts(_nbparticlesocl, 0u);
+	for (unsigned i = 0; i < _nbtorsionsocl; ++i)
+		for (unsigned k = 0; k < 4; ++k)
+			{
+			const unsigned a = torsions[i].atoms[k];
+			if (a < _nbparticlesocl)
+				counts[a]++;
+			}
+
+	_torsionoffsets = new int[_nbparticlesocl + 1];
+	unsigned running = 0;
+	for (unsigned p = 0; p < _nbparticlesocl; ++p)
+		{
+		_torsionoffsets[p] = static_cast<int>(running);
+		running += counts[p];
+		}
+	_torsionoffsets[_nbparticlesocl] = static_cast<int>(running);
+	_nbtorsionentries = running;
+
+	_torsionentries = new unsigned[_nbtorsionentries == 0 ? 1 : _nbtorsionentries];
+	std::vector<unsigned> cursor(_nbparticlesocl, 0u);
+	for (unsigned i = 0; i < _nbtorsionsocl; ++i)
+		for (unsigned k = 0; k < 4; ++k)
+			{
+			const unsigned a = torsions[i].atoms[k];
+			if (a >= _nbparticlesocl)
+				continue;
+			const unsigned at = static_cast<unsigned>(_torsionoffsets[a]) + cursor[a]++;
+			// (torsion << 2 | slot): the slot says which of the four forces is
+			// this particle's share.
+			_torsionentries[at] = (i << 2) | k;
+			}
+	}
+
+
+// The eight family switches as the bitmask the kernel takes, in the order of
+// SpringNetwork::DihedralFamilyIndex -- the same order computeTorsionForces
+// builds its `enabled` array in.
+int SpringNetworkOpenCL::_torsionFamilyMask() const
+	{
+	int mask = 0;
+	const bool on[] = {isDihedralPhiEnabled(),          isDihedralPsiEnabled(),
+	                   isDihedralOmegaEnabled(),        isDihedralChiEnabled(),
+	                   isDihedralPlanarityEnabled(),    isDihedralNucleicBackboneEnabled(),
+	                   isDihedralNucleicChiEnabled(),   isDihedralNucleicSugarEnabled()};
+	for (int i = 0; i < 8; ++i)
+		if (on[i])
+			mask |= (1 << i);
+	return mask;
 	}
 
 
@@ -1111,7 +1292,30 @@ float SpringNetworkOpenCL::_springEnergyOfCurrentState()
 // integration as the CPU, which writes it there.
 void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 	{
-	_energies.spring = _springenergybeforestep;
+	if (!_measuringthisstep)
+		return;   // nothing will read them; see idleRun
+
+	// Summed here rather than reduced on the device: 2811 floats is a fraction
+	// of the transfer that brought them, so a reduction kernel would save
+	// nothing worth a second launch.
+	_energies.spring = 0.0f;
+	_energies.dihedral = 0.0f;
+	if (isSpringEnabled() && _nbspringsocl > 0)
+		{
+		_err = _queue.enqueueReadBuffer(_springEnergyBuffer, CL_TRUE, 0,
+		                                sizeof(float) * _nbparticlesocl, _springenergyper);
+		checkErr("enqueueReadBuffer(spring energy)");
+		for (unsigned i = 0; i < _nbparticlesocl; ++i)
+			_energies.spring += _springenergyper[i];
+		}
+	if (isSpringEnabled() && _nbtorsionsocl > 0)
+		{
+		_err = _queue.enqueueReadBuffer(_torsionEnergyBuffer, CL_TRUE, 0,
+		                                sizeof(float) * _nbparticlesocl, _torsionenergyper);
+		checkErr("enqueueReadBuffer(torsion energy)");
+		for (unsigned i = 0; i < _nbparticlesocl; ++i)
+			_energies.dihedral += _torsionenergyper[i];
+		}
 
 	float kinetic = 0.0f;
 	for (size_t i = 0; i < _dynamicparticules.size(); ++i)
@@ -1158,7 +1362,10 @@ void SpringNetworkOpenCL::_displayFrameData()
 	biospring::logging::info("Framerate: %5.2f", _framerate);
 	biospring::logging::info("Kinetic energy: %5.2f kJ.mol-1", _energies.kinetic);
 	if (isSpringEnabled())
+		{
 		biospring::logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
+		biospring::logging::info("Dihedral energy: %5.2f kJ.mol-1", _energies.dihedral);
+		}
 	}
 
 

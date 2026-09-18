@@ -30,6 +30,7 @@ set(BIOSPRING_CL_SHARED_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/../forcefield/shared/electrostatic_shared.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/../forcefield/shared/steric_shared.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/../forcefield/shared/hydrophobic_shared.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../forcefield/shared/torsion_shared.h"
 )
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS

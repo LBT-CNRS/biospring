@@ -4,6 +4,7 @@
 #define _SPRINGNETWORKOPENCL_H_
 
 #include "SpringNetwork.h"
+#include "forcefield/shared/torsion_shared.h"
 #ifdef OPENGL_SUPPORT
 	#include "viewer/SpringNetworkViewer.h"
 #endif
@@ -185,6 +186,27 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inRadiusBuffer;
 		cl::Buffer _inEpsilonBuffer;
 		cl::Buffer _inHydrophobicityBuffer;
+
+		// Torsions: the quadruplets and their tables, plus a CSR from each
+		// particle to the torsions it takes part in. See the torsion kernel for
+		// why it gathers rather than scatters.
+		cl::Buffer _inTorsionAtomsBuffer;
+		cl::Buffer _inTorsionTableBuffer;
+		cl::Buffer _inTorsionFamilyBuffer;
+		cl::Buffer _inTorsionEnergyBuffer;
+		cl::Buffer _inTorsionTorqueBuffer;
+		cl::Buffer _inTorsionOffsetsBuffer;
+		cl::Buffer _inTorsionEntriesBuffer;
+		cl_uint4 * _torsionatoms = nullptr;
+		unsigned * _torsiontable = nullptr;
+		unsigned * _torsionfamily = nullptr;
+		float * _torsiontableenergy = nullptr;
+		float * _torsiontabletorque = nullptr;
+		int * _torsionoffsets = nullptr;
+		unsigned * _torsionentries = nullptr;
+		unsigned _nbtorsionsocl = 0;
+		unsigned _nbtorsionentries = 0;
+		unsigned _torsionbins = 0;
 		cl::Buffer _inDynamicBuffer;
 
 		cl_context_properties * _contextproperties;
@@ -200,6 +222,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelelectrostatic;
 		cl::Kernel _kernelsteric;
 		cl::Kernel _kernelhydrophobic;
+		cl::Kernel _kerneltorsion;
 
 		cl::KernelFunctor _kernelfunctorspring;
 		cl::KernelFunctor _kernelfunctordamping;
@@ -264,6 +287,12 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void computeOpenCLCharges();
 		void computeOpenCLStericParameters();
 		void computeOpenCLHydrophobicity();
+		void computeOpenCLTorsions();
+
+		// Which families the .msp turns on, as the bitmask the kernel takes.
+		int _torsionFamilyMask() const;
+
+
 
 		// The .msp's steric.mode as the kernel's integer. Resolved once rather
 		// than compared as a string per step; see steric_shared.h.
@@ -280,12 +309,31 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// and there was no way to compare the two backends on anything but
 		// coordinates. These recompute what the device actually evaluated,
 		// each from the same side of the integration as the CPU.
-		float _springEnergyOfCurrentState();
 		void _computeEnergiesFromDeviceState();
 
 		// Measured before the kernels run, reported after (_resetEnergies sits
 		// between the two).
-		float _springenergybeforestep = 0.0f;
+
+		// Per-particle energy, written by the spring and torsion kernels as a
+		// by-product of the force they were already computing: an energy and a
+		// force are the same function, one the derivative of the other, so once
+		// the distance or the angle is in hand the second costs three flops or
+		// one more lerp of the SAME table at the SAME index.
+		//
+		// Read back only on the steps that report it -- that part is not free,
+		// being a transfer and a synchronisation.
+		cl::Buffer _springEnergyBuffer;
+		cl::Buffer _torsionEnergyBuffer;
+		float * _springenergyper = nullptr;
+		float * _torsionenergyper = nullptr;
+
+		// Whether the step now running will have its energies reported.
+		bool _measuringthisstep = false;
+		bool _willLogAfterThisStep() const
+			{
+			const unsigned rate = static_cast<unsigned>(getSampleRate());
+			return rate == 0 || (static_cast<unsigned>(_nbiter) + 1u) % rate == 0u;
+			}
 
 		// Says once, at startup, which terms the .msp turns on that the device
 		// does not evaluate. Silence there means a --opencl run quietly

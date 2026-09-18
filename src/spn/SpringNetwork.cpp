@@ -5,6 +5,7 @@
 #include "measure.hpp"
 
 #include "forcefield/constants.hpp"
+#include "forcefield/shared/torsion_shared.h"
 #include "forcefield/ForceField.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Lewitt.h"
@@ -617,9 +618,8 @@ float SpringNetwork::computeTorsionForces()
         // offline, and the table holds both what the energy is worth and how
         // hard it pulls.
         const TorsionTable & tab = _torsiontables[t.table];
-        const float x = (phi + PI) / (2.0f * PI) * static_cast<float>(tab.bins);
-        const unsigned b = std::min(static_cast<unsigned>(std::max(x, 0.0f)), tab.bins - 1);
-        const float f = x - static_cast<float>(b);
+        const int b = biospring_torsion_bin(phi, PI, static_cast<int>(tab.bins));
+        const float f = biospring_torsion_fraction(phi, PI, static_cast<int>(tab.bins));
         energy += tab.energy[b] + f * (tab.energy[b + 1] - tab.energy[b]);
         const float torque = tab.torque[b] + f * (tab.torque[b + 1] - tab.torque[b]);
         if (torque == 0.0f)
@@ -633,11 +633,11 @@ float SpringNetwork::computeTorsionForces()
         // conserves momentum by construction: the four forces sum to zero
         // identically, since F2 and F3 are built from F1 and F4.
         const float scale = unit * torque;
-        const Vector3f F1 = n1 * (-scale * b2len / n1sq);
-        const Vector3f F4 = n2 * (scale * b2len / n2sq);
-        const float inv = 1.0f / (b2len * b2len);
-        const float c1 = b1.dot(b2) * inv;
-        const float c3 = b3.dot(b2) * inv;
+        const Vector3f F1 = n1 * biospring_torsion_k1(scale, b2len, n1sq);
+        const Vector3f F4 = n2 * biospring_torsion_k4(scale, b2len, n2sq);
+        const float b2lensq = b2len * b2len;
+        const float c1 = biospring_torsion_c(b1.dot(b2), b2lensq);
+        const float c3 = biospring_torsion_c(b3.dot(b2), b2lensq);
         // Signs matter here and are not guessable: the decomposition is written
         // in terms of r_ij = r_i - r_j and r_kl = r_k - r_l, which are the
         // NEGATIVES of b1 and b3 as spelled above. Checked against a finite

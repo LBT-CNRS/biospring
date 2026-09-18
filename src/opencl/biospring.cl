@@ -122,6 +122,7 @@ __kernel void spring(const __global float4 * positions,
                      const __global Springocl * springs,
                      const __global int * springoffsets,
                      __global float4 * forces,
+                     __global float * energy,
                      const uint N,
                      const float scale)
 	{
@@ -135,6 +136,7 @@ __kernel void spring(const __global float4 * positions,
 
 	float3 here = positions[tid].xyz;
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
+	float e = 0.0f;
 
 	for(int i=begin;i<end;i++)
 		{
@@ -144,9 +146,14 @@ __kernel void spring(const __global float4 * positions,
 		                                                      springs[i].stiffness,
 		                                                      springs[i].equilibrium,
 		                                                      scale);
+		// Half, because the CSR holds each spring from both of its ends and
+		// this kernel runs once per end. Summed over every particle, the halves
+		// make each spring's energy exactly once.
+		e += 0.5f * biospring_spring_energy(dist, springs[i].stiffness, springs[i].equilibrium);
 		}
 
 	forces[tid].xyz += sum;
+	energy[tid] = e;
 	}
 
 
@@ -390,6 +397,113 @@ __kernel void hydrophobic(const __global float4 * positions,
 				}
 
 	forces[tid].xyz += sum;
+	}
+
+
+// Tabulated torsions, gathered per particle.
+//
+// A torsion is a FOUR-atom term, so unlike every other kernel here it cannot
+// simply own its output: one work item per torsion would have four particles to
+// write and two torsions sharing an atom would race. Gathering instead -- one
+// work item per particle, walking the torsions that particle takes part in and
+// keeping only its own share -- costs computing each torsion four times and
+// needs no atomic at all. The same trade, and the same CSR shape, as the spring
+// kernel.
+//
+//   torsionoffsets[p] .. torsionoffsets[p+1]   this particle's entries
+//   each entry packs (torsion index << 2 | slot), slot being which of the four
+//   atoms this particle is.
+//
+// The scalars come from torsion_shared.h, which the CPU compiles too. The
+// four-line vector assembly below is the one thing that cannot be shared -- a
+// Vector3f is not a float3 -- so it is spelled exactly as SpringNetwork::
+// computeTorsionForces spells it, signs included. Those signs are not
+// guessable: the other convention passes the sum-to-zero test while being wrong
+// by 5 rad/A.
+__kernel void torsion(const __global float4 * positions,
+                      __global float4 * forces,
+                      __global float * energy,
+                      const __global uint4 * torsionatoms,
+                      const __global uint * torsiontable,
+                      const __global uint * torsionfamily,
+                      const __global float * tableenergy,   // unused here, kept for symmetry
+                      const __global float * tabletorque,
+                      const uint bins,
+                      const __global int * torsionoffsets,
+                      const __global uint * torsionentries,
+                      const int familymask,
+                      const float pi,
+                      const float unit,
+                      const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	const int begin = torsionoffsets[tid];
+	const int end = torsionoffsets[tid + 1];
+	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
+	float esum = 0.0f;
+
+	for (int k = begin; k < end; k++)
+		{
+		const uint packed = torsionentries[k];
+		const uint ti = packed >> 2;
+		const uint slot = packed & 3u;
+
+		if (!(familymask & (1 << torsionfamily[ti])))
+			continue;
+
+		const uint4 q = torsionatoms[ti];
+		const float3 p1 = positions[q.x].xyz;
+		const float3 p2 = positions[q.y].xyz;
+		const float3 p3 = positions[q.z].xyz;
+		const float3 p4 = positions[q.w].xyz;
+
+		const float3 b1 = p2 - p1;
+		const float3 b2 = p3 - p2;
+		const float3 b3 = p4 - p3;
+
+		const float3 n1 = cross(b1, b2);
+		const float3 n2 = cross(b2, b3);
+		const float n1sq = dot(n1, n1);
+		const float n2sq = dot(n2, n2);
+		const float b2len = length(b2);
+		// Three atoms in line: the dihedral is not defined.
+		if (n1sq < 1e-12f || n2sq < 1e-12f || b2len < 1e-6f)
+			continue;
+
+		const float phi = atan2(b2len * dot(b1, n2), dot(n1, n2));
+
+		const int b = biospring_torsion_bin(phi, pi, (int)bins);
+		const float f = biospring_torsion_fraction(phi, pi, (int)bins);
+		const uint base = torsiontable[ti] * (bins + 1);
+		// A quarter, because the CSR holds each torsion from each of its four
+		// atoms and this kernel runs once per atom.
+		esum += 0.25f * (tableenergy[base + b] + f * (tableenergy[base + b + 1] - tableenergy[base + b]));
+		const float torque = tabletorque[base + b] + f * (tabletorque[base + b + 1] - tabletorque[base + b]);
+		if (torque == 0.0f)
+			continue;
+
+		const float scale = unit * torque;
+		const float3 F1 = n1 * biospring_torsion_k1(scale, b2len, n1sq);
+		const float3 F4 = n2 * biospring_torsion_k4(scale, b2len, n2sq);
+		const float b2lensq = b2len * b2len;
+		const float c1 = biospring_torsion_c(dot(b1, b2), b2lensq);
+		const float c3 = biospring_torsion_c(dot(b3, b2), b2lensq);
+		const float3 F2 = F1 * (-(c1 + 1.0f)) + F4 * c3;
+		const float3 F3 = F1 * c1 - F4 * (c3 + 1.0f);
+
+		// Only this particle's share. A particle appearing twice in the same
+		// quadruplet would be a malformed torsion; the generator cannot emit
+		// one and the reader rejects it.
+		if (slot == 0u)      sum += F1;
+		else if (slot == 1u) sum += F2;
+		else if (slot == 2u) sum += F3;
+		else                 sum += F4;
+		}
+
+	forces[tid].xyz += sum;
+	energy[tid] = esum;
 	}
 
 
