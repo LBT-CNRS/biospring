@@ -351,7 +351,8 @@ __kernel void hydrophobic(const __global float4 * positions,
                           const __global Springocl * springs,
                           const __global int * springoffsets,
                           const int springsenabled,
-                          const float cutoff, const float convert, const float hydrophobicityscale,
+                          const float cutoff, const float convert, const float decaylength,
+                          const float hydrophobicityscale,
                           const uint N)
 	{
 	const uint tid = get_global_id(0);
@@ -391,7 +392,7 @@ __kernel void hydrophobic(const __global float4 * positions,
 
 					const float dist = sqrt(distsq);
 					const float module = biospring_hydrophobic_force_module(
-					    hydrophobicities[p], h, dist, convert);
+					    hydrophobicities[p], h, dist, decaylength, convert);
 					sum += (axis / dist) * (hydrophobicityscale * module);
 					}
 				}

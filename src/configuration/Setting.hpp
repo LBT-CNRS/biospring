@@ -157,6 +157,43 @@ class ElectrostaticSetting : public EnergySetting
     }
 };
 
+// The pairwise hydrophobic term, which needs one parameter the other energies
+// do not: the distance over which it decays.
+//
+// It sits here rather than being written into the law for the same reason
+// `dielectric` does: it is a property of the solvent that the modeller picks,
+// not a universal constant. The default, 10 A, is the decay length
+// Israelachvili & Pashley measured between two MACROSCOPIC hydrophobic
+// surfaces (Nature 300:341, 1982, published as 22 exp(-D/10) mJ.m-2 with D in
+// A), which is where the law in hydrophobic_shared.h comes from. Later work
+// puts the range anywhere between 3 and 10 A depending on the system, and two
+// coarse-grained beads are not two macroscopic plates -- so 10 is the value
+// the published law calls for, not a value validated between beads.
+class HydrophobicitySetting : public EnergySetting
+{
+  public:
+    double decaylength;
+
+    HydrophobicitySetting(const std::string & name) : EnergySetting(name), decaylength(10.0)
+    {
+        _parameterNames = {"enable", "scale", "cutoff", "decaylength"};
+    }
+
+    void setFromString(const std::string & param, const std::string & s) override
+    {
+        if (param == "decaylength")
+            utils::string::from_string<decltype(decaylength)>(decaylength, s);
+        else
+            EnergySetting::setFromString(param, s);
+    }
+
+    void print(std::ostream & os = std::cout) const override
+    {
+        EnergySetting::print(os);
+        _mspFormatter.print("decaylength", decaylength, os);
+    }
+};
+
 class TrajectorySetting : public SettingBase
 {
   public:

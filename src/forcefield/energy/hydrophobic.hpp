@@ -10,33 +10,32 @@ namespace biospring
 namespace forcefield
 {
 
-/// @param hydrophobicity1, hydrophobicity2 Particle hydrophobicity/transfer
-///     scale, in kJ.mol-1 (see NetCDFWriter's "hydrophobicityscale" units).
+/// @param hydrophobicity1, hydrophobicity2 Per-particle hydrophobicity, from
+///     the force field's seventh column (the .nc variable "hydrophobicity",
+///     NOT "hydrophobicityscale", which is IMPALA's transfer energy). Their
+///     product is in kJ.mol-1.A-1.
 /// @param distance Distance between the two particles, in Angstrom (A).
-/// @return Pseudo-hydrophobicity energy, in kJ.mol-1. Note: this is an
-///     empirical (not first-principles) potential, so hydrophobicity1 *
-///     hydrophobicity2 is not literally an energy despite each factor being
-///     in kJ.mol-1; the Avogadro/kJ scaling below only mirrors the reporting
-///     convention used by the other energy terms in this module.
-inline float hydrophobic_energy(float hydrophobicity1, float hydrophobicity2, float distance)
+/// @param decaylength The decay length of the attraction, in A.
+/// @return Hydrophobic energy of the pair, in kJ.mol-1.
+///
+/// The arithmetic lives in ../shared/hydrophobic_shared.h next to the force,
+/// which the OpenCL kernel compiles too, because the two are one function:
+/// this is the integral of that gradient. They used to be written apart and
+/// disagreed by N_A * 1e-3 -- the energy scaled as if the product were joules
+/// per molecule while the force scaled as if it were already molar.
+inline float hydrophobic_energy(float hydrophobicity1, float hydrophobicity2, float distance,
+                                float decaylength)
 {
-    double energy = 0.0;
-    energy = -(hydrophobicity1 * hydrophobicity2) * exp(-distance);
-    energy = energy * AVOGADRO_NUMBER; // J/mol
-    energy = energy * 1.0E-3;          // kJ/mol
-    return energy;
+    return biospring_hydrophobic_energy(hydrophobicity1, hydrophobicity2, distance, decaylength);
 }
 
-/// @return Pseudo-hydrophobicity force module, in Da.A.fs-2 (see
-///     GLOBAL_SPRING_FORCE_CONVERT). hydrophobicity1/2 are treated as an
-///     already-molar (kJ.mol-1) quantity here, same convention as spring
-///     stiffness, so no separate Avogadro scaling is applied (unlike
-///     hydrophobic_energy above).
-/// The arithmetic lives in ../shared/hydrophobic_shared.h, which the OpenCL
-/// kernel compiles too. The constant stays here and is passed down.
-inline float hydrophobic_force_module(float hydrophobicity1, float hydrophobicity2, float distance)
+/// @return Hydrophobic force module, in Da.A.fs-2 (see
+///     GLOBAL_SPRING_FORCE_CONVERT). The constant stays here and is passed
+///     down, so the shared header carries no include.
+inline float hydrophobic_force_module(float hydrophobicity1, float hydrophobicity2, float distance,
+                                      float decaylength)
 {
-    return biospring_hydrophobic_force_module(hydrophobicity1, hydrophobicity2, distance,
+    return biospring_hydrophobic_force_module(hydrophobicity1, hydrophobicity2, distance, decaylength,
                                               static_cast<float>(GLOBAL_SPRING_FORCE_CONVERT));
 }
 

@@ -763,8 +763,14 @@ void buildHydrophobicChain(spn::SpringNetwork & network, configuration::Configur
     config.steric.enable = false;
     config.electrostatic.enable = false;
     config.hydrophobicity.enable = true;
-    config.hydrophobicity.scale = 1000.0;
+    // 1000 was the value while the law decayed over 1 A instead of 10, which
+    // made it exp(3.8 - 0.38) = 30 times weaker at this chain's step. Left
+    // there, the corrected law piles the chain onto itself (closest pair
+    // 0.0045 A) and stops being a comparison of force laws.
+    config.hydrophobicity.scale = 30.0;
     config.hydrophobicity.cutoff = 12.0;
+    // decaylength is left at its default (10 A) on purpose, so that a change
+    // to that default shows up here.
 
     network.setup(config);
 }
@@ -800,21 +806,22 @@ TEST(SpringNetworkOpenCL, HydrophobicityMatchesTheCPU)
             (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
     }
 
-    // The chain contracts by about 0.63 A under the attraction, and the closest
-    // any two particles come is 1.92 A, having started no closer than 3.0.
+    // The chain contracts by about 0.58 A under the attraction, and the closest
+    // any two particles come is 2.78 A, having started no closer than 3.0.
     EXPECT_GT(moved, 0.1f) << "the chain barely moved, so this comparison proves nothing";
     EXPECT_LT(moved, 20.0f) << "the chain ran away (" << moved
                             << " A); this is no longer a comparison of force laws";
 
     // This law is an ATTRACTION with no repulsive core at all, so it will pile
-    // particles up given enough strength -- at scale 5000 the closest pair
-    // reaches 0.0098 A and the two backends part company by 0.1 A. Unlike
-    // Coulomb's 1/r^2 the force stays bounded (exp(-r) -> 1), so the collapse
-    // is slow rather than singular, which makes it easy to miss: hence the
-    // guard, at a distance two atoms could actually be.
+    // particles up given enough strength -- at scale 300 the closest pair
+    // reaches 0.034 A. Unlike Coulomb's 1/r^2 the force stays bounded
+    // (exp(-r/L) -> 1), so the collapse is slow rather than singular, which
+    // makes it easy to miss: hence the guard, at a distance two atoms could
+    // actually be. The usable window for this fixture is scale 10 to 100:
+    // below it the chain barely moves, above it it piles up.
     EXPECT_GT(closestPair(cpu), 1.5f) << "the chain piled up; this is no longer a physical configuration";
 
-    // Measured agreement is 1.9e-06 A. The bar is nearly three orders above it, and
+    // Measured agreement is 5.4e-06 A. The bar is over two orders above it, and
     // still far below anything a wrong law or a missing exclusion would cause.
     EXPECT_LT(worst, 1.0e-3f) << "the GPU's hydrophobicity ended up " << worst << " A from the CPU's";
 }

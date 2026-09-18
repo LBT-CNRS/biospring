@@ -22,7 +22,7 @@ class Configuration
     SimulationSetting sim;
     StericSetting steric;
     EnergySetting spring;
-    EnergySetting hydrophobicity;
+    HydrophobicitySetting hydrophobicity;
     ElectrostaticSetting electrostatic;
     ImpalaSetting imp;
     InsertionVectorSetting ivector;

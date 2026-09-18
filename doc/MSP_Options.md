@@ -335,11 +335,31 @@ Hydrophobicity (experimental)
 
 Add a pseudo-hydrophobicity interaction for multimeric assembly into a rigid body in an implicit membrane.
 
-* **hydrophobicity.enable = 0** *(boolean)* Enable Hydrophobicity interaction.
+This is a **two-body** term between particles, `E = -h_i h_j L exp(-r/L)`, and it
+is not the IMPALA implicit-membrane term. The two read different columns of the
+`.ff` file and must not be confused:
+
+| `.ff` column | `.nc` variable | term | unit |
+|---|---|---|---|
+| 6, `transferIMP` | `hydrophobicityscale` | IMPALA, one-body against a membrane | kJ.mol-1.A-2 |
+| 7, `Hydrophobicity` | `hydrophobicity` | this one, two-body between particles | see `scale` below |
+
+* **hydrophobicity.enable = 0** *(boolean)* Enable the pairwise hydrophobic interaction.
 * **hydrophobicity.scale = 1.0** *(dimensionless factor, float)* Multiplier applied to
-Hydrophobicity forces (per-particle hydrophobicity/transfer scale, in kJ.mol-1, comes from the
-.ff file).
-* **hydrophobicity.cutoff = 15.0** *(Angstroms, float)* Cutoff distance for Hydrophobicity.
+hydrophobicity forces. The per-particle `h` comes from the seventh column of the `.ff`
+file; the product `h_i h_j` is in kJ.mol-1.A-1. The product form means `h` cannot be a
+signed hydrophobicity scale -- two hydrophilic particles would both be negative, their
+product positive, and they would attract each other as if they were oil -- so a rectified
+scale is required and a particle that is not hydrophobic gets exactly 0.
+* **hydrophobicity.cutoff = 15.0** *(Angstroms, float)* Cutoff distance for the pair search.
+* **hydrophobicity.decaylength = 10.0** *(Angstroms, float)* The distance over which the
+attraction decays. A property of the solvent that you pick, in the same way
+`coulomb.dielectric` is, rather than a universal constant. The default is the decay length
+Israelachvili & Pashley measured between two **macroscopic** hydrophobic surfaces
+(Nature 300:341, 1982, published as `22 exp(-D/10)` mJ.m-2 with D in Angstrom), which is
+where this law comes from; later work puts the range anywhere between 3 and 10 A depending
+on the system, and two coarse-grained beads are not two macroscopic plates. See example
+058.Hydrophobicity.
 
 
 Probe

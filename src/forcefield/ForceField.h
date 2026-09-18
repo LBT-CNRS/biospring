@@ -22,7 +22,7 @@ class ForceField
     ForceField()
         : _stericscale(1.0), _springscale(1.0), _impscale(1.0), _impuppermebraneoffset(0.0), _implowermembraneoffset(0.0),
           _uppermembtubecurv(0.0), _lowermembtubecurv(0.0),
-          _forcefieldscale(1.0), _coulombscale(1.0), _hydrophobicityscale(1.0), _dielectric(1.0)
+          _forcefieldscale(1.0), _coulombscale(1.0), _hydrophobicityscale(1.0), _hydrophobicitydecaylength(10.0), _dielectric(1.0)
     {
     }
     virtual ~ForceField() {}
@@ -36,6 +36,7 @@ class ForceField
         _forcefieldscale = other._forcefieldscale;
         _coulombscale = other._coulombscale;
         _hydrophobicityscale = other._hydrophobicityscale;
+        _hydrophobicitydecaylength = other._hydrophobicitydecaylength;
         _dielectric = other._dielectric;
         _propertiesfromname = other._propertiesfromname;
         return *this;
@@ -112,6 +113,12 @@ class ForceField
     float getHydrophobicityScale() const { return _hydrophobicityscale; }
     void setHydrophobicityScale(float hydrophobicityscale) { _hydrophobicityscale = hydrophobicityscale; }
 
+    // The distance over which the pairwise hydrophobic attraction decays, in A
+    // (msp: hydrophobicity.decaylength). A solvent property the modeller picks,
+    // like _dielectric below, not a universal constant.
+    float getHydrophobicityDecayLength() const { return _hydrophobicitydecaylength; }
+    void setHydrophobicityDecayLength(float decaylength) { _hydrophobicitydecaylength = decaylength; }
+
     float getDielectric() const { return _dielectric; }
     void setDielectric(float dielectric) { _dielectric = dielectric; }
 
@@ -126,6 +133,7 @@ class ForceField
     float _forcefieldscale;
     float _coulombscale;
     float _hydrophobicityscale;
+    float _hydrophobicitydecaylength;
     float _dielectric;
 
   private:

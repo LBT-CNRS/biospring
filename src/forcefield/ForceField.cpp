@@ -89,12 +89,14 @@ Vector3f ForceField::computeIMPForceVector(float x, float y, float z, float surf
 // Hydrophobicity energy and force.
 float ForceField::computeHydrophobicityEnergy(float hydrophobicity1, float hydrophobicity2, float distance) const
 {
-    return _hydrophobicityscale * hydrophobic_energy(hydrophobicity1, hydrophobicity2, distance);
+    return _hydrophobicityscale *
+           hydrophobic_energy(hydrophobicity1, hydrophobicity2, distance, _hydrophobicitydecaylength);
 }
 
 float ForceField::computeHydrophobicityForceModule(float hydrophobicity1, float hydrophobicity2, float distance) const
 {
-    return _hydrophobicityscale * hydrophobic_force_module(hydrophobicity1, hydrophobicity2, distance);
+    return _hydrophobicityscale *
+           hydrophobic_force_module(hydrophobicity1, hydrophobicity2, distance, _hydrophobicitydecaylength);
 }
 
 // ======================================================================================

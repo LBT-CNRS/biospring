@@ -763,6 +763,7 @@ void SpringNetworkOpenCL::idleRun()
         _kernelhydrophobic.setArg(a++, getHydrophobicCutoff());
         _kernelhydrophobic.setArg(a++, static_cast<float>(
             biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
+        _kernelhydrophobic.setArg(a++, getForceField()->getHydrophobicityDecayLength());
         _kernelhydrophobic.setArg(a++, getForceField()->getHydrophobicityScale());
         _kernelhydrophobic.setArg(a++, _nbparticlesocl);
 

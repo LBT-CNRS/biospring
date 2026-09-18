@@ -837,6 +837,7 @@ void SpringNetwork::_setupForceField()
     _ff->setSpringScale(_config.spring.scale);
     _ff->setIMPScale(_config.imp.scale);
     _ff->setHydrophobicityScale(_config.hydrophobicity.scale);
+    _ff->setHydrophobicityDecayLength(_config.hydrophobicity.decaylength);
 }
 
 void SpringNetwork::_setupElectrostatic()
