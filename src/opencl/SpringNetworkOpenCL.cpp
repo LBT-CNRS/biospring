@@ -16,6 +16,7 @@
 #include "Particle.h"
 #include "Vector3f.h"
 #include "forcefield/constants.hpp"
+#include "forcefield/energy/steric.hpp"   // STERIC_LINEAR_STIFFNESS and the mode constants
 
 using biospring::spn::Particle;
 using biospring::spn::Spring;
@@ -89,6 +90,8 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particletospringindexes;
     delete[] _particlemasses;
     delete[] _particlecharges;
+    delete[] _particleradii;
+    delete[] _particleepsilons;
     delete[] _particledynamic;
     delete[] _springsocl;
     for (CellGrid * g : {&_stericcells, &_electrostaticcells, &_hydrophobiccells})
@@ -217,6 +220,22 @@ void SpringNetworkOpenCL::createBuffer()
 								 _particlecharges,
 								 &_err);
 		checkErr( "Buffer::Buffer() charge");
+
+		_inRadiusBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(float)*_nbparticlesocl,
+								 _particleradii,
+								 &_err);
+		checkErr( "Buffer::Buffer() radius");
+
+		_inEpsilonBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(float)*_nbparticlesocl,
+								 _particleepsilons,
+								 &_err);
+		checkErr( "Buffer::Buffer() epsilon");
 
 	_inDynamicBuffer=cl::Buffer(
 								 _context,
@@ -364,6 +383,8 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kernelelectrostatic = cl::Kernel(_program, "electrostatic", &_err);
 	checkErr("Kernel::Kernel()");
+	_kernelsteric = cl::Kernel(_program, "steric", &_err);
+	checkErr("Kernel::Kernel()");
 
 	}
 
@@ -464,6 +485,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLForces();
 	computeOpenCLMasses();
 	computeOpenCLCharges();
+	computeOpenCLStericParameters();
 	computeOpenCLDynamicState();
 	computeOpenCLSprings();
 	computeParticleToSpringIndexes();
@@ -471,6 +493,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 
 double springtime=0.0;
 double electrostatictime=0.0;
+double sterictime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
 double externalforcetime=0.0;
@@ -524,6 +547,47 @@ void SpringNetworkOpenCL::idleRun()
 	springtime+=(endTime-startTime)*1.0E-9;
     }
 
+
+    // Steric, over its own cell list. Before Coulomb only because that is the
+    // order SpringNetwork::computeForces uses; the two accumulate into the same
+    // buffer and the sum is the same either way, to the last bit of a float.
+    if (isStericEnabled() && _stericcells.ncellstotal > 0)
+        {
+        const unsigned wg = WORK_GROUP_SIZE;
+        const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+        const int springsenabled = (isSpringEnabled() && _nbspringsocl > 0) ? 1 : 0;
+
+        unsigned a = 0;
+        _kernelsteric.setArg(a++, _inoutPositionBuffer);
+        _kernelsteric.setArg(a++, _inRadiusBuffer);
+        _kernelsteric.setArg(a++, _inEpsilonBuffer);
+        _kernelsteric.setArg(a++, _inoutForceBuffer);
+        _kernelsteric.setArg(a++, _stericcells.headbuffer);
+        _kernelsteric.setArg(a++, _stericcells.nextbuffer);
+        _kernelsteric.setArg(a++, _stericcells.origin);
+        _kernelsteric.setArg(a++, _stericcells.width);
+        _kernelsteric.setArg(a++, _stericcells.ncells);
+        _kernelsteric.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
+        _kernelsteric.setArg(a++, _inSpringIndexesBuffer);
+        _kernelsteric.setArg(a++, springsenabled);
+        _kernelsteric.setArg(a++, _stericMode());
+        _kernelsteric.setArg(a++, getStericCutoff());
+        _kernelsteric.setArg(a++, biospring::forcefield::STERIC_LINEAR_STIFFNESS);
+        _kernelsteric.setArg(a++, static_cast<float>(
+            biospring::forcefield::MINIMAL_DISTANCE_VDW_CUTOFF));
+        _kernelsteric.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
+        _kernelsteric.setArg(a++, getForceField()->getStericScale());
+        _kernelsteric.setArg(a++, _nbparticlesocl);
+
+        _err = _queue.enqueueNDRangeKernel(_kernelsteric, cl::NullRange,
+                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(steric)");
+        _event.wait();
+        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        sterictime += (endTime - startTime) * 1.0E-9;
+        }
 
     // Coulomb, over its own cell list. Skipped when the grid could not be
     // built rather than run over a stale one: _buildCellList invalidates on
@@ -648,8 +712,9 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+electrostatictime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+sterictime+electrostatictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
+	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
@@ -1014,8 +1079,8 @@ void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 
 void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	{
-	// biospring.cl evaluates springs, Coulomb, damping, external forces and the
-	// integration. Everything else a .msp can switch on is simply not computed
+	// biospring.cl evaluates springs, steric, Coulomb, damping, external forces
+	// and the integration. Everything else a .msp can switch on is not computed
 	// on this path, and used to be so without a word -- the run looked like the
 	// CPU's and was a different model.
 	std::string ignored;
@@ -1024,7 +1089,6 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 			ignored += ", ";
 		ignored += name;
 	};
-	if (isStericEnabled())          add("steric");
 	if (isHydrophobicityEnabled())  add("hydrophobicity");
 	if (isIMPEnabled())             add("impala");
 	if (isInsertionVectorEnabled()) add("insertionvector");
@@ -1033,22 +1097,9 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	if (!ignored.empty())
 		biospring::logging::warning(
 		    "OpenCL backend: %s enabled in the configuration but NOT evaluated on the device -- "
-		    "it computes springs, Coulomb, damping, external forces and the integration, nothing "
-		    "else. The reported energies cover only what it evaluated.",
+		    "it computes springs, steric, Coulomb, damping, external forces and the integration, "
+		    "nothing else. The reported energies cover only what it evaluated.",
 		    ignored.c_str());
-
-	// The combination that does not merely differ from the CPU but cannot work.
-	// Coulomb is the only long-range attraction here, and steric is the only
-	// thing that stops two opposite charges reaching r = 0, where 1/r^2 is
-	// unbounded. AMBER's hydroxyl hydrogens have no Lennard-Jones term of their
-	// own at all, which is why the force field gives them a floor -- and that
-	// floor is part of steric, so on this path it does not exist. Example 072
-	// takes about 200 steps to reach 5e5 kJ.mol-1 this way.
-	if (isAnyElectrostaticEnabled() && isStericEnabled())
-		biospring::logging::warning(
-		    "OpenCL backend: coulomb runs here but steric does not, and steric is what keeps two "
-		    "opposite charges from reaching r = 0. Expect the structure to collapse; this is not a "
-		    "model you can compare with the CPU's.");
 	}
 
 
@@ -1216,6 +1267,34 @@ void SpringNetworkOpenCL::computeOpenCLCharges()
 	_particlecharges = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
 	for (unsigned i = 0; i < _nbparticlesocl; i++)
 		_particlecharges[i] = SpringNetwork::getParticle(i).getCharge();
+	}
+
+void SpringNetworkOpenCL::computeOpenCLStericParameters()
+	{
+	delete[] _particleradii;
+	delete[] _particleepsilons;
+	_particleradii = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
+	_particleepsilons = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		{
+		_particleradii[i] = SpringNetwork::getParticle(i).getRadius();
+		_particleepsilons[i] = SpringNetwork::getParticle(i).getEpsilon();
+		}
+	}
+
+// The .msp names the law; the kernel takes a number. Resolved from the same
+// string SpringNetwork::_setupForceField switches on, so the two cannot pick
+// different laws from one configuration.
+int SpringNetworkOpenCL::_stericMode() const
+	{
+	const std::string mode = _config.steric.mode;
+	if (mode == "lennard-jones-12-6Amber")
+		return BIOSPRING_STERIC_AMBER_12_6;
+	if (mode == "lennard-jones-8-6Lewitt")
+		return BIOSPRING_STERIC_LEWITT_8_6;
+	if (mode == "lennard-jones-8-6Zacharias")
+		return BIOSPRING_STERIC_ZACHARIAS_8_6;
+	return BIOSPRING_STERIC_LINEAR;
 	}
 
 void SpringNetworkOpenCL::computeOpenCLMasses()

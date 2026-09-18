@@ -155,6 +155,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		float4 * _particleexternalforces;
 		float * _particlemasses;
 		float * _particlecharges = nullptr;
+		float * _particleradii = nullptr;
+		float * _particleepsilons = nullptr;
 		int * _particledynamic;
 		int * _particletospringindexes;
 
@@ -179,6 +181,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inExternalForceBuffer;
 		cl::Buffer _inMassBuffer;
 		cl::Buffer _inChargeBuffer;
+		cl::Buffer _inRadiusBuffer;
+		cl::Buffer _inEpsilonBuffer;
 		cl::Buffer _inDynamicBuffer;
 
 		cl_context_properties * _contextproperties;
@@ -192,6 +196,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelblankcells;
 		cl::Kernel _kernelbinparticles;
 		cl::Kernel _kernelelectrostatic;
+		cl::Kernel _kernelsteric;
 
 		cl::KernelFunctor _kernelfunctorspring;
 		cl::KernelFunctor _kernelfunctordamping;
@@ -254,6 +259,11 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void computeOpenCLVelocities();
 		void computeOpenCLMasses();
 		void computeOpenCLCharges();
+		void computeOpenCLStericParameters();
+
+		// The .msp's steric.mode as the kernel's integer. Resolved once rather
+		// than compared as a string per step; see steric_shared.h.
+		int _stericMode() const;
 		void computeOpenCLDynamicState();
 		void computeOpenCLForces();
 

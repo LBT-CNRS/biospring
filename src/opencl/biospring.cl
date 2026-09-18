@@ -247,6 +247,82 @@ __kernel void electrostatic(const __global float4 * positions,
 	}
 
 
+// Steric, gathered over its own cell list.
+//
+// Same shape as the electrostatic kernel above, and the same reasons: one
+// writer per particle so no atomics, each pair evaluated from both ends, the
+// spring exclusion walked over the CSR already on the device, and `cellwidth`
+// taken from the grid while `cutoff` comes from the term.
+//
+// `mode` selects among the four laws the .msp can ask for. One kernel rather
+// than four builds: the branch is uniform across the whole grid -- every work
+// item takes the same one -- so it costs nothing a separate build would save.
+__kernel void steric(const __global float4 * positions,
+                     const __global float * radii,
+                     const __global float * epsilons,
+                     __global float4 * forces,
+                     const __global uint * cellhead,
+                     const __global uint * nextincell,
+                     const float4 origin, const float cellwidth, const int4 ncells,
+                     const __global Springocl * springs,
+                     const __global int * springoffsets,
+                     const int springsenabled,
+                     const int mode,
+                     const float cutoff, const float linearstiffness, const float mindistance,
+                     const float convert, const float stericscale,
+                     const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	const float4 here = positions[tid];
+	const float radius = radii[tid];
+	const float epsilon = epsilons[tid];
+	const float cutoffsq = cutoff * cutoff;
+
+	const int cx = (int)floor((here.x - origin.x) / cellwidth);
+	const int cy = (int)floor((here.y - origin.y) / cellwidth);
+	const int cz = (int)floor((here.z - origin.z) / cellwidth);
+
+	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
+
+	for (int dz = -1; dz <= 1; dz++)
+		for (int dy = -1; dy <= 1; dy++)
+			for (int dx = -1; dx <= 1; dx++)
+				{
+				const int x = cx + dx, y = cy + dy, z = cz + dz;
+				if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)
+					continue;
+
+				const uint cell = (uint)((z * ncells.y + y) * ncells.x + x);
+				for (uint p = cellhead[cell]; p != BIOSPRING_EMPTY_CELL; p = nextincell[p])
+					{
+					if (p == tid)
+						continue;
+
+					float3 axis = positions[p].xyz - here.xyz;
+					const float distsq = axis.x * axis.x + axis.y * axis.y + axis.z * axis.z;
+					if (distsq > cutoffsq || distsq == 0.0f)
+						continue;
+
+					if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+						continue;
+
+					const float dist = sqrt(distsq);
+					// Neighbour first, self second, as Particle::addStericForce
+					// calls it. Both combination rules are symmetric, so this is
+					// for the reader rather than for the arithmetic.
+					const float module = biospring_steric_force_module(
+					    mode, radii[p], radius, epsilons[p], epsilon, dist,
+					    linearstiffness, mindistance, convert);
+					sum += (axis / dist) * (stericscale * module);
+					}
+				}
+
+	forces[tid].xyz += sum;
+	}
+
+
 __kernel void damping(__global float4 * forces,   const __global float4 * velocities, float damping, const uint N)
 	{
 	size_t tid = get_global_id(0);

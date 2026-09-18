@@ -551,3 +551,138 @@ TEST(SpringNetworkOpenCL, CoulombMatchesTheCPU)
     // cannot hide.
     EXPECT_LT(worst, 0.05f) << "the GPU's Coulomb ended up " << worst << " A from the CPU's";
 }
+
+// Steric, on the device, against the CPU -- once per law.
+//
+// The four laws are the reason this term is not Coulomb with another formula:
+// a .msp picks one by name, the host resolves it to an integer, and one kernel
+// serves all four. Testing only the default would leave three untested, and one
+// of those is what the rigid-body examples actually use.
+//
+// The particles sit on a LATTICE at 2.6 A, just outside the 2 A minimum the
+// Good-Hope rule gives two 2 A radii, with a small jitter so the arrangement is
+// not symmetric. That spacing is the whole difficulty of testing this term.
+// The first version dropped 250 particles into a 14 A box, which is a mean
+// spacing of 2.2 A -- inside the repulsive wall, where r^-13 is astronomical.
+// The CPU alone reached 9.7e7 A in a hundred steps, and comparing two backends
+// on an explosion measures which one rounded first. The linear law, the only
+// bounded one, agreed to 4.8e-07 A throughout, which is what said the setup was
+// at fault rather than the code.
+//
+// Neutral particles, so nothing but the steric law moves the cloud.
+namespace
+{
+void buildLattice(spn::SpringNetwork & network, configuration::Configuration & config,
+                  const std::string & mode)
+{
+    const int SIDE = 6;             // 216 particles
+    const float SPACING = 2.6f;
+
+    unsigned state = 4242u;
+    const auto jitter = [&state]() {
+        state = state * 1103515245u + 12345u;
+        return (static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff) - 0.5f) * 1.2f;
+    };
+
+    for (int x = 0; x < SIDE; ++x)
+        for (int y = 0; y < SIDE; ++y)
+            for (int z = 0; z < SIDE; ++z)
+            {
+                spn::Particle p;
+                p.setPosition(Vector3f(x * SPACING + jitter(), y * SPACING + jitter(),
+                                       z * SPACING + jitter()));
+                p.setMass(12.0f);
+                p.setCharge(0.0f);
+                p.setRadius(2.0f);
+                p.setEpsilon(0.5f);
+                network.addParticle(p);
+            }
+
+    // A sprung pair off to the side, placed AT its rest length: every one of
+    // these laws would throw two particles 1.4 A apart violently apart, so the
+    // pair staying there is what says the exclusion ran. Placing them at random
+    // and trusting the spring to pull them together, as the first version did,
+    // measures the spring rather than the exclusion.
+    const float away = SIDE * SPACING + 20.0f;
+    for (int i = 0; i < 2; ++i)
+    {
+        spn::Particle p;
+        p.setPosition(Vector3f(away + i * 1.4f, away, away));
+        p.setMass(12.0f);
+        p.setCharge(0.0f);
+        p.setRadius(2.0f);
+        p.setEpsilon(0.5f);
+        network.addParticle(p);
+    }
+    const unsigned first = SIDE * SIDE * SIDE;
+    network.addSpring(first, first + 1, /*equilibrium=*/1.4f, /*stiffness=*/500.0f);
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = 400;
+    config.sim.timestep = 0.2;
+    config.spring.enable = true;
+    config.spring.scale = 1.0;
+    config.viscosity.enable = true;
+    config.viscosity.value = 0.2;
+    config.electrostatic.enable = false;
+    config.hydrophobicity.enable = false;
+    config.steric.enable = true;
+    config.steric.mode = mode;
+    config.steric.gridscale = 1.0;
+    config.steric.cutoff = 8.0;
+
+    network.setup(config);
+}
+} // namespace
+
+TEST(SpringNetworkOpenCL, StericMatchesTheCPUInEveryMode)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const char * modes[] = {"linear", "lennard-jones-12-6Amber", "lennard-jones-8-6Lewitt",
+                            "lennard-jones-8-6Zacharias"};
+
+    for (const char * mode : modes)
+    {
+        spn::SpringNetwork cpu;
+        configuration::Configuration cpuconfig;
+        buildLattice(cpu, cpuconfig, mode);
+        cpu.run();
+
+        SpringNetworkOpenCL gpu;
+        configuration::Configuration gpuconfig;
+        buildLattice(gpu, gpuconfig, mode);
+        gpu.run();
+
+        spn::SpringNetwork start;
+        configuration::Configuration startconfig;
+        buildLattice(start, startconfig, mode);
+
+        const unsigned n = cpu.getNumberOfParticles();
+        float moved = 0.0f, worst = 0.0f;
+        for (unsigned i = 0; i < n; ++i)
+        {
+            moved = std::max(moved,
+                (cpu.getParticle(i).getPosition() - start.getParticle(i).getPosition()).norm());
+            worst = std::max(worst,
+                (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
+        }
+
+        EXPECT_GT(moved, 0.05f) << mode << ": the lattice barely moved, so this comparison proves nothing";
+        // And it must not have gone off: comparing two backends on an explosion
+        // measures which one rounded first, not whether they agree on the law.
+        EXPECT_LT(moved, 20.0f) << mode << ": the lattice blew up (" << moved
+                                << " A); this is no longer a comparison of force laws";
+        // 1e-3 A is 450 times the worst difference measured across the four
+        // laws, which is 2.2e-06 A -- the two backends run the same text here,
+        // so what is left is the order of a summation. Tight enough that a
+        // wrong combination rule or a missing exclusion cannot hide in it.
+        EXPECT_LT(worst, 1.0e-3f) << mode << ": the GPU ended up " << worst << " A from the CPU";
+
+        const unsigned first = n - 2;
+        const float held = (gpu.getParticle(first).getPosition()
+                            - gpu.getParticle(first + 1).getPosition()).norm();
+        EXPECT_NEAR(held, 1.4f, 0.2f) << mode << ": the sprung pair was blown apart; steric is not excluding it";
+    }
+}
