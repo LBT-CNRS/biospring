@@ -2,6 +2,7 @@
 #define __HYDROPHOBIC_ENERGY_HPP__
 
 #include "../constants.hpp"
+#include "../shared/hydrophobic_shared.h"
 #include <cmath>
 
 namespace biospring
@@ -31,11 +32,12 @@ inline float hydrophobic_energy(float hydrophobicity1, float hydrophobicity2, fl
 ///     already-molar (kJ.mol-1) quantity here, same convention as spring
 ///     stiffness, so no separate Avogadro scaling is applied (unlike
 ///     hydrophobic_energy above).
+/// The arithmetic lives in ../shared/hydrophobic_shared.h, which the OpenCL
+/// kernel compiles too. The constant stays here and is passed down.
 inline float hydrophobic_force_module(float hydrophobicity1, float hydrophobicity2, float distance)
 {
-    float force_module = (hydrophobicity1 * hydrophobicity2) * exp(-distance);
-    force_module *= GLOBAL_SPRING_FORCE_CONVERT;
-    return force_module;
+    return biospring_hydrophobic_force_module(hydrophobicity1, hydrophobicity2, distance,
+                                              static_cast<float>(GLOBAL_SPRING_FORCE_CONVERT));
 }
 
 } // namespace forcefield

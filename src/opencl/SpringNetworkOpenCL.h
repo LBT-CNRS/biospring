@@ -157,6 +157,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		float * _particlecharges = nullptr;
 		float * _particleradii = nullptr;
 		float * _particleepsilons = nullptr;
+		float * _particlehydrophobicities = nullptr;
 		int * _particledynamic;
 		int * _particletospringindexes;
 
@@ -183,6 +184,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inChargeBuffer;
 		cl::Buffer _inRadiusBuffer;
 		cl::Buffer _inEpsilonBuffer;
+		cl::Buffer _inHydrophobicityBuffer;
 		cl::Buffer _inDynamicBuffer;
 
 		cl_context_properties * _contextproperties;
@@ -197,6 +199,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelbinparticles;
 		cl::Kernel _kernelelectrostatic;
 		cl::Kernel _kernelsteric;
+		cl::Kernel _kernelhydrophobic;
 
 		cl::KernelFunctor _kernelfunctorspring;
 		cl::KernelFunctor _kernelfunctordamping;
@@ -260,6 +263,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void computeOpenCLMasses();
 		void computeOpenCLCharges();
 		void computeOpenCLStericParameters();
+		void computeOpenCLHydrophobicity();
 
 		// The .msp's steric.mode as the kernel's integer. Resolved once rather
 		// than compared as a string per step; see steric_shared.h.

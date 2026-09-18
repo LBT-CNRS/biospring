@@ -92,6 +92,7 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particlecharges;
     delete[] _particleradii;
     delete[] _particleepsilons;
+    delete[] _particlehydrophobicities;
     delete[] _particledynamic;
     delete[] _springsocl;
     for (CellGrid * g : {&_stericcells, &_electrostaticcells, &_hydrophobiccells})
@@ -236,6 +237,14 @@ void SpringNetworkOpenCL::createBuffer()
 								 _particleepsilons,
 								 &_err);
 		checkErr( "Buffer::Buffer() epsilon");
+
+		_inHydrophobicityBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(float)*_nbparticlesocl,
+								 _particlehydrophobicities,
+								 &_err);
+		checkErr( "Buffer::Buffer() hydrophobicity");
 
 	_inDynamicBuffer=cl::Buffer(
 								 _context,
@@ -385,6 +394,8 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kernelsteric = cl::Kernel(_program, "steric", &_err);
 	checkErr("Kernel::Kernel()");
+	_kernelhydrophobic = cl::Kernel(_program, "hydrophobic", &_err);
+	checkErr("Kernel::Kernel()");
 
 	}
 
@@ -486,6 +497,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLMasses();
 	computeOpenCLCharges();
 	computeOpenCLStericParameters();
+	computeOpenCLHydrophobicity();
 	computeOpenCLDynamicState();
 	computeOpenCLSprings();
 	computeParticleToSpringIndexes();
@@ -494,6 +506,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 double springtime=0.0;
 double electrostatictime=0.0;
 double sterictime=0.0;
+double hydrophobictime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
 double externalforcetime=0.0;
@@ -632,6 +645,40 @@ void SpringNetworkOpenCL::idleRun()
         electrostatictime += (endTime - startTime) * 1.0E-9;
         }
 
+    // Hydrophobic attraction, over its own cell list.
+    if (isHydrophobicityEnabled() && _hydrophobiccells.ncellstotal > 0)
+        {
+        const unsigned wg = WORK_GROUP_SIZE;
+        const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+        const int springsenabled = (isSpringEnabled() && _nbspringsocl > 0) ? 1 : 0;
+
+        unsigned a = 0;
+        _kernelhydrophobic.setArg(a++, _inoutPositionBuffer);
+        _kernelhydrophobic.setArg(a++, _inHydrophobicityBuffer);
+        _kernelhydrophobic.setArg(a++, _inoutForceBuffer);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.headbuffer);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.nextbuffer);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.origin);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.width);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.ncells);
+        _kernelhydrophobic.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
+        _kernelhydrophobic.setArg(a++, _inSpringIndexesBuffer);
+        _kernelhydrophobic.setArg(a++, springsenabled);
+        _kernelhydrophobic.setArg(a++, getHydrophobicCutoff());
+        _kernelhydrophobic.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
+        _kernelhydrophobic.setArg(a++, getForceField()->getHydrophobicityScale());
+        _kernelhydrophobic.setArg(a++, _nbparticlesocl);
+
+        _err = _queue.enqueueNDRangeKernel(_kernelhydrophobic, cl::NullRange,
+                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(hydrophobic)");
+        _event.wait();
+        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        hydrophobictime += (endTime - startTime) * 1.0E-9;
+        }
+
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
     _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
                                   viscosity, _nbparticlesocl);
@@ -712,10 +759,11 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+sterictime+electrostatictime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+sterictime+electrostatictime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
 	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
+	         <<", hydrophobic: "<<hydrophobictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
 	SpringNetwork::endRun();
@@ -1089,7 +1137,6 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 			ignored += ", ";
 		ignored += name;
 	};
-	if (isHydrophobicityEnabled())  add("hydrophobicity");
 	if (isIMPEnabled())             add("impala");
 	if (isInsertionVectorEnabled()) add("insertionvector");
 	if (isRigidBodyEnabled())       add("rigidbody");
@@ -1097,8 +1144,8 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	if (!ignored.empty())
 		biospring::logging::warning(
 		    "OpenCL backend: %s enabled in the configuration but NOT evaluated on the device -- "
-		    "it computes springs, steric, Coulomb, damping, external forces and the integration, "
-		    "nothing else. The reported energies cover only what it evaluated.",
+		    "it computes springs, steric, Coulomb, hydrophobicity, damping, external forces and "
+		    "the integration, nothing else. The reported energies cover only what it evaluated.",
 		    ignored.c_str());
 	}
 
@@ -1295,6 +1342,14 @@ int SpringNetworkOpenCL::_stericMode() const
 	if (mode == "lennard-jones-8-6Zacharias")
 		return BIOSPRING_STERIC_ZACHARIAS_8_6;
 	return BIOSPRING_STERIC_LINEAR;
+	}
+
+void SpringNetworkOpenCL::computeOpenCLHydrophobicity()
+	{
+	delete[] _particlehydrophobicities;
+	_particlehydrophobicities = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		_particlehydrophobicities[i] = SpringNetwork::getParticle(i).getHydrophobicity();
 	}
 
 void SpringNetworkOpenCL::computeOpenCLMasses()

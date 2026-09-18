@@ -686,3 +686,135 @@ TEST(SpringNetworkOpenCL, StericMatchesTheCPUInEveryMode)
         EXPECT_NEAR(held, 1.4f, 0.2f) << mode << ": the sprung pair was blown apart; steric is not excluding it";
     }
 }
+
+// Hydrophobicity, on the device, against the CPU.
+//
+// The third pairwise term, and the simplest law of the three: -h1*h2*exp(-r),
+// an attraction with no repulsive core at all. That is what makes its test
+// setup delicate rather than its arithmetic -- two hydrophobic particles with
+// nothing to hold them apart approach without limit, and comparing two
+// backends on a collapse measures which one rounded first, as the Coulomb test
+// found the hard way.
+//
+// So the cloud is held by a spring network: every particle is sprung to the
+// next, at a rest length the attraction cannot pull them far below. Half the
+// particles are hydrophobic and half are not, so the term has something to
+// distinguish and the sum is not a single uniform contraction.
+namespace
+{
+void buildHydrophobicChain(spn::SpringNetwork & network, configuration::Configuration & config,
+                           unsigned n)
+{
+    unsigned state = 31337u;
+    const auto next = [&state]() {
+        state = state * 1103515245u + 12345u;
+        return static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff);
+    };
+
+    // A self-avoiding-ish walk with a FIXED 3.8 A step, so the chain starts at
+    // its springs' rest length. Dropping the particles at random instead, as
+    // the first version did, makes the springs contract a tangle: the chain
+    // then moved 10.4 A whatever the hydrophobicity was -- including at 0.3 --
+    // which is the tell that the test was measuring the springs.
+    const float STEP = 3.8f;
+    Vector3f at(0.0f, 0.0f, 0.0f);
+    for (unsigned i = 0; i < n; ++i)
+    {
+        spn::Particle p;
+        p.setPosition(at);
+        p.setMass(12.0f);
+        p.setCharge(0.0f);
+        // In blocks of two, not alternating. Alternating looks like the
+        // better test -- neighbours differ, the sum is not uniform -- and
+        // quietly makes the exclusion untestable: the law is a product, so
+        // every sprung pair would have one hydrophobic end and one not, and
+        // contribute nothing whether it is excluded or not. In blocks, half
+        // the sprung pairs are hydrophobic at both ends.
+        p.setHydrophobicity(((i / 2) % 2 == 0) ? 1.0f : 0.0f);
+        network.addParticle(p);
+
+        // Self-avoiding: a plain walk folds back on itself, and two
+        // non-adjacent particles starting 0.3 A apart is a bad initial
+        // structure rather than anything the law did.
+        Vector3f candidate = at;
+        for (int attempt = 0; attempt < 200; ++attempt)
+        {
+            Vector3f dir(next() - 0.5f, next() - 0.5f, next() - 0.5f);
+            dir.normalize();
+            candidate = at + dir * STEP;
+            float closest = 1.0e9f;
+            for (unsigned j = 0; j < network.getNumberOfParticles(); ++j)
+                closest = std::min(closest, (candidate - network.getParticle(j).getPosition()).norm());
+            if (closest > 3.0f)
+                break;
+        }
+        at = candidate;
+    }
+    for (unsigned i = 0; i + 1 < n; ++i)
+        network.addSpring(i, i + 1, /*equilibrium=*/STEP, /*stiffness=*/200.0f);
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = 200;
+    config.sim.timestep = 0.5;
+    config.spring.enable = true;
+    config.spring.scale = 1.0;
+    config.viscosity.enable = true;
+    config.viscosity.value = 1.0;
+    config.steric.enable = false;
+    config.electrostatic.enable = false;
+    config.hydrophobicity.enable = true;
+    config.hydrophobicity.scale = 1000.0;
+    config.hydrophobicity.cutoff = 12.0;
+
+    network.setup(config);
+}
+} // namespace
+
+TEST(SpringNetworkOpenCL, HydrophobicityMatchesTheCPU)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 200;
+
+    spn::SpringNetwork cpu;
+    configuration::Configuration cpuconfig;
+    buildHydrophobicChain(cpu, cpuconfig, N);
+    cpu.run();
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration gpuconfig;
+    buildHydrophobicChain(gpu, gpuconfig, N);
+    gpu.run();
+
+    spn::SpringNetwork start;
+    configuration::Configuration startconfig;
+    buildHydrophobicChain(start, startconfig, N);
+
+    float moved = 0.0f, worst = 0.0f;
+    for (unsigned i = 0; i < N; ++i)
+    {
+        moved = std::max(moved,
+            (cpu.getParticle(i).getPosition() - start.getParticle(i).getPosition()).norm());
+        worst = std::max(worst,
+            (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
+    }
+
+    // The chain contracts by about 0.63 A under the attraction, and the closest
+    // any two particles come is 1.92 A, having started no closer than 3.0.
+    EXPECT_GT(moved, 0.1f) << "the chain barely moved, so this comparison proves nothing";
+    EXPECT_LT(moved, 20.0f) << "the chain ran away (" << moved
+                            << " A); this is no longer a comparison of force laws";
+
+    // This law is an ATTRACTION with no repulsive core at all, so it will pile
+    // particles up given enough strength -- at scale 5000 the closest pair
+    // reaches 0.0098 A and the two backends part company by 0.1 A. Unlike
+    // Coulomb's 1/r^2 the force stays bounded (exp(-r) -> 1), so the collapse
+    // is slow rather than singular, which makes it easy to miss: hence the
+    // guard, at a distance two atoms could actually be.
+    EXPECT_GT(closestPair(cpu), 1.5f) << "the chain piled up; this is no longer a physical configuration";
+
+    // Measured agreement is 1.9e-06 A. The bar is nearly three orders above it, and
+    // still far below anything a wrong law or a missing exclusion would cause.
+    EXPECT_LT(worst, 1.0e-3f) << "the GPU's hydrophobicity ended up " << worst << " A from the CPU's";
+}
