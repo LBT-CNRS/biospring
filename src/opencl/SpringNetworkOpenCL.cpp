@@ -255,6 +255,19 @@ void SpringNetworkOpenCL::createBuffer()
 								 &_err);
 		checkErr( "Buffer::Buffer() hydrophobicity");
 
+		// Only when a .dx was actually read: OpenCL rejects a zero-sized buffer,
+		// and a run without electrostaticgrid.enable has no map at all.
+		if (_electrostaticgridcellcount > 0)
+			{
+			_inElectrostaticGridBuffer=cl::Buffer(
+									 _context,
+									 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+									 sizeof(cl_float4)*_electrostaticgridcellcount,
+									 _electrostaticgridcells,
+									 &_err);
+			checkErr( "Buffer::Buffer() electrostatic grid");
+			}
+
 		_springenergyper = new float[_nbparticlesocl];
 		_torsionenergyper = new float[_nbparticlesocl];
 		for (unsigned i = 0; i < _nbparticlesocl; ++i)
@@ -447,6 +460,8 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kernelhydrophobic = cl::Kernel(_program, "hydrophobic", &_err);
 	checkErr("Kernel::Kernel()");
+	_kernelelectrostaticfield = cl::Kernel(_program, "electrostaticfield", &_err);
+	checkErr("Kernel::Kernel()");
 	_kerneltorsion = cl::Kernel(_program, "torsion", &_err);
 	checkErr("Kernel::Kernel()");
 
@@ -551,6 +566,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLCharges();
 	computeOpenCLStericParameters();
 	computeOpenCLHydrophobicity();
+	computeOpenCLElectrostaticGrid();
 	computeOpenCLTorsions();
 	computeOpenCLDynamicState();
 	computeOpenCLSprings();
@@ -562,6 +578,7 @@ double electrostatictime=0.0;
 double sterictime=0.0;
 double torsiontime=0.0;
 double hydrophobictime=0.0;
+double electrostaticfieldtime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
 double externalforcetime=0.0;
@@ -701,7 +718,12 @@ void SpringNetworkOpenCL::idleRun()
     // Coulomb, over its own cell list. Skipped when the grid could not be
     // built rather than run over a stale one: _buildCellList invalidates on
     // failure precisely so this test means what it says.
-    if (isAnyElectrostaticEnabled() && _electrostaticcells.ncellstotal > 0)
+    // isElectrostaticCoulombEnabled(), not isAnyElectrostaticEnabled(): the
+    // latter is also true when only the potential GRID is on, and this kernel is
+    // the pairwise Coulomb one. Gated on "any", the device applied a pairwise
+    // force to five examples (011, 012, 013, 021, 022) whose .msp sets
+    // coulomb.enable = 0, and the CPU applied none.
+    if (isElectrostaticCoulombEnabled() && _electrostaticcells.ncellstotal > 0)
         {
         const unsigned wg = WORK_GROUP_SIZE;
         const unsigned global = (_nbparticlesocl / wg) * wg + wg;
@@ -774,6 +796,39 @@ void SpringNetworkOpenCL::idleRun()
         startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
         endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
         hydrophobictime += (endTime - startTime) * 1.0E-9;
+        }
+
+    // The precomputed potential map. No cell list and no neighbour walk: one
+    // lookup per particle, in a buffer that was uploaded once and is never
+    // touched again.
+    if (isElectrostaticFieldEnabled() && _electrostaticgridcellcount > 0)
+        {
+        const unsigned wg = WORK_GROUP_SIZE;
+        const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+
+        unsigned a = 0;
+        _kernelelectrostaticfield.setArg(a++, _inoutPositionBuffer);
+        _kernelelectrostaticfield.setArg(a++, _inChargeBuffer);
+        _kernelelectrostaticfield.setArg(a++, _inoutForceBuffer);
+        _kernelelectrostaticfield.setArg(a++, _inElectrostaticGridBuffer);
+        _kernelelectrostaticfield.setArg(a++, _gridorigin);
+        _kernelelectrostaticfield.setArg(a++, _gridinvstep);
+        _kernelelectrostaticfield.setArg(a++, _gridshape);
+        _kernelelectrostaticfield.setArg(a++, _gridboxmin);
+        _kernelelectrostaticfield.setArg(a++, _gridboxmax);
+        // getForceFieldScale(), which is what electrostaticgrid.scale sets --
+        // NOT the coulomb scale, which belongs to the pairwise term. Particle::
+        // addElectrostaticFieldForce reads the same one.
+        _kernelelectrostaticfield.setArg(a++, getForceField()->getForceFieldScale());
+        _kernelelectrostaticfield.setArg(a++, _nbparticlesocl);
+
+        _err = _queue.enqueueNDRangeKernel(_kernelelectrostaticfield, cl::NullRange,
+                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(electrostaticfield)");
+        _event.wait();
+        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        electrostaticfieldtime += (endTime - startTime) * 1.0E-9;
         }
 
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
@@ -856,11 +911,12 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+torsiontime+sterictime+electrostatictime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
 	         <<", torsion: "<<torsiontime
 	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
+	         <<", electrostaticfield: "<<electrostaticfieldtime
 	         <<", hydrophobic: "<<hydrophobictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
@@ -898,7 +954,9 @@ void SpringNetworkOpenCL::_updateCellLists()
 	{
 	if (isStericEnabled())
 		_buildCellList(_stericcells, getStericCutoff());
-	if (isAnyElectrostaticEnabled())
+	// Same distinction as at the dispatch: the cell list serves the PAIRWISE
+	// kernel, and a grid-only configuration has no use for it.
+	if (isElectrostaticCoulombEnabled())
 		_buildCellList(_electrostaticcells, getElectrostaticCutoff());
 	if (isHydrophobicityEnabled())
 		_buildCellList(_hydrophobiccells, getHydrophobicCutoff());
@@ -1558,6 +1616,75 @@ void SpringNetworkOpenCL::computeOpenCLHydrophobicity()
 	_particlehydrophobicities = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
 	for (unsigned i = 0; i < _nbparticlesocl; i++)
 		_particlehydrophobicities[i] = SpringNetwork::getParticle(i).getHydrophobicity();
+	}
+
+// The .dx potential map, flattened row-major into one float4 per cell:
+// potential in .x and the field PotentialGrid::compute_gradient already derived
+// in .yzw. Nothing is recomputed here and nothing is interpolated -- the host
+// has done the differentiation once, at setup.
+//
+// Called once, because the map is read from the .dx in
+// SpringNetwork::_setupElectrostatic and never changes afterwards. That is what
+// makes this term cheap on the device: one upload, then no transfer at all for
+// the rest of the run.
+//
+// The frame is stored as one INVERSE STEP PER AXIS rather than a cell width,
+// because the maps are anisotropic: eleven of the twelve in the examples have a
+// different step on each axis. _gridboxmax carries GridCoordinatesSystem's
+// -1e-6 so the kernel's bounds test is the one the CPU makes.
+void SpringNetworkOpenCL::computeOpenCLElectrostaticGrid()
+	{
+	delete[] _electrostaticgridcells;
+	_electrostaticgridcells = nullptr;
+	_electrostaticgridcellcount = 0;
+
+	if (!isElectrostaticFieldEnabled())
+		return;
+
+	const biospring::grid::PotentialGrid & grid = getElectrostaticGrid();
+	const std::array<size_t, 3> shape = grid.shape();
+	const size_t total = shape[0] * shape[1] * shape[2];
+	if (total == 0)
+		return;
+
+	const std::array<double, 3> step = grid.cell_size();
+	const std::array<double, 3> origin = grid.origin();
+	const biospring::Box & box = grid.boundaries();
+
+	_electrostaticgridcells = new cl_float4[total];
+	for (size_t i = 0; i < shape[0]; ++i)
+		for (size_t j = 0; j < shape[1]; ++j)
+			for (size_t k = 0; k < shape[2]; ++k)
+				{
+				// An explicit discrete_coordinates, not a braced list: at() is
+				// overloaded on discrete_ and real_coordinates and a braced list
+				// matches both.
+				const biospring::grid::discrete_coordinates cell(
+				    static_cast<int>(i), static_cast<int>(j), static_cast<int>(k));
+				const biospring::grid::PotentialCell & c = grid.at(cell);
+				cl_float4 & out = _electrostaticgridcells[(i * shape[1] + j) * shape[2] + k];
+				out.s[0] = c.scalar;
+				out.s[1] = c.vector.getX();
+				out.s[2] = c.vector.getY();
+				out.s[3] = c.vector.getZ();
+				}
+	_electrostaticgridcellcount = total;
+
+	_gridorigin = {{static_cast<float>(origin[0]), static_cast<float>(origin[1]),
+	                static_cast<float>(origin[2]), 0.0f}};
+	_gridinvstep = {{static_cast<float>(1.0 / step[0]), static_cast<float>(1.0 / step[1]),
+	                 static_cast<float>(1.0 / step[2]), 0.0f}};
+	_gridboxmin = {{static_cast<float>(box.min_x()), static_cast<float>(box.min_y()),
+	                static_cast<float>(box.min_z()), 0.0f}};
+	_gridboxmax = {{static_cast<float>(box.max_x() - 1e-6), static_cast<float>(box.max_y() - 1e-6),
+	                static_cast<float>(box.max_z() - 1e-6), 0.0f}};
+	_gridshape = {{static_cast<cl_int>(shape[0]), static_cast<cl_int>(shape[1]),
+	               static_cast<cl_int>(shape[2]), 0}};
+
+	biospring::logging::info("OpenCL: electrostatic map on the device, %d x %d x %d cells (%.1f MB), "
+	                         "uploaded once",
+	                         _gridshape.s[0], _gridshape.s[1], _gridshape.s[2],
+	                         total * sizeof(cl_float4) / 1048576.0);
 	}
 
 void SpringNetworkOpenCL::computeOpenCLMasses()

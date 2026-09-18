@@ -402,6 +402,74 @@ __kernel void hydrophobic(const __global float4 * positions,
 
 
 // Tabulated torsions, gathered per particle.
+// The precomputed electrostatic potential map (APBS/OpenDX), as a force on each
+// charge.
+//
+// WHY IT IS WORTH HAVING HERE. The map is CONSTANT for the whole run: it is
+// read from the .dx once in SpringNetwork::_setupElectrostatic and nothing
+// changes it afterwards, not even MDDriver. So it is uploaded once and never
+// transferred again, and the eleven examples that carry a .dx stop needing the
+// host in their step at all -- which without this kernel they did not get
+// either, because the term simply did not exist on the device and the map was
+// silently ignored.
+//
+// Each cell carries the potential in .x and the field in .yzw: the gradient
+// PRECOMPUTED on the host by PotentialGrid::compute_gradient, by central
+// differences, already negated and already scaled, and zero on the boundary
+// cells where a central difference has no neighbour. Nothing is differentiated
+// here.
+//
+// NEAREST cell, no interpolation, because that is what the CPU does:
+// DenseGrid::at goes through cell_coordinates, which truncates towards zero.
+//
+// THE GRID IS ANISOTROPIC. Eleven of the twelve maps in the examples have a
+// different step on each axis -- 011 is 0.5895 x 0.5325 x 0.5717 A, 022 is
+// 1.3782 x 0.8902 x 0.9798 -- and the counts differ too (161 x 225 x 385 for
+// 032). Hence one inverse step per axis rather than a single cell width, and
+// the row-major index below. The delta matrix is diagonal in every one of them,
+// so no shear has to be handled; a sheared map would need more than this.
+__kernel void electrostaticfield(const __global float4 * positions,
+                                 const __global float * charges,
+                                 __global float4 * forces,
+                                 const __global float4 * cells,
+                                 const float4 origin,
+                                 const float4 invstep,
+                                 const int4 shape,
+                                 const float4 boxmin,
+                                 const float4 boxmax,
+                                 const float gridscale,
+                                 const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	const float4 p = positions[tid];
+
+	// Mirrors GridCoordinatesSystem::is_out_of_grid, whose upper bound is the
+	// box minus 1e-6 (applied on the host, so boxmax already carries it). A
+	// particle outside contributes no force and no energy, rather than throwing
+	// as DenseGrid::at would.
+	if (p.x < boxmin.x || p.x > boxmax.x ||
+	    p.y < boxmin.y || p.y > boxmax.y ||
+	    p.z < boxmin.z || p.z > boxmax.z)
+		return;
+
+	const int i = (int)((p.x - origin.x) * invstep.x);
+	const int j = (int)((p.y - origin.y) * invstep.y);
+	const int k = (int)((p.z - origin.z) * invstep.z);
+
+	// The bounds test above is on the box and this one is on the indices: they
+	// are not the same test, and rounding can put a particle a hair inside the
+	// box and a hair past the last cell.
+	if (i < 0 || j < 0 || k < 0 || i >= shape.x || j >= shape.y || k >= shape.z)
+		return;
+
+	const float4 cell = cells[((size_t)i * shape.y + j) * shape.z + k];
+	const float q = charges[tid] * gridscale;
+
+	forces[tid].xyz += cell.yzw * q;
+	}
+
 //
 // A torsion is a FOUR-atom term, so unlike every other kernel here it cannot
 // simply own its output: one work item per torsion would have four particles to

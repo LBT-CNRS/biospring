@@ -187,6 +187,28 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inEpsilonBuffer;
 		cl::Buffer _inHydrophobicityBuffer;
 
+		// The precomputed electrostatic potential map, flattened row-major, one
+		// float4 per cell: potential in .x, the field PotentialGrid::
+		// compute_gradient already derived in .yzw.
+		//
+		// Uploaded once. The map is read from the .dx at setup and nothing
+		// changes it afterwards, so it never crosses the bus again -- which is
+		// the whole reason it is worth holding here. Held as CL_MEM_USE_HOST_PTR
+		// like every other input, so on unified memory it is not copied at all.
+		//
+		// The frame is kept beside it because the grid is ANISOTROPIC: almost
+		// every map in the examples has a different step on each axis, so what
+		// the kernel needs is one inverse step per axis, not a cell width.
+		// _gridboxmax already carries GridCoordinatesSystem's -1e-6.
+		cl::Buffer _inElectrostaticGridBuffer;
+		cl_float4 * _electrostaticgridcells = nullptr;
+		size_t _electrostaticgridcellcount = 0;
+		cl_float4 _gridorigin = {{0.0f, 0.0f, 0.0f, 0.0f}};
+		cl_float4 _gridinvstep = {{0.0f, 0.0f, 0.0f, 0.0f}};
+		cl_float4 _gridboxmin = {{0.0f, 0.0f, 0.0f, 0.0f}};
+		cl_float4 _gridboxmax = {{0.0f, 0.0f, 0.0f, 0.0f}};
+		cl_int4 _gridshape = {{0, 0, 0, 0}};
+
 		// Torsions: the quadruplets and their tables, plus a CSR from each
 		// particle to the torsions it takes part in. See the torsion kernel for
 		// why it gathers rather than scatters.
@@ -222,6 +244,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelelectrostatic;
 		cl::Kernel _kernelsteric;
 		cl::Kernel _kernelhydrophobic;
+		cl::Kernel _kernelelectrostaticfield;
 		cl::Kernel _kerneltorsion;
 
 		cl::KernelFunctor _kernelfunctorspring;
@@ -287,6 +310,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void computeOpenCLCharges();
 		void computeOpenCLStericParameters();
 		void computeOpenCLHydrophobicity();
+		// Flattens the .dx potential map into _electrostaticgridcells and fills
+		// the frame beside it. Called once: the map never changes.
+		void computeOpenCLElectrostaticGrid();
 		void computeOpenCLTorsions();
 
 		// Which families the .msp turns on, as the bitmask the kernel takes.

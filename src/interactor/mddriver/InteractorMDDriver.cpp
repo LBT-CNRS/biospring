@@ -138,8 +138,13 @@ void InteractorMDDriver::setupIMDInteractions( InteractorMDDriver * imdl)
 		IIMD_probeconnection();
 		IIMD_treatprotocol();
 
-		// Set IMDGrid at initialization
-		if (spn->isAnyElectrostaticEnabled())
+		// Set IMDGrid at initialization.
+		//
+		// isElectrostaticFieldEnabled(), not isAnyElectrostaticEnabled(): the
+		// latter is also true when only the PAIRWISE Coulomb term is on, and a
+		// run with coulomb.enable = 1 and electrostaticgrid.enable = 0 never
+		// reads a .dx -- so this pushed an empty grid to the client.
+		if (spn->isElectrostaticFieldEnabled())
 		{
 			biospring::grid::PotentialGrid electrostaticGrid = spn->getElectrostaticGrid();
 			updateGridFromSource(imdl->_IMDpotentialGrid, electrostaticGrid);
