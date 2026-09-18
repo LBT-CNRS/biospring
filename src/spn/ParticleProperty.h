@@ -10,10 +10,17 @@ namespace spn
 // Units (matching the simulation's internal unit system, see
 // forcefield/constants.hpp): mass in Dalton (Da), charge in elementary
 // charge (e), radius in Angstrom (A), epsilon in kJ.mol-1 (Lennard-Jones
-// well depth), hydrophobicity in kJ.mol-1 (see NetCDFWriter's
-// "hydrophobicityscale" units), solvent accessibility surface in A^2,
-// transfer energy by accessible surface in kJ.mol-1.A-2 (see IMPALA,
-// forcefield/energy/imp.hpp).
+// well depth), solvent accessibility surface in A^2, and two quantities
+// that are NOT the same and whose names invite confusing them:
+//   - hydrophobicity, the PAIRWISE term's per-particle amplitude, in
+//     sqrt(kJ.mol-1.A-1): the law multiplies two of them together and the
+//     product is a force amplitude (forcefield/shared/hydrophobic_shared.h).
+//     It is written to the .nc as "hydrophobicity".
+//   - transfer energy by accessible surface, IMPALA's, in kJ.mol-1.A-2 --
+//     per unit of surface, since imp.hpp multiplies it by one
+//     (forcefield/energy/imp.hpp). It is written to the .nc as
+//     "hydrophobicityscale", which is the trap: the name with "scale" in it
+//     is IMPALA's, not the pairwise term's.
 class ParticleProperty
 {
   public:

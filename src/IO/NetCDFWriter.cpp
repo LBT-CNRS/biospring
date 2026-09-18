@@ -127,10 +127,18 @@ void NetCDFWriter::writeBinary()
     surfacc.putAtt("long_name", "Particle surface accessibility");
 
     NcVar hscale = nc->addVar("hydrophobicityscale", ncFloat, pnbdim);
-    hscale.putAtt("units", "kJ.mol-1");
+    // Per unit of accessible surface: imp_energy multiplies it by the
+    // particle's surface in A2 to get an energy, so kJ.mol-1 alone would not
+    // balance. This is the unit amber.ff's own header declares (transferIMP).
+    hscale.putAtt("units", "kJ.mol-1.A-2");
     hscale.putAtt("long_name", "Particle hydrophobicity scale (transfer energy)");
 
     NcVar hydrophobicity = nc->addVar("hydrophobicity", ncFloat, pnbdim);
+    // The pairwise law multiplies two of these together and the product is a
+    // force amplitude in kJ.mol-1.A-1, so a single one carries its square
+    // root. Not an energy, and not the same quantity as hydrophobicityscale
+    // above.
+    hydrophobicity.putAtt("units", "sqrt(kJ.mol-1.A-1)");
     hydrophobicity.putAtt("long_name", "Particle hydrophobicity (pairwise hydrophobic force)");
 
     NcVar resids = nc->addVar("resids", ncInt, pnbdim);
@@ -274,12 +282,13 @@ void NetCDFWriter::_writeHeaderCDL()
     _ostream << std::endl;
 
     _ostream << "\tfloat   hydrophobicityscale(particle_number);" << std::endl;
-    _ostream << "\t        hydrophobicityscale:units = \"kJ.mol-1\" ;" << std::endl;
+    _ostream << "\t        hydrophobicityscale:units = \"kJ.mol-1.A-2\" ;" << std::endl;
     _ostream << "\t        hydrophobicityscale:long_name = \"Particle hydrophobicity scale (transfer energy)\";"
              << std::endl;
     _ostream << std::endl;
 
     _ostream << "\tfloat   hydrophobicity(particle_number);" << std::endl;
+    _ostream << "\t        hydrophobicity:units = \"sqrt(kJ.mol-1.A-1)\" ;" << std::endl;
     _ostream << "\t        hydrophobicity:long_name = \"Particle hydrophobicity (pairwise hydrophobic force)\";"
              << std::endl;
     _ostream << std::endl;
