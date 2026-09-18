@@ -154,6 +154,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		float4 * _particleforces;
 		float4 * _particleexternalforces;
 		float * _particlemasses;
+		float * _particlecharges = nullptr;
 		int * _particledynamic;
 		int * _particletospringindexes;
 
@@ -177,6 +178,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 		cl::Buffer _inExternalForceBuffer;
 		cl::Buffer _inMassBuffer;
+		cl::Buffer _inChargeBuffer;
 		cl::Buffer _inDynamicBuffer;
 
 		cl_context_properties * _contextproperties;
@@ -189,6 +191,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelexternal;
 		cl::Kernel _kernelblankcells;
 		cl::Kernel _kernelbinparticles;
+		cl::Kernel _kernelelectrostatic;
 
 		cl::KernelFunctor _kernelfunctorspring;
 		cl::KernelFunctor _kernelfunctordamping;
@@ -250,6 +253,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void computeOpenCLPositions();
 		void computeOpenCLVelocities();
 		void computeOpenCLMasses();
+		void computeOpenCLCharges();
 		void computeOpenCLDynamicState();
 		void computeOpenCLForces();
 

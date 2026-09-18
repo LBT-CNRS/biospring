@@ -2,6 +2,7 @@
 #define __ELECTROSTATIC_ENERGY_HPP__
 
 #include "../constants.hpp"
+#include "../shared/electrostatic_shared.h"
 
 namespace biospring
 {
@@ -37,15 +38,18 @@ inline float electrostatic_energy(float charge1, float charge2, float distance, 
 /// @return Coulomb force module, in Da.A.fs-2 (see
 ///     GLOBAL_ELECTROSTATIC_FORCE_CONVERT: charges here are real per-particle
 ///     values, so unlike electrostatic_energy no Avogadro scaling applies).
+///
+/// The arithmetic lives in ../shared/electrostatic_shared.h, which the OpenCL
+/// kernel compiles too, so the two backends cannot drift apart on it. The
+/// constants stay here and are passed down: there is one definition of each.
 inline float electrostatic_force_module(float charge1, float charge2, float distance, float dielectric)
 {
-    if (distance < MINIMAL_DISTANCE_ELECTROSTATIC_CUTOFF)
-        return 0.0;
-    // charge1, charge2 in e; distance in A (not yet converted to meter here,
+    // charge1, charge2 in e; distance in A (not converted to meter here,
     // GLOBAL_ELECTROSTATIC_FORCE_CONVERT accounts for both units at once).
-    float force_module = -(charge1 * charge2) / (4.0 * PI * dielectric * distance * distance);
-    force_module *= GLOBAL_ELECTROSTATIC_FORCE_CONVERT; // -> Da.A.fs-2
-    return force_module;
+    return biospring_electrostatic_force_module(charge1, charge2, distance, dielectric,
+                                                static_cast<float>(MINIMAL_DISTANCE_ELECTROSTATIC_CUTOFF),
+                                                static_cast<float>(4.0 * PI),
+                                                static_cast<float>(GLOBAL_ELECTROSTATIC_FORCE_CONVERT));
 }
 
 } // namespace forcefield

@@ -88,6 +88,7 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _particleexternalforces;
     delete[] _particletospringindexes;
     delete[] _particlemasses;
+    delete[] _particlecharges;
     delete[] _particledynamic;
     delete[] _springsocl;
     for (CellGrid * g : {&_stericcells, &_electrostaticcells, &_hydrophobiccells})
@@ -209,7 +210,15 @@ void SpringNetworkOpenCL::createBuffer()
 								 &_err);
 		checkErr( "Buffer::Buffer() mass");
 
-		_inDynamicBuffer=cl::Buffer(
+			_inChargeBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(float)*_nbparticlesocl,
+								 _particlecharges,
+								 &_err);
+		checkErr( "Buffer::Buffer() charge");
+
+	_inDynamicBuffer=cl::Buffer(
 								 _context,
 								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
 								 sizeof(int)*_nbparticlesocl,
@@ -353,6 +362,8 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kernelbinparticles = cl::Kernel(_program, "binParticles", &_err);
 	checkErr("Kernel::Kernel()");
+	_kernelelectrostatic = cl::Kernel(_program, "electrostatic", &_err);
+	checkErr("Kernel::Kernel()");
 
 	}
 
@@ -452,12 +463,14 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLVelocities();
 	computeOpenCLForces();
 	computeOpenCLMasses();
+	computeOpenCLCharges();
 	computeOpenCLDynamicState();
 	computeOpenCLSprings();
 	computeParticleToSpringIndexes();
 	}
 
 double springtime=0.0;
+double electrostatictime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
 double externalforcetime=0.0;
@@ -511,6 +524,49 @@ void SpringNetworkOpenCL::idleRun()
 	springtime+=(endTime-startTime)*1.0E-9;
     }
 
+
+    // Coulomb, over its own cell list. Skipped when the grid could not be
+    // built rather than run over a stale one: _buildCellList invalidates on
+    // failure precisely so this test means what it says.
+    if (isAnyElectrostaticEnabled() && _electrostaticcells.ncellstotal > 0)
+        {
+        const unsigned wg = WORK_GROUP_SIZE;
+        const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+        const int springsenabled = (isSpringEnabled() && _nbspringsocl > 0) ? 1 : 0;
+
+        unsigned a = 0;
+        _kernelelectrostatic.setArg(a++, _inoutPositionBuffer);
+        _kernelelectrostatic.setArg(a++, _inChargeBuffer);
+        _kernelelectrostatic.setArg(a++, _inoutForceBuffer);
+        _kernelelectrostatic.setArg(a++, _electrostaticcells.headbuffer);
+        _kernelelectrostatic.setArg(a++, _electrostaticcells.nextbuffer);
+        _kernelelectrostatic.setArg(a++, _electrostaticcells.origin);
+        _kernelelectrostatic.setArg(a++, _electrostaticcells.width);
+        _kernelelectrostatic.setArg(a++, _electrostaticcells.ncells);
+        // A network with no spring has no spring buffer at all (OpenCL rejects
+        // a zero-sized one), so hand the kernel something valid and tell it not
+        // to look: the exclusion is meaningless without springs anyway.
+        _kernelelectrostatic.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
+        _kernelelectrostatic.setArg(a++, _inSpringIndexesBuffer);
+        _kernelelectrostatic.setArg(a++, springsenabled);
+        _kernelelectrostatic.setArg(a++, getElectrostaticCutoff());
+        _kernelelectrostatic.setArg(a++, getForceField()->getDielectric());
+        _kernelelectrostatic.setArg(a++, static_cast<float>(
+            biospring::forcefield::MINIMAL_DISTANCE_ELECTROSTATIC_CUTOFF));
+        _kernelelectrostatic.setArg(a++, static_cast<float>(4.0 * biospring::forcefield::PI));
+        _kernelelectrostatic.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_ELECTROSTATIC_FORCE_CONVERT));
+        _kernelelectrostatic.setArg(a++, getForceField()->getCoulombScale());
+        _kernelelectrostatic.setArg(a++, _nbparticlesocl);
+
+        _err = _queue.enqueueNDRangeKernel(_kernelelectrostatic, cl::NullRange,
+                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(electrostatic)");
+        _event.wait();
+        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+        electrostatictime += (endTime - startTime) * 1.0E-9;
+        }
 
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
     _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
@@ -592,8 +648,9 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+electrostatictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
+	         <<", electrostatic: "<<electrostatictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
 	SpringNetwork::endRun();
@@ -957,10 +1014,10 @@ void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 
 void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	{
-	// biospring.cl has four kernels: spring, damping, external, integration.
-	// Everything else a .msp can switch on is simply not evaluated on this
-	// path, and used to be so without a word -- the run looked like the CPU's
-	// and was a different model.
+	// biospring.cl evaluates springs, Coulomb, damping, external forces and the
+	// integration. Everything else a .msp can switch on is simply not computed
+	// on this path, and used to be so without a word -- the run looked like the
+	// CPU's and was a different model.
 	std::string ignored;
 	const auto add = [&ignored](const char * name) {
 		if (!ignored.empty())
@@ -968,7 +1025,6 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 		ignored += name;
 	};
 	if (isStericEnabled())          add("steric");
-	if (isAnyElectrostaticEnabled()) add("coulomb");
 	if (isHydrophobicityEnabled())  add("hydrophobicity");
 	if (isIMPEnabled())             add("impala");
 	if (isInsertionVectorEnabled()) add("insertionvector");
@@ -977,9 +1033,22 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	if (!ignored.empty())
 		biospring::logging::warning(
 		    "OpenCL backend: %s enabled in the configuration but NOT evaluated on the device -- "
-		    "it computes springs, damping, external forces and the integration, nothing else. "
-		    "The reported energies cover only what it evaluated.",
+		    "it computes springs, Coulomb, damping, external forces and the integration, nothing "
+		    "else. The reported energies cover only what it evaluated.",
 		    ignored.c_str());
+
+	// The combination that does not merely differ from the CPU but cannot work.
+	// Coulomb is the only long-range attraction here, and steric is the only
+	// thing that stops two opposite charges reaching r = 0, where 1/r^2 is
+	// unbounded. AMBER's hydroxyl hydrogens have no Lennard-Jones term of their
+	// own at all, which is why the force field gives them a floor -- and that
+	// floor is part of steric, so on this path it does not exist. Example 072
+	// takes about 200 steps to reach 5e5 kJ.mol-1 this way.
+	if (isAnyElectrostaticEnabled() && isStericEnabled())
+		biospring::logging::warning(
+		    "OpenCL backend: coulomb runs here but steric does not, and steric is what keeps two "
+		    "opposite charges from reaching r = 0. Expect the structure to collapse; this is not a "
+		    "model you can compare with the CPU's.");
 	}
 
 
@@ -1141,6 +1210,14 @@ void SpringNetworkOpenCL::computeOpenCLPositions()
 // Particle::_integrateForce does. Before this buffer existed it did not, so
 // the GPU integrated every particle as if it weighed 1 Da -- invisible on a
 // toy system where that is true, wrong on any real structure.
+void SpringNetworkOpenCL::computeOpenCLCharges()
+	{
+	delete[] _particlecharges;
+	_particlecharges = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		_particlecharges[i] = SpringNetwork::getParticle(i).getCharge();
+	}
+
 void SpringNetworkOpenCL::computeOpenCLMasses()
 	{
 	delete[] _particlemasses;

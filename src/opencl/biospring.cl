@@ -150,6 +150,103 @@ __kernel void spring(const __global float4 * positions,
 	}
 
 
+// Is `other` joined to `self` by a spring?
+//
+// The exclusion the CPU makes in Particle::addElectrostaticForce, guarded by
+// spring.enable there and by `springsenabled` here. It is not optional: the
+// mesh puts bonded atoms 1 to 1.5 A apart with opposite partial charges, and
+// a Coulomb term that sees them pulls with hundreds of kJ.mol-1.A-1 on pairs
+// a spring is already holding.
+//
+// The spring CSR is already on the device for the spring kernel, so this costs
+// a walk over the four to ten springs a particle has.
+inline bool biospring_sprung_together(const __global Springocl * springs,
+                                      const __global int * springoffsets,
+                                      const uint self, const uint other)
+	{
+	const int begin = springoffsets[self];
+	const int end = springoffsets[self + 1];
+	for (int i = begin; i < end; i++)
+		if (springs[i].id2 == other)
+			return true;
+	return false;
+	}
+
+
+// Coulomb, gathered over the cell list.
+//
+// Work item tid owns particle tid and is the only writer of forces[tid], so no
+// atomics and no deferred second pass. Each pair is therefore evaluated twice,
+// once from each end -- the CPU evaluates it once and hands the other half over
+// (see the deferred scratch in Particle::addElectrostaticForce), which is the
+// right trade on a core and the wrong one on a device, where the arithmetic is
+// cheaper than the bookkeeping.
+//
+// `cellwidth` is the grid's, which may be WIDER than `cutoff` (see
+// _measureCellGrid): the stencil then covers more than asked and the distance
+// test below drops the surplus. Reading the cutoff from the grid instead would
+// silently extend the term's range.
+__kernel void electrostatic(const __global float4 * positions,
+                            const __global float * charges,
+                            __global float4 * forces,
+                            const __global uint * cellhead,
+                            const __global uint * nextincell,
+                            const float4 origin, const float cellwidth, const int4 ncells,
+                            const __global Springocl * springs,
+                            const __global int * springoffsets,
+                            const int springsenabled,
+                            const float cutoff, const float dielectric, const float mindistance,
+                            const float fourpi, const float convert, const float coulombscale,
+                            const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	const float4 here = positions[tid];
+	const float q = charges[tid];
+	const float cutoffsq = cutoff * cutoff;
+
+	const int cx = (int)floor((here.x - origin.x) / cellwidth);
+	const int cy = (int)floor((here.y - origin.y) / cellwidth);
+	const int cz = (int)floor((here.z - origin.z) / cellwidth);
+
+	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
+
+	for (int dz = -1; dz <= 1; dz++)
+		for (int dy = -1; dy <= 1; dy++)
+			for (int dx = -1; dx <= 1; dx++)
+				{
+				const int x = cx + dx, y = cy + dy, z = cz + dz;
+				// Nothing is periodic here: a stencil cell outside the grid is
+				// absent, never the cell on the opposite face.
+				if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)
+					continue;
+
+				const uint cell = (uint)((z * ncells.y + y) * ncells.x + x);
+				for (uint p = cellhead[cell]; p != BIOSPRING_EMPTY_CELL; p = nextincell[p])
+					{
+					if (p == tid)
+						continue;
+
+					float3 axis = positions[p].xyz - here.xyz;
+					const float distsq = axis.x * axis.x + axis.y * axis.y + axis.z * axis.z;
+					if (distsq > cutoffsq || distsq == 0.0f)
+						continue;
+
+					if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+						continue;
+
+					const float dist = sqrt(distsq);
+					const float module = biospring_electrostatic_force_module(
+					    charges[p], q, dist, dielectric, mindistance, fourpi, convert);
+					sum += (axis / dist) * (coulombscale * module);
+					}
+				}
+
+	forces[tid].xyz += sum;
+	}
+
+
 __kernel void damping(__global float4 * forces,   const __global float4 * velocities, float damping, const uint N)
 	{
 	size_t tid = get_global_id(0);

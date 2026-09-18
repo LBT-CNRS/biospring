@@ -430,3 +430,124 @@ TEST(SpringNetworkOpenCL, TooBigABoxWidensTheCellsAndStaysExact)
         ASSERT_EQ(found, expected) << "widened cells gave the wrong neighbours for particle " << i;
     }
 }
+
+// Coulomb, on the device, against the same run on the CPU.
+//
+// The two reach it by different routes -- the CPU walks its unordered_map grid
+// and evaluates each pair once, handing the other half over; the device walks
+// its cell list and evaluates each pair from both ends -- so agreeing is a
+// statement about the law and about the neighbour sets, not about shared code
+// paths. The force module itself IS shared source
+// (forcefield/shared/electrostatic_shared.h), which is what makes the residual
+// difference float32 rounding rather than a second transcription.
+//
+// ALL CHARGES THE SAME SIGN, which is not a detail. The first version of this
+// gave them both signs and no steric term, and two opposite charges fell into
+// each other: 0.274 A apart after 200 steps, where the 1/r^2 force is some 1900
+// times its value at the cutoff. From there the last bit of a float decides
+// which way the pair flies, and the two backends ended up 15 A apart on a law
+// they both computed correctly. Pure repulsion has no such singularity, so what
+// is left to disagree about is the arithmetic. The guard below keeps it that
+// way -- a test that quietly starts measuring a collapse again would go on
+// passing for a while and then fail for the wrong reason.
+namespace
+{
+void buildChargedCloud(spn::SpringNetwork & network, configuration::Configuration & config, unsigned n)
+{
+    unsigned state = 99u;
+    const auto next = [&state]() {
+        state = state * 1103515245u + 12345u;
+        return static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff);
+    };
+
+    for (unsigned i = 0; i < n; ++i)
+    {
+        spn::Particle p;
+        p.setPosition(Vector3f(next() * 25.0f - 9.0f, next() * 25.0f - 9.0f, next() * 25.0f - 9.0f));
+        p.setMass(12.0f);
+        p.setCharge(0.4f);
+        network.addParticle(p);
+    }
+    // One sprung pair, held at 1.4 A. Coulomb would throw two like charges that
+    // close apart at once, so the pair staying there is what says the exclusion
+    // ran -- on both backends, by the same measurement.
+    network.addSpring(0, 1, /*equilibrium=*/1.4f, /*stiffness=*/500.0f);
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = 200;
+    config.sim.timestep = 0.5;
+    config.spring.enable = true;
+    config.spring.scale = 1.0;
+    config.viscosity.enable = true;
+    config.viscosity.value = 1.0;
+    config.steric.enable = false;
+    config.hydrophobicity.enable = false;
+    config.electrostatic.enable = true;
+    config.electrostatic.scale = 1.0;
+    config.electrostatic.cutoff = 12.0;
+
+    network.setup(config);
+}
+
+float closestPair(const spn::SpringNetwork & network)
+{
+    float closest = 1.0e9f;
+    for (unsigned i = 0; i < network.getNumberOfParticles(); ++i)
+        for (unsigned j = i + 1; j < network.getNumberOfParticles(); ++j)
+            closest = std::min(closest,
+                (network.getParticle(i).getPosition() - network.getParticle(j).getPosition()).norm());
+    return closest;
+}
+} // namespace
+
+TEST(SpringNetworkOpenCL, CoulombMatchesTheCPU)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 300;
+
+    spn::SpringNetwork cpu;
+    configuration::Configuration cpuconfig;
+    buildChargedCloud(cpu, cpuconfig, N);
+    cpu.run();
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration gpuconfig;
+    buildChargedCloud(gpu, gpuconfig, N);
+    gpu.run();
+
+    // Two backends that both did nothing would agree perfectly and mean
+    // nothing, so check the cloud actually blew apart.
+    spn::SpringNetwork start;
+    configuration::Configuration startconfig;
+    buildChargedCloud(start, startconfig, N);
+    float moved = 0.0f;
+    for (unsigned i = 0; i < N; ++i)
+        moved = std::max(moved, (cpu.getParticle(i).getPosition() - start.getParticle(i).getPosition()).norm());
+    ASSERT_GT(moved, 1.0f) << "the cloud barely moved, so this comparison proves nothing";
+
+    // The sprung pair is the exclusion's witness: at 1.4 A, two 0.4 e charges
+    // repel far harder than a 500 kJ.mol-1.A-2 spring holds, so this pair
+    // stays put only if Coulomb never saw it.
+    for (const spn::SpringNetwork * net : {static_cast<const spn::SpringNetwork *>(&cpu),
+                                           static_cast<const spn::SpringNetwork *>(&gpu)})
+    {
+        const float held = (net->getParticle(0).getPosition() - net->getParticle(1).getPosition()).norm();
+        EXPECT_NEAR(held, 1.4f, 0.2f) << "the sprung pair was blown apart: Coulomb is not excluding it";
+    }
+
+    // And no OTHER pair may have collapsed, or the comparison below is
+    // measuring a singularity rather than a force law.
+    EXPECT_GT(closestPair(cpu), 1.0f) << "a pair collapsed on the CPU; this test is no longer about the law";
+    EXPECT_GT(closestPair(gpu), 1.0f) << "a pair collapsed on the GPU; this test is no longer about the law";
+
+    float worst = 0.0f;
+    for (unsigned i = 0; i < N; ++i)
+        worst = std::max(worst, (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
+
+    // Loose enough for float32 against float64 and a different summation order
+    // over 200 steps, tight enough that a missing exclusion or a sign error
+    // cannot hide.
+    EXPECT_LT(worst, 0.05f) << "the GPU's Coulomb ended up " << worst << " A from the CPU's";
+}
