@@ -35,6 +35,11 @@ void ForceFieldReader::read()
     float transfer = 0.0;
     float hydrophobicity = 0.0;
 
+    // A .ff file has seven columns. Six is still read, for files written before
+    // the seventh existed, but it is reported: see the warning after the loop.
+    size_t sixcolumnlines = 0;
+    size_t firstsixcolumnline = 0;
+
     std::string buffer;
     size_t lineid = 0;
     while (_instream)
@@ -59,8 +64,22 @@ void ForceFieldReader::read()
             mass = getFloat(tokens[4], "mass", lineid);
             transfer = getFloat(tokens[5], "transfert", lineid);
 
+            // Assigned on every line, not only on a seven-column one. Left to
+            // carry over, a six-column line would silently inherit the
+            // hydrophobicity of whichever seven-column line came before it --
+            // and the warning below would then be telling the truth about the
+            // column and a lie about the value.
             if (tokens.size() == 7)
+            {
                 hydrophobicity = getFloat(tokens[6], "hydrophobicity", lineid);
+            }
+            else
+            {
+                hydrophobicity = 0.0;
+                if (sixcolumnlines == 0)
+                    firstsixcolumnline = lineid;
+                sixcolumnlines++;
+            }
 
             biospring::spn::ParticleProperty pp;
 
@@ -73,5 +92,18 @@ void ForceFieldReader::read()
             _forcefield.addPropertiesFromName(name, pp);
         }
     }
+
+    // Once per file rather than once per line: a six-column file is six-column
+    // throughout, and 337 identical warnings would bury everything else.
+    if (sixcolumnlines > 0)
+    {
+        biospring::logging::warning(
+            "ForcefieldReader: %s: %d line(s) carry 6 columns instead of 7, the first at line %d. The "
+            "missing column is Hydrophobicity, which feeds the pairwise hydrophobic term "
+            "(hydrophobicity.enable); it is taken as 0, so that term does nothing for those types. "
+            "transferIMP, the sixth column, is a different model (IMPALA) and is unaffected.",
+            getFileName().c_str(), sixcolumnlines, firstsixcolumnline);
+    }
+
     close();
 }
