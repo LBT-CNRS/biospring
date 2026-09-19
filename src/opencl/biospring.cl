@@ -402,6 +402,47 @@ __kernel void hydrophobic(const __global float4 * positions,
 
 
 // Tabulated torsions, gathered per particle.
+// IMPALA: the implicit membrane, as a force on each particle's accessible
+// surface.
+//
+// ONE BODY, no neighbour walk: the membrane is a profile in z and each particle
+// answers to it alone. That makes this the cheapest kernel here and the one
+// whose cost is exactly proportional to the particle count.
+//
+// WHAT IT NEEDS THAT THE OTHER TERMS DO NOT: a solvent-accessible surface per
+// particle. That is why impala.enable implies --sasa. This kernel is written
+// for the STATIC surface -- computed once at setup and constant afterwards, as
+// examples 052 and 054 arrange by injecting it into the CDL. When FreeSASA
+// runs in its dynamic mode the surface changes during the run and the host has
+// to re-upload it; see SpringNetworkOpenCL::computeOpenCLSurfaces.
+//
+// FLAT SINGLE MEMBRANE ONLY. imp.hpp also carries a double membrane with a tube
+// curvature on each, reachable only from an MDDriver client (the "dmou",
+// "dmol" and "dmtc" custom data). That is not a parameterisation of this one:
+// measured, the general branch returns exactly TWICE this one when its
+// parameters are set to zero, because the lower membrane then coincides with
+// the upper and is counted again. So the host does not run this kernel at all
+// once any of the four is non-zero -- it cannot approximate a model it is not.
+__kernel void impala(const __global float4 * positions,
+                     const __global float * surfaces,
+                     const __global float * transfers,
+                     __global float4 * forces,
+                     const float alip, const float alpha, const float z0,
+                     const float convert, const float impscale,
+                     const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	const float surface = surfaces[tid];
+	if (surface == 0.0f) return;        // no surface, no term -- and most beads of a
+	                                    // network built without --sasa are in that case
+
+	const float fz = biospring_imp_force_z(positions[tid].z, surface, transfers[tid],
+	                                       alip, alpha, z0, convert);
+	forces[tid].z += fz * impscale;
+	}
+
 // The precomputed electrostatic potential map (APBS/OpenDX), as a force on each
 // charge.
 //

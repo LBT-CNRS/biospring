@@ -1,6 +1,9 @@
 #ifndef __IMP_ENERGY_HPP__
 #define __IMP_ENERGY_HPP__
 
+// Vector3f is used below and was not included: this header only compiled when
+// something before it had already pulled it in.
+#include "Vector3f.h"
 #include "../constants.hpp"
 
 #include <cmath>
@@ -72,11 +75,33 @@ inline float imp_energy(float x, float y, float z,
     double lipid_upper = ALIP * surface * cz_upper;
     double lipid_lower = ALIP * surface * cz_lower;
 
-        // If simple flat membrane
-    if (uppermemboffset == 0.0 && lowermemboffset == 0.0 && uppermembtubecurv == 0.0 && lowermembtubecurv == 0.0)
-        return hydro_upper + lipid_upper;
-    else // Double membrane
-        return hydro_upper + lipid_upper + hydro_lower + lipid_lower;
+        // Which membranes are actually there.
+    //
+    // A membrane whose offset AND curvature are both zero is not a membrane
+    // sitting at z = 0, it is an absent one. The previous test asked only
+    // whether ALL FOUR parameters were zero, so the moment a client nudged one
+    // of them the other membrane -- still at zero, still flat -- started
+    // contributing as well, and it contributes the SAME profile: with
+    // lowermembtubecurv = 0 the code sets z_lower = z, and with
+    // lowermemboffset = 0 that makes cz_lower bit-identical to cz_upper.
+    //
+    // The result was a jump by a factor of exactly two on both the energy and
+    // the force, the instant an offset left zero -- measured at 1e-30 A, long
+    // before the two membranes are physically distinct.
+    //
+    // With all four at zero, which is every batch run, the upper one is the
+    // single flat membrane and this reduces to what it always returned.
+    const bool anyset = uppermemboffset != 0.0 || lowermemboffset != 0.0 ||
+                        uppermembtubecurv != 0.0 || lowermembtubecurv != 0.0;
+    const bool upper_present = !anyset || uppermemboffset != 0.0 || uppermembtubecurv != 0.0;
+    const bool lower_present = lowermemboffset != 0.0 || lowermembtubecurv != 0.0;
+
+    double total = 0.0;
+    if (upper_present)
+        total += hydro_upper + lipid_upper;
+    if (lower_present)
+        total += hydro_lower + lipid_lower;
+    return total;
 }
 
 /// @brief Compute IMPALA force module (double membrane version)
@@ -155,11 +180,33 @@ inline Vector3f imp_force_vector(float x, float y, float z,
     Vector3f force_module_upper = v_upper_dir * ((hydro_upper + lipid_upper) * GLOBAL_IMP_FORCE_CONVERT);
     Vector3f force_module_lower = v_lower_dir * ((hydro_lower + lipid_lower) * GLOBAL_IMP_FORCE_CONVERT);
 
-    // If simple flat membrane
-    if (uppermemboffset == 0.0 && lowermemboffset == 0.0 && uppermembtubecurv == 0.0 && lowermembtubecurv == 0.0)
-        return force_module_upper;
-    else // Double membrane
-        return force_module_upper + force_module_lower;
+    // Which membranes are actually there.
+    //
+    // A membrane whose offset AND curvature are both zero is not a membrane
+    // sitting at z = 0, it is an absent one. The previous test asked only
+    // whether ALL FOUR parameters were zero, so the moment a client nudged one
+    // of them the other membrane -- still at zero, still flat -- started
+    // contributing as well, and it contributes the SAME profile: with
+    // lowermembtubecurv = 0 the code sets z_lower = z, and with
+    // lowermemboffset = 0 that makes cz_lower bit-identical to cz_upper.
+    //
+    // The result was a jump by a factor of exactly two on both the energy and
+    // the force, the instant an offset left zero -- measured at 1e-30 A, long
+    // before the two membranes are physically distinct.
+    //
+    // With all four at zero, which is every batch run, the upper one is the
+    // single flat membrane and this reduces to what it always returned.
+    const bool anyset = uppermemboffset != 0.0 || lowermemboffset != 0.0 ||
+                        uppermembtubecurv != 0.0 || lowermembtubecurv != 0.0;
+    const bool upper_present = !anyset || uppermemboffset != 0.0 || uppermembtubecurv != 0.0;
+    const bool lower_present = lowermemboffset != 0.0 || lowermembtubecurv != 0.0;
+
+    Vector3f total = Vector3f(0.0f, 0.0f, 0.0f);
+    if (upper_present)
+        total = total + force_module_upper;
+    if (lower_present)
+        total = total + force_module_lower;
+    return total;
 }
 
 } // namespace forcefield

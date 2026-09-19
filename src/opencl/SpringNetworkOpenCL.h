@@ -187,6 +187,16 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inEpsilonBuffer;
 		cl::Buffer _inHydrophobicityBuffer;
 
+		// IMPALA's two per-particle inputs: the solvent-accessible surface in A2
+		// and the transfer energy PER UNIT of that surface in kJ.mol-1.A-2 (the
+		// .ff's sixth column -- not the seventh, which is the pairwise
+		// hydrophobic term). Uploaded once, since this port covers the STATIC
+		// surface; a dynamic FreeSASA would have to re-upload _particlesurfaces.
+		cl::Buffer _inSurfaceBuffer;
+		cl::Buffer _inTransferBuffer;
+		float * _particlesurfaces = nullptr;
+		float * _particletransfers = nullptr;
+
 		// The precomputed electrostatic potential map, flattened row-major, one
 		// float4 per cell: potential in .x, the field PotentialGrid::
 		// compute_gradient already derived in .yzw.
@@ -245,6 +255,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelsteric;
 		cl::Kernel _kernelhydrophobic;
 		cl::Kernel _kernelelectrostaticfield;
+		cl::Kernel _kernelimpala;
 
 		// The kernels of one step, with the timer each one feeds, queried after
 		// the step's single synchronisation instead of one at a time.
@@ -325,6 +336,13 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// Flattens the .dx potential map into _electrostaticgridcells and fills
 		// the frame beside it. Called once: the map never changes.
 		void computeOpenCLElectrostaticGrid();
+		// Fills _particlesurfaces and _particletransfers, IMPALA's per-particle
+		// inputs. Called once: this port covers the static surface.
+		void computeOpenCLSurfaces();
+		// True when the membrane is the flat single one the kernel implements.
+		// The four geometry parameters default to 0 and only an MDDriver client
+		// can change them, mid-run, so this is re-read every step.
+		bool _membraneIsFlat() const;
 		void computeOpenCLTorsions();
 
 		// Which families the .msp turns on, as the bitmask the kernel takes.

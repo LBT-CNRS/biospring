@@ -12,6 +12,7 @@ set(TEST_MODULES
     hydrophobic-energy
     spring-energy
     offgrid-force
+    impala-law
 )
 
 foreach(MODULE ${TEST_CLI_MODULES})

@@ -161,6 +161,9 @@ class SpringNetwork
     void setSASATotal(double sasa_total) {_freesasaState.sasaTotal = sasa_total;}
     double getSASATotal() const { return _freesasaState.sasaTotal; }
     void isFreeSASADynamic(bool isdyn) {_freesasaState.isDynamic = isdyn;}
+    // True when FreeSASA recomputes the surface during the run rather than once
+    // at setup. The OpenCL backend uploads the surface once, so it needs to know.
+    bool isFreeSASADynamic() const { return _freesasaState.isDynamic; }
 
     // ================================================================================
     // Returns frame rate (read-only).

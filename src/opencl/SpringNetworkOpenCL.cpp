@@ -2,6 +2,7 @@
 
 
 
+#include "forcefield/energy/imp.hpp"
 #include "SpringNetworkOpenCL.h"
 #include "IO/PDBTrajectoryWriter.h"
 #include "IO/CSVSampleWriter.h"
@@ -255,6 +256,22 @@ void SpringNetworkOpenCL::createBuffer()
 								 &_err);
 		checkErr( "Buffer::Buffer() hydrophobicity");
 
+		_inSurfaceBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(float)*_nbparticlesocl,
+								 _particlesurfaces,
+								 &_err);
+		checkErr( "Buffer::Buffer() surface");
+
+		_inTransferBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(float)*_nbparticlesocl,
+								 _particletransfers,
+								 &_err);
+		checkErr( "Buffer::Buffer() transfer");
+
 		// Only when a .dx was actually read: OpenCL rejects a zero-sized buffer,
 		// and a run without electrostaticgrid.enable has no map at all.
 		if (_electrostaticgridcellcount > 0)
@@ -462,6 +479,8 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kernelelectrostaticfield = cl::Kernel(_program, "electrostaticfield", &_err);
 	checkErr("Kernel::Kernel()");
+	_kernelimpala = cl::Kernel(_program, "impala", &_err);
+	checkErr("Kernel::Kernel()");
 	_kerneltorsion = cl::Kernel(_program, "torsion", &_err);
 	checkErr("Kernel::Kernel()");
 
@@ -567,6 +586,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLStericParameters();
 	computeOpenCLHydrophobicity();
 	computeOpenCLElectrostaticGrid();
+	computeOpenCLSurfaces();
 	computeOpenCLTorsions();
 	computeOpenCLDynamicState();
 	computeOpenCLSprings();
@@ -579,6 +599,7 @@ double sterictime=0.0;
 double torsiontime=0.0;
 double hydrophobictime=0.0;
 double electrostaticfieldtime=0.0;
+double impalatime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
 double externalforcetime=0.0;
@@ -810,6 +831,34 @@ void SpringNetworkOpenCL::idleRun()
 	_pendingevents.emplace_back(_event, &electrostaticfieldtime);
         }
 
+    // IMPALA. One body, no neighbour walk, and no per-step transfer: the
+    // surface was uploaded once. Skipped entirely rather than approximated when
+    // a client has curved or doubled the membrane, which is a different model
+    // and not a parameterisation of this one -- see the kernel.
+    if (isIMPEnabled() && _membraneIsFlat() && !isFreeSASADynamic())
+        {
+        const unsigned wg = WORK_GROUP_SIZE;
+        const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+
+        unsigned a = 0;
+        _kernelimpala.setArg(a++, _inoutPositionBuffer);
+        _kernelimpala.setArg(a++, _inSurfaceBuffer);
+        _kernelimpala.setArg(a++, _inTransferBuffer);
+        _kernelimpala.setArg(a++, _inoutForceBuffer);
+        _kernelimpala.setArg(a++, biospring::forcefield::ALIP);
+        _kernelimpala.setArg(a++, biospring::forcefield::ALPHA);
+        _kernelimpala.setArg(a++, biospring::forcefield::Z0);
+        _kernelimpala.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_IMP_FORCE_CONVERT));
+        _kernelimpala.setArg(a++, getForceField()->getIMPScale());
+        _kernelimpala.setArg(a++, _nbparticlesocl);
+
+        _err = _queue.enqueueNDRangeKernel(_kernelimpala, cl::NullRange,
+                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(impala)");
+        _pendingevents.emplace_back(_event, &impalatime);
+        }
+
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
     _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
                                   viscosity, _nbparticlesocl);
@@ -891,12 +940,12 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+impalatime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
 	         <<", torsion: "<<torsiontime
 	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
-	         <<", electrostaticfield: "<<electrostaticfieldtime
+	         <<", electrostaticfield: "<<electrostaticfieldtime<<", impala: "<<impalatime
 	         <<", hydrophobic: "<<hydrophobictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
@@ -1380,7 +1429,11 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 			ignored += ", ";
 		ignored += name;
 	};
-	if (isIMPEnabled())             add("impala");
+	// Evaluated now, except in the two cases the kernel does not cover.
+	if (isIMPEnabled() && !_membraneIsFlat())
+		add("impala (the membrane is curved or doubled: a different model)");
+	if (isIMPEnabled() && isFreeSASADynamic())
+		add("impala (--sasa-dynamic: the device holds the surface computed at setup)");
 	if (isInsertionVectorEnabled()) add("insertionvector");
 	if (isRigidBodyEnabled())       add("rigidbody");
 
@@ -1665,6 +1718,33 @@ void SpringNetworkOpenCL::computeOpenCLElectrostaticGrid()
 	                         "uploaded once",
 	                         _gridshape.s[0], _gridshape.s[1], _gridshape.s[2],
 	                         total * sizeof(cl_float4) / 1048576.0);
+	}
+
+void SpringNetworkOpenCL::computeOpenCLSurfaces()
+	{
+	delete[] _particlesurfaces;
+	delete[] _particletransfers;
+	_particlesurfaces = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
+	_particletransfers = _nbparticlesocl == 0 ? nullptr : new float[_nbparticlesocl];
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		{
+		const Particle & p = SpringNetwork::getParticle(i);
+		_particlesurfaces[i] = p.getSolventAccessibilitySurface();
+		_particletransfers[i] = p.getTransferEnergyByAccessibleSurface();
+		}
+	}
+
+// The four membrane parameters default to 0.0 and no .msp key reaches them;
+// only an MDDriver client can set them, through the "dmou", "dmol" and "dmtc"
+// custom data. So this is cheap to re-read every step and has to be: a client
+// can curve the membrane while the run is going.
+bool SpringNetworkOpenCL::_membraneIsFlat() const
+	{
+	const biospring::forcefield::ForceField * ff = getForceField();
+	return ff->getImpDoubleMembraneUpperMembOffset() == 0.0f &&
+	       ff->getImpDoubleMembraneLowerMembOffset() == 0.0f &&
+	       ff->getImpDoubleMembraneUpperMembTubeCurv() == 0.0f &&
+	       ff->getImpDoubleMembraneLowerMembTubeCurv() == 0.0f;
 	}
 
 void SpringNetworkOpenCL::computeOpenCLMasses()
