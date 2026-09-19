@@ -312,7 +312,10 @@ void InteractorMDDriver::syncSystemStateData()
 // of the given particle based on MDDriver-related computations.
 void InteractorMDDriver::syncParticleStateData(unsigned index)
 {
-	biospring::spn::Particle particle = _springnetwork->getParticle(index);
+	// No copy of the Particle here: this function runs once per particle per
+	// step, and a Particle carries five std::string and an unordered_map of
+	// its spring neighbours, so copying one costs a handful of allocations.
+	// The copy that used to sit here was not even read.
 	float position[3];
 	_springnetwork->getParticlePosition(index, position);
 	// Update the `positions` array for the given particle.

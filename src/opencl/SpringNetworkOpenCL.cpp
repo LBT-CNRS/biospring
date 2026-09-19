@@ -588,6 +588,7 @@ double totaltime=0.0;
 
 void SpringNetworkOpenCL::idleRun()
 	{
+	_pendingevents.clear();
 	// The spring and torsion kernels write their energy as they go, from the
 	// pre-integration positions -- which is the state the CPU reports for this
 	// step. What is NOT free is reading it back, so the flag says whether this
@@ -603,8 +604,6 @@ void SpringNetworkOpenCL::idleRun()
 	// a skin.
 	_updateCellLists();
 
-	cl_ulong startTime;
-	cl_ulong endTime;
 	#ifdef OPENGL_SUPPORT
 		glFinish();
 		// map OpenGL buffer object for writing from OpenCL
@@ -630,12 +629,7 @@ void SpringNetworkOpenCL::idleRun()
                                  _inSpringIndexesBuffer, _inoutForceBuffer,
                                  _springEnergyBuffer,
                                  _nbparticlesocl, springForceScale);
-	_event.wait();
-
-
-	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	springtime+=(endTime-startTime)*1.0E-9;
+	_pendingevents.emplace_back(_event, &springtime);
     }
 
 
@@ -668,10 +662,7 @@ void SpringNetworkOpenCL::idleRun()
         _err = _queue.enqueueNDRangeKernel(_kerneltorsion, cl::NullRange,
                                            cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
         checkErr("enqueueNDRangeKernel(torsion)");
-        _event.wait();
-        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        torsiontime += (endTime - startTime) * 1.0E-9;
+	_pendingevents.emplace_back(_event, &torsiontime);
         }
 
     // Steric, over its own cell list. Before Coulomb only because that is the
@@ -709,10 +700,7 @@ void SpringNetworkOpenCL::idleRun()
         _err = _queue.enqueueNDRangeKernel(_kernelsteric, cl::NullRange,
                                            cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
         checkErr("enqueueNDRangeKernel(steric)");
-        _event.wait();
-        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        sterictime += (endTime - startTime) * 1.0E-9;
+	_pendingevents.emplace_back(_event, &sterictime);
         }
 
     // Coulomb, over its own cell list. Skipped when the grid could not be
@@ -757,10 +745,7 @@ void SpringNetworkOpenCL::idleRun()
         _err = _queue.enqueueNDRangeKernel(_kernelelectrostatic, cl::NullRange,
                                            cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
         checkErr("enqueueNDRangeKernel(electrostatic)");
-        _event.wait();
-        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        electrostatictime += (endTime - startTime) * 1.0E-9;
+	_pendingevents.emplace_back(_event, &electrostatictime);
         }
 
     // Hydrophobic attraction, over its own cell list.
@@ -792,10 +777,7 @@ void SpringNetworkOpenCL::idleRun()
         _err = _queue.enqueueNDRangeKernel(_kernelhydrophobic, cl::NullRange,
                                            cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
         checkErr("enqueueNDRangeKernel(hydrophobic)");
-        _event.wait();
-        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        hydrophobictime += (endTime - startTime) * 1.0E-9;
+	_pendingevents.emplace_back(_event, &hydrophobictime);
         }
 
     // The precomputed potential map. No cell list and no neighbour walk: one
@@ -825,34 +807,22 @@ void SpringNetworkOpenCL::idleRun()
         _err = _queue.enqueueNDRangeKernel(_kernelelectrostaticfield, cl::NullRange,
                                            cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
         checkErr("enqueueNDRangeKernel(electrostaticfield)");
-        _event.wait();
-        startTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-        endTime = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-        electrostaticfieldtime += (endTime - startTime) * 1.0E-9;
+	_pendingevents.emplace_back(_event, &electrostaticfieldtime);
         }
 
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
     _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
                                   viscosity, _nbparticlesocl);
-	_event.wait();
-	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	dampingtime+=(endTime-startTime)*1.0E-9;
+	_pendingevents.emplace_back(_event, &dampingtime);
 
 
 	_event=_kernelfunctorexternal(_inoutForceBuffer,_inExternalForceBuffer,_nbparticlesocl);
-	_event.wait();
-	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	integrationtime+=(endTime-startTime)*1.0E-9;
+	_pendingevents.emplace_back(_event, &integrationtime);
 
     _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
                                       _inoutForceBuffer, _inMassBuffer, _inDynamicBuffer,
                                       getTimeStep(), _nbparticlesocl);
-	_event.wait();
-	startTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-	endTime=_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-	externalforcetime+=(endTime-startTime)*1.0E-9;
+	_pendingevents.emplace_back(_event, &externalforcetime);
 
 	_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_TRUE, 0,
         sizeof(float4) * _nbparticlesocl, _particlevelocities);
@@ -884,6 +854,16 @@ void SpringNetworkOpenCL::idleRun()
 	// Without this the GPU path computed correctly and reported the structure
 	// it started from -- every frame of every trajectory identical to the
 	// input, on a run that was doing real work.
+	// Every kernel of this step has completed -- the reads above are blocking
+	// -- so their profiling counters are all readable now.
+	for (auto & pending : _pendingevents)
+		{
+		const cl_ulong s = pending.first.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+		const cl_ulong e = pending.first.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+		*pending.second += (e - s) * 1.0E-9;
+		}
+	_pendingevents.clear();
+
 	_syncParticlesFromDevice();
 
 	// SpringNetwork::idleRun() calls _resetEnergies(), so the energies have to

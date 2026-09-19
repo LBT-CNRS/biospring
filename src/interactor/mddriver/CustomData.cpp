@@ -431,7 +431,10 @@ int CustomData::getCustomDataFromClient(char *getName, int *getSize, T **getData
 
 void CustomData::syncParticleStateData(InteractorMDDriver* imdl, unsigned index)
 {
-    biospring::spn::Particle particle = imdl->getSpringNetwork()->getParticle(index);
+    // By reference: this reads three scalars, and copying a Particle costs
+    // five std::string and an unordered_map of spring neighbours -- once per
+    // particle per step. See InteractorMDDriver::syncParticleStateData.
+    const biospring::spn::Particle & particle = imdl->getSpringNetwork()->getParticle(index);
     // Update sasa array for the given particle
 	float sasa = particle.getSolventAccessibilitySurface();
 	float* sasaArray = imdl->floatManager.get("sasa").getData();

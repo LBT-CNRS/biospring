@@ -245,6 +245,18 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelsteric;
 		cl::Kernel _kernelhydrophobic;
 		cl::Kernel _kernelelectrostaticfield;
+
+		// The kernels of one step, with the timer each one feeds, queried after
+		// the step's single synchronisation instead of one at a time.
+		//
+		// The queue is in-order (created with CL_QUEUE_PROFILING_ENABLE alone),
+		// so a kernel cannot start before its predecessor has finished and the
+		// waits bought nothing: nine cl::Event::wait() and eighteen
+		// getProfilingInfo() per step, blocking the host each time, for 0.27 ms
+		// of actual kernel work on a 25069-particle system. Profiling info is
+		// readable once an event has completed, which the blocking read at the
+		// end of the step guarantees for all of them.
+		std::vector<std::pair<cl::Event, double *>> _pendingevents;
 		cl::Kernel _kerneltorsion;
 
 		cl::KernelFunctor _kernelfunctorspring;
