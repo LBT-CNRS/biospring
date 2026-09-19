@@ -2,6 +2,9 @@
 
 
 
+#if defined(__APPLE__)
+#include <mach/mach_time.h>
+#endif
 #include "forcefield/energy/imp.hpp"
 #include "SpringNetworkOpenCL.h"
 #include "IO/PDBTrajectoryWriter.h"
@@ -399,6 +402,16 @@ void SpringNetworkOpenCL::createBuffer()
 	_queue=cl::CommandQueue(_context, _devices[0], CL_QUEUE_PROFILING_ENABLE, &_err);
 	checkErr("CommandQueue::CommandQueue()");
 
+	// See _profilingtickns: Apple's profiling timestamps are mach ticks, not
+	// nanoseconds.
+	#if defined(__APPLE__)
+		{
+		mach_timebase_info_data_t timebase;
+		if (mach_timebase_info(&timebase) == KERN_SUCCESS && timebase.denom != 0)
+			_profilingtickns = static_cast<double>(timebase.numer) / timebase.denom;
+		}
+	#endif
+
 	// The kernel text is compiled into the binary (see KernelSource.h), so
 	// there is nothing to find on disk and nothing that depends on the
 	// directory biospring was launched from.
@@ -630,6 +643,7 @@ double hydrophobictime=0.0;
 double electrostaticfieldtime=0.0;
 double densityfieldtime=0.0;
 double probetime=0.0;
+double celllisttime=0.0;
 double impalatime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
@@ -1026,7 +1040,7 @@ void SpringNetworkOpenCL::idleRun()
 		{
 		const cl_ulong s = pending.first.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 		const cl_ulong e = pending.first.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-		*pending.second += (e - s) * 1.0E-9;
+		*pending.second += (e - s) * _profilingtickns * 1.0E-9;
 		}
 	_pendingevents.clear();
 
@@ -1086,12 +1100,12 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+densityfieldtime+probetime+impalatime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+densityfieldtime+probetime+celllisttime+impalatime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
 	         <<", torsion: "<<torsiontime
 	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
-	         <<", electrostaticfield: "<<electrostaticfieldtime<<", densityfield: "<<densityfieldtime<<", probe: "<<probetime<<", impala: "<<impalatime
+	         <<", electrostaticfield: "<<electrostaticfieldtime<<", densityfield: "<<densityfieldtime<<", probe: "<<probetime<<", listes de cellules: "<<celllisttime<<", impala: "<<impalatime
 	         <<", hydrophobic: "<<hydrophobictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
@@ -1284,8 +1298,9 @@ void SpringNetworkOpenCL::_binParticlesIntoCells(CellGrid & grid)
 	_kernelblankcells.setArg(0, grid.ncellstotal);
 	_kernelblankcells.setArg(1, grid.headbuffer);
 	_err = _queue.enqueueNDRangeKernel(_kernelblankcells, cl::NullRange,
-	                                   cl::NDRange(cellglobal), cl::NDRange(wg));
+	                                   cl::NDRange(cellglobal), cl::NDRange(wg), NULL, &_event);
 	checkErr("enqueueNDRangeKernel(blankCells)");
+	_pendingevents.emplace_back(_event, &celllisttime);
 
 	const unsigned partglobal = (_nbparticlesocl / wg) * wg + wg;
 	_kernelbinparticles.setArg(0, _inoutPositionBuffer);
@@ -1296,8 +1311,9 @@ void SpringNetworkOpenCL::_binParticlesIntoCells(CellGrid & grid)
 	_kernelbinparticles.setArg(5, grid.nextbuffer);
 	_kernelbinparticles.setArg(6, _nbparticlesocl);
 	_err = _queue.enqueueNDRangeKernel(_kernelbinparticles, cl::NullRange,
-	                                   cl::NDRange(partglobal), cl::NDRange(wg));
+	                                   cl::NDRange(partglobal), cl::NDRange(wg), NULL, &_event);
 	checkErr("enqueueNDRangeKernel(binParticles)");
+	_pendingevents.emplace_back(_event, &celllisttime);
 	}
 
 

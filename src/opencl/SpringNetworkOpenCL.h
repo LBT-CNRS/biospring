@@ -277,6 +277,22 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelprobegather;
 		cl::Kernel _kernelimpala;
 
+		// What one unit of a profiling timestamp is worth, in nanoseconds.
+		//
+		// OpenCL says those timestamps ARE nanoseconds. Apple's implementation
+		// returns mach ticks instead, and on Apple Silicon a tick is
+		// mach_timebase_info's 125/3 = 41.6667 ns, the 24 MHz timebase. Taking
+		// them for nanoseconds under-reports every kernel by that factor --
+		// measured 41.8 to 42.1 against a host clock on a kernel whose duration
+		// was varied over three orders of magnitude, and it is why the kernels
+		// looked like 0.9% of a step when they are most of it.
+		//
+		// CL_DEVICE_PROFILING_TIMER_RESOLUTION does not help: this device
+		// answers 1000 ns, which is neither the resolution nor the unit.
+		//
+		// 1.0 anywhere else, where the spec is followed.
+		double _profilingtickns = 1.0;
+
 		// The kernels of one step, with the timer each one feeds, queried after
 		// the step's single synchronisation instead of one at a time.
 		//
