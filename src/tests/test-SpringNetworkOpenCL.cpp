@@ -275,9 +275,9 @@ void buildParticleCloud(spn::SpringNetwork & network, configuration::Configurati
     config.sim.timestep = 0.1;
     config.spring.enable = false;
 
-    // Three terms, three DIFFERENT cutoffs. That is the whole point of a grid
-    // per term: the cell width is the cutoff, so a single grid at the longest
-    // of them makes the shortest term walk eight times the volume it needs.
+    // Three terms, three DIFFERENT cutoffs, which is what makes the shared
+    // grid worth testing: one set of bins has to answer all three, and only
+    // the stencil radius tells them apart.
     config.steric.enable = true;
     config.steric.cutoff = 6.0;
     config.electrostatic.enable = true;

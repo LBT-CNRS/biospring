@@ -1429,13 +1429,14 @@ bool SpringNetworkOpenCL::_buildCellList(CellGrid & grid, float width)
 	}
 
 
-// The 3x3x3 stencil around a particle's own cell, filtered to `cutoff`.
+// The stencil around a particle's own cell, at the radius `cutoff` asks of the
+// grid's width, filtered to `cutoff`.
 //
-// A cell is a box of side `cutoff` and a cutoff is a sphere of radius `cutoff`,
-// so the stencil is necessary and not sufficient: everything within the cutoff
-// is in one of the 27 cells, and some of what is in them is beyond it. The
-// distance test is what makes the answer exact, and a force kernel has to make
-// the same one.
+// A stencil is a box and a cutoff is a ball, so the stencil is necessary and
+// not sufficient: everything within the cutoff is in one of its cells, and some
+// of what is in them is beyond it. The distance test is what makes the answer
+// exact, and a force kernel has to make the same one -- which is why this walks
+// the cells exactly as the kernels do, down to the corner test.
 std::vector<unsigned> SpringNetworkOpenCL::neighborsFromCellList(const CellGrid & grid, unsigned i,
                                                                 float cutoff)
 	{

@@ -92,11 +92,19 @@ class SpringNetwork
         using Searcher = nsearch::NeighborSearch<Container>;
         using SearcherPtr = std::unique_ptr<Searcher>;
 
+        // Three searchers, and NOT for the reason the device used to have three
+        // grids. They differ by which particles they bin, not by how the space
+        // is cut: steric holds every particle, electrostatic only the charged
+        // ones and hydrophobic only the hydrophobic ones, so each walks a
+        // shorter list than a merged grid would hand it.
+        //
+        // The cell width is the same for all three -- getCellWidth() -- so they
+        // do cut the space identically; merging them would only trade a binning
+        // pass for a charge test on every candidate, which is the wrong way
+        // round.
         SearcherPtr steric;
         SearcherPtr electrostatic;
         SearcherPtr hydrophobic;
-
-        // Shared grid holding every donor AND acceptor particle together
     };
 
     static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,

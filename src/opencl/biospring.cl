@@ -16,12 +16,14 @@ typedef struct{
 // particles close enough to matter. The CPU answers it with an infinite grid of
 // cells (nsearch.hpp); this is the device's version of the same structure.
 //
-// ONE GRID PER TERM, not one shared. The cell width IS the cutoff, and the
-// three cutoffs differ -- steric 8 A, electrostatic 16, hydrophobicity 15 by
-// default -- so a shared grid at the longest of them would make the shortest
-// term walk the longest one's volume, eight times the candidates for the same
-// answer. The kernels below take the frame as arguments for exactly that
-// reason: the same code bins into whichever grid it is handed.
+// ONE GRID, SHARED, and cells narrower than any cutoff. What separates the
+// terms is the stencil radius each kernel is handed -- how many cells out of
+// its own it walks -- and not the width of a cell. See
+// shared/cellgrid_shared.h, which is where that arithmetic lives and which the
+// host compiles too: the two backends have to walk the same cells.
+//
+// The kernels still take the frame as arguments rather than reading a global,
+// so the same code bins into and walks whichever grid it is handed.
 //
 // Built as a linked list per cell rather than a sorted array, after the method
 // in Marcus Bannerman's OpenCL course (exercise 3, "sorting particles"): each

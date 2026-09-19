@@ -324,15 +324,14 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// biospring.cl for the structure: a linked list per cell, after
 		// Bannerman's exercise 3.
 		//
-		// ONE PER TERM, because the cell width IS the cutoff and the three
-		// cutoffs differ -- steric 8 A, electrostatic 16, hydrophobicity 15 by
-		// default. A single grid at the longest of them would make the shortest
-		// term walk the longest one's volume: 27 cells of 16 A is 110592 A^3
-		// against 13824, so at protein density the steric term would sift some
-		// 7400 candidates to find the ~144 within its own 8 A. Eight times the
-		// work for the same answer. Binning is O(N) with one atomic, walking is
-		// O(N x candidates), so a second bin pass is the cheap side of that
-		// trade.
+		// ONE, for every non-bonded term at once. There used to be one each,
+		// because the cell width was the cutoff and the cutoffs differ --
+		// steric 8 A, electrostatic 16, hydrophobicity 15 by default -- so a
+		// shared grid meant a shared cutoff, and the shortest term would have
+		// walked the longest one's volume. Once the width is its own number
+		// (forcefield/shared/cellgrid_shared.h) the terms differ by their
+		// stencil radius instead, which costs one integer rather than a grid,
+		// a ranging and a binning pass each.
 		//
 		// Must match BIOSPRING_EMPTY_CELL in biospring.cl.
 		static const unsigned EMPTY_CELL = static_cast<unsigned>(-1);
