@@ -915,6 +915,20 @@ void SpringNetworkOpenCL::idleRun()
 
 	_syncParticlesFromDevice();
 
+	// The insertion vector is a MEASUREMENT, not a force: it reads two
+	// particles and reports how deep and at what angle the structure sits in
+	// the membrane. The CPU updates it at the end of SpringNetwork::
+	// computeStep(), which this backend replaces, so on the device it was never
+	// updated at all and every frame reported the angle and depth of the
+	// initial structure. Here, right after the positions come back, is the same
+	// point of the step the CPU uses.
+	//
+	// It is also the observable IMPALA is judged on: bead positions say whether
+	// two backends agree, the insertion angle and depth say whether the membrane
+	// term did what it is for.
+	if (isInsertionVectorEnabled())
+		_updateInsertionVector();
+
 	// SpringNetwork::idleRun() calls _resetEnergies(), so the energies have to
 	// be filled after it, not before.
 	SpringNetwork::idleRun();
@@ -1470,6 +1484,13 @@ void SpringNetworkOpenCL::_displayFrameData()
 		{
 		biospring::logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
 		biospring::logging::info("Dihedral energy: %5.2f kJ.mol-1", _energies.dihedral);
+		}
+	// Measurements rather than energies, and the ones an IMPALA run is read on.
+	if (isInsertionVectorEnabled() && _insertionVector)
+		{
+		biospring::logging::info("Insertion angle: %5.2lf °", _insertionVector->getAngle());
+		biospring::logging::info("Roll angle: %5.2lf °", _insertionVector->getRollAngle());
+		biospring::logging::info("Insertion depth: %5.2lf.", _insertionVector->getInsertionDepth());
 		}
 	}
 
