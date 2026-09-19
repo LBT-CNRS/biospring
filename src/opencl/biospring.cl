@@ -450,9 +450,7 @@ __kernel void impala(const __global float4 * positions,
 // read from the .dx once in SpringNetwork::_setupElectrostatic and nothing
 // changes it afterwards, not even MDDriver. So it is uploaded once and never
 // transferred again, and the eleven examples that carry a .dx stop needing the
-// host in their step at all -- which without this kernel they did not get
-// either, because the term simply did not exist on the device and the map was
-// silently ignored.
+// host in their step at all.
 //
 // Each cell carries the potential in .x and the field in .yzw: the gradient
 // PRECOMPUTED on the host by PotentialGrid::compute_gradient, by central
@@ -463,12 +461,17 @@ __kernel void impala(const __global float4 * positions,
 // NEAREST cell, no interpolation, because that is what the CPU does:
 // DenseGrid::at goes through cell_coordinates, which truncates towards zero.
 //
-// THE GRID IS ANISOTROPIC. Eleven of the twelve maps in the examples have a
-// different step on each axis -- 011 is 0.5895 x 0.5325 x 0.5717 A, 022 is
-// 1.3782 x 0.8902 x 0.9798 -- and the counts differ too (161 x 225 x 385 for
-// 032). Hence one inverse step per axis rather than a single cell width, and
-// the row-major index below. The delta matrix is diagonal in every one of them,
-// so no shear has to be handled; a sheared map would need more than this.
+// THE MAP IS ANISOTROPIC. Eleven of the twelve in the examples have a different
+// step on each axis -- 011 is 0.5895 x 0.5325 x 0.5717 A, 022 is 1.3782 x
+// 0.8902 x 0.9798 -- and the counts differ too (161 x 225 x 385 for 032). Hence
+// one inverse step per axis rather than a single cell width, and the row-major
+// index below. The delta matrix is diagonal in every one of them, so no shear
+// has to be handled; a sheared map would need more than this.
+//
+// The density map next door does the same lookup with its own weight and its
+// own scale. Kept as two kernels rather than one parameterised on the weight:
+// the two terms are independent, they are read separately in the timings, and
+// nothing says the laws stay identical.
 __kernel void electrostaticfield(const __global float4 * positions,
                                  const __global float * charges,
                                  __global float4 * forces,
@@ -509,6 +512,56 @@ __kernel void electrostaticfield(const __global float4 * positions,
 	const float q = charges[tid] * gridscale;
 
 	forces[tid].xyz += cell.yzw * q;
+	}
+
+// The precomputed density map, as a force on each particle's burying factor.
+//
+// The same lookup as the electrostatic map above -- same .dx format, same
+// PotentialGrid, same precomputed field, same nearest-cell rule, same
+// anisotropy, same off-grid behaviour -- with its own weight and its own scale
+// (densitygrid.scale, which is NOT the steric grid scale; see
+// SpringNetwork::getDensityGridScale).
+//
+// On the weight: ParticleProperty initialises the burying factor to 1.0 and
+// setBurying() has no caller, so today it is 1 everywhere and this kernel
+// reduces to the map times the scale. It is read per particle anyway rather
+// than assumed, so that wiring setBurying() up does not leave the device
+// behind.
+__kernel void densityfield(const __global float4 * positions,
+                           const __global float * buryings,
+                           __global float4 * forces,
+                           const __global float4 * cells,
+                           const float4 origin,
+                           const float4 invstep,
+                           const int4 shape,
+                           const float4 boxmin,
+                           const float4 boxmax,
+                           const float gridscale,
+                           const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	const float4 p = positions[tid];
+
+	// Mirrors DenseGrid::is_out_of_grid, as above: a particle that has left the
+	// map contributes nothing rather than throwing.
+	if (p.x < boxmin.x || p.x > boxmax.x ||
+	    p.y < boxmin.y || p.y > boxmax.y ||
+	    p.z < boxmin.z || p.z > boxmax.z)
+		return;
+
+	const int i = (int)((p.x - origin.x) * invstep.x);
+	const int j = (int)((p.y - origin.y) * invstep.y);
+	const int k = (int)((p.z - origin.z) * invstep.z);
+
+	if (i < 0 || j < 0 || k < 0 || i >= shape.x || j >= shape.y || k >= shape.z)
+		return;
+
+	const float4 cell = cells[((size_t)i * shape.y + j) * shape.z + k];
+	const float w = buryings[tid] * gridscale;
+
+	forces[tid].xyz += cell.yzw * w;
 	}
 
 //
