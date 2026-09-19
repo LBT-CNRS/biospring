@@ -100,15 +100,17 @@ class SpringNetwork
     };
 
     static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
-                                                     float skin)
+                                                     float skin, float cellwidth)
     {
-        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, skin);
+        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, skin, cellwidth);
     }
 
     static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
-                                                     std::vector<size_t> included_indices, float skin)
+                                                     std::vector<size_t> included_indices, float skin,
+                                                     float cellwidth)
     {
-        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, std::move(included_indices), skin);
+        return std::make_unique<NeighborSearch::Searcher>(particles, cutoff, std::move(included_indices), skin,
+                                                          cellwidth);
     }
 
   public:
@@ -329,6 +331,12 @@ class SpringNetwork
     float getElectrostaticCutoff() const { return _config.electrostatic.cutoff; }
     float getHydrophobicCutoff() const { return _config.hydrophobicity.cutoff; }
     float getNeighborSkin() const { return _config.sim.neighborskin; }
+
+    // The width of a neighbour-search cell, in A: what the .msp asked for, or
+    // the automatic choice when it asked for nothing. Both backends take their
+    // grid from here, so that a CPU run and an --opencl run of the same .msp
+    // walk the same cells.
+    float getCellWidth() const;
 
     bool isSpringEnabled() const { return _config.spring.enable; }
     // Per-family runtime toggles for the torsions that -dihedral* already

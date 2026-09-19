@@ -20,55 +20,6 @@ std::vector<Particle> generate_particle_groups(size_t n);
 
 // =====================================================================================
 //
-// Test for `NeighborSearch2` class.
-//
-// =====================================================================================
-
-TEST(TestNeighborSearch2, NeighbourSearchingOneNeighbor)
-{
-    // 10 groups of 10 particles spaced 10 units apart.
-    const auto particles = generate_particle_groups(10);
-    double cutoff = 1.0;
-    biospring::nsearch::NeighborSearch2 ns(particles, cutoff);
-
-    for (size_t i = 0; i < particles.size() - 1; i++)
-    {
-        const auto & neighbors = ns.get_neighbors(particles[i]);
-        // Groups have 10 particles so each particle should have 9 neighbors.
-        ASSERT_EQ(neighbors.size(), 9);
-    }
-}
-
-// =====================================================================================
-//
-// Test for `NeighborSearchDynamic` class.
-//
-// =====================================================================================
-TEST(TestNeighborSearchDynamic, is_dynamic)
-{
-    std::vector<Particle> particles = generate_particles(10);
-    double cutoff = 2.0;
-    biospring::nsearch::NeighborSearchDynamic ns(particles, cutoff);
-
-    // Particle 0 has only one neighbor, particle 1.
-    ASSERT_LE(biospring::measure::distance(particles[0], particles[1]), cutoff);
-
-    std::vector<size_t> neighbors = ns.get_neighbors(0);
-    ASSERT_EQ(neighbors.size(), 1);
-    EXPECT_EQ(neighbors[0], 1);
-
-    // Changes Particle 0's coordinates to be neighbor with particle 9 (and only
-    // particle 9).
-    particles[0].setPosition(Vector3f(10, 10, 10));
-    ns.update();
-
-    neighbors = ns.get_neighbors(0);
-    ASSERT_EQ(neighbors.size(), 1);
-    EXPECT_EQ(neighbors[0], 9);
-}
-
-// =====================================================================================
-//
 // Test for `NeighborSearch` class.
 //
 // =====================================================================================
@@ -126,6 +77,86 @@ TEST(TestNeighborSearch, NeighbourSearchingRandom)
                 EXPECT_FALSE(neighbors_contains_j);
         }
     }
+}
+
+// =====================================================================================
+//
+// Tests for the cell width, which is not the cutoff.
+//
+// =====================================================================================
+
+// The answer must not depend on how the space was cut up. Held against brute
+// force -- which is what NeighborSearchO2 is for -- at widths from the whole
+// cutoff down to a fifth of it, so every stencil radius from 1 to 5 is walked.
+//
+// This is the test the change needs: a stencil that is too small silently drops
+// pairs, and nothing else in the suite would notice.
+TEST(TestNeighborSearchCellWidth, EveryWidthFindsTheSameNeighbors)
+{
+    const auto particles = generate_random_particles(500);
+    ASSERT_FALSE(has_position_duplicate(particles));
+
+    const double cutoff = 10.0;
+    biospring::nsearch::NeighborSearchO2 reference(particles, cutoff);
+
+    for (int divisor = 1; divisor <= 5; divisor++)
+    {
+        const float width = static_cast<float>(cutoff) / static_cast<float>(divisor);
+        biospring::nsearch::NeighborSearch ns(particles, cutoff, 0.0f, width);
+
+        EXPECT_EQ(ns.stencil_radius(), divisor) << "at a width of " << width;
+
+        for (size_t i = 0; i < particles.size(); i++)
+        {
+            auto expected = reference.get_neighbors(particles[i]);
+            auto found = ns.get_neighbors(particles[i]);
+            std::sort(expected.begin(), expected.end());
+            std::sort(found.begin(), found.end());
+            ASSERT_EQ(found, expected) << "particle " << i << " at a cell width of " << width;
+        }
+    }
+}
+
+// The skin widens the sphere the stencil has to cover, and the stencil radius
+// has to grow with it. Getting this wrong loses exactly the pairs the skin was
+// there to keep.
+TEST(TestNeighborSearchCellWidth, TheStencilCoversTheSkinToo)
+{
+    const auto particles = generate_random_particles(500);
+    const double cutoff = 8.0;
+    const float skin = 4.0f;
+
+    // Cells of 2 A: the cutoff alone reaches 4 cells, cutoff plus skin reaches 6.
+    biospring::nsearch::NeighborSearch ns(particles, cutoff, skin, 2.0f);
+    EXPECT_EQ(ns.stencil_radius(), 6);
+
+    biospring::nsearch::NeighborSearchO2 reference(particles, cutoff);
+    for (size_t i = 0; i < particles.size(); i++)
+    {
+        auto expected = reference.get_neighbors(particles[i]);
+        auto found = ns.get_neighbors(particles[i]);
+        std::sort(expected.begin(), expected.end());
+        std::sort(found.begin(), found.end());
+        ASSERT_EQ(found, expected) << "particle " << i;
+    }
+}
+
+// A cell that the cutoff cannot reach into must be skipped, and one it can must
+// not be. Checked against the definition directly, because it is the one piece
+// of arithmetic the OpenCL kernels also compile.
+TEST(TestNeighborSearchCellWidth, TheStencilDropsItsDeadCorners)
+{
+    const float width = 2.0f;
+    const float cutoff = 6.0f;
+
+    // Touching cells: no gap at all, whatever the cutoff.
+    EXPECT_TRUE(biospring_cell_in_range(1, 1, 1, width, 0.001f));
+    // Straight out along one axis: 3 cells away leaves a gap of 2 widths = 4 A.
+    EXPECT_TRUE(biospring_cell_in_range(3, 0, 0, width, cutoff * cutoff));
+    // The corner at the same radius is 4 * sqrt(3) = 6.93 A away, and is not.
+    EXPECT_FALSE(biospring_cell_in_range(3, 3, 3, width, cutoff * cutoff));
+    // Which is the whole point: the stencil is a cube and the cutoff is a ball.
+    EXPECT_EQ(biospring_stencil_radius(cutoff, width), 3);
 }
 
 // =====================================================================================

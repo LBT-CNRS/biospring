@@ -1,30 +1,24 @@
 // Neighbor search.
 //
-// This is a simple implementation of neighbor search. It is not
-// optimized for performance, but it is easy to use and understand.
+// A cell list over the particles, queried one particle at a time. The grid is
+// rebuilt by `update()`, which a positive skin lets skip until something has
+// actually drifted; `for_each_neighbor` then answers from the current
+// positions.
 //
-// The neighbor search is performed in two steps. First, the
-// `NeighborSearch` class is initialized with the particles.
-// Then, the `find_neighbors` method is called to find the
-// neighbors of a given particle. The neighbors are returned as a
-// vector of indices.
+// A cell is NOT the size of the cutoff -- see forcefield/shared/cellgrid_shared.h
+// for what that buys and what picks the width. Callers that pass no width get
+// one cell per search radius and the 3x3x3 stencil this started out with.
 //
 // Example:
 //
-//     // Create a neighbor search object.
-//     NeighborSearch nsearch;
+//     nsearch::NeighborSearch search(particles, cutoff);
+//     for (size_t j : search.get_neighbors(particles[0]))
+//         ...
 //
-//     // Initialize the neighbor search object with the particles.
-//     nsearch.init(particles);
+//     search.update();  // after the particles have moved
 //
-//     // Find the neighbors of particle 0.
-//     auto neighbors = nsearch.find_neighbors(0);
-//
-//     // Print the neighbors.
-//     for (auto i : neighbors) {
-//         std::cout << i << std::endl;
-//     }
-//
+// `NeighborSearchO2` is the same query answered by brute force. It exists to
+// hold the cell list to account in the tests, and is too slow for anything else.
 
 #ifndef __NSEARCH_HPP__
 #define __NSEARCH_HPP__
@@ -33,13 +27,12 @@
 #include <array>
 #include <cmath>
 #include <optional>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "box.hpp"
 #include "concepts.hpp"
-#include "grid/InfiniteGrid.hpp"
+#include "forcefield/shared/cellgrid_shared.h"
 #include "measure.hpp"
 
 namespace biospring
@@ -101,57 +94,6 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearchO2 : p
     }
 };
 
-template <concepts::LocatableContainer ContainerType> class NeighborSearch2 : public NeighborSearchBase<ContainerType>
-{
-  protected:
-    using NeighborSearchBase<ContainerType>::_cutoff;
-    using NeighborSearchBase<ContainerType>::_system;
-
-    grid::InfiniteGridOfContainers<size_t> _grid;
-
-  public:
-    NeighborSearch2(const ContainerType & container, float cutoff)
-        : NeighborSearchBase<ContainerType>(container, cutoff)
-    {
-        _populate();
-    }
-
-    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
-    {
-        std::vector<size_t> neighbors;
-        auto cells = _grid.cells_within_radius(concepts::locatable::get_position(element), _cutoff);
-
-        for (auto cell : cells)
-        {
-            // This is an infinite grid, so we need to check if the cell exists.
-            if (!_grid.has_cell(cell))
-                continue;
-
-            for (auto index : _grid.at(cell))
-            {
-                const T & candidate = _system->at(index);
-
-                if (&candidate != &element && measure::distance(element, candidate) < _cutoff)
-                    neighbors.push_back(index);
-            }
-        }
-        return neighbors;
-    }
-
-  protected:
-    void _populate()
-    {
-        _grid.clear();
-        _grid.initialize({_cutoff, _cutoff, _cutoff});
-
-        for (size_t i = 0; i < _system->size(); i++)
-        {
-            const auto & position = concepts::locatable::get_position(_system->at(i));
-            _grid.add(position, i);
-        }
-    }
-};
-
 template <concepts::LocatableContainer ContainerType> class NeighborSearch : public NeighborSearchBase<ContainerType>
 {
   protected:
@@ -163,8 +105,25 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     size_t _ncells_y = 0;
     size_t _ncells_z = 0;
 
-    // The cell list, which maps each cell to the particles it contains.
-    std::unordered_map<size_t, std::vector<size_t>> _cells;
+    // The cell list, in the layout a counting sort produces: `_cellitems` holds
+    // every binned particle index grouped by cell, and cell `c` owns the slice
+    // [_cellstart[c], _cellstart[c + 1]). `_cellstart` therefore has one entry
+    // more than there are cells.
+    //
+    // This used to be an unordered_map from cell id to a vector of indices,
+    // which cost a hash lookup and a pointer chase per cell VISITED rather than
+    // per cell occupied. That was tolerable while a walk visited 27 cells; it is
+    // not once the cells are narrower than the cutoff and a walk visits several
+    // hundred (see forcefield/shared/cellgrid_shared.h). The flat layout also
+    // puts a cell's particles next to each other in memory, which is what the
+    // walk reads them in.
+    std::vector<size_t> _cellstart;
+    std::vector<size_t> _cellitems;
+
+    // Scratch for the second pass of the counting sort. A member rather than a
+    // local so that a rebuild -- which happens every step without a skin --
+    // allocates nothing.
+    std::vector<size_t> _cellcursor;
 
     // The particle' bounding box.
     Box _box;
@@ -193,35 +152,55 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     // populated and consulted when `_skin > 0`.
     std::vector<std::array<double, 3>> _referencePositions;
 
+    // Width of a cell, in the same unit as the cutoff. NOT the search radius:
+    // see forcefield/shared/cellgrid_shared.h for why the two are different
+    // things and what narrower cells buy. Zero asks for the historical
+    // behaviour, one cell per search radius and a 3x3x3 stencil.
+    float _cellwidth = 0.0f;
+
+    // What `_size_grid` settled on, which is `_cellwidth` unless the box needed
+    // more than `MAX_CELLS` of it, and the stencil radius that goes with it.
+    float _gridwidth = 0.0f;
+    int _stencilradius = 1;
+
+    // Ceiling on the number of cells, and so on what `_cellstart` allocates:
+    // 8M cells is 64 MB here, and the same cap the OpenCL grid uses.
+    static constexpr size_t MAX_CELLS = 8u << 20;
+
   public:
     // Initializes the neighbor search object with the particles.
 
-    NeighborSearch(const ContainerType & container, float cutoff, float skin = 0.0f)
-        : NeighborSearchBase<ContainerType>(container, cutoff), _skin(skin)
+    NeighborSearch(const ContainerType & container, float cutoff, float skin = 0.0f, float cellwidth = 0.0f)
+        : NeighborSearchBase<ContainerType>(container, cutoff), _skin(skin), _cellwidth(cellwidth)
     {
         _build_grid();
     }
 
     NeighborSearch(const ContainerType & container, float cutoff, std::vector<size_t> included_indices,
-                    float skin = 0.0f)
+                    float skin = 0.0f, float cellwidth = 0.0f)
         : NeighborSearchBase<ContainerType>(container, cutoff), _included_indices(std::move(included_indices)),
-          _skin(skin)
+          _skin(skin), _cellwidth(cellwidth)
     {
         _build_grid();
     }
+
+    // The cell width the grid actually uses, and the stencil radius that goes
+    // with it: how many cells out of its own a particle has to look. Reported
+    // for tests and for logging; both are decided by `_size_grid`.
+    float cell_width() const { return _gridwidth; }
+    int stencil_radius() const { return _stencilradius; }
 
     // Applies a callback to each neighbor of the given element.
     template <concepts::Locatable T, typename Callback> void for_each_neighbor(const T & element, Callback && callback) const
     {
         // Loops over the particles in the cell of the given particle and in the neighboring cells.
         _for_each_neighbor_cell(concepts::locatable::get_position(element), [&](size_t neighbor_cell_id) {
-            // If cell does not exist (aka is empty), skip it.
-            const auto cell = _cells.find(neighbor_cell_id);
-            if (cell == _cells.end())
-                return;
+            const size_t first = _cellstart[neighbor_cell_id];
+            const size_t last = _cellstart[neighbor_cell_id + 1];
 
-            for (size_t particle_index : cell->second)
+            for (size_t slot = first; slot < last; slot++)
             {
+                const size_t particle_index = _cellitems[slot];
                 const T & candidate = _system->at(particle_index);
 
                 // Visit the particle if:
@@ -270,49 +249,82 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     // skin was requested.
     float _search_radius() const { return _cutoff + _skin; }
 
+    // The cell width asked for, which defaults to the search radius so that a
+    // caller that says nothing gets the 3x3x3 stencil it always got.
+    float _requested_cell_width() const { return _cellwidth > 0.0f ? _cellwidth : _search_radius(); }
+
     // Returns the total number of cells.
     size_t _number_of_cells() const { return _ncells_x * _ncells_y * _ncells_z; }
 
     // Returns the cell id of the given position.
+    //
+    // Clamped at BOTH ends. The grid is sized to the box at the last rebuild
+    // and a query is answered from the current position, so with a skin a
+    // particle can have drifted below the box minimum -- and the floor of a
+    // negative quotient, cast to size_t, is not a small number. It used to be
+    // clamped from above only, which sent such a particle to the cell at the
+    // far end of the axis instead of the near one.
     size_t _compute_cell(const std::array<double, 3> & position) const
     {
-        const float radius = _search_radius();
+        const auto along = [&](double coordinate, double minimum, size_t ncells) -> size_t {
+            const double index = std::floor((coordinate - minimum) / _gridwidth);
+            if (index <= 0.0)
+                return 0;
+            if (index >= static_cast<double>(ncells - 1))
+                return ncells - 1;
+            return static_cast<size_t>(index);
+        };
 
-        // Calculate grid cell coordinates for the given position, considering negative coordinates
-        size_t cell_y = static_cast<size_t>((position[1] - _box.min_y()) / radius);
-        size_t cell_z = static_cast<size_t>((position[2] - _box.min_z()) / radius);
-        size_t cell_x = static_cast<size_t>((position[0] - _box.min_x()) / radius);
-
-        // Ensure that the cell coordinates are within bounds
-        cell_x = std::min(cell_x, _ncells_x - 1);
-        cell_y = std::min(cell_y, _ncells_y - 1);
-        cell_z = std::min(cell_z, _ncells_z - 1);
+        const size_t cell_x = along(position[0], _box.min_x(), _ncells_x);
+        const size_t cell_y = along(position[1], _box.min_y(), _ncells_y);
+        const size_t cell_z = along(position[2], _box.min_z(), _ncells_z);
 
         // Calculate a unique cell ID for the position
         return cell_x + cell_y * _ncells_x + cell_z * _ncells_x * _ncells_y;
     }
 
+    // Applies a callback to every cell that can hold a neighbour of a particle
+    // in `cell_id`: the cube of `_stencilradius` cells around it, minus the
+    // corners that the search radius does not reach and minus whatever falls
+    // outside the grid.
+    //
+    // The corner test is what pays for a narrow cell. A stencil is a cube and a
+    // cutoff is a sphere, so the wider the stencil the larger the share of it
+    // that cannot hold anything -- at 11x11x11 it is a quarter of the cells,
+    // dropped for three multiplies each, before a single position is read.
     template <typename Callback> void _for_each_neighbor_cell(size_t cell_id, Callback && callback) const
     {
-        for (int dx = -1; dx <= 1; dx++)
+        const int k = _stencilradius;
+        const float radius = _search_radius();
+        const float radiussquared = radius * radius;
+
+        const int cx = static_cast<int>(cell_id % _ncells_x);
+        const int cy = static_cast<int>((cell_id / _ncells_x) % _ncells_y);
+        const int cz = static_cast<int>(cell_id / (_ncells_x * _ncells_y));
+
+        for (int dx = -k; dx <= k; dx++)
         {
-            for (int dy = -1; dy <= 1; dy++)
+            const int x = cx + dx;
+            if (x < 0 || x >= static_cast<int>(_ncells_x))
+                continue;
+
+            for (int dy = -k; dy <= k; dy++)
             {
-                for (int dz = -1; dz <= 1; dz++)
+                const int y = cy + dy;
+                if (y < 0 || y >= static_cast<int>(_ncells_y))
+                    continue;
+
+                for (int dz = -k; dz <= k; dz++)
                 {
-                    int neighbor_cell_x = static_cast<int>(cell_id % _ncells_x) + dx;
-                    int neighbor_cell_y = static_cast<int>((cell_id / _ncells_x) % _ncells_y) + dy;
-                    int neighbor_cell_z = static_cast<int>(cell_id / (_ncells_x * _ncells_y)) + dz;
-
-                    if (neighbor_cell_x < 0 || neighbor_cell_x >= static_cast<int>(_ncells_x))
-                        continue;
-                    if (neighbor_cell_y < 0 || neighbor_cell_y >= static_cast<int>(_ncells_y))
-                        continue;
-                    if (neighbor_cell_z < 0 || neighbor_cell_z >= static_cast<int>(_ncells_z))
+                    const int z = cz + dz;
+                    if (z < 0 || z >= static_cast<int>(_ncells_z))
                         continue;
 
-                    callback(static_cast<size_t>(neighbor_cell_x) + static_cast<size_t>(neighbor_cell_y) * _ncells_x +
-                             static_cast<size_t>(neighbor_cell_z) * _ncells_x * _ncells_y);
+                    if (!biospring_cell_in_range(dx, dy, dz, _gridwidth, radiussquared))
+                        continue;
+
+                    callback(static_cast<size_t>(x) + static_cast<size_t>(y) * _ncells_x +
+                             static_cast<size_t>(z) * _ncells_x * _ncells_y);
                 }
             }
         }
@@ -338,55 +350,99 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         return _compute_neighbor_cells(_compute_cell(position));
     }
 
-    // Builds the cell list.
-    void _build_grid()
+    // Applies a callback to the index of every particle this grid bins: all of
+    // them, or `_included_indices` when the caller restricted the grid to a
+    // subset, minus the excluded one in both cases.
+    template <typename Callback> void _for_each_selected(Callback && callback) const
     {
-        // Clears the cell list.
-        _cells.clear();
-
-        // Computes the simulation box.
-        _box = measure::box(*_system);
-
-        // Computes the number of cells in each direction.
-        const float radius = _search_radius();
-        _ncells_x = size_t(std::ceil(_box.length()[0] / radius) + 1);
-        _ncells_y = size_t(std::ceil(_box.length()[1] / radius) + 1);
-        _ncells_z = size_t(std::ceil(_box.length()[2] / radius) + 1);
-
-        if (_skin > 0.0f)
-            _referencePositions.assign(_system->size(), std::array<double, 3>{});
-
-        const auto add_particle_to_cell = [&](size_t i) {
+        const auto visit = [&](size_t i) {
             if (_excluded_index && i == *_excluded_index)
                 return;
-
-            const auto & position = concepts::locatable::get_position(_system->at(i));
-
-            // Computes the cell number of the particle.
-            size_t cell_id = _compute_cell(position);
-
-            // Adds the particle to the appropriate cell.
-            _cells[cell_id].push_back(i);
-
-            if (_skin > 0.0f)
-                _referencePositions[i] = position;
+            callback(i);
         };
 
-        // Finds the cell of each selected particle.
         if (_included_indices.empty())
         {
             for (size_t i = 0; i < _system->size(); i++)
-                add_particle_to_cell(i);
+                visit(i);
         }
         else
         {
             for (size_t i : _included_indices)
-            {
-                if (i >= _system->size())
-                    continue;
-                add_particle_to_cell(i);
-            }
+                if (i < _system->size())
+                    visit(i);
         }
+    }
+
+    // Sizes the grid to the box the particles currently occupy, widening the
+    // cells if that would need more of them than `MAX_CELLS`.
+    //
+    // The cap is what makes a flat cell array safe. A hash map only ever held
+    // the occupied cells, so an absurd bounding box cost nothing; an array is
+    // allocated for the whole box, and a diverging structure produces boxes of
+    // any size. Widening rather than refusing keeps the answer exact -- wider
+    // cells search more than the cutoff asks for and the distance test drops the
+    // surplus -- so the grid degrades towards brute force instead of vanishing.
+    void _size_grid()
+    {
+        _box = measure::box(*_system);
+
+        _gridwidth = _requested_cell_width();
+        for (int attempt = 0; attempt < 64; attempt++)
+        {
+            const auto span = [&](size_t d) { return std::ceil(_box.length()[d] / _gridwidth) + 1.0; };
+            const double cells = span(0) * span(1) * span(2);
+            if (cells <= static_cast<double>(MAX_CELLS))
+            {
+                _ncells_x = static_cast<size_t>(span(0));
+                _ncells_y = static_cast<size_t>(span(1));
+                _ncells_z = static_cast<size_t>(span(2));
+                _stencilradius = biospring_stencil_radius(_search_radius(), _gridwidth);
+                return;
+            }
+            _gridwidth *= 2.0f;
+        }
+
+        // 64 doublings and still too big means the coordinates are not a
+        // structure any more. One cell is degenerate but well defined: every
+        // particle lands in it and the search is brute force.
+        _ncells_x = _ncells_y = _ncells_z = 1;
+        _stencilradius = 1;
+    }
+
+    // Builds the cell list, as a counting sort over the cells.
+    void _build_grid()
+    {
+        _size_grid();
+
+        const size_t ncells = _number_of_cells();
+        _cellstart.assign(ncells + 1, 0);
+
+        // First pass: how many particles each cell holds, written one slot to
+        // the right so that the prefix sum below turns counts into starts.
+        _for_each_selected([&](size_t i) { _cellstart[_compute_cell_of(i) + 1]++; });
+
+        for (size_t c = 0; c < ncells; c++)
+            _cellstart[c + 1] += _cellstart[c];
+
+        // Second pass: place each particle in its cell's slice.
+        _cellitems.resize(_cellstart[ncells]);
+        _cellcursor.assign(_cellstart.begin(), _cellstart.end() - 1);
+        if (_skin > 0.0f)
+            _referencePositions.assign(_system->size(), std::array<double, 3>{});
+
+        _for_each_selected([&](size_t i) {
+            const auto & position = concepts::locatable::get_position(_system->at(i));
+            _cellitems[_cellcursor[_compute_cell(position)]++] = i;
+            if (_skin > 0.0f)
+                _referencePositions[i] = position;
+        });
+    }
+
+    // The cell of the particle at `index`.
+    size_t _compute_cell_of(size_t index) const
+    {
+        return _compute_cell(concepts::locatable::get_position(_system->at(index)));
     }
 
     // Returns true when the grid must be rebuilt: either no skin was
@@ -432,89 +488,6 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
                     return true;
         }
         return false;
-    }
-};
-
-// Dynamic neighbor search.
-//
-// This class is aimed to be used when computing the neighbor list of elements
-// multiple times.
-//
-// Implementation details:
-//   Compared to `NeighborSearch`, this class stores the indices of the neighbor cells
-//   of each cell.
-template <concepts::LocatableContainer ContainerType> class NeighborSearchDynamic : public NeighborSearch<ContainerType>
-{
-  protected:
-    using NeighborSearch<ContainerType>::_cutoff;
-    using NeighborSearch<ContainerType>::_system;
-    using NeighborSearch<ContainerType>::_cells;
-
-    // The neighbor cells of each cell.
-    std::unordered_map<size_t, std::vector<size_t>> _neighbor_cells;
-
-  public:
-    // using NeighborSearch<ContainerType>::NeighborSearch;
-
-    NeighborSearchDynamic(const ContainerType & container, float cutoff)
-        : NeighborSearch<ContainerType>(container, cutoff)
-    {
-        _build_grid();
-    }
-
-    NeighborSearchDynamic(const ContainerType & container, float cutoff, std::vector<size_t> included_indices)
-        : NeighborSearch<ContainerType>(container, cutoff, std::move(included_indices))
-    {
-        _build_grid();
-    }
-
-    // Returns the neighbors of the given element.
-    template <concepts::Locatable T> std::vector<size_t> get_neighbors(const T & element) const
-    {
-        return NeighborSearch<ContainerType>::get_neighbors(element);
-    }
-
-    // Rebuilds the cell list and the cached neighbor-cell topology.
-    void update() { _build_grid(); }
-
-    // Returns the neighbors of the element located at `index` in `_system`.
-    std::vector<size_t> get_neighbors(size_t index) const
-    {
-        size_t cell_id = _compute_cell(concepts::locatable::get_position(_system->at(index)));
-
-        std::vector<size_t> neighbors;
-        for (auto neighbor_cell_id : _neighbor_cells.at(cell_id))
-        {
-            const auto cell = _cells.find(neighbor_cell_id);
-            if (cell == _cells.end())
-                continue;
-
-            for (size_t particle_index : cell->second)
-            {
-                const auto & candidate = _system->at(particle_index);
-
-                if (&candidate != &_system->at(index) && measure::distance(_system->at(index), candidate) < _cutoff)
-                    neighbors.push_back(particle_index);
-            }
-        }
-        return neighbors;
-    }
-
-  protected:
-    using NeighborSearch<ContainerType>::_build_grid;
-    using NeighborSearch<ContainerType>::_compute_cell;
-    using NeighborSearch<ContainerType>::_compute_neighbor_cells;
-    using NeighborSearch<ContainerType>::_number_of_cells;
-
-    // Constructs the cell list and the neighbor cells of each cell.
-    void _build_grid()
-    {
-        NeighborSearch<ContainerType>::_build_grid();
-
-        // Computes the neighbor cells of each cell.
-        _neighbor_cells.clear();
-        for (size_t cell_id = 0; cell_id < _number_of_cells(); cell_id++)
-            _neighbor_cells[cell_id] = _compute_neighbor_cells(cell_id);
     }
 };
 

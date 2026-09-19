@@ -26,6 +26,7 @@ set(BIOSPRING_CL_EMBEDDED "${CMAKE_CURRENT_BINARY_DIR}/BiospringKernelSource.cpp
 # transcriptions that drift. Add a header here when its formulas move into
 # src/forcefield/shared/.
 set(BIOSPRING_CL_SHARED_HEADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/../forcefield/shared/cellgrid_shared.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/../forcefield/shared/spring_shared.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/../forcefield/shared/electrostatic_shared.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/../forcefield/shared/steric_shared.h"

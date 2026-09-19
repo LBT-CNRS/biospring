@@ -266,10 +266,16 @@ class SimulationSetting : public SettingBase
     size_t samplerate;
     double neighborskin;
 
+    // Width of a neighbour-search cell, in A. Zero asks for the automatic
+    // choice, which is what every run should want; see
+    // SpringNetwork::chooseCellWidth. It is NOT a cutoff, and making it one
+    // is the pessimal setting rather than the neutral one.
+    double cellsize;
+
     SimulationSetting(const std::string & name)
-        : SettingBase(name), nbsteps(0), timestep(0.0), samplerate(1), neighborskin(0.0)
+        : SettingBase(name), nbsteps(0), timestep(0.0), samplerate(1), neighborskin(0.0), cellsize(0.0)
     {
-        _parameterNames = {"nbsteps", "timestep", "samplerate", "neighborskin"};
+        _parameterNames = {"nbsteps", "timestep", "samplerate", "neighborskin", "cellsize"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -282,6 +288,8 @@ class SimulationSetting : public SettingBase
             utils::string::from_string<decltype(samplerate)>(samplerate, s);
         else if (param == "neighborskin")
             utils::string::from_string<decltype(neighborskin)>(neighborskin, s);
+        else if (param == "cellsize")
+            utils::string::from_string<decltype(cellsize)>(cellsize, s);
         else
             logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
     }
@@ -292,6 +300,7 @@ class SimulationSetting : public SettingBase
         _mspFormatter.print("timestep", timestep, os);
         _mspFormatter.print("samplerate", samplerate, os);
         _mspFormatter.print("neighborskin", neighborskin, os);
+        _mspFormatter.print("cellsize", cellsize, os);
     }
 };
 

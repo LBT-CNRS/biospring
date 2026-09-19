@@ -790,13 +790,100 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     // _setupSelections();
 }
 
+// The largest stencil the automatic width is allowed to ask for: a term whose
+// search radius is `k` cells looks at (2k + 1)^3 of them.
+//
+// This is the one knob. Narrower cells always search less VOLUME -- the stencil
+// hugs the cutoff sphere more closely -- but they visit more cells to do it, and
+// a cell visit is not free. k = 5 is where the two meet on 023 (25069 beads,
+// steric 9 A and coulomb 16 A): it puts the width at 3.2 A and takes the
+// distances computed per bead per step from 2275 to 738, where k = 4 gives 983
+// and k = 8 gives 610 for four times the cells.
+static constexpr int MAX_STENCIL_RADIUS = 5;
+
+// How many cells of a stencil of radius `k` can actually hold a neighbour --
+// the cube minus the corners the search radius does not reach into. This is
+// what `_for_each_neighbor_cell` walks, so it is what the width is scored on.
+static size_t liveStencilCells(float radius, float width)
+{
+    const int k = biospring_stencil_radius(radius, width);
+    const float radiussquared = radius * radius;
+    size_t live = 0;
+    for (int dx = -k; dx <= k; dx++)
+        for (int dy = -k; dy <= k; dy++)
+            for (int dz = -k; dz <= k; dz++)
+                if (biospring_cell_in_range(dx, dy, dz, width, radiussquared))
+                    live++;
+    return live;
+}
+
+float SpringNetwork::getCellWidth() const
+{
+    if (_config.sim.cellsize > 0.0)
+        return static_cast<float>(_config.sim.cellsize);
+
+    // Each term searches its cutoff plus the skin, so that is what the cells
+    // have to cover.
+    const float skin = getNeighborSkin();
+    std::vector<float> radii;
+    if (isStericEnabled() && getStericCutoff() > 0.0f)
+        radii.push_back(getStericCutoff() + skin);
+    if (isElectrostaticCoulombEnabled() && getElectrostaticCutoff() > 0.0f)
+        radii.push_back(getElectrostaticCutoff() + skin);
+    if (isHydrophobicityEnabled() && getHydrophobicCutoff() > 0.0f)
+        radii.push_back(getHydrophobicCutoff() + skin);
+
+    if (radii.empty())
+        return 0.0f; // no pairwise term: the searchers fall back to one cell per radius
+
+    // The widths worth considering are the ones that divide SOME term's radius
+    // exactly, because those are the ones with no slack: a width just under a
+    // divisor costs a whole extra shell of cells for a sliver of volume. On 023
+    // that is what picks 3.2 A -- 16/5 exactly for the coulomb, and 2.81 cells
+    // for the steric, which rounds up to 3 with 7% to spare.
+    float best = 0.0f;
+    double bestvolume = 0.0;
+    for (float radius : radii)
+    {
+        for (int divisor = 1; divisor <= MAX_STENCIL_RADIUS; divisor++)
+        {
+            const float width = radius / static_cast<float>(divisor);
+
+            double volume = 0.0;
+            bool admissible = true;
+            for (float other : radii)
+            {
+                if (biospring_stencil_radius(other, width) > MAX_STENCIL_RADIUS)
+                {
+                    // A width that suits a short cutoff can put a long one
+                    // several shells out. Rejected rather than scored, because
+                    // the cost that bounds it is cells visited, not volume.
+                    admissible = false;
+                    break;
+                }
+                volume += static_cast<double>(liveStencilCells(other, width)) * std::pow(width, 3);
+            }
+
+            if (admissible && (best <= 0.0f || volume < bestvolume))
+            {
+                best = width;
+                bestvolume = volume;
+            }
+        }
+    }
+
+    // Unreachable unless every candidate was rejected, which cannot happen:
+    // width = max(radii) always gives every term a stencil radius of 1.
+    return best > 0.0f ? best : *std::max_element(radii.begin(), radii.end());
+}
+
 void SpringNetwork::_setupSteric()
 {
     if (isStericEnabled())
     {
         if (getStericCutoff() < 1e-6)
             throw std::runtime_error("Steric cutoff must be > 0");
-        _nsearch.steric = make_nsearch(_particles, getStericCutoff(), getNeighborSkin());
+        _nsearch.steric = make_nsearch(_particles, getStericCutoff(), getNeighborSkin(), getCellWidth());
         _excludeProbeFromNeighborSearch(*_nsearch.steric);
     }
 }
@@ -811,7 +898,7 @@ void SpringNetwork::_setupHydrophobic()
         if (!hydrophobic_particles.empty())
         {
             _nsearch.hydrophobic =
-                make_nsearch(_particles, getHydrophobicCutoff(), hydrophobic_particles, getNeighborSkin());
+                make_nsearch(_particles, getHydrophobicCutoff(), hydrophobic_particles, getNeighborSkin(), getCellWidth());
             _excludeProbeFromNeighborSearch(*_nsearch.hydrophobic);
         }
     }
@@ -861,7 +948,7 @@ void SpringNetwork::_setupElectrostatic()
         if (!charged_particles.empty())
         {
             _nsearch.electrostatic =
-                make_nsearch(_particles, getElectrostaticCutoff(), charged_particles, getNeighborSkin());
+                make_nsearch(_particles, getElectrostaticCutoff(), charged_particles, getNeighborSkin(), getCellWidth());
             _excludeProbeFromNeighborSearch(*_nsearch.electrostatic);
         }
     }
