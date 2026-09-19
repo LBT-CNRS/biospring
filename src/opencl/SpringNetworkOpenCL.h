@@ -229,6 +229,11 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// electrostatic one, the burying factor for the density one. Same
 		// kernel, different weights.
 		cl::Buffer _inBuryingBuffer;
+
+		// Where the probe kernel scatters each particle's reaction on the probe,
+		// for probegather to fold into one float4. Device-only: nothing reads it
+		// on the host.
+		cl::Buffer _probeForceBuffer;
 		float * _particleburyings = nullptr;
 
 		// Torsions: the quadruplets and their tables, plus a CSR from each
@@ -268,6 +273,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelhydrophobic;
 		cl::Kernel _kernelelectrostaticfield;
 		cl::Kernel _kerneldensityfield;
+		cl::Kernel _kernelprobe;
+		cl::Kernel _kernelprobegather;
 		cl::Kernel _kernelimpala;
 
 		// The kernels of one step, with the timer each one feeds, queried after

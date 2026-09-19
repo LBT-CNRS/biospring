@@ -88,36 +88,109 @@ __kernel void binParticles(const __global float4 * positions,
 	nextincell[p] = atom_xchg(cellhead + c, p);
 	}
 
-__kernel void linearstericprobeonparticle(const __global float4 * positions,const __global float * radii,  __global float4 * forces, const uint probeid, const float proberadius,  const uint N, const float unitscale)
+// The interactive probe: one extra particle that every other one feels, and
+// that feels every other one back.
+//
+// It has no cutoff and no cell list -- it is an all-pairs term with a single
+// partner, so one work item per particle is the whole parallelisation. The
+// laws are the ordinary steric and Coulomb ones, from the same shared headers
+// the pairwise kernels use; what differs is only that one side of every pair
+// is the same particle.
+//
+// THE FORCE GOES BOTH WAYS. Particle::addStericProbeForce adds +f to the
+// particle and -f to the probe, which is why the CPU runs this serially: a
+// parallel loop would race on the probe. Here each work item writes its own -f
+// into `probeforces[tid]` and the host sums that, which is a reduction it was
+// going to pay for anyway -- the probe is integrated on the host, as one
+// particle among N it is not worth a kernel for.
+//
+// Only DYNAMIC particles take part, matching the CPU's loop over
+// _dynamicparticules, and the probe is skipped against itself.
+__kernel void probe(const __global float4 * positions,
+                    const __global float * radii,
+                    const __global float * epsilons,
+                    const __global float * charges,
+                    const __global int * dynamicstate,
+                    __global float4 * forces,
+                    __global float4 * probeforces,
+                    const uint probeid,
+                    const int stericenabled, const int coulombenabled,
+                    const int mode, const float proberadius, const float probeepsilon,
+                    const float probecharge, const float dielectric,
+                    const float linearstiffness, const float stericmindistance,
+                    const float coulombmindistance, const float fourpi,
+                    const float stericconvert, const float coulombconvert,
+                    const float stericscale, const float coulombscale,
+                    const uint N)
 	{
-	size_t tid = get_global_id(0);
-	if(tid>=N) return;	
-	if(tid==probeid) return;
-		
-	float dist=0.0f, diff=0.0f, intersectdist=proberadius+radii[tid]; 
-	dist=distance(positions[probeid], positions[tid]);	
-	diff=dist-intersectdist;
-	
-	if(diff<0.0)
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	probeforces[tid] = (float4)(0.0f, 0.0f, 0.0f, 0.0f);
+	if (tid == probeid || !dynamicstate[tid]) return;
+
+	const float4 axis = positions[probeid] - positions[tid];
+	const float distsq = axis.x * axis.x + axis.y * axis.y + axis.z * axis.z;
+	if (distsq == 0.0f) return;
+	const float dist = sqrt(distsq);
+
+	float3 f = (float3)(0.0f, 0.0f, 0.0f);
+
+	if (stericenabled)
 		{
-		float4 unit=(float4)0;
-		float4 dir=(float4)0;
-		float4 force=(float4)0;
-		dir=positions[probeid]-positions[tid];
-		unit=normalize(dir);
-		force=unit*diff*unitscale;
-		forces[tid]+=force;
+		const float module = biospring_steric_force_module(
+		    mode, proberadius, radii[tid], probeepsilon, epsilons[tid], dist,
+		    linearstiffness, stericmindistance, stericconvert);
+		f += (axis.xyz / dist) * (stericscale * module);
 		}
+
+	if (coulombenabled)
+		{
+		const float module = biospring_electrostatic_force_module(
+		    probecharge, charges[tid], dist, dielectric, coulombmindistance, fourpi,
+		    coulombconvert);
+		f += (axis.xyz / dist) * (coulombscale * module);
+		}
+
+	forces[tid].xyz += f;
+	probeforces[tid].xyz = -f;
 	}
 
-// Springs, gathered: work item tid owns particle tid and is the only writer of
-// forces[tid], so no atomics and no serial pass.
+// Sums what the probe kernel scattered and gives the probe its own force.
 //
-// The force module comes from biospring_spring_force_module(), which is the
-// SAME TEXT the CPU compiles -- see spring_shared.h, prepended to this file
-// when the kernel source is embedded. The scale argument carries the force
-// field's spring scale times the unit conversion; this kernel used to receive
-// only the conversion and so pulled spring.scale times too weakly.
+// A reduction rather than an atomic, because OpenCL 1.2 has no atomic add on
+// floats. ONE work group: the result is a single float4, so a second pass would
+// cost more than it saves. Each lane walks the array with a stride of the group
+// size -- coalesced -- then the group folds its partial sums in local memory.
+//
+// Launched with exactly WORK_GROUP_SIZE work items, and `partial` sized to
+// match.
+__kernel void probegather(const __global float4 * probeforces,
+                          __global float4 * forces,
+                          __local float4 * partial,
+                          const uint probeid,
+                          const uint N)
+	{
+	const uint lid = get_local_id(0);
+	const uint groupsize = get_local_size(0);
+
+	float4 sum = (float4)(0.0f, 0.0f, 0.0f, 0.0f);
+	for (uint i = lid; i < N; i += groupsize)
+		sum += probeforces[i];
+	partial[lid] = sum;
+
+	barrier(CLK_LOCAL_MEM_FENCE);
+	for (uint stride = groupsize / 2; stride > 0; stride >>= 1)
+		{
+		if (lid < stride)
+			partial[lid] += partial[lid + stride];
+		barrier(CLK_LOCAL_MEM_FENCE);
+		}
+
+	if (lid == 0)
+		forces[probeid].xyz += partial[0].xyz;
+	}
+
 __kernel void spring(const __global float4 * positions,
                      const __global Springocl * springs,
                      const __global int * springoffsets,

@@ -280,6 +280,16 @@ void SpringNetworkOpenCL::createBuffer()
 								 &_err);
 		checkErr( "Buffer::Buffer() burying");
 
+		// Device-only, so no host pointer: probegather reads it back on the
+		// device and nothing else ever looks at it.
+		_probeForceBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_WRITE,
+								 sizeof(float)*4*_nbparticlesocl,
+								 NULL,
+								 &_err);
+		checkErr( "Buffer::Buffer() probe force");
+
 		// Only for a map that was actually read: OpenCL rejects a zero-sized
 		// buffer, and a run without the term has no map at all.
 		for (MapOnDevice * map : {&_electrostaticmap, &_densitymap})
@@ -490,6 +500,10 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kerneldensityfield = cl::Kernel(_program, "densityfield", &_err);
 	checkErr("Kernel::Kernel()");
+	_kernelprobe = cl::Kernel(_program, "probe", &_err);
+	checkErr("Kernel::Kernel()");
+	_kernelprobegather = cl::Kernel(_program, "probegather", &_err);
+	checkErr("Kernel::Kernel()");
 	_kernelimpala = cl::Kernel(_program, "impala", &_err);
 	checkErr("Kernel::Kernel()");
 	_kerneltorsion = cl::Kernel(_program, "torsion", &_err);
@@ -615,6 +629,7 @@ double torsiontime=0.0;
 double hydrophobictime=0.0;
 double electrostaticfieldtime=0.0;
 double densityfieldtime=0.0;
+double probetime=0.0;
 double impalatime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
@@ -901,6 +916,66 @@ void SpringNetworkOpenCL::idleRun()
         _pendingevents.emplace_back(_event, &impalatime);
         }
 
+    // The interactive probe. All pairs against one partner, so no cell list;
+    // the reaction on the probe is scattered per particle and folded by a
+    // second, one-group kernel, because OpenCL 1.2 has no float atomic and the
+    // alternative -- reading N float4 back to sum them on the host -- would
+    // cost a transfer this avoids entirely.
+    if (isProbeEnabled() && _probeparticule.getId() >= 0)
+        {
+        const unsigned wg = WORK_GROUP_SIZE;
+        const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+        const unsigned probeid = static_cast<unsigned>(_probeparticule.getId());
+
+        unsigned a = 0;
+        _kernelprobe.setArg(a++, _inoutPositionBuffer);
+        _kernelprobe.setArg(a++, _inRadiusBuffer);
+        _kernelprobe.setArg(a++, _inEpsilonBuffer);
+        _kernelprobe.setArg(a++, _inChargeBuffer);
+        _kernelprobe.setArg(a++, _inDynamicBuffer);
+        _kernelprobe.setArg(a++, _inoutForceBuffer);
+        _kernelprobe.setArg(a++, _probeForceBuffer);
+        _kernelprobe.setArg(a++, probeid);
+        _kernelprobe.setArg(a++, isProbeStericEnabled() ? 1 : 0);
+        _kernelprobe.setArg(a++, isProbeElectrostaticEnabled() ? 1 : 0);
+        _kernelprobe.setArg(a++, _stericMode());
+        _kernelprobe.setArg(a++, _probeparticule.getRadius());
+        _kernelprobe.setArg(a++, _probeparticule.getEpsilon());
+        _kernelprobe.setArg(a++, _probeparticule.getCharge());
+        _kernelprobe.setArg(a++, getForceField()->getDielectric());
+        _kernelprobe.setArg(a++, static_cast<float>(
+            biospring::forcefield::STERIC_LINEAR_STIFFNESS));
+        _kernelprobe.setArg(a++, static_cast<float>(
+            biospring::forcefield::MINIMAL_DISTANCE_VDW_CUTOFF));
+        _kernelprobe.setArg(a++, static_cast<float>(
+            biospring::forcefield::MINIMAL_DISTANCE_ELECTROSTATIC_CUTOFF));
+        _kernelprobe.setArg(a++, static_cast<float>(4.0 * biospring::forcefield::PI));
+        _kernelprobe.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
+        _kernelprobe.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
+        _kernelprobe.setArg(a++, getForceField()->getStericScale());
+        _kernelprobe.setArg(a++, getForceField()->getCoulombScale());
+        _kernelprobe.setArg(a++, _nbparticlesocl);
+
+        _err = _queue.enqueueNDRangeKernel(_kernelprobe, cl::NullRange,
+                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(probe)");
+        _pendingevents.emplace_back(_event, &probetime);
+
+        a = 0;
+        _kernelprobegather.setArg(a++, _probeForceBuffer);
+        _kernelprobegather.setArg(a++, _inoutForceBuffer);
+        _kernelprobegather.setArg(a++, cl::__local(sizeof(float) * 4 * wg));
+        _kernelprobegather.setArg(a++, probeid);
+        _kernelprobegather.setArg(a++, _nbparticlesocl);
+
+        _err = _queue.enqueueNDRangeKernel(_kernelprobegather, cl::NullRange,
+                                           cl::NDRange(wg), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(probegather)");
+        _pendingevents.emplace_back(_event, &probetime);
+        }
+
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
     _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
                                   viscosity, _nbparticlesocl);
@@ -1011,12 +1086,12 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+densityfieldtime+impalatime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+densityfieldtime+probetime+impalatime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
 	         <<", torsion: "<<torsiontime
 	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
-	         <<", electrostaticfield: "<<electrostaticfieldtime<<", densityfield: "<<densityfieldtime<<", impala: "<<impalatime
+	         <<", electrostaticfield: "<<electrostaticfieldtime<<", densityfield: "<<densityfieldtime<<", probe: "<<probetime<<", impala: "<<impalatime
 	         <<", hydrophobic: "<<hydrophobictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
