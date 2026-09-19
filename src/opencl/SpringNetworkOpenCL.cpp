@@ -108,7 +108,7 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _torsionenergyper;
     delete[] _particledynamic;
     delete[] _springsocl;
-    for (CellGrid * g : {&_stericcells, &_electrostaticcells, &_hydrophobiccells})
+    for (CellGrid * g : {&_cells})
         {
         delete[] g->head;
         delete[] g->next;
@@ -734,7 +734,7 @@ void SpringNetworkOpenCL::idleRun()
     // Steric, over its own cell list. Before Coulomb only because that is the
     // order SpringNetwork::computeForces uses; the two accumulate into the same
     // buffer and the sum is the same either way, to the last bit of a float.
-    if (isStericEnabled() && _stericcells.ncellstotal > 0)
+    if (isStericEnabled() && _cells.ncellstotal > 0)
         {
         const unsigned wg = WORK_GROUP_SIZE;
         const unsigned global = (_nbparticlesocl / wg) * wg + wg;
@@ -745,11 +745,15 @@ void SpringNetworkOpenCL::idleRun()
         _kernelsteric.setArg(a++, _inRadiusBuffer);
         _kernelsteric.setArg(a++, _inEpsilonBuffer);
         _kernelsteric.setArg(a++, _inoutForceBuffer);
-        _kernelsteric.setArg(a++, _stericcells.headbuffer);
-        _kernelsteric.setArg(a++, _stericcells.nextbuffer);
-        _kernelsteric.setArg(a++, _stericcells.origin);
-        _kernelsteric.setArg(a++, _stericcells.width);
-        _kernelsteric.setArg(a++, _stericcells.ncells);
+        _kernelsteric.setArg(a++, _cells.headbuffer);
+        _kernelsteric.setArg(a++, _cells.nextbuffer);
+        _kernelsteric.setArg(a++, _cells.origin);
+        _kernelsteric.setArg(a++, _cells.width);
+        _kernelsteric.setArg(a++, _cells.ncells);
+        // How far out of its own cell this term has to look, in cells of the
+        // width the grid actually built. The grid is shared by every pairwise
+        // term; this argument is the only thing that tells them apart.
+        _kernelsteric.setArg(a++, biospring_stencil_radius(getStericCutoff(), _cells.width));
         _kernelsteric.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
         _kernelsteric.setArg(a++, _inSpringIndexesBuffer);
         _kernelsteric.setArg(a++, springsenabled);
@@ -777,7 +781,7 @@ void SpringNetworkOpenCL::idleRun()
     // the pairwise Coulomb one. Gated on "any", the device applied a pairwise
     // force to five examples (011, 012, 013, 021, 022) whose .msp sets
     // coulomb.enable = 0, and the CPU applied none.
-    if (isElectrostaticCoulombEnabled() && _electrostaticcells.ncellstotal > 0)
+    if (isElectrostaticCoulombEnabled() && _cells.ncellstotal > 0)
         {
         const unsigned wg = WORK_GROUP_SIZE;
         const unsigned global = (_nbparticlesocl / wg) * wg + wg;
@@ -787,11 +791,15 @@ void SpringNetworkOpenCL::idleRun()
         _kernelelectrostatic.setArg(a++, _inoutPositionBuffer);
         _kernelelectrostatic.setArg(a++, _inChargeBuffer);
         _kernelelectrostatic.setArg(a++, _inoutForceBuffer);
-        _kernelelectrostatic.setArg(a++, _electrostaticcells.headbuffer);
-        _kernelelectrostatic.setArg(a++, _electrostaticcells.nextbuffer);
-        _kernelelectrostatic.setArg(a++, _electrostaticcells.origin);
-        _kernelelectrostatic.setArg(a++, _electrostaticcells.width);
-        _kernelelectrostatic.setArg(a++, _electrostaticcells.ncells);
+        _kernelelectrostatic.setArg(a++, _cells.headbuffer);
+        _kernelelectrostatic.setArg(a++, _cells.nextbuffer);
+        _kernelelectrostatic.setArg(a++, _cells.origin);
+        _kernelelectrostatic.setArg(a++, _cells.width);
+        _kernelelectrostatic.setArg(a++, _cells.ncells);
+        // How far out of its own cell this term has to look, in cells of the
+        // width the grid actually built. The grid is shared by every pairwise
+        // term; this argument is the only thing that tells them apart.
+        _kernelelectrostatic.setArg(a++, biospring_stencil_radius(getElectrostaticCutoff(), _cells.width));
         // A network with no spring has no spring buffer at all (OpenCL rejects
         // a zero-sized one), so hand the kernel something valid and tell it not
         // to look: the exclusion is meaningless without springs anyway.
@@ -815,7 +823,7 @@ void SpringNetworkOpenCL::idleRun()
         }
 
     // Hydrophobic attraction, over its own cell list.
-    if (isHydrophobicityEnabled() && _hydrophobiccells.ncellstotal > 0)
+    if (isHydrophobicityEnabled() && _cells.ncellstotal > 0)
         {
         const unsigned wg = WORK_GROUP_SIZE;
         const unsigned global = (_nbparticlesocl / wg) * wg + wg;
@@ -825,11 +833,15 @@ void SpringNetworkOpenCL::idleRun()
         _kernelhydrophobic.setArg(a++, _inoutPositionBuffer);
         _kernelhydrophobic.setArg(a++, _inHydrophobicityBuffer);
         _kernelhydrophobic.setArg(a++, _inoutForceBuffer);
-        _kernelhydrophobic.setArg(a++, _hydrophobiccells.headbuffer);
-        _kernelhydrophobic.setArg(a++, _hydrophobiccells.nextbuffer);
-        _kernelhydrophobic.setArg(a++, _hydrophobiccells.origin);
-        _kernelhydrophobic.setArg(a++, _hydrophobiccells.width);
-        _kernelhydrophobic.setArg(a++, _hydrophobiccells.ncells);
+        _kernelhydrophobic.setArg(a++, _cells.headbuffer);
+        _kernelhydrophobic.setArg(a++, _cells.nextbuffer);
+        _kernelhydrophobic.setArg(a++, _cells.origin);
+        _kernelhydrophobic.setArg(a++, _cells.width);
+        _kernelhydrophobic.setArg(a++, _cells.ncells);
+        // How far out of its own cell this term has to look, in cells of the
+        // width the grid actually built. The grid is shared by every pairwise
+        // term; this argument is the only thing that tells them apart.
+        _kernelhydrophobic.setArg(a++, biospring_stencil_radius(getHydrophobicCutoff(), _cells.width));
         _kernelhydrophobic.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
         _kernelhydrophobic.setArg(a++, _inSpringIndexesBuffer);
         _kernelhydrophobic.setArg(a++, springsenabled);
@@ -1135,20 +1147,62 @@ void SpringNetworkOpenCL::run()
 	}
 
 
-// Refreshes the grid of every enabled non-bonded term, each at its own cutoff.
+// The longest reach of any enabled pairwise term, in A. Zero when none is on.
+float SpringNetworkOpenCL::_largestPairwiseCutoff() const
+	{
+	float longest = 0.0f;
+	if (isStericEnabled())
+		longest = std::max(longest, getStericCutoff());
+	if (isElectrostaticCoulombEnabled())
+		longest = std::max(longest, getElectrostaticCutoff());
+	if (isHydrophobicityEnabled())
+		longest = std::max(longest, getHydrophobicCutoff());
+	return longest;
+	}
+
+
+// The widest stencil any enabled non-bonded term asks of cells of `width`.
 //
-// A term that is off gets no grid: the cheapest neighbour search is the one
-// that does not run.
+// This is what the grid's margin has to cover, and what tells _measureCellGrid
+// that it has not made the cells so narrow that a walk runs off the end.
+//
+// The pairwise terms only. A grid-only electrostatic configuration reads a DX
+// map and never touches the cell list, the same distinction the dispatch makes.
+int SpringNetworkOpenCL::_maxStencilRadius(float width) const
+	{
+	int k = 1;
+	const auto consider = [&](float cutoff) {
+		const int radius = biospring_stencil_radius(cutoff, width);
+		if (radius > k)
+			k = radius;
+	};
+
+	if (isStericEnabled())
+		consider(getStericCutoff());
+	if (isElectrostaticCoulombEnabled())
+		consider(getElectrostaticCutoff());
+	if (isHydrophobicityEnabled())
+		consider(getHydrophobicCutoff());
+	return k;
+	}
+
+
+// Refreshes THE grid -- one, for every enabled non-bonded term at once.
+//
+// There used to be three, one per term, each with cells as wide as that term's
+// own cutoff. A cell is not a cutoff (see forcefield/shared/cellgrid_shared.h),
+// so they can share: the bins are the same, and each kernel takes its own
+// stencil radius out of them. That removes two of the three rangings per step
+// and lets the cells be narrower than any cutoff, which is where the work goes.
+//
+// Nothing here if no pairwise term is on: the cheapest neighbour search is the
+// one that does not run.
 void SpringNetworkOpenCL::_updateCellLists()
 	{
-	if (isStericEnabled())
-		_buildCellList(_stericcells, getStericCutoff());
-	// Same distinction as at the dispatch: the cell list serves the PAIRWISE
-	// kernel, and a grid-only configuration has no use for it.
-	if (isElectrostaticCoulombEnabled())
-		_buildCellList(_electrostaticcells, getElectrostaticCutoff());
-	if (isHydrophobicityEnabled())
-		_buildCellList(_hydrophobiccells, getHydrophobicCutoff());
+	if (!isStericEnabled() && !isElectrostaticCoulombEnabled() && !isHydrophobicityEnabled())
+		return;
+
+	_buildCellList(_cells, getCellWidth());
 	}
 
 
@@ -1165,9 +1219,9 @@ void SpringNetworkOpenCL::_updateCellLists()
 // outside the grid is invisible to every neighbour walk. The device says when
 // that has happened (see binParticles), so the pass below runs on the first
 // step and then only when someone has actually left.
-bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float cutoff)
+bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float requestedwidth)
 	{
-	if (_nbparticlesocl == 0 || cutoff <= 0.0f)
+	if (_nbparticlesocl == 0 || requestedwidth <= 0.0f)
 		return false;
 
 	float lo[3] = {_particlepositions[0].x, _particlepositions[0].y, _particlepositions[0].z};
@@ -1191,31 +1245,36 @@ bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float cutoff)
 			}
 		}
 
-	// Margin on each side, in whole cells. It is what buys the frame its
-	// lifetime: a structure has to expand by this much before anything leaves
-	// and the pass above runs again. Two cells rather than one because a cell
-	// is also the stencil's reach, so a particle in the outermost ring still
-	// has its full neighbourhood inside the grid.
-	const int MARGIN_CELLS = 2;
+	// Margin on each side, in angstroms rather than in cells. It is what buys
+	// the frame its lifetime: a particle outside the grid is binned nowhere and
+	// is invisible to every walk, so the device reports the first one to leave
+	// and the pass above runs again. The stencil itself needs no margin -- it is
+	// bounds-checked, and a cell outside the grid holds nothing by construction.
+	//
+	// Fixed in angstroms because the cells are no longer the size of a cutoff:
+	// counting in cells would shrink the headroom in step with the width and
+	// remeasure several times as often for nothing.
+	const float MARGIN = 2.0f * _largestPairwiseCutoff();
 	const long CELL_LIMIT = 8L * 1024L * 1024L;
 
-	// A cell WIDER than the cutoff is still correct: the 3x3x3 stencil then
-	// covers more than the cutoff asks for, and the distance test each term
-	// makes anyway drops the surplus. Only narrower would be wrong. So a box
-	// too big for the cell count is answered by widening the cells rather than
-	// by refusing to build -- which degrades towards brute force, slowly and
-	// correctly, instead of leaving a term with no neighbour structure and no
-	// way to know it.
+	// WIDER cells than asked for are still correct: every walk derives its
+	// stencil radius from the width it is given, so it simply takes fewer,
+	// bigger steps and the distance test drops the surplus. Only cells narrower
+	// than the caller believes would be wrong. So a box too big for the cell
+	// count is answered by widening rather than by refusing to build -- which
+	// degrades towards brute force, slowly and correctly, instead of leaving
+	// every term with no neighbour structure and no way to know it.
 	//
 	// It is not reached by a healthy structure: the largest example here is
-	// 034's capsid, a 292 A cube, which asks for 68921 cells of 8 A against the
-	// 8M below. It is reached by a diverging one, and then saying so is worth
-	// more than the grid.
-	float width = cutoff;
+	// 034's capsid, a 292 A cube, which at 3 A cells asks for about a million
+	// against the 8M below. It is reached by a diverging one, and then saying so
+	// is worth more than the grid.
+	float width = requestedwidth;
 	cl_int4 ncells;
 	long total = 0;
 	for (int attempt = 0; attempt < 64; ++attempt)
 		{
+		const int margincells = static_cast<int>(std::ceil(MARGIN / width));
 		total = 1;
 		bool overflowed = false;
 		for (int d = 0; d < 3; ++d)
@@ -1226,7 +1285,7 @@ bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float cutoff)
 				overflowed = true;
 				break;
 				}
-			const int n = static_cast<int>(std::floor(span)) + 1 + 2 * MARGIN_CELLS;
+			const int n = static_cast<int>(std::floor(span)) + 1 + 2 * margincells;
 			ncells.s[d] = n;
 			total *= n;
 			if (total > CELL_LIMIT)
@@ -1236,7 +1295,11 @@ bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float cutoff)
 				}
 			}
 		if (!overflowed)
+			{
+			for (int d = 0; d < 3; ++d)
+				grid.origin.s[d] = lo[d] - margincells * width;
 			break;
+			}
 		width *= 2.0f;
 		total = 0;
 		}
@@ -1252,18 +1315,17 @@ bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float cutoff)
 		return false;
 		}
 
-	if (width != cutoff)
+	if (width != requestedwidth)
 		BIOSPRING_WARN_ONCE("OpenCL cell list: the structure's box needs cells of %.2f A rather than the "
-		                    "%.2f A cutoff asks for, to stay under %ld cells. Still exact, and slower: "
+		                    "%.2f A asked for, to stay under %ld cells. Still exact, and slower: "
 		                    "each walk sifts (%.1f)^3 times as many candidates.",
-		                    width, cutoff, CELL_LIMIT, width / cutoff);
+		                    width, requestedwidth, CELL_LIMIT, width / requestedwidth);
 
 	ncells.s[3] = 0;
-	for (int d = 0; d < 3; ++d)
-		grid.origin.s[d] = lo[d] - MARGIN_CELLS * width;
 	grid.origin.s[3] = 0.0f;
-	grid.cutoff = cutoff;
+	grid.requestedwidth = requestedwidth;
 	grid.width = width;
+	grid.maxstencil = _maxStencilRadius(width);
 	grid.ncells = ncells;
 
 	const unsigned ncellstotal = static_cast<unsigned>(total);
@@ -1347,17 +1409,18 @@ bool SpringNetworkOpenCL::_frameStillHolds(const CellGrid & grid) const
 
 // Re-places the particles in the grid, measuring a new frame only when the one
 // in hand no longer holds them.
-bool SpringNetworkOpenCL::_buildCellList(CellGrid & grid, float cutoff)
+bool SpringNetworkOpenCL::_buildCellList(CellGrid & grid, float width)
 	{
-	// A first call, a cutoff that changed under us (the .msp can be reloaded
-	// mid-run), or a structure that has outgrown its frame.
-	if (grid.ncellstotal == 0 || grid.cutoff != cutoff || !_frameStillHolds(grid))
+	// A first call, a width that changed under us -- the .msp can be reloaded
+	// mid-run, and a cutoff moving moves the width with it -- or a structure
+	// that has outgrown its frame.
+	if (grid.ncellstotal == 0 || grid.requestedwidth != width || !_frameStillHolds(grid))
 		{
 		// _measureCellGrid invalidates the grid when it cannot measure one, so
 		// a term that consults it afterwards sees "no grid" rather than last
 		// step's cells over this step's positions -- which is the one outcome
 		// worse than having no grid at all, being wrong without saying so.
-		if (!_measureCellGrid(grid, cutoff))
+		if (!_measureCellGrid(grid, width))
 			return false;
 		}
 
@@ -1395,10 +1458,14 @@ std::vector<unsigned> SpringNetworkOpenCL::neighborsFromCellList(const CellGrid 
 	const int cz = static_cast<int>(std::floor((here.z - grid.origin.s[2]) / grid.width));
 
 	const float cutoffsq = cutoff * cutoff;
-	for (int dz = -1; dz <= 1; ++dz)
-		for (int dy = -1; dy <= 1; ++dy)
-			for (int dx = -1; dx <= 1; ++dx)
+	const int k = biospring_stencil_radius(cutoff, grid.width);
+	for (int dz = -k; dz <= k; ++dz)
+		for (int dy = -k; dy <= k; ++dy)
+			for (int dx = -k; dx <= k; ++dx)
 				{
+				if (!biospring_cell_in_range(dx, dy, dz, grid.width, cutoffsq))
+					continue;
+
 				const int x = cx + dx, y = cy + dy, z = cz + dz;
 				// No periodicity: a stencil cell outside the grid is simply not
 				// there, never the cell on the opposite face.

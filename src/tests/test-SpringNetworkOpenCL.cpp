@@ -303,7 +303,7 @@ std::vector<unsigned> neighborsByBruteForce(const spn::SpringNetwork & network, 
 }
 } // namespace
 
-TEST(SpringNetworkOpenCL, EachTermGetsACellListAtItsOwnCutoff)
+TEST(SpringNetworkOpenCL, OneGridServesEveryTermAtItsOwnStencil)
 {
     if (!hasOpenCLDevice())
         GTEST_SKIP() << "no OpenCL device available on this machine";
@@ -316,34 +316,38 @@ TEST(SpringNetworkOpenCL, EachTermGetsACellListAtItsOwnCutoff)
     buildParticleCloud(gpu, config, N, EXTENT);
     gpu.run();
 
-    // A grid per term, each with the cell width its own cutoff asks for. If
-    // these ever come back equal, the grids have been merged again and the
-    // shortest-range term is paying the longest one's volume.
-    EXPECT_FLOAT_EQ(gpu.stericCells().cutoff, 6.0f);
-    EXPECT_FLOAT_EQ(gpu.electrostaticCells().cutoff, 14.0f);
-    EXPECT_FLOAT_EQ(gpu.hydrophobicCells().cutoff, 10.0f);
+    const SpringNetworkOpenCL::CellGrid & grid = gpu.cells();
+    ASSERT_GT(grid.ncellstotal, 0u) << "no cell list was built at all";
+
+    // ONE grid, and its cells narrower than every cutoff that reads them. This
+    // is the whole change: the three terms used to own three grids of three
+    // widths, which cost three rangings a step and forced each cell to be as
+    // wide as its term's cutoff.
+    EXPECT_LT(grid.width, 6.0f) << "the cells are no narrower than the shortest cutoff";
 
     // A 40 A cloud is nowhere near the cell limit, so the cells built are the
     // cells asked for. Widening is the divergence path, not this one.
-    EXPECT_FLOAT_EQ(gpu.stericCells().width, 6.0f);
-    EXPECT_FLOAT_EQ(gpu.electrostaticCells().width, 14.0f);
-    EXPECT_FLOAT_EQ(gpu.hydrophobicCells().width, 10.0f);
+    EXPECT_FLOAT_EQ(grid.width, grid.requestedwidth);
 
-    struct Term { const char * name; const SpringNetworkOpenCL::CellGrid * grid; float cutoff; };
-    const Term terms[] = {
-        {"steric", &gpu.stericCells(), 6.0f},
-        {"electrostatic", &gpu.electrostaticCells(), 14.0f},
-        {"hydrophobic", &gpu.hydrophobicCells(), 10.0f},
-    };
+    struct Term { const char * name; float cutoff; };
+    const Term terms[] = {{"steric", 6.0f}, {"electrostatic", 14.0f}, {"hydrophobic", 10.0f}};
+
+    // What tells the terms apart is now the stencil radius alone, and it has to
+    // order like the cutoffs do. If these ever come back equal, every term is
+    // paying the longest one's volume again.
+    const int ksteric = biospring_stencil_radius(6.0f, grid.width);
+    const int kelectrostatic = biospring_stencil_radius(14.0f, grid.width);
+    const int khydrophobic = biospring_stencil_radius(10.0f, grid.width);
+    EXPECT_LT(ksteric, khydrophobic);
+    EXPECT_LT(khydrophobic, kelectrostatic);
+    EXPECT_EQ(kelectrostatic, grid.maxstencil) << "the grid did not size its margin on the longest reach";
 
     for (const Term & term : terms)
     {
-        ASSERT_GT(term.grid->ncellstotal, 0u) << "no cell list was built for " << term.name;
-
         size_t pairs = 0;
         for (unsigned i = 0; i < N; ++i)
         {
-            std::vector<unsigned> found = gpu.neighborsFromCellList(*term.grid, i, term.cutoff);
+            std::vector<unsigned> found = gpu.neighborsFromCellList(grid, i, term.cutoff);
             std::vector<unsigned> expected = neighborsByBruteForce(gpu, i, term.cutoff);
             std::sort(found.begin(), found.end());
             std::sort(expected.begin(), expected.end());
@@ -352,7 +356,7 @@ TEST(SpringNetworkOpenCL, EachTermGetsACellListAtItsOwnCutoff)
             // is a force applied twice, and the linked list makes that possible
             // if a stencil ever visits the same cell more than once.
             ASSERT_EQ(found, expected)
-                << term.name << "'s cell list disagrees with the O(N^2) answer for particle " << i;
+                << term.name << "'s walk over the shared grid disagrees with the O(N^2) answer for particle " << i;
             pairs += expected.size();
         }
 
@@ -363,16 +367,15 @@ TEST(SpringNetworkOpenCL, EachTermGetsACellListAtItsOwnCutoff)
 
 // What happens when the structure no longer fits the grid.
 //
-// The CPU never faces this: its grid is an unordered_map keyed by cell
-// coordinate (grid/InfiniteGrid.hpp), so cells exist only where particles are
-// and a structure can go anywhere. A device cannot hash cheaply, so its grid is
-// an array over a measured box, and the box can be outgrown.
+// Both backends face it the same way now -- an array over a measured box, which
+// a structure can outgrow -- so both answer it the same way.
 //
-// A cell WIDER than the cutoff is still exact -- the 3x3x3 stencil then covers
-// more than asked and the distance test drops the surplus -- so the answer to a
-// box too big is wider cells, not no grid. This drives it with a cutoff of 1 A
-// and one particle 5000 A away, which asks for 1.25e11 cells of 1 A and gets
-// cells of 32 instead. The neighbour sets must still be exactly the O(N^2) ones:
+// Cells WIDER than asked for are still exact: every walk derives its stencil
+// radius from the width it is handed, so it takes fewer and bigger steps and the
+// distance test drops the surplus. The answer to a box too big is therefore
+// wider cells, not no grid. This drives it with a cutoff of 1 A and one particle
+// 5000 A away, which asks for more cells than the build will allocate and gets
+// them widened instead. The neighbour sets must still be exactly the O(N^2) ones:
 // degrading towards brute force has to stay correct, or it is not a degradation
 // but a bug with a warning attached.
 TEST(SpringNetworkOpenCL, TooBigABoxWidensTheCellsAndStaysExact)
@@ -415,10 +418,9 @@ TEST(SpringNetworkOpenCL, TooBigABoxWidensTheCellsAndStaysExact)
     gpu.setup(config);
     gpu.run();
 
-    const SpringNetworkOpenCL::CellGrid & grid = gpu.stericCells();
+    const SpringNetworkOpenCL::CellGrid & grid = gpu.cells();
     ASSERT_GT(grid.ncellstotal, 0u) << "the grid was refused outright instead of widening";
-    EXPECT_FLOAT_EQ(grid.cutoff, CUTOFF) << "the requested cutoff was not kept";
-    EXPECT_GT(grid.width, CUTOFF) << "the cells were not widened, so the box cannot have fitted";
+    EXPECT_GT(grid.width, grid.requestedwidth) << "the cells were not widened, so the box cannot have fitted";
 
     // And it is still the right answer.
     for (unsigned i = 0; i < N + 1; ++i)

@@ -93,8 +93,14 @@ class SpringNetworkOpenCL : public SpringNetwork
 		virtual void endRun();
 
 		// A cell list: the linked-list grid of biospring.cl, plus the frame it
-		// is counted in. One per non-bonded term -- see the members below for
-		// why the cell width has to be that term's own cutoff.
+		// is counted in.
+		//
+		// ONE grid for every non-bonded term, not one each. A cell is not a
+		// cutoff -- see forcefield/shared/cellgrid_shared.h -- so a term is not
+		// tied to a grid of its own size: it takes its own stencil radius out of
+		// the same bins, `biospring_stencil_radius(its cutoff, this width)`.
+		// That is what removes two of the three rangings per step, and it is
+		// what lets the width be narrower than any cutoff.
 		struct CellGrid
 		{
 			cl::Buffer headbuffer;       // one head per cell
@@ -104,8 +110,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 			unsigned ncellstotal = 0;    // 0 = never measured
 			cl_int4 ncells = {{0, 0, 0, 0}};
 			cl_float4 origin = {{0.0f, 0.0f, 0.0f, 0.0f}};
-			float cutoff = 0.0f;         // what this term asked for
-			float width = 0.0f;          // the cells actually built; >= cutoff
+			float requestedwidth = 0.0f; // what getCellWidth() asked for
+			float width = 0.0f;          // the cells actually built; >= requested
+			int maxstencil = 1;          // the widest stencil any term needs here
 		};
 
 		// Walks the device's cell list the way a force kernel has to, and
@@ -122,11 +129,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 		std::vector<unsigned> neighborsFromCellList(const CellGrid & grid, unsigned i,
 		                                            float cutoff);
 
-		// The grid of a given term, for the parity test to walk. Each term has
-		// its own; see the CellGrid declaration for why.
-		const CellGrid & stericCells() const { return _stericcells; }
-		const CellGrid & electrostaticCells() const { return _electrostaticcells; }
-		const CellGrid & hydrophobicCells() const { return _hydrophobiccells; }
+		// The grid, for the parity test to walk. One for every term; see the
+		// CellGrid declaration for why.
+		const CellGrid & cells() const { return _cells; }
 
 
 
@@ -332,9 +337,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// Must match BIOSPRING_EMPTY_CELL in biospring.cl.
 		static const unsigned EMPTY_CELL = static_cast<unsigned>(-1);
 
-		CellGrid _stericcells;
-		CellGrid _electrostaticcells;
-		CellGrid _hydrophobiccells;
+		CellGrid _cells;
 
 		// Two different things, deliberately not one function.
 		//
@@ -346,10 +349,15 @@ class SpringNetworkOpenCL : public SpringNetwork
 		//
 		// The frame is remeasured when the device reports that a particle fell
 		// outside it, which is a four-byte read rather than that pass.
-		bool _measureCellGrid(CellGrid & grid, float cutoff);
+		bool _measureCellGrid(CellGrid & grid, float width);
 		void _binParticlesIntoCells(CellGrid & grid);
 		bool _frameStillHolds(const CellGrid & grid) const;
-		bool _buildCellList(CellGrid & grid, float cutoff);
+		bool _buildCellList(CellGrid & grid, float width);
+		// The widest stencil any enabled term asks of cells of `width`.
+		int _maxStencilRadius(float width) const;
+		// The longest reach of any enabled pairwise term, in A: what the grid's
+		// margin is measured against.
+		float _largestPairwiseCutoff() const;
 
 		// Refreshes the grid of every enabled non-bonded term.
 		void _updateCellLists();

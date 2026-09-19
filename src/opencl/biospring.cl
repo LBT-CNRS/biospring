@@ -272,6 +272,7 @@ __kernel void electrostatic(const __global float4 * positions,
                             const __global uint * cellhead,
                             const __global uint * nextincell,
                             const float4 origin, const float cellwidth, const int4 ncells,
+                            const int stencilradius,
                             const __global Springocl * springs,
                             const __global int * springoffsets,
                             const int springsenabled,
@@ -292,10 +293,18 @@ __kernel void electrostatic(const __global float4 * positions,
 
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
 
-	for (int dz = -1; dz <= 1; dz++)
-		for (int dy = -1; dy <= 1; dy++)
-			for (int dx = -1; dx <= 1; dx++)
+	// The stencil, not a fixed 3x3x3 block: the cells are narrower than the
+	// cutoff, so the walk goes `stencilradius` of them out and skips the corners
+	// the cutoff cannot reach into. Both come from shared/cellgrid_shared.h,
+	// which the host compiles too -- the two backends walk the same cells or
+	// they compute different forces.
+	for (int dz = -stencilradius; dz <= stencilradius; dz++)
+		for (int dy = -stencilradius; dy <= stencilradius; dy++)
+			for (int dx = -stencilradius; dx <= stencilradius; dx++)
 				{
+				if (!biospring_cell_in_range(dx, dy, dz, cellwidth, cutoffsq))
+					continue;
+
 				const int x = cx + dx, y = cy + dy, z = cz + dz;
 				// Nothing is periodic here: a stencil cell outside the grid is
 				// absent, never the cell on the opposite face.
@@ -344,6 +353,7 @@ __kernel void steric(const __global float4 * positions,
                      const __global uint * cellhead,
                      const __global uint * nextincell,
                      const float4 origin, const float cellwidth, const int4 ncells,
+                     const int stencilradius,
                      const __global Springocl * springs,
                      const __global int * springoffsets,
                      const int springsenabled,
@@ -366,10 +376,18 @@ __kernel void steric(const __global float4 * positions,
 
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
 
-	for (int dz = -1; dz <= 1; dz++)
-		for (int dy = -1; dy <= 1; dy++)
-			for (int dx = -1; dx <= 1; dx++)
+	// The stencil, not a fixed 3x3x3 block: the cells are narrower than the
+	// cutoff, so the walk goes `stencilradius` of them out and skips the corners
+	// the cutoff cannot reach into. Both come from shared/cellgrid_shared.h,
+	// which the host compiles too -- the two backends walk the same cells or
+	// they compute different forces.
+	for (int dz = -stencilradius; dz <= stencilradius; dz++)
+		for (int dy = -stencilradius; dy <= stencilradius; dy++)
+			for (int dx = -stencilradius; dx <= stencilradius; dx++)
 				{
+				if (!biospring_cell_in_range(dx, dy, dz, cellwidth, cutoffsq))
+					continue;
+
 				const int x = cx + dx, y = cy + dy, z = cz + dz;
 				if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)
 					continue;
@@ -421,6 +439,7 @@ __kernel void hydrophobic(const __global float4 * positions,
                           const __global uint * cellhead,
                           const __global uint * nextincell,
                           const float4 origin, const float cellwidth, const int4 ncells,
+                          const int stencilradius,
                           const __global Springocl * springs,
                           const __global int * springoffsets,
                           const int springsenabled,
@@ -441,10 +460,18 @@ __kernel void hydrophobic(const __global float4 * positions,
 
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
 
-	for (int dz = -1; dz <= 1; dz++)
-		for (int dy = -1; dy <= 1; dy++)
-			for (int dx = -1; dx <= 1; dx++)
+	// The stencil, not a fixed 3x3x3 block: the cells are narrower than the
+	// cutoff, so the walk goes `stencilradius` of them out and skips the corners
+	// the cutoff cannot reach into. Both come from shared/cellgrid_shared.h,
+	// which the host compiles too -- the two backends walk the same cells or
+	// they compute different forces.
+	for (int dz = -stencilradius; dz <= stencilradius; dz++)
+		for (int dy = -stencilradius; dy <= stencilradius; dy++)
+			for (int dx = -stencilradius; dx <= stencilradius; dx++)
 				{
+				if (!biospring_cell_in_range(dx, dy, dz, cellwidth, cutoffsq))
+					continue;
+
 				const int x = cx + dx, y = cy + dy, z = cz + dz;
 				if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)
 					continue;
