@@ -920,6 +920,21 @@ void SpringNetworkOpenCL::idleRun()
 	SpringNetwork::idleRun();
 	_computeEnergiesFromDeviceState();
 
+	// After the interactors, because that is where FreeSASA publishes a freshly
+	// computed surface into the Particle objects. Doing it here means the next
+	// step's kernel reads the surface the CPU would read on that same step.
+	//
+	// NOT gated on isFreeSASADynamic(). Even in its static mode FreeSASA
+	// publishes AFTER setup -- a worker thread computes the areas and flips
+	// _sasaValid, and until then syncParticleStateData deliberately leaves the
+	// particles alone. So the surfaces uploaded at init are not the ones the CPU
+	// ends up using, and a device that never re-read them ran the whole
+	// trajectory on the .nc's values. Measured on 052: 7.86 A apart after 300
+	// steps. The flag also only becomes true at the first interactor sync, so
+	// testing it here would miss the very publication it is meant to catch.
+	if (isIMPEnabled())
+		_refreshSurfacesIfChanged();
+
 	#ifdef OPENGL_SUPPORT
 		//Release the VBOs so OpenGL can play with them
 		_err = _queue.enqueueReleaseGLObjects(&_allvbos, NULL, &_event);
@@ -1432,8 +1447,6 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	// Evaluated now, except in the two cases the kernel does not cover.
 	if (isIMPEnabled() && !_membraneIsFlat())
 		add("impala (the membrane is curved or doubled: a different model)");
-	if (isIMPEnabled() && isFreeSASADynamic())
-		add("impala (--sasa-dynamic: the device holds the surface computed at setup)");
 	if (isInsertionVectorEnabled()) add("insertionvector");
 	if (isRigidBodyEnabled())       add("rigidbody");
 
@@ -1732,6 +1745,38 @@ void SpringNetworkOpenCL::computeOpenCLSurfaces()
 		_particlesurfaces[i] = p.getSolventAccessibilitySurface();
 		_particletransfers[i] = p.getTransferEnergyByAccessibleSurface();
 		}
+	}
+
+// FreeSASA's worker thread recomputes the surfaces every _freesasaState.step
+// steps (1000 by default) and syncParticleStateData copies them into the
+// Particle objects. There is no generation counter to ask, so this compares --
+// one pass over N floats, against a transfer of the same N floats, so the
+// comparison is worth making: on the default cadence it avoids 999 uploads out
+// of 1000.
+void SpringNetworkOpenCL::_refreshSurfacesIfChanged()
+	{
+	if (_particlesurfaces == nullptr)
+		return;
+
+	bool changed = false;
+	for (unsigned i = 0; i < _nbparticlesocl; i++)
+		{
+		const float surface = SpringNetwork::getParticle(i).getSolventAccessibilitySurface();
+		if (surface != _particlesurfaces[i])
+			{
+			_particlesurfaces[i] = surface;
+			changed = true;
+			}
+		}
+	if (!changed)
+		return;
+
+	// An explicit write even though the buffer was created CL_MEM_USE_HOST_PTR:
+	// on unified memory the device may well be reading the same pages already,
+	// but OpenCL only guarantees that after a map or a write.
+	_err = _queue.enqueueWriteBuffer(_inSurfaceBuffer, CL_TRUE, 0,
+	                                 sizeof(float) * _nbparticlesocl, _particlesurfaces);
+	checkErr("enqueueWriteBuffer(surface)");
 	}
 
 // The four membrane parameters default to 0.0 and no .msp key reaches them;

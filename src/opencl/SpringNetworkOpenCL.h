@@ -339,6 +339,11 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// Fills _particlesurfaces and _particletransfers, IMPALA's per-particle
 		// inputs. Called once: this port covers the static surface.
 		void computeOpenCLSurfaces();
+		// Re-reads the accessible surfaces from the Particle objects and, if any
+		// changed, sends them to the device. For --sasa-dynamic, where a worker
+		// thread recomputes them during the run.
+		void _refreshSurfacesIfChanged();
+
 		// True when the membrane is the flat single one the kernel implements.
 		// The four geometry parameters default to 0 and only an MDDriver client
 		// can change them, mid-run, so this is re-read every step.
