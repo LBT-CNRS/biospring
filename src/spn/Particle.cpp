@@ -196,7 +196,7 @@ void Particle::addElectrostaticForce(std::vector<DeferredNonbondedContribution> 
     bool apply = true;
 
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-    _springnetwork->getNeighborSearch().electrostatic->for_each_neighbor(*this, [&](size_t neighbor_index) {
+    _springnetwork->getNeighborSearch().electrostatic->for_each_neighbor(static_cast<size_t>(getId()), [&](size_t neighbor_index) {
         if (_springnetwork->isProbeParticle(neighbor_index))
             return;
 
@@ -276,7 +276,7 @@ void Particle::addHydrophobicityForce(std::vector<DeferredNonbondedContribution>
     if (_springnetwork->isHydrophobicityEnabled())
     {
         const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-        _springnetwork->getNeighborSearch().hydrophobic->for_each_neighbor(*this, [&](size_t neighbor_index) {
+        _springnetwork->getNeighborSearch().hydrophobic->for_each_neighbor(static_cast<size_t>(getId()), [&](size_t neighbor_index) {
             if (_springnetwork->isProbeParticle(neighbor_index))
                 return;
 
@@ -375,7 +375,7 @@ void Particle::addStericForce(std::vector<DeferredNonbondedContribution> & defer
     bool apply = true;
 
     const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-    _springnetwork->getNeighborSearch().steric->for_each_neighbor(*this, [&](size_t neighbor_index) {
+    _springnetwork->getNeighborSearch().steric->for_each_neighbor(static_cast<size_t>(getId()), [&](size_t neighbor_index) {
         if (_springnetwork->isProbeParticle(neighbor_index))
             return;
 

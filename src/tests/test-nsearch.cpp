@@ -161,6 +161,155 @@ TEST(TestNeighborSearchCellWidth, TheStencilDropsItsDeadCorners)
 
 // =====================================================================================
 //
+// Tests for the cached pair list.
+//
+// =====================================================================================
+
+// The list must answer exactly what a fresh search answers -- that is the whole
+// claim, and it is what makes the list an optimisation rather than an
+// approximation. Held against brute force after every move, while the particles
+// drift far enough to force several rebuilds.
+TEST(TestNeighborList, MatchesBruteForceWhileTheParticlesDrift)
+{
+    auto particles = generate_random_particles(400);
+    const double cutoff = 10.0;
+    // A narrow skin against a wide jitter, so that every round moves the
+    // particles past half of it: a list that failed to rebuild would be stale
+    // from the first round on, which is what this has to catch.
+    const float skin = 1.0f;
+
+    biospring::nsearch::NeighborSearch ns(particles, cutoff, skin);
+    ASSERT_TRUE(ns.has_list()) << "a searcher with a skin should hold a list";
+
+    unsigned state = 11u;
+    const auto jitter = [&state]() {
+        state = state * 1103515245u + 12345u;
+        return (static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff) - 0.5f) * 1.6f;
+    };
+
+    for (int round = 0; round < 10; round++)
+    {
+        for (auto & p : particles)
+            p.setPosition(p.getPosition() + Vector3f(jitter(), jitter(), jitter()));
+        ns.update();
+
+        biospring::nsearch::NeighborSearchO2 reference(particles, cutoff);
+        for (size_t i = 0; i < particles.size(); i++)
+        {
+            auto expected = reference.get_neighbors(particles[i]);
+            auto found = ns.get_neighbors(i);
+            std::sort(expected.begin(), expected.end());
+            std::sort(found.begin(), found.end());
+            ASSERT_EQ(found, expected) << "round " << round << ", particle " << i;
+        }
+    }
+}
+
+// What the skin is FOR: the list has to stay right while nothing has moved far
+// enough to rebuild it. A pair that was outside the cutoff at build time can
+// cross into it before the next rebuild, and the list has to have been holding
+// it all along -- which is why it is built at cutoff + skin and not at cutoff.
+//
+// The drift here stays under half the skin, so `update()` deliberately does
+// NOT rebuild: what is tested is the list it kept.
+TEST(TestNeighborList, HoldsPairsThatCrossInBeforeAnyRebuild)
+{
+    auto particles = generate_random_particles(400);
+    const double cutoff = 25.0;
+    const float skin = 4.0f;   // rebuilt only past a drift of 2 A
+
+    biospring::nsearch::NeighborSearch ns(particles, cutoff, skin);
+    ASSERT_TRUE(ns.has_list());
+    const size_t built = ns.list_size();
+
+    unsigned state = 29u;
+    const auto jitter = [&state]() {
+        state = state * 1103515245u + 12345u;
+        return (static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff) - 0.5f) * 1.8f;
+    };
+    for (auto & p : particles)
+        p.setPosition(p.getPosition() + Vector3f(jitter(), jitter(), jitter()));
+
+    ns.update();
+    ASSERT_EQ(ns.list_size(), built) << "nothing drifted past half the skin, so nothing should have been rebuilt";
+
+    biospring::nsearch::NeighborSearchO2 reference(particles, cutoff);
+    size_t pairs = 0;
+    for (size_t i = 0; i < particles.size(); i++)
+    {
+        auto expected = reference.get_neighbors(particles[i]);
+        auto found = ns.get_neighbors(i);
+        std::sort(expected.begin(), expected.end());
+        std::sort(found.begin(), found.end());
+        ASSERT_EQ(found, expected) << "particle " << i << " after drifting inside the skin";
+        pairs += expected.size();
+    }
+    EXPECT_GT(pairs, 100u) << "too sparse for the comparison to mean anything";
+}
+
+// A list is only worth having if it holds more than this step's neighbours:
+// what it holds beyond the cutoff is exactly what lets it survive the next
+// step. Without a skin there is nothing to survive on, so there is no list.
+TEST(TestNeighborList, NoSkinMeansNoList)
+{
+    const auto particles = generate_random_particles(200);
+    biospring::nsearch::NeighborSearch bare(particles, 10.0);
+    EXPECT_FALSE(bare.has_list());
+
+    biospring::nsearch::NeighborSearch skinned(particles, 10.0, 3.0f);
+    ASSERT_TRUE(skinned.has_list());
+
+    // And the answers are the same either way.
+    for (size_t i = 0; i < particles.size(); i++)
+    {
+        auto a = bare.get_neighbors(i), b = skinned.get_neighbors(i);
+        std::sort(a.begin(), a.end());
+        std::sort(b.begin(), b.end());
+        ASSERT_EQ(a, b) << "particle " << i;
+    }
+
+    // The list carries the pairs the cutoff does not, which is the margin it
+    // lives on.
+    EXPECT_GT(skinned.list_size(), 0u);
+}
+
+// A subset searcher -- electrostatic holds only the charged particles -- must
+// give every unlisted particle an empty slice, not a broken one, and must not
+// let the offsets go backwards whatever order the indices arrive in.
+TEST(TestNeighborList, ASubsetLeavesTheOthersEmpty)
+{
+    const auto particles = generate_random_particles(300);
+    // Deliberately out of order, which is what a caller building an index list
+    // from a filter may well produce.
+    std::vector<size_t> included;
+    for (size_t i = particles.size(); i-- > 0;)
+        if (i % 3 == 0)
+            included.push_back(i);
+
+    biospring::nsearch::NeighborSearch ns(particles, 12.0, included, 3.0f);
+    ASSERT_TRUE(ns.has_list());
+
+    biospring::nsearch::NeighborSearchO2 reference(particles, 12.0);
+    for (size_t i = 0; i < particles.size(); i++)
+    {
+        auto found = ns.get_neighbors(i);
+        std::sort(found.begin(), found.end());
+
+        // Only the included particles are in the grid, so only they can be
+        // neighbours -- of anyone.
+        auto expected = reference.get_neighbors(particles[i]);
+        expected.erase(std::remove_if(expected.begin(), expected.end(),
+                                      [&](size_t j) { return j % 3 != 0; }),
+                       expected.end());
+        if (i % 3 != 0)
+            expected.clear(); // not a member: the grid was never asked about it
+        std::sort(expected.begin(), expected.end());
+        ASSERT_EQ(found, expected) << "particle " << i;
+    }
+}
+
+// =====================================================================================
+//
 // Tests for the skin margin of `NeighborSearch` (deferred grid rebuilds).
 //
 // =====================================================================================
@@ -359,3 +508,4 @@ int main(int argc, char * argv[])
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+

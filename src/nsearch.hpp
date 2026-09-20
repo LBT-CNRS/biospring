@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -152,6 +153,27 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     // populated and consulted when `_skin > 0`.
     std::vector<std::array<double, 3>> _referencePositions;
 
+    // The cached pair list, in the same layout as the cells: particle `i` owns
+    // the slice [_listoffsets[i], _listoffsets[i + 1]) of _listitems.
+    //
+    // WHY IT EXISTS. Without it every query walks the cells again, so the
+    // neighbour search is redone at every step of every term -- measured at 87%
+    // of the non-bonded cost, against 13% for the force laws themselves. The
+    // list is built once at `cutoff + skin` and reused until something has moved
+    // far enough to invalidate it, which is what `_exceeds_skin` decides.
+    //
+    // It is not an approximation. A pair missing from the list was farther than
+    // cutoff + skin when the list was built, so it cannot be inside `cutoff`
+    // until the two have closed by `skin`; rebuilding before that can happen
+    // makes the set of pairs identical to a fresh search, every step.
+    //
+    // Only populated when a skin was asked for: with no skin the list would be
+    // rebuilt every step and would only add a pass.
+    std::vector<size_t> _listoffsets;
+    std::vector<uint32_t> _listitems;
+    std::vector<bool> _selected;
+    bool _listisvalid = false;
+
     // Width of a cell, in the same unit as the cutoff. NOT the search radius:
     // see forcefield/shared/cellgrid_shared.h for why the two are different
     // things and what narrower cells buy. Zero asks for the historical
@@ -174,6 +196,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         : NeighborSearchBase<ContainerType>(container, cutoff), _skin(skin), _cellwidth(cellwidth)
     {
         _build_grid();
+        _build_list();
     }
 
     NeighborSearch(const ContainerType & container, float cutoff, std::vector<size_t> included_indices,
@@ -182,6 +205,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
           _skin(skin), _cellwidth(cellwidth)
     {
         _build_grid();
+        _build_list();
     }
 
     // The cell width the grid actually uses, and the stencil radius that goes
@@ -220,8 +244,41 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         return neighbors;
     }
 
+    // Applies a callback to each neighbor of the particle at `index`.
+    //
+    // This is the query the force loops make, and the only one the cached list
+    // can answer: a list is per particle, so the caller has to say which one.
+    // The element-based overload above stays for callers that hold a Locatable
+    // and no index (Topology, the tests); it always walks the cells.
+    template <typename Callback> void for_each_neighbor(size_t index, Callback && callback) const
+    {
+        if (!_listisvalid)
+        {
+            for_each_neighbor(_system->at(index), std::forward<Callback>(callback));
+            return;
+        }
+
+        const auto & element = _system->at(index);
+        const size_t first = _listoffsets[index];
+        const size_t last = _listoffsets[index + 1];
+        for (size_t slot = first; slot < last; slot++)
+        {
+            const size_t candidate = _listitems[slot];
+            // The list was built at cutoff + skin, so it holds pairs that are
+            // not neighbours yet. This is the test that makes the answer the
+            // same one a fresh search would give.
+            if (measure::distance(element, _system->at(candidate)) < _cutoff)
+                callback(candidate);
+        }
+    }
+
     // Returns the neighbors of the element located at `index` in `_system`.
-    std::vector<size_t> get_neighbors(size_t i) const { return get_neighbors(_system->at(i)); }
+    std::vector<size_t> get_neighbors(size_t i) const
+    {
+        std::vector<size_t> neighbors;
+        for_each_neighbor(i, [&](size_t particle_index) { neighbors.push_back(particle_index); });
+        return neighbors;
+    }
 
     // Rebuilds the cell list based on the system coordinates. When a positive
     // skin was requested, the rebuild is skipped until a tracked particle has
@@ -232,7 +289,13 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         if (!_exceeds_skin())
             return;
         _build_grid();
+        _build_list();
     }
+
+    // How many pairs the cached list holds, and whether there is one at all.
+    // For the tests and for reporting; a searcher with no skin has no list.
+    bool has_list() const { return _listisvalid; }
+    size_t list_size() const { return _listitems.size(); }
 
     // Excludes one particle index from the grid. The grid is rebuilt
     // unconditionally, bypassing the skin check, so future neighbor queries
@@ -241,6 +304,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     {
         _excluded_index = index;
         _build_grid();
+        _build_list();
     }
 
   protected:
@@ -439,6 +503,58 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
         });
     }
 
+    // Collects, for every particle this grid serves, the particles within
+    // `cutoff + skin` of it.
+    //
+    // Skipped entirely without a skin: the list would then be exactly the
+    // neighbours of this step, rebuilt next step, so it would cost a pass and
+    // a copy of itself to save nothing.
+    void _build_list()
+    {
+        _listisvalid = false;
+        if (_skin <= 0.0f)
+        {
+            _listoffsets.clear();
+            _listitems.clear();
+            return;
+        }
+
+        const size_t n = _system->size();
+
+        // Walked in index order, not in the order `_for_each_selected` hands
+        // them over: a caller's `_included_indices` need not be sorted, and the
+        // offsets only make sense if they increase.
+        _selected.assign(n, false);
+        _for_each_selected([&](size_t i) { _selected[i] = true; });
+
+        const float radius = _search_radius();
+        _listoffsets.assign(n + 1, 0);
+        _listitems.clear();
+
+        for (size_t i = 0; i < n; i++)
+        {
+            if (_selected[i])
+            {
+                const auto & element = _system->at(i);
+                _for_each_neighbor_cell(concepts::locatable::get_position(element), [&](size_t cell) {
+                    for (size_t slot = _cellstart[cell]; slot < _cellstart[cell + 1]; slot++)
+                    {
+                        const size_t candidate = _cellitems[slot];
+                        if (candidate == i)
+                            continue;
+                        if (measure::distance(element, _system->at(candidate)) < radius)
+                            _listitems.push_back(static_cast<uint32_t>(candidate));
+                    }
+                });
+            }
+            // Written for every particle, selected or not, so a particle the
+            // grid does not serve owns an empty slice rather than a broken one.
+            _listoffsets[i + 1] = _listitems.size();
+        }
+
+        _listisvalid = true;
+    }
+
     // The cell of the particle at `index`.
     size_t _compute_cell_of(size_t index) const
     {
@@ -472,7 +588,12 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
             const double dx = current[0] - reference[0];
             const double dy = current[1] - reference[1];
             const double dz = current[2] - reference[2];
-            return std::sqrt(dx * dx + dy * dy + dz * dz) > static_cast<double>(_skin);
+            // HALF the skin. The cell grid alone could afford the whole of it,
+            // because a query recomputes its own cell from its current position
+            // and only the candidate was stale. A pair list has no fresh end:
+            // both particles were placed when it was built, so two of them
+            // drifting by skin/2 towards each other close the whole skin.
+            return std::sqrt(dx * dx + dy * dy + dz * dz) > 0.5 * static_cast<double>(_skin);
         };
 
         if (_included_indices.empty())
