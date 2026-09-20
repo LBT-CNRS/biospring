@@ -790,65 +790,37 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     // _setupSelections();
 }
 
-// Widths above this are not worth considering: a cell wider than the longest
-// cutoff only makes the stencil coarser than 3x3x3, which no example wants.
-// Below it the scan stops where the stencil would pass this many cells, which
-// is far past any width the cost model has ever chosen.
-static constexpr int MAX_STENCIL_RADIUS = 8;
-
-// How many cells of a stencil are walked, and how much volume they cover.
+// Picks the cell width, in A, from the stencil radius the longest-reaching term
+// should walk -- and from nothing else.
 //
-// `cube` is every cell the triple loop steps through, including the corners
-// `biospring_cell_in_range` rejects -- those are visited and tested, so they are
-// paid for. `volume` is what survives, which is what holds the candidates.
-static void stencilCost(float radius, float width, double & cube, double & volume)
-{
-    const int k = biospring_stencil_radius(radius, width);
-    const float radiussquared = radius * radius;
-    long live = 0;
-    for (int dx = -k; dx <= k; dx++)
-        for (int dy = -k; dy <= k; dy++)
-            for (int dz = -k; dz <= k; dz++)
-                if (biospring_cell_in_range(dx, dy, dz, width, radiussquared))
-                    live++;
-
-    const double side = 2.0 * k + 1.0;
-    cube += side * side * side;
-    volume += static_cast<double>(live) * std::pow(width, 3);
-}
-
-// Particles per A^3, over the box they currently occupy. Turns a searched
-// volume into a number of candidates, which is the only way the two halves of
-// the cost below can be added up.
-double SpringNetwork::_particleDensity() const
-{
-    if (_particles.size() < 2)
-        return 0.0;
-
-    double lo[3], hi[3];
-    for (int d = 0; d < 3; d++)
-        lo[d] = hi[d] = _particles[0].getPosition()[d];
-    for (const Particle & p : _particles)
-        for (int d = 0; d < 3; d++)
-        {
-            const double x = p.getPosition()[d];
-            if (x < lo[d]) lo[d] = x;
-            if (x > hi[d]) hi[d] = x;
-        }
-
-    const double volume = (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
-    return volume > 0.0 ? static_cast<double>(_particles.size()) / volume : 0.0;
-}
-
+// WHY NOTHING ELSE, AND PARTICULARLY NOT A DENSITY. The obvious model is to
+// price a width at "volume searched x particles per A3, plus what the cells
+// cost to visit", and that is what this did. It does not work here, because
+// BioSpring has no solvent: a structure is a molecule in vacuum, so there is no
+// density to speak of. 76% of the capsid's bounding box is empty and so is 74%
+// of the nucleosome's, and a fit of the cell-visit cost against measured times
+// came out a factor of 4 apart on the CPU between the two, and a factor of 7 on
+// the device. A number that moves by 7x between two examples is not a constant.
+//
+// What IS stable is the stencil radius. Measured on those same two examples --
+// 25069 beads at 0.0175 A-3 with cutoffs of 9 and 16 A, and 37200 beads at
+// 0.0015 A-3, twelve times sparser, with cutoffs of 5 and 16 A -- the best width
+// is the one that puts the longest term at a radius of 2 cells on the CPU and 3
+// on the device, in both cases, to within 1% of the measured optimum. It is a
+// dimensionless quantity, which is why it survives the change of system where
+// an energy per unit volume does not.
+//
+// Among the widths that give the longest term exactly that radius, the one that
+// walks the fewest cells in total. That is what separates 9 A from 8 A on the
+// nucleosome: both put the 16 A coulomb at two cells, but 9 A also puts the 9 A
+// steric term at one, 27 cells against 125, and it measured 5% faster.
 float SpringNetwork::getCellWidth() const
 {
     if (_config.sim.cellsize > 0.0)
         return static_cast<float>(_config.sim.cellsize);
 
-    // Settled once. The cutoffs do not move during a run -- no .msp key and no
-    // MDDriver message reaches them -- and the density drifts far too slowly to
-    // change the answer, so rescanning every step would only cost an O(N) pass
-    // to arrive at the same number.
+    // Settled once. Nothing that feeds it moves during a run: no .msp key and no
+    // MDDriver message reaches a cutoff.
     if (_automaticcellwidth > 0.0f)
         return _automaticcellwidth;
 
@@ -866,54 +838,49 @@ float SpringNetwork::getCellWidth() const
     if (radii.empty())
         return 0.0f; // no pairwise term: the searchers fall back to one cell per radius
 
-    const double density = _particleDensity();
-    const double visitcost = cellVisitCost();
+    const int target = targetStencilRadius();
+    const float longest = *std::max_element(radii.begin(), radii.end());
 
-    // The widths worth considering are the ones that divide SOME term's radius
-    // exactly. Those are the ones with no slack: a width a hair under a divisor
-    // costs a whole extra shell of cells for a sliver of volume.
+    // The widths worth considering divide some term's radius exactly. Those are
+    // the ones with no slack: a width a hair under a divisor costs a whole extra
+    // shell of cells for a sliver of volume. longest/target is always among them
+    // and always admissible, so the search below cannot come up empty.
     float best = 0.0f;
-    double bestcost = 0.0;
+    long bestcells = 0;
     for (float radius : radii)
     {
-        for (int divisor = 1; divisor <= MAX_STENCIL_RADIUS; divisor++)
+        for (int divisor = 1; divisor <= target; divisor++)
         {
             const float width = radius / static_cast<float>(divisor);
 
-            double cube = 0.0, volume = 0.0;
-            bool admissible = true;
+            long cells = 0;
+            int widest = 0;
             for (float other : radii)
             {
-                if (biospring_stencil_radius(other, width) > MAX_STENCIL_RADIUS)
-                {
-                    // A width that suits a short cutoff can put a long one far
-                    // out of reach. Nothing below the cap has ever won, so this
-                    // only bounds the scan.
-                    admissible = false;
-                    break;
-                }
-                stencilCost(other, width, cube, volume);
+                const int k = biospring_stencil_radius(other, width);
+                widest = std::max(widest, k);
+                const long side = 2L * k + 1L;
+                cells += side * side * side;
             }
-            if (!admissible)
+
+            // Exactly the target, not at most it: a coarser grid would win on
+            // cells walked every time, and be slower for it.
+            if (widest != target)
                 continue;
 
-            const double cost = volume * density + visitcost * cube;
-            if (best <= 0.0f || cost < bestcost)
+            if (best <= 0.0f || cells < bestcells || (cells == bestcells && width > best))
             {
                 best = width;
-                bestcost = cost;
+                bestcells = cells;
             }
         }
     }
 
-    // Unreachable unless every candidate was rejected, which cannot happen:
-    // width = max(radii) always gives every term a stencil radius of 1.
-    _automaticcellwidth = best > 0.0f ? best : *std::max_element(radii.begin(), radii.end());
+    _automaticcellwidth = best > 0.0f ? best : longest / static_cast<float>(target);
 
-    logging::info("Neighbour cells of %.2f A, %.0f particles per 1000 A3; stencil radius %d for %.1f A",
-                  _automaticcellwidth, _particleDensity() * 1000.0,
-                  biospring_stencil_radius(*std::max_element(radii.begin(), radii.end()), _automaticcellwidth),
-                  static_cast<double>(*std::max_element(radii.begin(), radii.end())));
+    logging::info("Neighbour cells of %.2f A: stencil radius %d for the longest cutoff (%.1f A)",
+                  _automaticcellwidth, biospring_stencil_radius(longest, _automaticcellwidth),
+                  static_cast<double>(longest));
 
     return _automaticcellwidth;
 }

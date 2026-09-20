@@ -133,18 +133,17 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// CellGrid declaration for why.
 		const CellGrid & cells() const { return _cells; }
 
-		// A cell visit costs about one candidate test here, against 2.5 on the
-		// CPU -- fitted the same way, on the same example, over the same widths,
-		// but against the kernels' own timers rather than the wall clock
-		// (R2 = 0.87). The device blanks and bins its cells in parallel, so what
-		// is left of a visit is one scattered read of the cell's head, and
-		// neighbouring work items read cells that are nowhere near each other.
+		// Three cells, where the CPU wants two. Measured the same way, on the
+		// same two examples, against the kernels' own timers: 5.33 A is the best
+		// width on both -- the optimum outright on the capsid and within 1% of it
+		// on the nucleosome -- and that is the 16 A coulomb term at three cells.
 		//
-		// It is cheaper than the CPU's and still not free, which is why the
-		// widths the two backends settle on differ -- 5.3 A here against 9 A
-		// there, on 023 -- and why neither goes as narrow as the geometry alone
-		// would want.
-		float cellVisitCost() const override { return 1.1f; }
+		// Finer than the CPU's because the device blanks and bins in parallel, so
+		// what is left of visiting a cell is one scattered read. Still not free,
+		// which is why it stops at three and not at the eight the geometry alone
+		// would ask for: at 2.67 A the capsid's kernels take 2.405 s against
+		// 1.341 s at 5.33 A.
+		int targetStencilRadius() const override { return 3; }
 
 
 

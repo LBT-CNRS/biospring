@@ -344,24 +344,21 @@ class SpringNetwork
     // the automatic choice when it asked for nothing.
     float getCellWidth() const;
 
-    // What visiting one more cell costs, expressed in candidate distance tests.
+    // How many cells out of its own the longest-reaching term should walk.
     //
-    // This is the number the automatic width turns on, and it is measured, not
-    // assumed. Narrower cells always search less VOLUME -- the stencil hugs the
-    // cutoff ball more closely -- but they visit more cells to do it, and the
-    // whole question is which side wins. If a cell visit were free the best
-    // width would be the narrowest one allowed; it is not.
+    // This one integer decides the cell width -- see getCellWidth, which also
+    // says why it is a stencil radius and not a cost per candidate, and why
+    // there is no density anywhere in it.
     //
-    // 2.5 here, fitted on 023 (25069 beads, steric 9 A, coulomb 16 A) over cell
-    // widths from 16 A down to 2 A, R2 = 0.99. A cell visit on this path is a
-    // scattered read into an array of cell starts plus the corner test, against
-    // a candidate test that reads a position and takes a dot product -- so the
-    // cell is the dearer of the two, which is not what the geometry alone would
-    // suggest.
+    // 2 here. Measured on 023 (25069 beads, 9 and 16 A cutoffs) and on 034
+    // (37200 beads in a hollow capsid, twelve times sparser, 5 and 16 A), by
+    // sweeping simulation.cellsize from 16 A down to 2 A: the best width puts
+    // the longest term at two cells on both, and the CPU loses 9% either side
+    // of that -- 6% at one cell, 8% at three.
     //
-    // The device pays a different price and says so -- see
-    // SpringNetworkOpenCL::cellVisitCost.
-    virtual float cellVisitCost() const { return 2.5f; }
+    // The device wants a different number and says so, in
+    // SpringNetworkOpenCL::targetStencilRadius.
+    virtual int targetStencilRadius() const { return 2; }
 
     bool isSpringEnabled() const { return _config.spring.enable; }
     // Per-family runtime toggles for the torsions that -dihedral* already
@@ -563,9 +560,6 @@ class SpringNetwork
 
     void _excludeProbeFromNeighborSearch(NeighborSearch::Searcher & searcher);
     void _updateNeighborSearches();
-    // Particles per A^3 over their bounding box, which is what turns a searched
-    // volume into a number of candidates.
-    double _particleDensity() const;
     void _markNeighborSearchesDirty();
     void _syncProbeParticle();
     void _rebuildSpringNeighbors();
