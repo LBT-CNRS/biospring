@@ -319,27 +319,31 @@ TEST(SpringNetworkOpenCL, OneGridServesEveryTermAtItsOwnStencil)
     const SpringNetworkOpenCL::CellGrid & grid = gpu.cells();
     ASSERT_GT(grid.ncellstotal, 0u) << "no cell list was built at all";
 
-    // ONE grid, and its cells narrower than every cutoff that reads them. This
-    // is the whole change: the three terms used to own three grids of three
-    // widths, which cost three rangings a step and forced each cell to be as
-    // wide as its term's cutoff.
-    EXPECT_LT(grid.width, 6.0f) << "the cells are no narrower than the shortest cutoff";
-
     // A 40 A cloud is nowhere near the cell limit, so the cells built are the
     // cells asked for. Widening is the divergence path, not this one.
     EXPECT_FLOAT_EQ(grid.width, grid.requestedwidth);
+
+    // How wide the cells came out is a tuning answer -- it depends on the
+    // density and on what a cell visit costs, and this cloud is far sparser
+    // than a protein -- so it is not asserted here. What is asserted is that
+    // one grid has to serve three cutoffs at once, which is the contract.
+    EXPECT_GT(grid.width, 0.0f);
+    EXPECT_LE(grid.width, 14.0f) << "cells wider than the longest cutoff are never worth it";
 
     struct Term { const char * name; float cutoff; };
     const Term terms[] = {{"steric", 6.0f}, {"electrostatic", 14.0f}, {"hydrophobic", 10.0f}};
 
     // What tells the terms apart is now the stencil radius alone, and it has to
-    // order like the cutoffs do. If these ever come back equal, every term is
-    // paying the longest one's volume again.
+    // order like the cutoffs do. Two terms close in cutoff may well land on the
+    // same radius; the shortest and the longest, a factor of 2.3 apart, may not
+    // -- if those come back equal then the short-range term is walking the
+    // long-range one's volume, which is the failure this whole change is about.
     const int ksteric = biospring_stencil_radius(6.0f, grid.width);
-    const int kelectrostatic = biospring_stencil_radius(14.0f, grid.width);
     const int khydrophobic = biospring_stencil_radius(10.0f, grid.width);
-    EXPECT_LT(ksteric, khydrophobic);
-    EXPECT_LT(khydrophobic, kelectrostatic);
+    const int kelectrostatic = biospring_stencil_radius(14.0f, grid.width);
+    EXPECT_LE(ksteric, khydrophobic);
+    EXPECT_LE(khydrophobic, kelectrostatic);
+    EXPECT_LT(ksteric, kelectrostatic) << "6 A and 14 A ended up walking the same stencil";
     EXPECT_EQ(kelectrostatic, grid.maxstencil) << "the grid did not size its margin on the longest reach";
 
     for (const Term & term : terms)

@@ -790,37 +790,67 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     // _setupSelections();
 }
 
-// The largest stencil the automatic width is allowed to ask for: a term whose
-// search radius is `k` cells looks at (2k + 1)^3 of them.
-//
-// This is the one knob. Narrower cells always search less VOLUME -- the stencil
-// hugs the cutoff sphere more closely -- but they visit more cells to do it, and
-// a cell visit is not free. k = 5 is where the two meet on 023 (25069 beads,
-// steric 9 A and coulomb 16 A): it puts the width at 3.2 A and takes the
-// distances computed per bead per step from 2275 to 738, where k = 4 gives 983
-// and k = 8 gives 610 for four times the cells.
-static constexpr int MAX_STENCIL_RADIUS = 5;
+// Widths above this are not worth considering: a cell wider than the longest
+// cutoff only makes the stencil coarser than 3x3x3, which no example wants.
+// Below it the scan stops where the stencil would pass this many cells, which
+// is far past any width the cost model has ever chosen.
+static constexpr int MAX_STENCIL_RADIUS = 8;
 
-// How many cells of a stencil of radius `k` can actually hold a neighbour --
-// the cube minus the corners the search radius does not reach into. This is
-// what `_for_each_neighbor_cell` walks, so it is what the width is scored on.
-static size_t liveStencilCells(float radius, float width)
+// How many cells of a stencil are walked, and how much volume they cover.
+//
+// `cube` is every cell the triple loop steps through, including the corners
+// `biospring_cell_in_range` rejects -- those are visited and tested, so they are
+// paid for. `volume` is what survives, which is what holds the candidates.
+static void stencilCost(float radius, float width, double & cube, double & volume)
 {
     const int k = biospring_stencil_radius(radius, width);
     const float radiussquared = radius * radius;
-    size_t live = 0;
+    long live = 0;
     for (int dx = -k; dx <= k; dx++)
         for (int dy = -k; dy <= k; dy++)
             for (int dz = -k; dz <= k; dz++)
                 if (biospring_cell_in_range(dx, dy, dz, width, radiussquared))
                     live++;
-    return live;
+
+    const double side = 2.0 * k + 1.0;
+    cube += side * side * side;
+    volume += static_cast<double>(live) * std::pow(width, 3);
+}
+
+// Particles per A^3, over the box they currently occupy. Turns a searched
+// volume into a number of candidates, which is the only way the two halves of
+// the cost below can be added up.
+double SpringNetwork::_particleDensity() const
+{
+    if (_particles.size() < 2)
+        return 0.0;
+
+    double lo[3], hi[3];
+    for (int d = 0; d < 3; d++)
+        lo[d] = hi[d] = _particles[0].getPosition()[d];
+    for (const Particle & p : _particles)
+        for (int d = 0; d < 3; d++)
+        {
+            const double x = p.getPosition()[d];
+            if (x < lo[d]) lo[d] = x;
+            if (x > hi[d]) hi[d] = x;
+        }
+
+    const double volume = (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
+    return volume > 0.0 ? static_cast<double>(_particles.size()) / volume : 0.0;
 }
 
 float SpringNetwork::getCellWidth() const
 {
     if (_config.sim.cellsize > 0.0)
         return static_cast<float>(_config.sim.cellsize);
+
+    // Settled once. The cutoffs do not move during a run -- no .msp key and no
+    // MDDriver message reaches them -- and the density drifts far too slowly to
+    // change the answer, so rescanning every step would only cost an O(N) pass
+    // to arrive at the same number.
+    if (_automaticcellwidth > 0.0f)
+        return _automaticcellwidth;
 
     // Each term searches its cutoff plus the skin, so that is what the cells
     // have to cover.
@@ -836,45 +866,56 @@ float SpringNetwork::getCellWidth() const
     if (radii.empty())
         return 0.0f; // no pairwise term: the searchers fall back to one cell per radius
 
+    const double density = _particleDensity();
+    const double visitcost = cellVisitCost();
+
     // The widths worth considering are the ones that divide SOME term's radius
-    // exactly, because those are the ones with no slack: a width just under a
-    // divisor costs a whole extra shell of cells for a sliver of volume. On 023
-    // that is what picks 3.2 A -- 16/5 exactly for the coulomb, and 2.81 cells
-    // for the steric, which rounds up to 3 with 7% to spare.
+    // exactly. Those are the ones with no slack: a width a hair under a divisor
+    // costs a whole extra shell of cells for a sliver of volume.
     float best = 0.0f;
-    double bestvolume = 0.0;
+    double bestcost = 0.0;
     for (float radius : radii)
     {
         for (int divisor = 1; divisor <= MAX_STENCIL_RADIUS; divisor++)
         {
             const float width = radius / static_cast<float>(divisor);
 
-            double volume = 0.0;
+            double cube = 0.0, volume = 0.0;
             bool admissible = true;
             for (float other : radii)
             {
                 if (biospring_stencil_radius(other, width) > MAX_STENCIL_RADIUS)
                 {
-                    // A width that suits a short cutoff can put a long one
-                    // several shells out. Rejected rather than scored, because
-                    // the cost that bounds it is cells visited, not volume.
+                    // A width that suits a short cutoff can put a long one far
+                    // out of reach. Nothing below the cap has ever won, so this
+                    // only bounds the scan.
                     admissible = false;
                     break;
                 }
-                volume += static_cast<double>(liveStencilCells(other, width)) * std::pow(width, 3);
+                stencilCost(other, width, cube, volume);
             }
+            if (!admissible)
+                continue;
 
-            if (admissible && (best <= 0.0f || volume < bestvolume))
+            const double cost = volume * density + visitcost * cube;
+            if (best <= 0.0f || cost < bestcost)
             {
                 best = width;
-                bestvolume = volume;
+                bestcost = cost;
             }
         }
     }
 
     // Unreachable unless every candidate was rejected, which cannot happen:
     // width = max(radii) always gives every term a stencil radius of 1.
-    return best > 0.0f ? best : *std::max_element(radii.begin(), radii.end());
+    _automaticcellwidth = best > 0.0f ? best : *std::max_element(radii.begin(), radii.end());
+
+    logging::info("Neighbour cells of %.2f A, %.0f particles per 1000 A3; stencil radius %d for %.1f A",
+                  _automaticcellwidth, _particleDensity() * 1000.0,
+                  biospring_stencil_radius(*std::max_element(radii.begin(), radii.end()), _automaticcellwidth),
+                  static_cast<double>(*std::max_element(radii.begin(), radii.end())));
+
+    return _automaticcellwidth;
 }
 
 void SpringNetwork::_setupSteric()

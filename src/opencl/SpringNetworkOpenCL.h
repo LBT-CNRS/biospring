@@ -133,6 +133,19 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// CellGrid declaration for why.
 		const CellGrid & cells() const { return _cells; }
 
+		// A cell visit costs about one candidate test here, against 2.5 on the
+		// CPU -- fitted the same way, on the same example, over the same widths,
+		// but against the kernels' own timers rather than the wall clock
+		// (R2 = 0.87). The device blanks and bins its cells in parallel, so what
+		// is left of a visit is one scattered read of the cell's head, and
+		// neighbouring work items read cells that are nowhere near each other.
+		//
+		// It is cheaper than the CPU's and still not free, which is why the
+		// widths the two backends settle on differ -- 5.3 A here against 9 A
+		// there, on 023 -- and why neither goes as narrow as the geometry alone
+		// would want.
+		float cellVisitCost() const override { return 1.1f; }
+
 
 
 		cl::Context * getContext() ;
