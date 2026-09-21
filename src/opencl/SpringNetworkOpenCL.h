@@ -132,14 +132,16 @@ class SpringNetworkOpenCL : public SpringNetwork
 			cl::Buffer offsetsbuffer;   // N + 1 uints
 			cl::Buffer itemsbuffer;     // `total` uints
 			cl::Buffer countsbuffer;    // N uints, the first pass's answer
-			cl::Buffer includedbuffer;  // N uchars, empty when every particle counts
+			cl::Buffer targetsbuffer;    // N uchars: who gets a list at all
+			cl::Buffer candidatesbuffer; // N uchars: who may appear in one
 			std::vector<unsigned> offsets;
 			std::vector<unsigned> counts;
 			unsigned total = 0;
 			unsigned capacity = 0;      // what itemsbuffer currently holds
 			float radius = 0.0f;
 			bool valid = false;
-			bool restricted = false;
+			bool hastargets = false;
+			bool hascandidates = false;
 		};
 
 		// Walks the device's cell list the way a force kernel has to, and
@@ -430,7 +432,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// when the positions have moved past half the skin.
 		void _updateNeighbourLists();
 		void _buildNeighbourList(NeighbourList & list, float cutoff,
-		                         const std::vector<unsigned char> & included);
+		                         const std::vector<unsigned char> & targets,
+		                         const std::vector<unsigned char> & candidates);
 		bool _listsNeedRebuilding();
 		// The kernels that fill a list, held beside the force kernels.
 		cl::Kernel _kernelcountneighbours;

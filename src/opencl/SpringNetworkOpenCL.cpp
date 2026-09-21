@@ -1289,6 +1289,15 @@ bool SpringNetworkOpenCL::_listsNeedRebuilding()
 	const float halfsquared = half * half;
 	for (unsigned i = 0; i < _nbparticlesocl; ++i)
 		{
+		// The probe moves under someone's hand, by as much as they like, and
+		// it is not what the lists are about: its interactions are the probe
+		// kernel's, pair by pair against every particle, with no cell list at
+		// all. Counting its drift would rebuild every list at every step of an
+		// interactive session for nothing. The CPU has always skipped it --
+		// see nsearch.hpp's has_drifted -- and the device did not.
+		if (SpringNetwork::isProbeParticle(i))
+			continue;
+
 		const float dx = _particlepositions[i].x - _listreference[i].x;
 		const float dy = _particlepositions[i].y - _listreference[i].y;
 		const float dz = _particlepositions[i].z - _listreference[i].z;
@@ -1308,21 +1317,25 @@ bool SpringNetworkOpenCL::_listsNeedRebuilding()
 // ints, a rebuild is rare by construction, and a device scan would be more
 // code than it saves here.
 void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff,
-                                              const std::vector<unsigned char> & included)
+                                              const std::vector<unsigned char> & targets,
+                                              const std::vector<unsigned char> & candidates)
 	{
 	list.valid = false;
 	if (_nbparticlesocl == 0 || _cells.ncellstotal == 0 || cutoff <= 0.0f)
 		return;
 
 	list.radius = cutoff + getNeighborSkin();
-	list.restricted = !included.empty();
-	if (list.restricted)
-		{
-		list.includedbuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-		                                 sizeof(unsigned char) * _nbparticlesocl,
-		                                 const_cast<unsigned char *>(included.data()), &_err);
-		checkErr("Buffer(included)");
-		}
+	const auto upload = [&](const std::vector<unsigned char> & mask, cl::Buffer & buffer) {
+		if (mask.empty())
+			return false;
+		buffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+		                    sizeof(unsigned char) * _nbparticlesocl,
+		                    const_cast<unsigned char *>(mask.data()), &_err);
+		checkErr("Buffer(mask)");
+		return true;
+	};
+	list.hastargets = upload(targets, list.targetsbuffer);
+	list.hascandidates = upload(candidates, list.candidatesbuffer);
 
 	if (list.counts.size() != _nbparticlesocl)
 		{
@@ -1346,8 +1359,12 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 		kernel.setArg(a++, _cells.width);
 		kernel.setArg(a++, _cells.ncells);
 		kernel.setArg(a++, biospring_stencil_radius(list.radius, _cells.width));
-		if (list.restricted)
-			kernel.setArg(a++, list.includedbuffer);
+		if (list.hastargets)
+			kernel.setArg(a++, list.targetsbuffer);
+		else
+			kernel.setArg(a++, sizeof(cl_mem), NULL);
+		if (list.hascandidates)
+			kernel.setArg(a++, list.candidatesbuffer);
 		else
 			kernel.setArg(a++, sizeof(cl_mem), NULL);
 		kernel.setArg(a++, list.radius);
@@ -1407,42 +1424,83 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 // simulation.neighborskin = 0, the default, keeps the cell walk.
 void SpringNetworkOpenCL::_updateNeighbourLists()
 	{
-	if (getNeighborSkin() <= 0.0f)
+	if (!isStericEnabled() && !isElectrostaticCoulombEnabled() && !isHydrophobicityEnabled())
 		{
 		_stericlist.valid = _electrostaticlist.valid = _hydrophobiclist.valid = false;
 		return;
 		}
 
-	if (!_listsNeedRebuilding())
+	// ALWAYS, and with no skin unless one was asked for. This is where the
+	// device parts company with the CPU, and it is measured rather than
+	// assumed: a list rebuilt at EVERY step, holding exactly this step's
+	// neighbours, beats walking the cells by 34% on 023 and 45% on 034 before
+	// any subset filtering, and by 62% and 92% with it.
+	//
+	// It is not a Verlet list and there is nothing to amortise. What it buys is
+	// that the force kernel stops chasing `nextincell[p]`, whose every load has
+	// to wait for the previous one to return, and reads a contiguous run of
+	// indices instead -- loads that can all be issued at once. The walk is still
+	// paid, once, in a small kernel that hides the latency better than the force
+	// kernel could.
+	//
+	// A skin only widens the list here, and every extra entry is read again at
+	// every step: measured on 034, a 2 A skin costs 0.063 against 0.0096
+	// normalised. So simulation.neighborskin stays the CPU's knob, where the
+	// build is serial and amortising it is the whole point.
+	//
+	// Rebuilding every step also means nothing is ever stale: no pair can be
+	// missed, and an interactive pull cannot invalidate anything.
+	if (getNeighborSkin() > 0.0f && !_listsNeedRebuilding())
 		return;
 
-	// Which particles each term acts on. Empty means every one of them, which
-	// is what the steric term wants and what the device used to assume for all
-	// three.
-	std::vector<unsigned char> charged, hydrophobic;
-	if (isElectrostaticCoulombEnabled() || isHydrophobicityEnabled())
+	// Two masks per term, because the two ends of a pair are not the same
+	// question -- see the kernels.
+	//
+	// TARGETS: who gets a list. A static particle's force is never read -- the
+	// CPU only loops over _dynamicparticules -- so finding its neighbours is
+	// work thrown away, and several examples here are 89% to 100% static.
+	// Coulomb narrows it further to the charged ones.
+	//
+	// CANDIDATES: who may appear in a list. A static charged particle still
+	// pushes the dynamic ones, so it stays a candidate. For the steric term
+	// that is everybody, which is what an empty mask means.
+	const unsigned n = std::min<unsigned>(SpringNetwork::getNumberOfParticles(), _nbparticlesocl);
+	std::vector<unsigned char> dynamic(_nbparticlesocl, 0);
+	std::vector<unsigned char> dynamiccharged, charged, dynamichydrophobic, hydrophobic;
+	if (isElectrostaticCoulombEnabled())
+		{ dynamiccharged.assign(_nbparticlesocl, 0); charged.assign(_nbparticlesocl, 0); }
+	if (isHydrophobicityEnabled())
+		{ dynamichydrophobic.assign(_nbparticlesocl, 0); hydrophobic.assign(_nbparticlesocl, 0); }
+
+	for (unsigned i = 0; i < n; ++i)
 		{
-		const unsigned n = SpringNetwork::getNumberOfParticles();
-		if (isElectrostaticCoulombEnabled())
-			charged.assign(_nbparticlesocl, 0);
-		if (isHydrophobicityEnabled())
-			hydrophobic.assign(_nbparticlesocl, 0);
-		for (unsigned i = 0; i < n && i < _nbparticlesocl; ++i)
+		const Particle & particle = SpringNetwork::getParticle(i);
+		// The probe is nobody's neighbour: its interactions are the probe
+		// kernel's, and the CPU keeps it out of every searcher for the same
+		// reason.
+		if (SpringNetwork::isProbeParticle(i))
+			continue;
+
+		const bool isdynamic = particle.isDynamic();
+		dynamic[i] = isdynamic ? 1 : 0;
+		if (!charged.empty() && particle.isCharged())
 			{
-			const Particle & particle = SpringNetwork::getParticle(i);
-			if (!charged.empty() && particle.isCharged())
-				charged[i] = 1;
-			if (!hydrophobic.empty() && particle.isHydrophobic())
-				hydrophobic[i] = 1;
+			charged[i] = 1;
+			dynamiccharged[i] = isdynamic ? 1 : 0;
+			}
+		if (!hydrophobic.empty() && particle.isHydrophobic())
+			{
+			hydrophobic[i] = 1;
+			dynamichydrophobic[i] = isdynamic ? 1 : 0;
 			}
 		}
 
 	if (isStericEnabled())
-		_buildNeighbourList(_stericlist, getStericCutoff(), std::vector<unsigned char>());
+		_buildNeighbourList(_stericlist, getStericCutoff(), dynamic, std::vector<unsigned char>());
 	if (isElectrostaticCoulombEnabled())
-		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), charged);
+		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), dynamiccharged, charged);
 	if (isHydrophobicityEnabled())
-		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), hydrophobic);
+		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), dynamichydrophobic, hydrophobic);
 
 	_listreference.assign(_particlepositions, _particlepositions + _nbparticlesocl);
 	_listsarebuilt = true;
