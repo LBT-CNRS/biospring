@@ -115,6 +115,33 @@ class SpringNetworkOpenCL : public SpringNetwork
 			int maxstencil = 1;          // the widest stencil any term needs here
 		};
 
+		// A term's stored neighbours, in the same packed layout as the cells:
+		// particle i owns [offsets[i], offsets[i + 1]) of `items`.
+		//
+		// Built at cutoff + skin so that a pair can cross into the cutoff
+		// without a rebuild, and rebuilt when something has drifted half the
+		// skin -- half, because both ends of a pair are stale. nsearch.hpp
+		// carries the same construction for the CPU, and the same reasoning.
+		//
+		// `included` is what the device never had: the particles a term acts
+		// on. Coulomb only concerns the charged ones, and on 034 that is 15% of
+		// the beads at both ends of every pair.
+	public:
+		struct NeighbourList
+		{
+			cl::Buffer offsetsbuffer;   // N + 1 uints
+			cl::Buffer itemsbuffer;     // `total` uints
+			cl::Buffer countsbuffer;    // N uints, the first pass's answer
+			cl::Buffer includedbuffer;  // N uchars, empty when every particle counts
+			std::vector<unsigned> offsets;
+			std::vector<unsigned> counts;
+			unsigned total = 0;
+			unsigned capacity = 0;      // what itemsbuffer currently holds
+			float radius = 0.0f;
+			bool valid = false;
+			bool restricted = false;
+		};
+
 		// Walks the device's cell list the way a force kernel has to, and
 		// returns the particles within `cutoff` of particle `i`.
 		//
@@ -132,6 +159,25 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// The grid, for the parity test to walk. One for every term; see the
 		// CellGrid declaration for why.
 		const CellGrid & cells() const { return _cells; }
+
+		// How many times the stored neighbours were rebuilt. Zero without a
+		// skin, since there is then no list; otherwise far below the step count
+		// or the list is not paying for itself.
+		unsigned neighbourListRebuilds() const { return _listrebuilds; }
+
+		// The stored neighbours of particle `i`, read back off the device.
+		//
+		// Public for the same reason neighborsFromCellList is: a neighbour
+		// structure that quietly drops pairs does not crash and does not look
+		// wrong, it just makes every term built on it too weak. Comparing the
+		// forces it produces is far too blunt to see that -- a dropped pair
+		// near the cutoff is worth almost nothing -- so the structure itself
+		// has to be held against the O(N^2) answer.
+		std::vector<unsigned> neighboursFromList(const NeighbourList & list, unsigned i);
+
+		const NeighbourList & stericList() const { return _stericlist; }
+		const NeighbourList & electrostaticList() const { return _electrostaticlist; }
+		const NeighbourList & hydrophobicList() const { return _hydrophobiclist; }
 
 		// Three cells, where the CPU wants two. Measured the same way, on the
 		// same two examples, against the kernels' own timers: 5.33 A is the best
@@ -350,6 +396,20 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 		CellGrid _cells;
 
+
+		NeighbourList _stericlist;
+		NeighbourList _electrostaticlist;
+		NeighbourList _hydrophobiclist;
+
+		// Where every particle was when the lists were last built, and whether
+		// building them is worth it at all -- see _updateNeighbourLists.
+		std::vector<float4> _listreference;
+		bool _listsarebuilt = false;
+		// How many times the lists were rebuilt over the run. A list that is
+		// rebuilt every step is a list that never served, which is the failure
+		// mode a skin has to be checked against.
+		unsigned _listrebuilds = 0;
+
 		// Two different things, deliberately not one function.
 		//
 		// The GRID -- the cells, their width, the origin they are counted from
@@ -364,6 +424,16 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void _binParticlesIntoCells(CellGrid & grid);
 		bool _frameStillHolds(const CellGrid & grid) const;
 		bool _buildCellList(CellGrid & grid, float width);
+
+		// The stored neighbours of every enabled pairwise term, rebuilt only
+		// when the positions have moved past half the skin.
+		void _updateNeighbourLists();
+		void _buildNeighbourList(NeighbourList & list, float cutoff,
+		                         const std::vector<unsigned char> & included);
+		bool _listsNeedRebuilding();
+		// The kernels that fill a list, held beside the force kernels.
+		cl::Kernel _kernelcountneighbours;
+		cl::Kernel _kernelfillneighbours;
 		// The widest stencil any enabled term asks of cells of `width`.
 		int _maxStencilRadius(float width) const;
 		// The longest reach of any enabled pairwise term, in A: what the grid's

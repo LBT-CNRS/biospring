@@ -458,7 +458,11 @@ TEST(SpringNetworkOpenCL, TooBigABoxWidensTheCellsAndStaysExact)
 // passing for a while and then fail for the wrong reason.
 namespace
 {
-void buildChargedCloud(spn::SpringNetwork & network, configuration::Configuration & config, unsigned n)
+void buildChargedCloud(spn::SpringNetwork & network, configuration::Configuration & config, unsigned n,
+                       double skin = 0.0, float charge = 0.4f);
+
+void buildChargedCloud(spn::SpringNetwork & network, configuration::Configuration & config, unsigned n, double skin,
+                       float charge)
 {
     unsigned state = 99u;
     const auto next = [&state]() {
@@ -471,7 +475,7 @@ void buildChargedCloud(spn::SpringNetwork & network, configuration::Configuratio
         spn::Particle p;
         p.setPosition(Vector3f(next() * 25.0f - 9.0f, next() * 25.0f - 9.0f, next() * 25.0f - 9.0f));
         p.setMass(12.0f);
-        p.setCharge(0.4f);
+        p.setCharge(charge);
         network.addParticle(p);
     }
     // One sprung pair, held at 1.4 A. Coulomb would throw two like charges that
@@ -491,6 +495,7 @@ void buildChargedCloud(spn::SpringNetwork & network, configuration::Configuratio
     config.electrostatic.enable = true;
     config.electrostatic.scale = 1.0;
     config.electrostatic.cutoff = 12.0;
+    config.sim.neighborskin = skin;
 
     network.setup(config);
 }
@@ -556,6 +561,105 @@ TEST(SpringNetworkOpenCL, CoulombMatchesTheCPU)
     // over 200 steps, tight enough that a missing exclusion or a sign error
     // cannot hide.
     EXPECT_LT(worst, 0.05f) << "the GPU's Coulomb ended up " << worst << " A from the CPU's";
+}
+
+
+// A skin must not change the answer, on either backend.
+//
+// That is the whole claim of a stored neighbour list: it is an optimisation and
+// not an approximation, because what it holds beyond the cutoff is exactly what
+// lets it stay right until the next rebuild. A list that were rebuilt too late
+// would drop pairs, and on a cloud of like charges a dropped pair is a particle
+// that quietly stops being pushed.
+//
+// Held against the SAME configuration without a skin, which is the reference
+// this whole port has to reproduce -- separately for the CPU, whose list lives
+// in nsearch.hpp, and for the device, whose list is two kernels and a packing
+// pass, so that neither can be right by accident while the other is wrong.
+TEST(SpringNetworkOpenCL, ASkinChangesNothingOnEitherBackend)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 300;
+    const double SKIN = 4.0;
+
+    spn::SpringNetwork cpubare, cpuskinned;
+    SpringNetworkOpenCL gpubare, gpuskinned;
+    configuration::Configuration c1, c2, c3, c4;
+    // A tenth of the usual charge, so the cloud creeps rather than explodes and
+    // the list survives tens of steps: a list rebuilt every step would be right
+    // whatever radius it was built at, and would prove nothing.
+    const float CREEP = 0.04f;
+    buildChargedCloud(cpubare, c1, N, 0.0, CREEP);
+    buildChargedCloud(cpuskinned, c2, N, SKIN, CREEP);
+    buildChargedCloud(gpubare, c3, N, 0.0, CREEP);
+    buildChargedCloud(gpuskinned, c4, N, SKIN, CREEP);
+    cpubare.run();
+    cpuskinned.run();
+    gpubare.run();
+    gpuskinned.run();
+
+    // The cloud has to have actually moved, or agreeing proves nothing.
+    spn::SpringNetwork start;
+    configuration::Configuration c0;
+    buildChargedCloud(start, c0, N, 0.0, CREEP);
+    float moved = 0.0f;
+    for (unsigned i = 0; i < N; ++i)
+        moved = std::max(moved, (cpubare.getParticle(i).getPosition() - start.getParticle(i).getPosition()).norm());
+    ASSERT_GT(moved, 1.0f) << "the cloud barely moved, so this comparison proves nothing";
+
+    // And the list has to have been REUSED, or the comparison is vacuous: a
+    // list rebuilt at every step holds this step's neighbours whatever radius
+    // it was built at, so it could be built at the bare cutoff and still agree.
+    ASSERT_GT(gpuskinned.neighbourListRebuilds(), 0u) << "no list was ever built";
+    ASSERT_LT(gpuskinned.neighbourListRebuilds(), 100u)
+        << "the device rebuilt its list " << gpuskinned.neighbourListRebuilds()
+        << " times in 200 steps, so nothing was ever reused";
+
+    float worstcpu = 0.0f, worstgpu = 0.0f;
+    for (unsigned i = 0; i < N; ++i)
+    {
+        worstcpu = std::max(worstcpu,
+            (cpubare.getParticle(i).getPosition() - cpuskinned.getParticle(i).getPosition()).norm());
+        worstgpu = std::max(worstgpu,
+            (gpubare.getParticle(i).getPosition() - gpuskinned.getParticle(i).getPosition()).norm());
+    }
+
+    // The pairs are the same set either way, so only the summation order can
+    // differ -- which over 200 steps is worth a little, and nowhere near what a
+    // dropped pair would be worth.
+    EXPECT_LT(worstcpu, 0.05f) << "the CPU's list moved a particle " << worstcpu << " A from the cell walk";
+    EXPECT_LT(worstgpu, 0.05f) << "the device's list moved a particle " << worstgpu << " A from the cell walk";
+
+    // And the structure itself, against the O(N^2) answer. Comparing positions
+    // is far too blunt on its own: a pair dropped near the cutoff carries
+    // almost no force, so a list built at the wrong radius passes the check
+    // above and fails here.
+    const SpringNetworkOpenCL::NeighbourList & list = gpuskinned.electrostaticList();
+    ASSERT_TRUE(list.valid) << "the device built no list";
+    EXPECT_NEAR(list.radius, 12.0f + static_cast<float>(SKIN), 1.0e-4f)
+        << "the list was not built at cutoff + skin";
+
+    // The list dates from its last rebuild, not from the positions it is being
+    // read at, so it is not the neighbour set of this instant -- it is a
+    // SUPERSET of it, and that is precisely the property that makes it correct:
+    // every pair within the cutoff now has to be in it, whatever has moved
+    // since, or the force on that pair was silently dropped.
+    size_t held = 0, inside = 0;
+    for (unsigned i = 0; i < N; ++i)
+    {
+        std::vector<unsigned> found = gpuskinned.neighboursFromList(list, i);
+        std::vector<unsigned> within = neighborsByBruteForce(gpuskinned, i, 12.0f);
+        std::sort(found.begin(), found.end());
+        std::sort(within.begin(), within.end());
+        ASSERT_TRUE(std::includes(found.begin(), found.end(), within.begin(), within.end()))
+            << "particle " << i << " has neighbours inside the cutoff that its list never held";
+        held += found.size();
+        inside += within.size();
+    }
+    EXPECT_GT(inside, 1000u) << "the lists are too empty for the comparison to mean anything";
+    EXPECT_GT(held, inside) << "the list holds nothing beyond the cutoff, so it has no margin to live on";
 }
 
 // Steric, on the device, against the CPU -- once per law.

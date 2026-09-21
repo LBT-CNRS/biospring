@@ -90,6 +90,158 @@ __kernel void binParticles(const __global float4 * positions,
 	nextincell[p] = atom_xchg(cellhead + c, p);
 	}
 
+// ============================================================================
+// Neighbour list
+// ============================================================================
+//
+// The cell walk above answers "who is near me", and the force kernels used to
+// ask it again at every step. Measured with the force law compiled out of the
+// kernel, that walk is 87% of what a non-bonded kernel does and the physics is
+// 13%. So the answer is kept instead: these two kernels write it once, and the
+// force kernels read it until something has moved far enough to invalidate it.
+//
+// Built at `radius` = cutoff + skin, so a pair can cross into the cutoff
+// without the list having to be rebuilt. nsearch.hpp carries the same
+// construction, and the same argument, for the CPU.
+//
+// Two passes, because the slices have to be packed: `countneighbours` says how
+// long each particle's slice is, the host turns that into offsets, and
+// `fillneighbours` writes the indices. A fixed capacity per particle would be
+// one pass, but it would have to be sized for the worst particle and paid for
+// by every one of them.
+//
+// `included` restricts the list to the particles a term acts on -- the charged
+// ones for Coulomb, the hydrophobic ones for the pairwise hydrophobic term.
+// Both ends are filtered: an uncharged particle is neither asked for its list
+// nor offered as a candidate. The CPU has had this through its per-term
+// searchers; the device did not, and on a capsid where 15% of the beads carry a
+// charge it is most of the work. A null pointer means "every particle".
+
+#define BIOSPRING_WALK_AT_RADIUS(BODY)                                                      \
+	const int cx = (int)floor((here.x - origin.x) / cellwidth);                             \
+	const int cy = (int)floor((here.y - origin.y) / cellwidth);                             \
+	const int cz = (int)floor((here.z - origin.z) / cellwidth);                             \
+	const float radiussq = radius * radius;                                                 \
+	for (int dz = -stencilradius; dz <= stencilradius; dz++)                                \
+		for (int dy = -stencilradius; dy <= stencilradius; dy++)                            \
+			for (int dx = -stencilradius; dx <= stencilradius; dx++)                        \
+				{                                                                           \
+				if (!biospring_cell_in_range(dx, dy, dz, cellwidth, radiussq))              \
+					continue;                                                               \
+				const int x = cx + dx, y = cy + dy, z = cz + dz;                            \
+				if (x < 0 || y < 0 || z < 0 ||                                              \
+				    x >= ncells.x || y >= ncells.y || z >= ncells.z)                         \
+					continue;                                                               \
+				const uint cell = (uint)((z * ncells.y + y) * ncells.x + x);                \
+				for (uint p = cellhead[cell]; p != BIOSPRING_EMPTY_CELL; p = nextincell[p]) \
+					{                                                                       \
+					if (p == tid)                                                           \
+						continue;                                                           \
+					if (included != 0 && included[p] == 0)                                  \
+						continue;                                                           \
+					const float3 axis = positions[p].xyz - here.xyz;                        \
+					const float distsq = axis.x*axis.x + axis.y*axis.y + axis.z*axis.z;     \
+					if (distsq > radiussq || distsq == 0.0f)                                \
+						continue;                                                           \
+					BODY                                                                    \
+					}                                                                       \
+				}
+
+__kernel void countneighbours(const __global float4 * positions,
+                              const __global uint * cellhead,
+                              const __global uint * nextincell,
+                              const float4 origin, const float cellwidth, const int4 ncells,
+                              const int stencilradius,
+                              const __global uchar * included,
+                              const float radius,
+                              __global uint * counts,
+                              const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	counts[tid] = 0u;
+	if (included != 0 && included[tid] == 0) return;
+
+	const float4 here = positions[tid];
+	uint n = 0u;
+	BIOSPRING_WALK_AT_RADIUS(n++;)
+	counts[tid] = n;
+	}
+
+__kernel void fillneighbours(const __global float4 * positions,
+                             const __global uint * cellhead,
+                             const __global uint * nextincell,
+                             const float4 origin, const float cellwidth, const int4 ncells,
+                             const int stencilradius,
+                             const __global uchar * included,
+                             const float radius,
+                             const __global uint * offsets,
+                             __global uint * items,
+                             const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+	if (included != 0 && included[tid] == 0) return;
+
+	const float4 here = positions[tid];
+	uint at = offsets[tid];
+	BIOSPRING_WALK_AT_RADIUS(items[at++] = p;)
+	}
+
+#undef BIOSPRING_WALK_AT_RADIUS
+
+
+// Enumerating the candidates of particle `tid`, either out of the stored list
+// or by walking the cells. One or the other per launch, chosen by
+// `listoffsets != 0`: a list exists only when a skin was configured, and
+// without one it would be rebuilt every step to serve a single step.
+//
+// The physics goes in BODY and is written once for both. The two enumerations
+// have to agree about which pairs exist, and the surest way to keep them
+// agreeing is for the force to be the same text.
+#define BIOSPRING_FOR_EACH_CANDIDATE(BODY)                                                    \
+	if (listoffsets != 0)                                                                     \
+		{                                                                                     \
+		const uint last = listoffsets[tid + 1];                                               \
+		for (uint slot = listoffsets[tid]; slot < last; slot++)                               \
+			{                                                                                 \
+			const uint p = listitems[slot];                                                   \
+			const float3 axis = positions[p].xyz - here.xyz;                                  \
+			const float distsq = axis.x*axis.x + axis.y*axis.y + axis.z*axis.z;               \
+			if (distsq > cutoffsq || distsq == 0.0f)                                          \
+				continue;                                                                     \
+			BODY                                                                              \
+			}                                                                                 \
+		}                                                                                     \
+	else                                                                                      \
+		{                                                                                     \
+		const int cx = (int)floor((here.x - origin.x) / cellwidth);                           \
+		const int cy = (int)floor((here.y - origin.y) / cellwidth);                           \
+		const int cz = (int)floor((here.z - origin.z) / cellwidth);                           \
+		for (int dz = -stencilradius; dz <= stencilradius; dz++)                              \
+		for (int dy = -stencilradius; dy <= stencilradius; dy++)                              \
+		for (int dx = -stencilradius; dx <= stencilradius; dx++)                              \
+			{                                                                                 \
+			if (!biospring_cell_in_range(dx, dy, dz, cellwidth, cutoffsq))                    \
+				continue;                                                                     \
+			const int x = cx + dx, y = cy + dy, z = cz + dz;                                  \
+			if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)   \
+				continue;                                                                     \
+			const uint cell = (uint)((z * ncells.y + y) * ncells.x + x);                      \
+			for (uint p = cellhead[cell]; p != BIOSPRING_EMPTY_CELL; p = nextincell[p])       \
+				{                                                                             \
+				if (p == tid)                                                                 \
+					continue;                                                                 \
+				const float3 axis = positions[p].xyz - here.xyz;                              \
+				const float distsq = axis.x*axis.x + axis.y*axis.y + axis.z*axis.z;           \
+				if (distsq > cutoffsq || distsq == 0.0f)                                      \
+					continue;                                                                 \
+				BODY                                                                          \
+				}                                                                             \
+			}                                                                                 \
+		}
+
 // The interactive probe: one extra particle that every other one feels, and
 // that feels every other one back.
 //
@@ -275,6 +427,8 @@ __kernel void electrostatic(const __global float4 * positions,
                             const __global uint * nextincell,
                             const float4 origin, const float cellwidth, const int4 ncells,
                             const int stencilradius,
+                            const __global uint * listoffsets,
+                            const __global uint * listitems,
                             const __global Springocl * springs,
                             const __global int * springoffsets,
                             const int springsenabled,
@@ -289,51 +443,16 @@ __kernel void electrostatic(const __global float4 * positions,
 	const float q = charges[tid];
 	const float cutoffsq = cutoff * cutoff;
 
-	const int cx = (int)floor((here.x - origin.x) / cellwidth);
-	const int cy = (int)floor((here.y - origin.y) / cellwidth);
-	const int cz = (int)floor((here.z - origin.z) / cellwidth);
-
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
 
-	// The stencil, not a fixed 3x3x3 block: the cells are narrower than the
-	// cutoff, so the walk goes `stencilradius` of them out and skips the corners
-	// the cutoff cannot reach into. Both come from shared/cellgrid_shared.h,
-	// which the host compiles too -- the two backends walk the same cells or
-	// they compute different forces.
-	for (int dz = -stencilradius; dz <= stencilradius; dz++)
-		for (int dy = -stencilradius; dy <= stencilradius; dy++)
-			for (int dx = -stencilradius; dx <= stencilradius; dx++)
-				{
-				if (!biospring_cell_in_range(dx, dy, dz, cellwidth, cutoffsq))
-					continue;
-
-				const int x = cx + dx, y = cy + dy, z = cz + dz;
-				// Nothing is periodic here: a stencil cell outside the grid is
-				// absent, never the cell on the opposite face.
-				if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)
-					continue;
-
-				const uint cell = (uint)((z * ncells.y + y) * ncells.x + x);
-				for (uint p = cellhead[cell]; p != BIOSPRING_EMPTY_CELL; p = nextincell[p])
-					{
-					if (p == tid)
-						continue;
-
-					float3 axis = positions[p].xyz - here.xyz;
-					const float distsq = axis.x * axis.x + axis.y * axis.y + axis.z * axis.z;
-					if (distsq > cutoffsq || distsq == 0.0f)
-						continue;
-
-					if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
-						continue;
-
-					const float dist = sqrt(distsq);
-					const float module = biospring_electrostatic_force_module(
-					    charges[p], q, dist, dielectric, mindistance, fourpi, convert);
-					sum += (axis / dist) * (coulombscale * module);
-					}
-				}
-
+	BIOSPRING_FOR_EACH_CANDIDATE(
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+			continue;
+		const float dist = sqrt(distsq);
+		const float module = biospring_electrostatic_force_module(
+		    charges[p], q, dist, dielectric, mindistance, fourpi, convert);
+		sum += (axis / dist) * (coulombscale * module);
+	)
 	forces[tid].xyz += sum;
 	}
 
@@ -356,6 +475,8 @@ __kernel void steric(const __global float4 * positions,
                      const __global uint * nextincell,
                      const float4 origin, const float cellwidth, const int4 ncells,
                      const int stencilradius,
+                     const __global uint * listoffsets,
+                     const __global uint * listitems,
                      const __global Springocl * springs,
                      const __global int * springoffsets,
                      const int springsenabled,
@@ -372,53 +493,19 @@ __kernel void steric(const __global float4 * positions,
 	const float epsilon = epsilons[tid];
 	const float cutoffsq = cutoff * cutoff;
 
-	const int cx = (int)floor((here.x - origin.x) / cellwidth);
-	const int cy = (int)floor((here.y - origin.y) / cellwidth);
-	const int cz = (int)floor((here.z - origin.z) / cellwidth);
-
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
 
-	// The stencil, not a fixed 3x3x3 block: the cells are narrower than the
-	// cutoff, so the walk goes `stencilradius` of them out and skips the corners
-	// the cutoff cannot reach into. Both come from shared/cellgrid_shared.h,
-	// which the host compiles too -- the two backends walk the same cells or
-	// they compute different forces.
-	for (int dz = -stencilradius; dz <= stencilradius; dz++)
-		for (int dy = -stencilradius; dy <= stencilradius; dy++)
-			for (int dx = -stencilradius; dx <= stencilradius; dx++)
-				{
-				if (!biospring_cell_in_range(dx, dy, dz, cellwidth, cutoffsq))
-					continue;
-
-				const int x = cx + dx, y = cy + dy, z = cz + dz;
-				if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)
-					continue;
-
-				const uint cell = (uint)((z * ncells.y + y) * ncells.x + x);
-				for (uint p = cellhead[cell]; p != BIOSPRING_EMPTY_CELL; p = nextincell[p])
-					{
-					if (p == tid)
-						continue;
-
-					float3 axis = positions[p].xyz - here.xyz;
-					const float distsq = axis.x * axis.x + axis.y * axis.y + axis.z * axis.z;
-					if (distsq > cutoffsq || distsq == 0.0f)
-						continue;
-
-					if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
-						continue;
-
-					const float dist = sqrt(distsq);
-					// Neighbour first, self second, as Particle::addStericForce
-					// calls it. Both combination rules are symmetric, so this is
-					// for the reader rather than for the arithmetic.
-					const float module = biospring_steric_force_module(
-					    mode, radii[p], radius, epsilons[p], epsilon, dist,
-					    linearstiffness, mindistance, convert);
-					sum += (axis / dist) * (stericscale * module);
-					}
-				}
-
+	BIOSPRING_FOR_EACH_CANDIDATE(
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+			continue;
+		/* Neighbour first, self second, as Particle::addStericForce calls it. Both */
+		/* combination rules are symmetric, so this is for the reader. */
+		const float dist = sqrt(distsq);
+		const float module = biospring_steric_force_module(
+		    mode, radii[p], radius, epsilons[p], epsilon, dist,
+		    linearstiffness, mindistance, convert);
+		sum += (axis / dist) * (stericscale * module);
+	)
 	forces[tid].xyz += sum;
 	}
 
@@ -442,6 +529,8 @@ __kernel void hydrophobic(const __global float4 * positions,
                           const __global uint * nextincell,
                           const float4 origin, const float cellwidth, const int4 ncells,
                           const int stencilradius,
+                          const __global uint * listoffsets,
+                          const __global uint * listitems,
                           const __global Springocl * springs,
                           const __global int * springoffsets,
                           const int springsenabled,
@@ -456,49 +545,16 @@ __kernel void hydrophobic(const __global float4 * positions,
 	const float h = hydrophobicities[tid];
 	const float cutoffsq = cutoff * cutoff;
 
-	const int cx = (int)floor((here.x - origin.x) / cellwidth);
-	const int cy = (int)floor((here.y - origin.y) / cellwidth);
-	const int cz = (int)floor((here.z - origin.z) / cellwidth);
-
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
 
-	// The stencil, not a fixed 3x3x3 block: the cells are narrower than the
-	// cutoff, so the walk goes `stencilradius` of them out and skips the corners
-	// the cutoff cannot reach into. Both come from shared/cellgrid_shared.h,
-	// which the host compiles too -- the two backends walk the same cells or
-	// they compute different forces.
-	for (int dz = -stencilradius; dz <= stencilradius; dz++)
-		for (int dy = -stencilradius; dy <= stencilradius; dy++)
-			for (int dx = -stencilradius; dx <= stencilradius; dx++)
-				{
-				if (!biospring_cell_in_range(dx, dy, dz, cellwidth, cutoffsq))
-					continue;
-
-				const int x = cx + dx, y = cy + dy, z = cz + dz;
-				if (x < 0 || y < 0 || z < 0 || x >= ncells.x || y >= ncells.y || z >= ncells.z)
-					continue;
-
-				const uint cell = (uint)((z * ncells.y + y) * ncells.x + x);
-				for (uint p = cellhead[cell]; p != BIOSPRING_EMPTY_CELL; p = nextincell[p])
-					{
-					if (p == tid)
-						continue;
-
-					float3 axis = positions[p].xyz - here.xyz;
-					const float distsq = axis.x * axis.x + axis.y * axis.y + axis.z * axis.z;
-					if (distsq > cutoffsq || distsq == 0.0f)
-						continue;
-
-					if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
-						continue;
-
-					const float dist = sqrt(distsq);
-					const float module = biospring_hydrophobic_force_module(
-					    hydrophobicities[p], h, dist, decaylength, convert);
-					sum += (axis / dist) * (hydrophobicityscale * module);
-					}
-				}
-
+	BIOSPRING_FOR_EACH_CANDIDATE(
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+			continue;
+		const float dist = sqrt(distsq);
+		const float module = biospring_hydrophobic_force_module(
+		    hydrophobicities[p], h, dist, decaylength, convert);
+		sum += (axis / dist) * (hydrophobicityscale * module);
+	)
 	forces[tid].xyz += sum;
 	}
 

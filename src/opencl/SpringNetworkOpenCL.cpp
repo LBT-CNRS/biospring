@@ -503,6 +503,10 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kernelbinparticles = cl::Kernel(_program, "binParticles", &_err);
 	checkErr("Kernel::Kernel()");
+	_kernelcountneighbours = cl::Kernel(_program, "countneighbours", &_err);
+	checkErr("Kernel::Kernel()");
+	_kernelfillneighbours = cl::Kernel(_program, "fillneighbours", &_err);
+	checkErr("Kernel::Kernel()");
 	_kernelelectrostatic = cl::Kernel(_program, "electrostatic", &_err);
 	checkErr("Kernel::Kernel()");
 	_kernelsteric = cl::Kernel(_program, "steric", &_err);
@@ -669,6 +673,9 @@ void SpringNetworkOpenCL::idleRun()
 	// cell of margin _buildCellList adds, the same reason the CPU's grid carries
 	// a skin.
 	_updateCellLists();
+	// And the stored neighbours the force kernels read instead of walking the
+	// cells again. A no-op without a skin -- see _updateNeighbourLists.
+	_updateNeighbourLists();
 
 	#ifdef OPENGL_SUPPORT
 		glFinish();
@@ -754,6 +761,18 @@ void SpringNetworkOpenCL::idleRun()
         // width the grid actually built. The grid is shared by every pairwise
         // term; this argument is the only thing that tells them apart.
         _kernelsteric.setArg(a++, biospring_stencil_radius(getStericCutoff(), _cells.width));
+        // The stored neighbours, or nothing: with no list the kernel falls back
+        // to walking the cells, which is what it did before there was one.
+        if (_stericlist.valid)
+            {
+            _kernelsteric.setArg(a++, _stericlist.offsetsbuffer);
+            _kernelsteric.setArg(a++, _stericlist.itemsbuffer);
+            }
+        else
+            {
+            _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
+            _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
+            }
         _kernelsteric.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
         _kernelsteric.setArg(a++, _inSpringIndexesBuffer);
         _kernelsteric.setArg(a++, springsenabled);
@@ -800,6 +819,18 @@ void SpringNetworkOpenCL::idleRun()
         // width the grid actually built. The grid is shared by every pairwise
         // term; this argument is the only thing that tells them apart.
         _kernelelectrostatic.setArg(a++, biospring_stencil_radius(getElectrostaticCutoff(), _cells.width));
+        // The stored neighbours, or nothing: with no list the kernel falls back
+        // to walking the cells, which is what it did before there was one.
+        if (_electrostaticlist.valid)
+            {
+            _kernelelectrostatic.setArg(a++, _electrostaticlist.offsetsbuffer);
+            _kernelelectrostatic.setArg(a++, _electrostaticlist.itemsbuffer);
+            }
+        else
+            {
+            _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
+            _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
+            }
         // A network with no spring has no spring buffer at all (OpenCL rejects
         // a zero-sized one), so hand the kernel something valid and tell it not
         // to look: the exclusion is meaningless without springs anyway.
@@ -842,6 +873,18 @@ void SpringNetworkOpenCL::idleRun()
         // width the grid actually built. The grid is shared by every pairwise
         // term; this argument is the only thing that tells them apart.
         _kernelhydrophobic.setArg(a++, biospring_stencil_radius(getHydrophobicCutoff(), _cells.width));
+        // The stored neighbours, or nothing: with no list the kernel falls back
+        // to walking the cells, which is what it did before there was one.
+        if (_hydrophobiclist.valid)
+            {
+            _kernelhydrophobic.setArg(a++, _hydrophobiclist.offsetsbuffer);
+            _kernelhydrophobic.setArg(a++, _hydrophobiclist.itemsbuffer);
+            }
+        else
+            {
+            _kernelhydrophobic.setArg(a++, sizeof(cl_mem), NULL);
+            _kernelhydrophobic.setArg(a++, sizeof(cl_mem), NULL);
+            }
         _kernelhydrophobic.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
         _kernelhydrophobic.setArg(a++, _inSpringIndexesBuffer);
         _kernelhydrophobic.setArg(a++, springsenabled);
@@ -1203,6 +1246,205 @@ void SpringNetworkOpenCL::_updateCellLists()
 		return;
 
 	_buildCellList(_cells, getCellWidth());
+	}
+
+
+std::vector<unsigned> SpringNetworkOpenCL::neighboursFromList(const NeighbourList & list, unsigned i)
+	{
+	std::vector<unsigned> neighbours;
+	if (!list.valid || i + 1 >= list.offsets.size())
+		return neighbours;
+
+	const unsigned first = list.offsets[i];
+	const unsigned last = list.offsets[i + 1];
+	if (last <= first)
+		return neighbours;
+
+	neighbours.resize(last - first);
+	_err = _queue.enqueueReadBuffer(list.itemsbuffer, CL_TRUE, sizeof(unsigned) * first,
+	                                sizeof(unsigned) * (last - first), neighbours.data());
+	checkErr("enqueueReadBuffer(list items)");
+	return neighbours;
+	}
+
+
+// Whether the stored lists still describe the current positions.
+//
+// A pair absent from a list was farther than cutoff + skin when the list was
+// built, so it cannot have reached the cutoff before the two closed by skin --
+// and two particles each drifting skin/2 towards each other close exactly that.
+// So the question is whether ANY particle has moved half the skin.
+//
+// Asked on the host over the positions that came back at the end of the last
+// step, which cost 0.05 to 0.09 ms per step measured; the walk it avoids costs
+// milliseconds.
+bool SpringNetworkOpenCL::_listsNeedRebuilding()
+	{
+	if (!_listsarebuilt || _listreference.size() != _nbparticlesocl)
+		return true;
+
+	const float half = 0.5f * getNeighborSkin();
+	const float halfsquared = half * half;
+	for (unsigned i = 0; i < _nbparticlesocl; ++i)
+		{
+		const float dx = _particlepositions[i].x - _listreference[i].x;
+		const float dy = _particlepositions[i].y - _listreference[i].y;
+		const float dz = _particlepositions[i].z - _listreference[i].z;
+		const float moved = dx * dx + dy * dy + dz * dz;
+		if (!(moved <= halfsquared))   // catches NaN too, which invalidates it
+			return true;
+		}
+	return false;
+	}
+
+
+// Builds one term's list: count, pack, fill.
+//
+// Two passes over the same walk rather than one pass into a fixed capacity,
+// because a capacity has to be sized for the densest particle and paid for by
+// every other one. The prefix sum happens on the host: it is over N unsigned
+// ints, a rebuild is rare by construction, and a device scan would be more
+// code than it saves here.
+void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff,
+                                              const std::vector<unsigned char> & included)
+	{
+	list.valid = false;
+	if (_nbparticlesocl == 0 || _cells.ncellstotal == 0 || cutoff <= 0.0f)
+		return;
+
+	list.radius = cutoff + getNeighborSkin();
+	list.restricted = !included.empty();
+	if (list.restricted)
+		{
+		list.includedbuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+		                                 sizeof(unsigned char) * _nbparticlesocl,
+		                                 const_cast<unsigned char *>(included.data()), &_err);
+		checkErr("Buffer(included)");
+		}
+
+	if (list.counts.size() != _nbparticlesocl)
+		{
+		list.counts.assign(_nbparticlesocl, 0u);
+		list.offsets.assign(_nbparticlesocl + 1, 0u);
+		list.countsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned) * _nbparticlesocl, NULL, &_err);
+		checkErr("Buffer(counts)");
+		list.offsetsbuffer = cl::Buffer(_context, CL_MEM_READ_ONLY, sizeof(unsigned) * (_nbparticlesocl + 1), NULL, &_err);
+		checkErr("Buffer(offsets)");
+		}
+
+	const unsigned wg = WORK_GROUP_SIZE;
+	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+
+	const auto setwalkargs = [&](cl::Kernel & kernel) {
+		unsigned a = 0;
+		kernel.setArg(a++, _inoutPositionBuffer);
+		kernel.setArg(a++, _cells.headbuffer);
+		kernel.setArg(a++, _cells.nextbuffer);
+		kernel.setArg(a++, _cells.origin);
+		kernel.setArg(a++, _cells.width);
+		kernel.setArg(a++, _cells.ncells);
+		kernel.setArg(a++, biospring_stencil_radius(list.radius, _cells.width));
+		if (list.restricted)
+			kernel.setArg(a++, list.includedbuffer);
+		else
+			kernel.setArg(a++, sizeof(cl_mem), NULL);
+		kernel.setArg(a++, list.radius);
+		return a;
+	};
+
+	unsigned a = setwalkargs(_kernelcountneighbours);
+	_kernelcountneighbours.setArg(a++, list.countsbuffer);
+	_kernelcountneighbours.setArg(a++, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelcountneighbours, cl::NullRange,
+	                                   cl::NDRange(global), cl::NDRange(wg));
+	checkErr("enqueueNDRangeKernel(countneighbours)");
+
+	_err = _queue.enqueueReadBuffer(list.countsbuffer, CL_TRUE, 0,
+	                                sizeof(unsigned) * _nbparticlesocl, list.counts.data());
+	checkErr("enqueueReadBuffer(counts)");
+
+	list.offsets[0] = 0;
+	for (unsigned i = 0; i < _nbparticlesocl; ++i)
+		list.offsets[i + 1] = list.offsets[i] + list.counts[i];
+	list.total = list.offsets[_nbparticlesocl];
+
+	_err = _queue.enqueueWriteBuffer(list.offsetsbuffer, CL_TRUE, 0,
+	                                 sizeof(unsigned) * (_nbparticlesocl + 1), list.offsets.data());
+	checkErr("enqueueWriteBuffer(offsets)");
+
+	// Grown, never shrunk: the size a structure needs swings from step to step
+	// and reallocating on every rebuild would cost more than the slack.
+	if (list.total > list.capacity)
+		{
+		list.capacity = list.total + list.total / 8 + 1;
+		list.itemsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned) * list.capacity, NULL, &_err);
+		checkErr("Buffer(items)");
+		}
+
+	if (list.total > 0)
+		{
+		a = setwalkargs(_kernelfillneighbours);
+		_kernelfillneighbours.setArg(a++, list.offsetsbuffer);
+		_kernelfillneighbours.setArg(a++, list.itemsbuffer);
+		_kernelfillneighbours.setArg(a++, _nbparticlesocl);
+		_err = _queue.enqueueNDRangeKernel(_kernelfillneighbours, cl::NullRange,
+		                                   cl::NDRange(global), cl::NDRange(wg));
+		checkErr("enqueueNDRangeKernel(fillneighbours)");
+		}
+
+	list.valid = true;
+	}
+
+
+// Refreshes the stored neighbours of every enabled pairwise term.
+//
+// Nothing happens without a skin. A list built at the bare cutoff holds exactly
+// this step's neighbours and is stale the moment anything moves, so it would be
+// rebuilt every step -- two walks to save one, measured on the CPU at up to
+// 2.4x slower on a structure whose fastest beads move 3 A in a step. So
+// simulation.neighborskin = 0, the default, keeps the cell walk.
+void SpringNetworkOpenCL::_updateNeighbourLists()
+	{
+	if (getNeighborSkin() <= 0.0f)
+		{
+		_stericlist.valid = _electrostaticlist.valid = _hydrophobiclist.valid = false;
+		return;
+		}
+
+	if (!_listsNeedRebuilding())
+		return;
+
+	// Which particles each term acts on. Empty means every one of them, which
+	// is what the steric term wants and what the device used to assume for all
+	// three.
+	std::vector<unsigned char> charged, hydrophobic;
+	if (isElectrostaticCoulombEnabled() || isHydrophobicityEnabled())
+		{
+		const unsigned n = SpringNetwork::getNumberOfParticles();
+		if (isElectrostaticCoulombEnabled())
+			charged.assign(_nbparticlesocl, 0);
+		if (isHydrophobicityEnabled())
+			hydrophobic.assign(_nbparticlesocl, 0);
+		for (unsigned i = 0; i < n && i < _nbparticlesocl; ++i)
+			{
+			const Particle & particle = SpringNetwork::getParticle(i);
+			if (!charged.empty() && particle.isCharged())
+				charged[i] = 1;
+			if (!hydrophobic.empty() && particle.isHydrophobic())
+				hydrophobic[i] = 1;
+			}
+		}
+
+	if (isStericEnabled())
+		_buildNeighbourList(_stericlist, getStericCutoff(), std::vector<unsigned char>());
+	if (isElectrostaticCoulombEnabled())
+		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), charged);
+	if (isHydrophobicityEnabled())
+		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), hydrophobic);
+
+	_listreference.assign(_particlepositions, _particlepositions + _nbparticlesocl);
+	_listsarebuilt = true;
+	_listrebuilds++;
 	}
 
 
