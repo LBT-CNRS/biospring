@@ -77,10 +77,26 @@ namespace nsearch
 // list is not what is wrong there.)
 class ListPolicy
 {
-    // How many steps a list has to survive to have been worth building. Two:
-    // one rebuild serving one step is exactly break-even at best, since the
-    // build walks the same cells the search would have walked.
-    static constexpr unsigned MINIMUM_SURVIVAL = 2;
+    // How many steps a list has to survive to have been worth building.
+    //
+    // Eight, and it is a compromise rather than a threshold, because a step
+    // count cannot separate the cases cleanly. What decides it is the cost of
+    // building against the saving per step, and the build cost scales with the
+    // list -- 17 entries per bead on 034, where 15% of the beads carry a
+    // charge, against 659 on 023. Thirty-nine times apart, so the same survival
+    // means different things:
+    //
+    //   034, skin 0.1 A, survival  8 : 2.84 s against 3.22 s -- worth it
+    //   023, skin 4.0 A, survival 10 : 15.0 s against 12.0 s -- not
+    //
+    // Eight is where the damage is bounded without giving up the cases that
+    // pay: it fires on 023 at a skin of 1 and 2 A, which is where the loss is
+    // worst (24.4 s and 18.4 s against 12.0 s), and leaves 034 alone all the
+    // way down to a skin of 0.1 A. What it does not catch is 023 at 4 A, which
+    // stays 25% slow. Modelling the real criterion would mean pricing a walk
+    // against a read, and that ratio has already proved not to transfer between
+    // two systems here.
+    static constexpr unsigned MINIMUM_SURVIVAL = 8;
     // How many useless rebuilds to sit through before giving up. Not one: a
     // single fast step -- an interaction, a clash relaxing -- should not cost
     // the list for the rest of the run.
