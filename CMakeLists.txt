@@ -22,6 +22,17 @@ endif()
 option(MDDRIVER_SUPPORT "Enable MDDriver coupling" OFF)
 option(FREESASA_SUPPORT "Enable FreeSASA coupling" OFF)
 option(OPENCL_SUPPORT "Enable the OpenCL backend" OFF)
+# Use a Khronos ICD loader rather than whatever OpenCL the platform ships.
+#
+# On macOS the platform's own OpenCL is Apple's, and it exposes the GPU and
+# nothing else -- no CPU device at all. An ICD loader instead dispatches to
+# every installed implementation, which is how a CPU device (POCL, Intel's
+# runtime) becomes visible. It is the same OpenCL API either way; only which
+# implementations answer changes.
+#
+# OFF leaves the previous behaviour exactly: find_package(OpenCL) picks the
+# platform's own, as it always did.
+option(OPENCL_ICD_LOADER "Dispatch through a Khronos ICD loader instead of the platform's OpenCL" OFF)
 option(OPENGL_SUPPORT "Enable the OpenGL viewer" OFF)
 option(OPENMP_SUPPORT "Enable OpenMP parallelism" OFF)
 
@@ -52,6 +63,43 @@ if(FREESASA_SUPPORT)
 endif()
 
 if(OPENCL_SUPPORT)
+    if(OPENCL_ICD_LOADER)
+        # FindOpenCL honours these cache entries, so pointing them at the loader
+        # is all it takes: everything downstream still consumes OpenCL::OpenCL.
+        # Homebrew keeps both keg-only, i.e. off every default search path, so
+        # they are looked up the same way libomp is below. An explicit
+        # -DOpenCL_LIBRARY / -DOpenCL_INCLUDE_DIR still wins.
+        if(NOT OpenCL_LIBRARY OR NOT OpenCL_INCLUDE_DIR)
+            find_program(_biospring_brew_for_opencl brew NO_CACHE)
+            if(_biospring_brew_for_opencl)
+                foreach(_pkg opencl-icd-loader opencl-headers)
+                    execute_process(
+                        COMMAND "${_biospring_brew_for_opencl}" --prefix "${_pkg}"
+                        OUTPUT_VARIABLE _prefix OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+                    if(_prefix)
+                        list(APPEND CMAKE_PREFIX_PATH "${_prefix}")
+                        if(NOT OpenCL_INCLUDE_DIR AND EXISTS "${_prefix}/include/CL/cl.h")
+                            set(OpenCL_INCLUDE_DIR "${_prefix}/include" CACHE PATH "" FORCE)
+                        endif()
+                        find_library(_loader NAMES OpenCL PATHS "${_prefix}/lib" NO_DEFAULT_PATH)
+                        if(_loader AND NOT OpenCL_LIBRARY)
+                            set(OpenCL_LIBRARY "${_loader}" CACHE FILEPATH "" FORCE)
+                        endif()
+                        unset(_loader CACHE)
+                    endif()
+                endforeach()
+            endif()
+        endif()
+        if(NOT OpenCL_LIBRARY OR NOT OpenCL_INCLUDE_DIR)
+            message(FATAL_ERROR
+                "OPENCL_ICD_LOADER is ON but no loader was found. Install one "
+                "(brew install opencl-icd-loader opencl-headers, plus an "
+                "implementation such as pocl) or pass -DOpenCL_LIBRARY and "
+                "-DOpenCL_INCLUDE_DIR.")
+        endif()
+        message(STATUS "OpenCL through an ICD loader: ${OpenCL_LIBRARY}")
+    endif()
+
     find_package(OpenCL REQUIRED)
     # The bundled legacy OpenCL C++ header exposes OpenGL interop types.
     find_package(OpenGL REQUIRED)

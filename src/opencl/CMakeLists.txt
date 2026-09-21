@@ -6,6 +6,11 @@ target_compile_definitions(biospring-core PRIVATE
     CL_USE_DEPRECATED_OPENCL_1_2_APIS
 )
 target_link_libraries(biospring-core PUBLIC OpenCL::OpenCL OpenGL::GL)
+if(OPENCL_ICD_LOADER)
+    # Tells the bundled cl.hpp to take the portable <CL/...> headers rather than
+    # Apple's <OpenCL/...>, which is the whole difference on this platform.
+    target_compile_definitions(biospring-core PUBLIC BIOSPRING_OPENCL_ICD)
+endif()
 
 # The kernel source is compiled into the binary. It used to be copied to the
 # top of the build tree and opened at run time through a bare relative path,

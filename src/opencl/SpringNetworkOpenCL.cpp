@@ -402,13 +402,29 @@ void SpringNetworkOpenCL::createBuffer()
 	_queue=cl::CommandQueue(_context, _devices[0], CL_QUEUE_PROFILING_ENABLE, &_err);
 	checkErr("CommandQueue::CommandQueue()");
 
-	// See _profilingtickns: Apple's profiling timestamps are mach ticks, not
-	// nanoseconds.
+	// See _profilingtickns: APPLE'S profiling timestamps are mach ticks where
+	// OpenCL says nanoseconds, a factor of 41.667 that made the kernels look
+	// like 0.9% of the run instead of 86%.
+	//
+	// Asked of the PLATFORM and not of the operating system, because the two
+	// are no longer the same question: a build that dispatches through an ICD
+	// loader can be running on POCL on this very machine, and POCL's timestamps
+	// are the nanoseconds the standard asks for. Correcting them would divide
+	// every measurement by 41.667 in the other direction.
 	#if defined(__APPLE__)
 		{
-		mach_timebase_info_data_t timebase;
-		if (mach_timebase_info(&timebase) == KERN_SUCCESS && timebase.denom != 0)
-			_profilingtickns = static_cast<double>(timebase.numer) / timebase.denom;
+		std::string platformname;
+		try { platformname = _devices[0].getInfo<CL_DEVICE_PLATFORM>()
+		                     ? cl::Platform(_devices[0].getInfo<CL_DEVICE_PLATFORM>()).getInfo<CL_PLATFORM_NAME>()
+		                     : std::string(); }
+		catch (...) { platformname.clear(); }
+
+		if (platformname.find("Apple") != std::string::npos)
+			{
+			mach_timebase_info_data_t timebase;
+			if (mach_timebase_info(&timebase) == KERN_SUCCESS && timebase.denom != 0)
+				_profilingtickns = static_cast<double>(timebase.numer) / timebase.denom;
+			}
 		}
 	#endif
 
@@ -608,7 +624,27 @@ void SpringNetworkOpenCL::InitOcl()
 		_contextproperties[1] = (cl_context_properties)(_platforms[0])();
 		_contextproperties[2] = 0;
 
-		_context=cl::Context(CL_DEVICE_TYPE_GPU,_contextproperties,NULL,NULL,&_err);
+		// A GPU by preference, and whatever the platform has otherwise.
+		//
+		// Asking for CL_DEVICE_TYPE_GPU outright is right for the
+		// implementations that ship with a machine, and wrong for an ICD loader:
+		// POCL exposes the CPU and nothing else, so the context creation failed
+		// before it could say why. Falling back keeps the GPU first where there
+		// is one -- it is an order of magnitude faster per work item, measured
+		// at 1.4 ns against 18 ns here -- while letting a CPU-only platform run
+		// the same kernels.
+		// Caught rather than tested: this binding is built with exceptions, so
+		// the constructor throws before it can report through _err.
+		try
+			{
+			_context = cl::Context(CL_DEVICE_TYPE_GPU, _contextproperties, NULL, NULL, &_err);
+			}
+		catch (const cl::Error &)
+			{
+			biospring::logging::info("OpenCL: no GPU on platform '%s', falling back to any device",
+			                         _platforms[0].getInfo<CL_PLATFORM_NAME>().c_str());
+			_context = cl::Context(CL_DEVICE_TYPE_ALL, _contextproperties, NULL, NULL, &_err);
+			}
 		checkErr( "Context::Context()");
 	#endif
 

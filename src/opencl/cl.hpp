@@ -153,12 +153,23 @@
 #include <CL/cl_ext.h>
 #endif
 
-#if defined(__APPLE__) || defined(__MACOSX)
+// BIOSPRING: the portable headers even on Apple when the build dispatches
+// through a Khronos ICD loader (-DOPENCL_ICD_LOADER=ON). <OpenCL/...> are
+// Apple's own implementation's; a loader wants Khronos'. OpenGL stays Apple's
+// either way -- the loader has nothing to say about it.
+#if (defined(__APPLE__) || defined(__MACOSX)) && !defined(BIOSPRING_OPENCL_ICD)
 #include <OpenGL/OpenGL.h>
 #include <OpenCL/opencl.h>
 #else
+#if defined(__APPLE__) || defined(__MACOSX)
+#include <OpenGL/OpenGL.h>
+#else
 #include <GL/gl.h>
+#endif
 #include <CL/cl.h>
+// CL_DEVICE_HALF_FP_CONFIG, which this binding names unconditionally, lives in
+// the extension header in Khronos' layout where Apple folds it into cl.h.
+#include <CL/cl_ext.h>
 #include <CL/cl_gl.h>
 #endif // !__APPLE__
 
