@@ -165,6 +165,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// or the list is not paying for itself.
 		unsigned neighbourListRebuilds() const { return _listrebuilds; }
 
+
 		// The stored neighbours of particle `i`, read back off the device.
 		//
 		// Public for the same reason neighborsFromCellList is: a neighbour

@@ -1164,6 +1164,8 @@ void SpringNetworkOpenCL::endRun()
 	         <<", hydrophobic: "<<hydrophobictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
+	if (getNeighborSkin() > 0.0f)
+		biospring::logging::info("Neighbour lists rebuilt %u times over %d steps", _listrebuilds, getNbIterations());
 	SpringNetwork::endRun();
 	}
 

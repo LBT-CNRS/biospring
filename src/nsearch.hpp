@@ -41,6 +41,90 @@ namespace biospring
 namespace nsearch
 {
 
+// Whether keeping a neighbour list is paying for itself, decided from what
+// actually happens rather than from a setting.
+//
+// The criterion is REUSE: how many steps a list served before it had to be
+// rebuilt. That is a complete criterion here and only here, which is worth
+// spelling out, because the device uses no such policy and the asymmetry looks
+// arbitrary until the three things a list buys are separated:
+//
+//   A. the search amortised over the steps the list survives;
+//   B. a contiguous read where the cell walk chases a linked list;
+//   C. only the particles a term acts on -- the charged ones for Coulomb.
+//
+// Only A depends on reuse. This class measures A, so it is the whole story
+// exactly when B and C are nil, and on this path they are: C the CPU has had
+// since before there was a device, through the per-term searchers, and B is
+// small because an out-of-order core with a large cache absorbs a pointer chase.
+// Measured on 023 with a 1 A skin -- a structure whose fastest beads force a
+// rebuild at every step, so A = 0 by construction -- the list costs 7% here and
+// saves 59% on the device. Same structure, same motion, same absent reuse: what
+// differs is B and C, and there they are worth 40% and 58% on their own.
+//
+// So: a judgement about THIS backend's cost structure, not about the
+// simulation. Do not lift it to the device without measuring there.
+//
+// Why it is needed at all: a list only earns its cost by being reused, and if
+// the structure crosses half the skin every step it is rebuilt every step --
+// two walks where the plain cell search does one. On 023 a 1 A skin ran 2.4x
+// slower than no list at all before this existed. It is tried again later,
+// because a structure changes regime: one that is equilibrating slows down.
+//
+// (On 023 the beads that force it are hydroxyl hydrogens moving at 84 km/s,
+// thirty times thermal -- the known collapse of an AMBER hydroxyl H, which has
+// no Lennard-Jones while BioSpring excludes only SPRUNG pairs from Coulomb. The
+// list is not what is wrong there.)
+class ListPolicy
+{
+    // How many steps a list has to survive to have been worth building. Two:
+    // one rebuild serving one step is exactly break-even at best, since the
+    // build walks the same cells the search would have walked.
+    static constexpr unsigned MINIMUM_SURVIVAL = 2;
+    // How many useless rebuilds to sit through before giving up. Not one: a
+    // single fast step -- an interaction, a clash relaxing -- should not cost
+    // the list for the rest of the run.
+    static constexpr unsigned PATIENCE = 3;
+    // And how long before trying again.
+    static constexpr unsigned RETRY_AFTER = 1000;
+
+    unsigned _sincerebuild = MINIMUM_SURVIVAL; // so the first build is not judged
+    unsigned _wasted = 0;
+    unsigned _sinceretry = 0;
+    bool _worthit = true;
+
+  public:
+    bool worth_it() const { return _worthit; }
+    unsigned wasted_rebuilds() const { return _wasted; }
+
+    // Once per step, whether or not anything is rebuilt.
+    void step()
+    {
+        _sincerebuild++;
+        if (_worthit)
+            return;
+        if (++_sinceretry >= RETRY_AFTER)
+        {
+            _worthit = true;
+            _wasted = 0;
+            _sinceretry = 0;
+        }
+    }
+
+    // When a rebuild actually happens.
+    void rebuilt()
+    {
+        if (_sincerebuild < MINIMUM_SURVIVAL)
+        {
+            if (++_wasted >= PATIENCE)
+                _worthit = false;
+        }
+        else
+            _wasted = 0;
+        _sincerebuild = 0;
+    }
+};
+
 template <concepts::LocatableContainer ContainerType> class NeighborSearchBase
 {
   protected:
@@ -173,6 +257,7 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     std::vector<uint32_t> _listitems;
     std::vector<bool> _selected;
     bool _listisvalid = false;
+    ListPolicy _listpolicy;
 
     // Width of a cell, in the same unit as the cutoff. NOT the search radius:
     // see forcefield/shared/cellgrid_shared.h for why the two are different
@@ -286,11 +371,26 @@ template <concepts::LocatableContainer ContainerType> class NeighborSearch : pub
     // otherwise be missed (see `_exceeds_skin`).
     void update()
     {
+        _listpolicy.step();
         if (!_exceeds_skin())
             return;
+
         _build_grid();
-        _build_list();
+        if (_listpolicy.worth_it())
+            _build_list();
+        else
+        {
+            // Dropped: the queries fall back to walking the cells, which is
+            // what they did before there was a list.
+            _listisvalid = false;
+            _listoffsets.clear();
+            _listitems.clear();
+        }
+        _listpolicy.rebuilt();
     }
+
+    // Whether the list is still judged worth keeping -- see ListPolicy.
+    bool list_is_paying() const { return _listpolicy.worth_it(); }
 
     // How many pairs the cached list holds, and whether there is one at all.
     // For the tests and for reporting; a searcher with no skin has no list.
