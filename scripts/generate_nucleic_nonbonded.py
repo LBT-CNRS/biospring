@@ -60,6 +60,15 @@ DATA = os.path.join(os.path.dirname(openmm_app.__file__), "data")
 KCAL = 4.184                      # kJ/mol per kcal/mol
 RSTAR = 10.0 * 2.0 ** (1.0 / 6.0) / 2.0   # sigma(nm) -> R*(A)
 
+# The core given to a hydrogen AMBER leaves with no Lennard-Jones -- see emit().
+# Not invented and not borrowed from a neighbour: these are AMBER's OWN numbers
+# for class H, the hydrogen on a nitrogen, which is what it gives every polar
+# hydrogen that does have a core (class HS, on sulfur, carries the same). Read
+# out of the same XML: sigma 0.106908 nm is R* = 0.6000 A, epsilon 0.0657 kJ/mol
+# is 0.0157 kcal/mol.
+POLAR_HYDROGEN_SIGMA = 0.106908                   # nm, AMBER class H
+POLAR_HYDROGEN_EPSILON = 0.0157 * KCAL            # kJ/mol, as the XML carries it
+
 # Atom-name spellings, same convention and same reason as the bonded
 # generator: a rule that knows one spelling matches nothing on a file
 # written in the other, silently.
@@ -178,6 +187,26 @@ def generate(xml_name, kind, sugar_prefix, base_prefix, spellings):
     def emit(type_name, atom_type, charge, resnames, atom_names):
         if type_name not in seen:
             sigma, eps = lj[atom_type]
+            if eps == 0.0:
+                # AMBER gives its hydroxyl hydrogens no Lennard-Jones at all,
+                # and can afford to: its non-bonded exclusions come from the
+                # bonded topology, so such a hydrogen never meets a partner
+                # that the oxygen it hangs off is not already keeping away.
+                #
+                # BioSpring excludes only pairs joined by a SPRING, which is
+                # 1-2 and nothing else. A charged particle with no repulsive
+                # core is then not a well-defined thing in this model but a
+                # Coulomb singularity waiting to happen -- measured on 023,
+                # where dHO3 and dHO5 reach 84 km/s, thirty times thermal, and
+                # force the neighbour list to be rebuilt at every step.
+                #
+                # So they get the smallest real core in this force field: the
+                # epsilon every other hydrogen here already carries, and the
+                # radius and well depth AMBER itself gives class H. Note that
+                # the sigma AMBER pairs with a zero epsilon is a placeholder --
+                # 1.0 nm, which is what RSTAR turns into the 5.6123 A these
+                # rows used to carry, wider than any heavy atom in the file.
+                sigma, eps = POLAR_HYDROGEN_SIGMA, POLAR_HYDROGEN_EPSILON
             nbi.append("%-6s\t%.4f\t%.4f\t%.4f\t%.3f\t0.0\t0.0"
                        % (type_name, charge, sigma * RSTAR, eps / KCAL, mass[atom_type]))
             seen[type_name] = charge
