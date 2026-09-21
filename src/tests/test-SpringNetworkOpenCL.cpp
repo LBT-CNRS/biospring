@@ -500,6 +500,150 @@ void buildChargedCloud(spn::SpringNetwork & network, configuration::Configuratio
     network.setup(config);
 }
 
+// =====================================================================================
+//
+// The asymmetry of a pair: who is seen, and who looks.
+//
+// =====================================================================================
+
+// A network of four particles, 3 A apart along x and 2 A in radius -- so every
+// pair overlaps and the steric term actually pushes -- one of each kind:
+//   0  dynamic, charged      -- looks, and is seen
+//   1  STATIC,  charged      -- is seen by 0, does not look
+//   2  dynamic, uncharged    -- looks and is seen for steric, neither for Coulomb
+//   3  STATIC,  uncharged    -- seen for steric only, never looks
+void buildFourKinds(spn::SpringNetwork & network, configuration::Configuration & config,
+                    bool steric, bool coulomb, int nbsteps)
+{
+    const struct { float x; bool dynamic; float charge; } kinds[4] = {
+        {0.0f, true, 0.5f}, {3.0f, false, 0.5f}, {6.0f, true, 0.0f}, {9.0f, false, 0.0f}};
+
+    for (const auto & k : kinds)
+    {
+        spn::Particle p;
+        p.setPosition(Vector3f(k.x, 0.0f, 0.0f));
+        p.setMass(12.0f);
+        p.setCharge(k.charge);
+        p.setRadius(2.0f);
+        p.setEpsilon(0.5f);
+        p.setDynamic(k.dynamic);
+        network.addParticle(p);
+    }
+
+    config = configuration::defaultConfiguration();
+    // The step count is the caller's: looking at the lists wants one step, so
+    // that they still describe the geometry they were built for, and comparing
+    // the forces wants many, because one step moves the dynamic particles less
+    // than the tolerance and a backend that never saw the static ones would
+    // still agree.
+    config.sim.nbsteps = nbsteps;
+    config.sim.timestep = 2.0;
+    config.spring.enable = false;
+    config.steric.enable = steric;
+    config.steric.cutoff = 20.0;
+    config.electrostatic.enable = coulomb;
+    config.electrostatic.cutoff = 20.0;
+    config.hydrophobicity.enable = false;
+    network.setup(config);
+}
+} // namespace
+
+// The rule, stated once and checked on the device's own structure: a STATIC
+// particle applies a force to its dynamic neighbours and must therefore be
+// visible to them, but has no neighbours of its own, because no force will ever
+// be computed on it. That asymmetry is the whole point of having two masks
+// rather than one, and it holds for the steric term exactly as for Coulomb --
+// the ONLY difference between them is that Coulomb additionally drops the
+// particles that carry no charge, at both ends.
+TEST(SpringNetworkOpenCL, StaticParticlesAreSeenButDoNotLook)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration config;
+    buildFourKinds(gpu, config, /*steric=*/true, /*coulomb=*/true, /*nbsteps=*/1);
+    gpu.run();
+
+    const SpringNetworkOpenCL::NeighbourList & st = gpu.stericList();
+    const SpringNetworkOpenCL::NeighbourList & el = gpu.electrostaticList();
+    ASSERT_TRUE(st.valid) << "no steric list was built";
+    ASSERT_TRUE(el.valid) << "no electrostatic list was built";
+
+    const auto list = [&](const SpringNetworkOpenCL::NeighbourList & l, unsigned i) {
+        std::vector<unsigned> v = gpu.neighboursFromList(l, i);
+        std::sort(v.begin(), v.end());
+        return v;
+    };
+
+    // STERIC. Everything is a candidate, so a dynamic particle sees all three
+    // others -- including both static ones, which is how they push it.
+    EXPECT_EQ(list(st, 0), (std::vector<unsigned>{1, 2, 3})) << "the dynamic charged particle cannot see everyone";
+    EXPECT_EQ(list(st, 2), (std::vector<unsigned>{0, 1, 3})) << "the dynamic uncharged particle cannot see everyone";
+    // And neither static one looks back.
+    EXPECT_TRUE(list(st, 1).empty()) << "a static particle was given a steric list it will never read";
+    EXPECT_TRUE(list(st, 3).empty()) << "a static particle was given a steric list it will never read";
+
+    // COULOMB. Same asymmetry, plus the charge filter at BOTH ends: 2 and 3
+    // carry no charge, so they neither look nor are looked at.
+    EXPECT_EQ(list(el, 0), (std::vector<unsigned>{1})) << "Coulomb should see only the other charged particle";
+    EXPECT_TRUE(list(el, 1).empty()) << "a static particle was given a Coulomb list";
+    EXPECT_TRUE(list(el, 2).empty()) << "an uncharged particle was given a Coulomb list";
+    EXPECT_TRUE(list(el, 3).empty()) << "an uncharged static particle was given a Coulomb list";
+}
+
+// And the forces that come out of that have to be the CPU's, which reaches the
+// same place by another route: it never asks a static particle for neighbours,
+// because computeParticleForces only walks the dynamic ones.
+//
+// Run term by term, so that a mistake in one cannot be hidden by the other.
+TEST(SpringNetworkOpenCL, TheAsymmetryGivesTheCPUsForces)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    struct Case { const char * name; bool steric; bool coulomb; };
+    for (const Case & c : {Case{"steric alone", true, false},
+                           Case{"coulomb alone", false, true},
+                           Case{"both", true, true}})
+    {
+        spn::SpringNetwork cpu;
+        SpringNetworkOpenCL gpu;
+        configuration::Configuration c1, c2;
+        buildFourKinds(cpu, c1, c.steric, c.coulomb, /*nbsteps=*/200);
+        buildFourKinds(gpu, c2, c.steric, c.coulomb, /*nbsteps=*/200);
+        cpu.run();
+        gpu.run();
+
+        for (unsigned i = 0; i < 4; ++i)
+        {
+            const Vector3f a = cpu.getParticle(i).getPosition();
+            const Vector3f b = gpu.getParticle(i).getPosition();
+            EXPECT_LT((a - b).norm(), 1.0e-4f)
+                << c.name << ": particle " << i << " ended " << (a - b).norm() << " A apart";
+        }
+
+        // The static ones must not have moved at all, on either backend.
+        for (unsigned i : {1u, 3u})
+        {
+            EXPECT_FLOAT_EQ(cpu.getParticle(i).getPosition().getX(), i == 1 ? 3.0f : 9.0f)
+                << c.name << ": the CPU moved static particle " << i;
+            EXPECT_FLOAT_EQ(gpu.getParticle(i).getPosition().getX(), i == 1 ? 3.0f : 9.0f)
+                << c.name << ": the device moved static particle " << i;
+        }
+
+        // And the dynamic ones must have moved, or none of the above means
+        // anything: a run where nothing happens agrees perfectly.
+        // The dynamic ones have to have moved FAR ENOUGH that a dropped pair
+        // could not hide under the tolerance above.
+        const float moved = std::max((cpu.getParticle(0).getPosition() - Vector3f(0, 0, 0)).norm(),
+                                     (cpu.getParticle(2).getPosition() - Vector3f(6, 0, 0)).norm());
+        EXPECT_GT(moved, 0.1f) << c.name << ": moved only " << moved << " A, which proves nothing";
+    }
+}
+
+namespace
+{
 float closestPair(const spn::SpringNetwork & network)
 {
     float closest = 1.0e9f;
