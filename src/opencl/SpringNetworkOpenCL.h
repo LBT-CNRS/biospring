@@ -110,6 +110,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 			unsigned ncellstotal = 0;    // 0 = never measured
 			cl_int4 ncells = {{0, 0, 0, 0}};
 			cl_float4 origin = {{0.0f, 0.0f, 0.0f, 0.0f}};
+			cl::Buffer includedbuffer;   // N uchars: the subset binned here, if any
+			bool restricted = false;
 			float requestedwidth = 0.0f; // what getCellWidth() asked for
 			float width = 0.0f;          // the cells actually built; >= requested
 			int maxstencil = 1;          // the widest stencil any term needs here
@@ -398,6 +400,12 @@ class SpringNetworkOpenCL : public SpringNetwork
 		static const unsigned EMPTY_CELL = static_cast<unsigned>(-1);
 
 		CellGrid _cells;
+		// The same frame binned over a subset: Coulomb walks only the charged
+		// particles, the pairwise hydrophobic term only the hydrophobic ones.
+		// One more cellhead array each, which is the memory this trades for not
+		// walking past four beads in five.
+		CellGrid _chargedcells;
+		CellGrid _hydrophobiccells;
 
 
 		NeighbourList _stericlist;
@@ -425,6 +433,10 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// outside it, which is a four-byte read rather than that pass.
 		bool _measureCellGrid(CellGrid & grid, float width);
 		void _binParticlesIntoCells(CellGrid & grid);
+		// Gives `subset` the frame `_cells` already measured and bins the masked
+		// particles into it. No remeasuring: one frame serves every subset, so
+		// only the binning differs.
+		void _binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask);
 		bool _frameStillHolds(const CellGrid & grid) const;
 		bool _buildCellList(CellGrid & grid, float width);
 
@@ -433,7 +445,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void _updateNeighbourLists();
 		void _buildNeighbourList(NeighbourList & list, float cutoff,
 		                         const std::vector<unsigned char> & targets,
-		                         const std::vector<unsigned char> & candidates);
+		                         const std::vector<unsigned char> & candidates,
+		                         const CellGrid & grid);
 		bool _listsNeedRebuilding();
 		// The kernels that fill a list, held beside the force kernels.
 		cl::Kernel _kernelcountneighbours;

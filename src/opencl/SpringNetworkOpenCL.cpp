@@ -648,6 +648,13 @@ double electrostaticfieldtime=0.0;
 double densityfieldtime=0.0;
 double probetime=0.0;
 double celllisttime=0.0;
+// Building the stored neighbours: countneighbours + fillneighbours, over every
+// term. Separate from the cell list, which is only the blanking and the binning.
+double listbuildtime=0.0;
+double listbuildsterictime=0.0;
+double listbuildcoulombtime=0.0;
+// Which term's list is being built, so the two kernels can be charged to it.
+double * listbuildinto = &listbuildtime;
 double impalatime=0.0;
 double dampingtime=0.0;
 double integrationtime=0.0;
@@ -1155,12 +1162,12 @@ void SpringNetworkOpenCL::initRun()
 // accumulated there rather than overwritten, so these are run totals.
 void SpringNetworkOpenCL::endRun()
 	{
-	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+densityfieldtime+probetime+celllisttime+impalatime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
+	totaltime=springtime+torsiontime+sterictime+electrostatictime+electrostaticfieldtime+densityfieldtime+probetime+celllisttime+listbuildtime+listbuildsterictime+listbuildcoulombtime+impalatime+hydrophobictime+dampingtime+integrationtime+externalforcetime;
 	std::cout<<"OpenCL kernel time: "<<totaltime<<" s ( spring: "<<springtime
 	         <<", torsion: "<<torsiontime
 	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
-	         <<", electrostaticfield: "<<electrostaticfieldtime<<", densityfield: "<<densityfieldtime<<", probe: "<<probetime<<", listes de cellules: "<<celllisttime<<", impala: "<<impalatime
+	         <<", electrostaticfield: "<<electrostaticfieldtime<<", densityfield: "<<densityfieldtime<<", probe: "<<probetime<<", listes de cellules: "<<celllisttime<<", construction steric: "<<listbuildsterictime<<", construction coulomb: "<<listbuildcoulombtime<<", construction autre: "<<listbuildtime<<", impala: "<<impalatime
 	         <<", hydrophobic: "<<hydrophobictime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
@@ -1270,6 +1277,53 @@ std::vector<unsigned> SpringNetworkOpenCL::neighboursFromList(const NeighbourLis
 	}
 
 
+// Gives a subset grid the frame `_cells` already measured, and bins into it
+// only the particles the mask keeps.
+//
+// The frame is shared on purpose: one measuring pass serves every subset, the
+// origin and the cell width are the same, and only the linked lists differ.
+// What it costs is one more head array per subset -- 1.2 MB on 034 -- and what
+// it buys is that a Coulomb query walks past charged particles only, where it
+// used to walk past every bead in the cell to reject four out of five.
+void SpringNetworkOpenCL::_binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask)
+	{
+	if (_cells.ncellstotal == 0 || mask.empty())
+		{
+		subset.ncellstotal = 0;
+		return;
+		}
+
+	subset.origin = _cells.origin;
+	subset.width = _cells.width;
+	subset.requestedwidth = _cells.requestedwidth;
+	subset.ncells = _cells.ncells;
+	subset.maxstencil = _cells.maxstencil;
+
+	if (subset.ncellstotal != _cells.ncellstotal)
+		{
+		subset.ncellstotal = _cells.ncellstotal;
+		delete[] subset.head;
+		delete[] subset.next;
+		subset.head = new unsigned[subset.ncellstotal];
+		subset.next = new unsigned[_nbparticlesocl];
+		subset.headbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE,
+		                               sizeof(unsigned) * subset.ncellstotal, NULL, &_err);
+		checkErr("Buffer(subset cellhead)");
+		subset.nextbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE,
+		                               sizeof(unsigned) * _nbparticlesocl, NULL, &_err);
+		checkErr("Buffer(subset nextincell)");
+		}
+
+	subset.includedbuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+	                                   sizeof(unsigned char) * _nbparticlesocl,
+	                                   const_cast<unsigned char *>(mask.data()), &_err);
+	checkErr("Buffer(subset mask)");
+	subset.restricted = true;
+
+	_binParticlesIntoCells(subset);
+	}
+
+
 // Whether the stored lists still describe the current positions.
 //
 // A pair absent from a list was farther than cutoff + skin when the list was
@@ -1318,10 +1372,11 @@ bool SpringNetworkOpenCL::_listsNeedRebuilding()
 // code than it saves here.
 void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff,
                                               const std::vector<unsigned char> & targets,
-                                              const std::vector<unsigned char> & candidates)
+                                              const std::vector<unsigned char> & candidates,
+                                              const CellGrid & grid)
 	{
 	list.valid = false;
-	if (_nbparticlesocl == 0 || _cells.ncellstotal == 0 || cutoff <= 0.0f)
+	if (_nbparticlesocl == 0 || grid.ncellstotal == 0 || cutoff <= 0.0f)
 		return;
 
 	list.radius = cutoff + getNeighborSkin();
@@ -1353,12 +1408,12 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 	const auto setwalkargs = [&](cl::Kernel & kernel) {
 		unsigned a = 0;
 		kernel.setArg(a++, _inoutPositionBuffer);
-		kernel.setArg(a++, _cells.headbuffer);
-		kernel.setArg(a++, _cells.nextbuffer);
-		kernel.setArg(a++, _cells.origin);
-		kernel.setArg(a++, _cells.width);
-		kernel.setArg(a++, _cells.ncells);
-		kernel.setArg(a++, biospring_stencil_radius(list.radius, _cells.width));
+		kernel.setArg(a++, grid.headbuffer);
+		kernel.setArg(a++, grid.nextbuffer);
+		kernel.setArg(a++, grid.origin);
+		kernel.setArg(a++, grid.width);
+		kernel.setArg(a++, grid.ncells);
+		kernel.setArg(a++, biospring_stencil_radius(list.radius, grid.width));
 		if (list.hastargets)
 			kernel.setArg(a++, list.targetsbuffer);
 		else
@@ -1375,8 +1430,9 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 	_kernelcountneighbours.setArg(a++, list.countsbuffer);
 	_kernelcountneighbours.setArg(a++, _nbparticlesocl);
 	_err = _queue.enqueueNDRangeKernel(_kernelcountneighbours, cl::NullRange,
-	                                   cl::NDRange(global), cl::NDRange(wg));
+	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
 	checkErr("enqueueNDRangeKernel(countneighbours)");
+	_pendingevents.emplace_back(_event, listbuildinto);
 
 	_err = _queue.enqueueReadBuffer(list.countsbuffer, CL_TRUE, 0,
 	                                sizeof(unsigned) * _nbparticlesocl, list.counts.data());
@@ -1407,8 +1463,9 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 		_kernelfillneighbours.setArg(a++, list.itemsbuffer);
 		_kernelfillneighbours.setArg(a++, _nbparticlesocl);
 		_err = _queue.enqueueNDRangeKernel(_kernelfillneighbours, cl::NullRange,
-		                                   cl::NDRange(global), cl::NDRange(wg));
+		                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
 		checkErr("enqueueNDRangeKernel(fillneighbours)");
+		_pendingevents.emplace_back(_event, listbuildinto);
 		}
 
 	list.valid = true;
@@ -1496,11 +1553,28 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 		}
 
 	if (isStericEnabled())
-		_buildNeighbourList(_stericlist, getStericCutoff(), dynamic, std::vector<unsigned char>());
+		{
+		// Everyone is a candidate, so the shared grid is already the right one.
+		listbuildinto = &listbuildsterictime;
+		_buildNeighbourList(_stericlist, getStericCutoff(), dynamic, std::vector<unsigned char>(), _cells);
+		}
 	if (isElectrostaticCoulombEnabled())
-		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), dynamiccharged, charged);
+		{
+		// Its own grid, holding the charged particles only. The candidate mask
+		// is then redundant -- there is nothing else in there to reject -- and
+		// dropping it takes a test out of the innermost loop.
+		_binSubsetIntoCells(_chargedcells, charged);
+		listbuildinto = &listbuildcoulombtime;
+		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), dynamiccharged,
+		                    std::vector<unsigned char>(), _chargedcells);
+		}
+	listbuildinto = &listbuildtime;
 	if (isHydrophobicityEnabled())
-		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), dynamichydrophobic, hydrophobic);
+		{
+		_binSubsetIntoCells(_hydrophobiccells, hydrophobic);
+		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), dynamichydrophobic,
+		                    std::vector<unsigned char>(), _hydrophobiccells);
+		}
 
 	_listreference.assign(_particlepositions, _particlepositions + _nbparticlesocl);
 	_listsarebuilt = true;
@@ -1673,7 +1747,11 @@ void SpringNetworkOpenCL::_binParticlesIntoCells(CellGrid & grid)
 	_kernelbinparticles.setArg(3, grid.ncells);
 	_kernelbinparticles.setArg(4, grid.headbuffer);
 	_kernelbinparticles.setArg(5, grid.nextbuffer);
-	_kernelbinparticles.setArg(6, _nbparticlesocl);
+	if (grid.restricted)
+		_kernelbinparticles.setArg(6, grid.includedbuffer);
+	else
+		_kernelbinparticles.setArg(6, sizeof(cl_mem), NULL);
+	_kernelbinparticles.setArg(7, _nbparticlesocl);
 	_err = _queue.enqueueNDRangeKernel(_kernelbinparticles, cl::NullRange,
 	                                   cl::NDRange(partglobal), cl::NDRange(wg), NULL, &_event);
 	checkErr("enqueueNDRangeKernel(binParticles)");

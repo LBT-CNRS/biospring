@@ -69,10 +69,21 @@ __kernel void blankCells(const uint ncellstotal, __global uint * cellhead)
 __kernel void binParticles(const __global float4 * positions,
                            const float4 origin, const float cellwidth, const int4 ncells,
                            __global uint * cellhead, __global uint * nextincell,
+                           const __global uchar * included,
                            const uint N)
 	{
 	const uint p = get_global_id(0);
 	if (p >= N) return;
+
+	// A grid may hold a SUBSET. Coulomb only ever asks about charged particles,
+	// so binning the others means walking past them at every query for nothing:
+	// 85% of the beads on 034, 79% on 024. A null pointer means everyone, which
+	// is what the steric term wants.
+	if (included != 0 && included[p] == 0)
+		{
+		nextincell[p] = BIOSPRING_EMPTY_CELL;
+		return;
+		}
 
 	const uint c = biospring_cell_of(positions[p], origin, cellwidth, ncells);
 	if (c == BIOSPRING_EMPTY_CELL)
