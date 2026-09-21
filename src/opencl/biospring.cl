@@ -110,12 +110,23 @@ __kernel void binParticles(const __global float4 * positions,
 // one pass, but it would have to be sized for the worst particle and paid for
 // by every one of them.
 //
-// `included` restricts the list to the particles a term acts on -- the charged
-// ones for Coulomb, the hydrophobic ones for the pairwise hydrophobic term.
-// Both ends are filtered: an uncharged particle is neither asked for its list
-// nor offered as a candidate. The CPU has had this through its per-term
-// searchers; the device did not, and on a capsid where 15% of the beads carry a
-// charge it is most of the work. A null pointer means "every particle".
+// TWO filters, because the two ends of a pair are not the same question.
+//
+// `targets` is who gets a list at all: a particle whose force nobody will ever
+// read does not need its neighbours found. That is every STATIC particle -- the
+// CPU only ever loops over _dynamicparticules -- and, for Coulomb, every
+// uncharged one. 013.GLIC and 041 are entirely static, so today the device
+// computes 25000 particles' worth of non-bonded force and throws all of it
+// away; 022.RecA is 89% static and 11% charged, of which 1% is both.
+//
+// `candidates` is who may APPEAR in someone's list. Not the same set: a static
+// charged particle exerts a perfectly good force on a dynamic one, so it has to
+// stay a candidate even though it needs no list of its own.
+//
+// A null pointer means "everyone", which is what the steric term's candidates
+// are. The CPU has had the candidate half through its per-term searchers since
+// before the device existed; it had the target half through looping over the
+// dynamic particles only.
 
 #define BIOSPRING_WALK_AT_RADIUS(BODY)                                                      \
 	const int cx = (int)floor((here.x - origin.x) / cellwidth);                             \
@@ -137,7 +148,7 @@ __kernel void binParticles(const __global float4 * positions,
 					{                                                                       \
 					if (p == tid)                                                           \
 						continue;                                                           \
-					if (included != 0 && included[p] == 0)                                  \
+					if (candidates != 0 && candidates[p] == 0)                              \
 						continue;                                                           \
 					const float3 axis = positions[p].xyz - here.xyz;                        \
 					const float distsq = axis.x*axis.x + axis.y*axis.y + axis.z*axis.z;     \
@@ -152,7 +163,8 @@ __kernel void countneighbours(const __global float4 * positions,
                               const __global uint * nextincell,
                               const float4 origin, const float cellwidth, const int4 ncells,
                               const int stencilradius,
-                              const __global uchar * included,
+                              const __global uchar * targets,
+                              const __global uchar * candidates,
                               const float radius,
                               __global uint * counts,
                               const uint N)
@@ -161,7 +173,7 @@ __kernel void countneighbours(const __global float4 * positions,
 	if (tid >= N) return;
 
 	counts[tid] = 0u;
-	if (included != 0 && included[tid] == 0) return;
+	if (targets != 0 && targets[tid] == 0) return;
 
 	const float4 here = positions[tid];
 	uint n = 0u;
@@ -174,7 +186,8 @@ __kernel void fillneighbours(const __global float4 * positions,
                              const __global uint * nextincell,
                              const float4 origin, const float cellwidth, const int4 ncells,
                              const int stencilradius,
-                             const __global uchar * included,
+                             const __global uchar * targets,
+                             const __global uchar * candidates,
                              const float radius,
                              const __global uint * offsets,
                              __global uint * items,
@@ -182,7 +195,7 @@ __kernel void fillneighbours(const __global float4 * positions,
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
-	if (included != 0 && included[tid] == 0) return;
+	if (targets != 0 && targets[tid] == 0) return;
 
 	const float4 here = positions[tid];
 	uint at = offsets[tid];
