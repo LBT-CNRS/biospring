@@ -42,6 +42,24 @@ class InteractorMDDriver : public Interactor
 
 		virtual void syncSystemStateData() override;
 
+		// The arrays the per-particle sync writes into, resolved once per step
+		// rather than once per particle. DataArrayManager::get() is a lookup in
+		// an unordered_map keyed by std::string, and the sync used to run six
+		// of them for every particle of every step -- 223 200 string hashes per
+		// step on a 37 200 bead capsid, for six pointers that cannot move: the
+		// arrays are added in initializeDataManager() and never again.
+		struct SyncTargets
+			{
+			float * positions = nullptr;
+			float * forces = nullptr;
+			float * sasa = nullptr;
+			float * insertionforce = nullptr;   // "imsf"
+			float * transferenergy = nullptr;   // "trimp"
+			float * impala = nullptr;
+			};
+		SyncTargets synctargets;
+		void resolveSyncTargets();
+
 		// Managers for float/int data assigned in the server side (BioSpring)
 		DataArrayManager<float> floatManager;
 		DataArrayManager<int> intManager;

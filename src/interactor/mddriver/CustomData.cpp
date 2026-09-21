@@ -431,29 +431,31 @@ int CustomData::getCustomDataFromClient(char *getName, int *getSize, T **getData
 
 void CustomData::syncParticleStateData(InteractorMDDriver* imdl, unsigned index)
 {
+    // The arrays written below come from imdl->synctargets, resolved once
+    // per step. Reaching them through floatManager.get(name) cost four
+    // lookups in an unordered_map keyed by std::string for every particle
+    // of every step.
+    //
     // By reference: this reads three scalars, and copying a Particle costs
     // five std::string and an unordered_map of spring neighbours -- once per
     // particle per step. See InteractorMDDriver::syncParticleStateData.
     const biospring::spn::Particle & particle = imdl->getSpringNetwork()->getParticle(index);
     // Update sasa array for the given particle
 	float sasa = particle.getSolventAccessibilitySurface();
-	float* sasaArray = imdl->floatManager.get("sasa").getData();
-	memcpy(&(sasaArray[index]), &sasa, sizeof(float));
+	memcpy(&(imdl->synctargets.sasa[index]), &sasa, sizeof(float));
 
 	// Update particle force array for the given particle
 	float particleForce[3];
     particle.getPreviousForce().to_array(particleForce);
-	float* imsf = imdl->floatManager.get("imsf").getData();
-	memcpy(&(imsf[index * 3]), particleForce, sizeof(float) * 3);
+	memcpy(&(imdl->synctargets.insertionforce[index * 3]), particleForce, sizeof(float) * 3);
 
 	// Update transfert energies array for the given particle
 	float tre = particle.getTransferEnergyByAccessibleSurface();
-	float* trimpArray = imdl->floatManager.get("trimp").getData();
-	memcpy(&(trimpArray[index]), &tre, sizeof(float));
+	memcpy(&(imdl->synctargets.transferenergy[index]), &tre, sizeof(float));
 
     // !!! Check processCustomFloatData to see other impala data being updated
-    float* impala = imdl->floatManager.get("impala").getData();
-    impala[0] = imdl->getSpringNetwork()->getIMPEnergy(); //!< IMPALA energy, KJoule/mol
+    // IMPALA's energy is one number for the whole network, not a per-particle
+    // one: InteractorMDDriver::syncSystemStateData writes it once per step.
 }
 
 

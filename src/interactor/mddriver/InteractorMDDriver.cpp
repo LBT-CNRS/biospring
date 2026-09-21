@@ -290,8 +290,32 @@ void InteractorMDDriver::updateForces(InteractorMDDriver * imdl, int nbforces, i
     }
 }
 
+void InteractorMDDriver::resolveSyncTargets()
+{
+	// Nothing to resolve before initializeDataManager() has added the arrays.
+	// The lookups used to sit inside the per-particle loop, so an empty network
+	// never reached them; get() calls die() on a name it does not hold.
+	if (_springnetwork == nullptr || _springnetwork->getNumberOfParticles() == 0)
+		return;
+
+	synctargets.positions = floatManager.get("positions").getData();
+	synctargets.forces = floatManager.get("forces").getData();
+	synctargets.sasa = floatManager.get("sasa").getData();
+	synctargets.insertionforce = floatManager.get("imsf").getData();
+	synctargets.transferenergy = floatManager.get("trimp").getData();
+	synctargets.impala = floatManager.get("impala").getData();
+}
+
 void InteractorMDDriver::syncSystemStateData()
 {
+	resolveSyncTargets();
+
+	// IMPALA's energy is one number for the whole network, not a per-particle
+	// one. It used to be written inside the per-particle loop, which set the
+	// same scalar once per bead.
+	if (synctargets.impala != nullptr && _springnetwork != nullptr)
+		synctargets.impala[0] = _springnetwork->getIMPEnergy();
+
 	Interactor::syncSystemStateData();
 	if(_springnetwork!=NULL)
 	{
@@ -319,11 +343,9 @@ void InteractorMDDriver::syncParticleStateData(unsigned index)
 	float position[3];
 	_springnetwork->getParticlePosition(index, position);
 	// Update the `positions` array for the given particle.
-	float* positions = floatManager.get("positions").getData();
-	memcpy(&(positions[index * 3]), position, sizeof(float) * 3);
+	memcpy(&(synctargets.positions[index * 3]), position, sizeof(float) * 3);
 	// Update the force for the given particle.
-	float* forces = floatManager.get("forces").getData();
-	_springnetwork->setForce(index, &(forces[index * 3]));
+	_springnetwork->setForce(index, &(synctargets.forces[index * 3]));
 
 	CustomData::syncParticleStateData(this, index);
 }
