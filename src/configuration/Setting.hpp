@@ -273,7 +273,7 @@ class SimulationSetting : public SettingBase
     double cellsize;
 
     SimulationSetting(const std::string & name)
-        : SettingBase(name), nbsteps(0), timestep(0.0), samplerate(1), neighborskin(0.0), cellsize(0.0)
+        : SettingBase(name), nbsteps(0), timestep(0.0), samplerate(1), neighborskin(-1.0), cellsize(0.0)
     {
         _parameterNames = {"nbsteps", "timestep", "samplerate", "neighborskin", "cellsize"};
     }

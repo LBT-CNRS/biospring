@@ -198,6 +198,12 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// which is why it stops at three and not at the eight the geometry alone
 		// would ask for: at 2.67 A the capsid's kernels take 2.405 s against
 		// 1.341 s at 5.33 A.
+		// No skin on the device. A tight list rebuilt every step beats any
+		// skin here -- measured monotone on both 023 and 034 -- because the
+		// build is parallel and costs little, while a skin only makes the
+		// walk longer for every work item on every step.
+		float defaultNeighborSkin() const override { return 0.0f; }
+
 		int targetStencilRadius() const override { return 3; }
 
 

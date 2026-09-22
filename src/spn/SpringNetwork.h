@@ -338,7 +338,32 @@ class SpringNetwork
     float getStericCutoff() const { return _config.steric.cutoff; }
     float getElectrostaticCutoff() const { return _config.electrostatic.cutoff; }
     float getHydrophobicCutoff() const { return _config.hydrophobicity.cutoff; }
-    float getNeighborSkin() const { return _config.sim.neighborskin; }
+    // The neighbour-list skin, in A. The list is built at cutoff + skin and
+    // reused until a particle has moved half the skin, so the skin is what
+    // decides whether the list can be reused at all rather than rebuilt --
+    // and a list rebuilt every step is two walks where the plain cell search
+    // does one.
+    //
+    // A NEGATIVE value in the .msp -- the default -- means "let the backend
+    // choose", because the right answer differs between them. Zero is a real
+    // choice and is honoured: on the CPU it means no list at all.
+    float getNeighborSkin() const
+    {
+        const double asked = _config.sim.neighborskin;
+        return asked >= 0.0 ? static_cast<float>(asked) : defaultNeighborSkin();
+    }
+
+    // 0.5 A on the CPU. Measured on 034.VirusCA with simulation.cellsize
+    // pinned, so the list is the only thing that changes:
+    //
+    //   skin 0 A (no list)  202 pas/s      skin 1 A  323 pas/s
+    //   skin 0.5 A          315 pas/s      skin 2 A  332 pas/s
+    //
+    // The curve is flat from 0.5 to 4 A, so having a skin matters and its
+    // exact value does not. The default sits at the low end because a large
+    // skin does start to cost where the structure moves fast: 023.Nucleosome
+    // gives 43.4 pas/s at 0, 43.5 at 0.5 and 41.5 at 2 A.
+    virtual float defaultNeighborSkin() const { return 0.5f; }
 
     // The width of a neighbour-search cell, in A: what the .msp asked for, or
     // the automatic choice when it asked for nothing.

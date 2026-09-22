@@ -274,7 +274,7 @@ inline Configuration defaultConfiguration()
     config.sim.nbsteps = -1;
     config.sim.timestep = 0.01;
     config.sim.samplerate = 100;
-    config.sim.neighborskin = 0.0;
+    config.sim.neighborskin = -1.0; // negative: the backend chooses, see getNeighborSkin
 
     config.steric.enable = false;
     config.steric.gridscale = 1.0;
