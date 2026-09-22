@@ -143,6 +143,10 @@ class SpringNetworkOpenCL : public SpringNetwork
 			float radius = 0.0f;
 			bool valid = false;
 			bool hastargets = false;
+			// The target mask is invariant, so it is uploaded on the first
+			// build and kept. It used to be rebuilt as a fresh COPY_HOST_PTR
+			// buffer on every step of every term.
+			bool targetsuploaded = false;
 			bool hascandidates = false;
 		};
 
@@ -437,6 +441,24 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// particles into it. No remeasuring: one frame serves every subset, so
 		// only the binning differs.
 		void _binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask);
+
+		// Who each term computes a force FOR (targets) and who may appear as
+		// someone's neighbour (candidates). isDynamic, isCharged, isHydrophobic
+		// and the probe's identity are all fixed for the run, so these are
+		// built once rather than once per step -- and the same target mask
+		// gates the force kernel, which is what keeps a static or uncharged
+		// particle from walking a neighbourhood whose result nobody reads.
+		struct TermMasks
+			{
+			std::vector<unsigned char> dynamic;            // steric targets
+			std::vector<unsigned char> dynamiccharged;     // Coulomb targets
+			std::vector<unsigned char> charged;            // Coulomb candidates
+			std::vector<unsigned char> dynamichydrophobic; // hydrophobic targets
+			std::vector<unsigned char> hydrophobic;        // hydrophobic candidates
+			unsigned builtfor = 0;                         // particle count they were built for
+			};
+		TermMasks _masks;
+		void _buildTermMasks();
 		bool _frameStillHolds(const CellGrid & grid) const;
 		bool _buildCellList(CellGrid & grid, float width);
 

@@ -1425,7 +1425,13 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 		checkErr("Buffer(mask)");
 		return true;
 	};
-	list.hastargets = upload(targets, list.targetsbuffer);
+	// Once, not once per step: _buildTermMasks clears the flag when the masks
+	// are rebuilt, which only happens when the network changes size.
+	if (!list.targetsuploaded)
+		{
+		list.hastargets = upload(targets, list.targetsbuffer);
+		list.targetsuploaded = true;
+		}
 	list.hascandidates = upload(candidates, list.candidatesbuffer);
 
 	if (list.counts.size() != _nbparticlesocl)
@@ -1515,6 +1521,69 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 // rebuilt every step -- two walks to save one, measured on the CPU at up to
 // 2.4x slower on a structure whose fastest beads move 3 A in a step. So
 // simulation.neighborskin = 0, the default, keeps the cell walk.
+// Built once: nothing that feeds them moves during a run. isStatic, isCharged,
+// isHydrophobic and the probe's index are all fixed once the network is loaded.
+//
+// TARGETS say who a term computes a force FOR. A static particle's force is
+// never read -- the CPU loops over _dynamicparticules alone -- and an uncharged
+// particle has no Coulomb force to compute, so neither needs a neighbourhood
+// and neither needs a work item.
+//
+// CANDIDATES say who may appear in someone else's neighbourhood. A STATIC
+// charged particle still pushes the dynamic ones, so it stays a candidate even
+// though it is not a target. That asymmetry is the whole point of having two
+// masks rather than one.
+void SpringNetworkOpenCL::_buildTermMasks()
+	{
+	const bool wantcoulomb = isElectrostaticCoulombEnabled();
+	const bool wanthydrophobic = isHydrophobicityEnabled();
+	if (_masks.builtfor == _nbparticlesocl &&
+	    _masks.dynamic.size() == _nbparticlesocl &&
+	    _masks.charged.empty() != wantcoulomb &&
+	    _masks.hydrophobic.empty() != wanthydrophobic)
+		return;
+
+	const unsigned n = std::min<unsigned>(SpringNetwork::getNumberOfParticles(), _nbparticlesocl);
+	_masks.dynamic.assign(_nbparticlesocl, 0);
+	_masks.dynamiccharged.clear();
+	_masks.charged.clear();
+	_masks.dynamichydrophobic.clear();
+	_masks.hydrophobic.clear();
+	if (wantcoulomb)
+		{ _masks.dynamiccharged.assign(_nbparticlesocl, 0); _masks.charged.assign(_nbparticlesocl, 0); }
+	if (wanthydrophobic)
+		{ _masks.dynamichydrophobic.assign(_nbparticlesocl, 0); _masks.hydrophobic.assign(_nbparticlesocl, 0); }
+
+	for (unsigned i = 0; i < n; ++i)
+		{
+		const Particle & particle = SpringNetwork::getParticle(i);
+		// The probe is nobody's neighbour: its interactions are the probe
+		// kernel's, and the CPU keeps it out of every searcher for the same
+		// reason.
+		if (SpringNetwork::isProbeParticle(i))
+			continue;
+
+		const bool isdynamic = particle.isDynamic();
+		_masks.dynamic[i] = isdynamic ? 1 : 0;
+		if (wantcoulomb && particle.isCharged())
+			{
+			_masks.charged[i] = 1;
+			_masks.dynamiccharged[i] = isdynamic ? 1 : 0;
+			}
+		if (wanthydrophobic && particle.isHydrophobic())
+			{
+			_masks.hydrophobic[i] = 1;
+			_masks.dynamichydrophobic[i] = isdynamic ? 1 : 0;
+			}
+		}
+
+	_masks.builtfor = _nbparticlesocl;
+	_stericlist.targetsuploaded = false;
+	_electrostaticlist.targetsuploaded = false;
+	_hydrophobiclist.targetsuploaded = false;
+	}
+
+
 void SpringNetworkOpenCL::_updateNeighbourLists()
 	{
 	if (!isStericEnabled() && !isElectrostaticCoulombEnabled() && !isHydrophobicityEnabled())
@@ -1557,58 +1626,29 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 	// CANDIDATES: who may appear in a list. A static charged particle still
 	// pushes the dynamic ones, so it stays a candidate. For the steric term
 	// that is everybody, which is what an empty mask means.
-	const unsigned n = std::min<unsigned>(SpringNetwork::getNumberOfParticles(), _nbparticlesocl);
-	std::vector<unsigned char> dynamic(_nbparticlesocl, 0);
-	std::vector<unsigned char> dynamiccharged, charged, dynamichydrophobic, hydrophobic;
-	if (isElectrostaticCoulombEnabled())
-		{ dynamiccharged.assign(_nbparticlesocl, 0); charged.assign(_nbparticlesocl, 0); }
-	if (isHydrophobicityEnabled())
-		{ dynamichydrophobic.assign(_nbparticlesocl, 0); hydrophobic.assign(_nbparticlesocl, 0); }
-
-	for (unsigned i = 0; i < n; ++i)
-		{
-		const Particle & particle = SpringNetwork::getParticle(i);
-		// The probe is nobody's neighbour: its interactions are the probe
-		// kernel's, and the CPU keeps it out of every searcher for the same
-		// reason.
-		if (SpringNetwork::isProbeParticle(i))
-			continue;
-
-		const bool isdynamic = particle.isDynamic();
-		dynamic[i] = isdynamic ? 1 : 0;
-		if (!charged.empty() && particle.isCharged())
-			{
-			charged[i] = 1;
-			dynamiccharged[i] = isdynamic ? 1 : 0;
-			}
-		if (!hydrophobic.empty() && particle.isHydrophobic())
-			{
-			hydrophobic[i] = 1;
-			dynamichydrophobic[i] = isdynamic ? 1 : 0;
-			}
-		}
+	_buildTermMasks();
 
 	if (isStericEnabled())
 		{
 		// Everyone is a candidate, so the shared grid is already the right one.
 		listbuildinto = &listbuildsterictime;
-		_buildNeighbourList(_stericlist, getStericCutoff(), dynamic, std::vector<unsigned char>(), _cells);
+		_buildNeighbourList(_stericlist, getStericCutoff(), _masks.dynamic, std::vector<unsigned char>(), _cells);
 		}
 	if (isElectrostaticCoulombEnabled())
 		{
 		// Its own grid, holding the charged particles only. The candidate mask
 		// is then redundant -- there is nothing else in there to reject -- and
 		// dropping it takes a test out of the innermost loop.
-		_binSubsetIntoCells(_chargedcells, charged);
+		_binSubsetIntoCells(_chargedcells, _masks.charged);
 		listbuildinto = &listbuildcoulombtime;
-		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), dynamiccharged,
+		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), _masks.dynamiccharged,
 		                    std::vector<unsigned char>(), _chargedcells);
 		}
 	listbuildinto = &listbuildtime;
 	if (isHydrophobicityEnabled())
 		{
-		_binSubsetIntoCells(_hydrophobiccells, hydrophobic);
-		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), dynamichydrophobic,
+		_binSubsetIntoCells(_hydrophobiccells, _masks.hydrophobic);
+		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), _masks.dynamichydrophobic,
 		                    std::vector<unsigned char>(), _hydrophobiccells);
 		}
 
