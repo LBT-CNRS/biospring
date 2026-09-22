@@ -814,76 +814,6 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
 // walks the fewest cells in total. That is what separates 9 A from 8 A on the
 // nucleosome: both put the 16 A coulomb at two cells, but 9 A also puts the 9 A
 // steric term at one, 27 cells against 125, and it measured 5% faster.
-float SpringNetwork::getCellWidth() const
-{
-    if (_config.sim.cellsize > 0.0)
-        return static_cast<float>(_config.sim.cellsize);
-
-    // Settled once. Nothing that feeds it moves during a run: no .msp key and no
-    // MDDriver message reaches a cutoff.
-    if (_automaticcellwidth > 0.0f)
-        return _automaticcellwidth;
-
-    // Each term searches its cutoff plus the skin, so that is what the cells
-    // have to cover.
-    const float skin = getNeighborSkin();
-    std::vector<float> radii;
-    if (isStericEnabled() && getStericCutoff() > 0.0f)
-        radii.push_back(getStericCutoff() + skin);
-    if (isElectrostaticCoulombEnabled() && getElectrostaticCutoff() > 0.0f)
-        radii.push_back(getElectrostaticCutoff() + skin);
-    if (isHydrophobicityEnabled() && getHydrophobicCutoff() > 0.0f)
-        radii.push_back(getHydrophobicCutoff() + skin);
-
-    if (radii.empty())
-        return 0.0f; // no pairwise term: the searchers fall back to one cell per radius
-
-    const int target = targetStencilRadius();
-    const float longest = *std::max_element(radii.begin(), radii.end());
-
-    // The widths worth considering divide some term's radius exactly. Those are
-    // the ones with no slack: a width a hair under a divisor costs a whole extra
-    // shell of cells for a sliver of volume. longest/target is always among them
-    // and always admissible, so the search below cannot come up empty.
-    float best = 0.0f;
-    long bestcells = 0;
-    for (float radius : radii)
-    {
-        for (int divisor = 1; divisor <= target; divisor++)
-        {
-            const float width = radius / static_cast<float>(divisor);
-
-            long cells = 0;
-            int widest = 0;
-            for (float other : radii)
-            {
-                const int k = biospring_stencil_radius(other, width);
-                widest = std::max(widest, k);
-                const long side = 2L * k + 1L;
-                cells += side * side * side;
-            }
-
-            // Exactly the target, not at most it: a coarser grid would win on
-            // cells walked every time, and be slower for it.
-            if (widest != target)
-                continue;
-
-            if (best <= 0.0f || cells < bestcells || (cells == bestcells && width > best))
-            {
-                best = width;
-                bestcells = cells;
-            }
-        }
-    }
-
-    _automaticcellwidth = best > 0.0f ? best : longest / static_cast<float>(target);
-
-    logging::info("Neighbour cells of %.2f A: stencil radius %d for the longest cutoff (%.1f A)",
-                  _automaticcellwidth, biospring_stencil_radius(longest, _automaticcellwidth),
-                  static_cast<double>(longest));
-
-    return _automaticcellwidth;
-}
 
 void SpringNetwork::_setupSteric()
 {
@@ -891,7 +821,7 @@ void SpringNetwork::_setupSteric()
     {
         if (getStericCutoff() < 1e-6)
             throw std::runtime_error("Steric cutoff must be > 0");
-        _nsearch.steric = make_nsearch(_particles, getStericCutoff(), getNeighborSkin(), getCellWidth());
+        _nsearch.steric = make_nsearch(_particles, getStericCutoff(), getNeighborSkin(), getCellWidthFor(getStericCutoff()));
         _excludeProbeFromNeighborSearch(*_nsearch.steric);
     }
 }
@@ -906,7 +836,7 @@ void SpringNetwork::_setupHydrophobic()
         if (!hydrophobic_particles.empty())
         {
             _nsearch.hydrophobic =
-                make_nsearch(_particles, getHydrophobicCutoff(), hydrophobic_particles, getNeighborSkin(), getCellWidth());
+                make_nsearch(_particles, getHydrophobicCutoff(), hydrophobic_particles, getNeighborSkin(), getCellWidthFor(getHydrophobicCutoff()));
             _excludeProbeFromNeighborSearch(*_nsearch.hydrophobic);
         }
     }
@@ -956,7 +886,7 @@ void SpringNetwork::_setupElectrostatic()
         if (!charged_particles.empty())
         {
             _nsearch.electrostatic =
-                make_nsearch(_particles, getElectrostaticCutoff(), charged_particles, getNeighborSkin(), getCellWidth());
+                make_nsearch(_particles, getElectrostaticCutoff(), charged_particles, getNeighborSkin(), getCellWidthFor(getElectrostaticCutoff()));
             _excludeProbeFromNeighborSearch(*_nsearch.electrostatic);
         }
     }

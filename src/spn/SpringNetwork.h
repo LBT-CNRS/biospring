@@ -98,10 +98,11 @@ class SpringNetwork
         // ones and hydrophobic only the hydrophobic ones, so each walks a
         // shorter list than a merged grid would hand it.
         //
-        // The cell width is the same for all three -- getCellWidth() -- so they
-        // do cut the space identically; merging them would only trade a binning
-        // pass for a charge test on every candidate, which is the wrong way
-        // round.
+        // They also cut the space differently: each takes cells the size of
+        // its own search radius, so a 5 A steric term and a 16 A Coulomb term
+        // both walk 27 cells rather than one of them walking hundreds. Merging
+        // them would trade a binning pass for a charge test on every candidate
+        // AND force one cell size on both, which is the wrong way round twice.
         SearcherPtr steric;
         SearcherPtr electrostatic;
         SearcherPtr hydrophobic;
@@ -367,23 +368,25 @@ class SpringNetwork
 
     // The width of a neighbour-search cell, in A: what the .msp asked for, or
     // the automatic choice when it asked for nothing.
-    float getCellWidth() const;
-
-    // How many cells out of its own the longest-reaching term should walk.
+    // The cell width for ONE term's grid: one cell per search radius, so the
+    // term walks the 27 cells around its own. A term looking 5 A gets 5 A
+    // cells, a term looking 16 A gets 16 A cells, and neither pays for the
+    // other's reach.
     //
-    // This one integer decides the cell width -- see getCellWidth, which also
-    // says why it is a stencil radius and not a cost per candidate, and why
-    // there is no density anywhere in it.
+    // This replaced a single width shared by every term, chosen so the longest
+    // cutoff walked a fixed number of cells while the short ones walked fewer,
+    // coarser ones. Measured over 16 examples the shared width was never
+    // faster and usually slower; see the commit that introduced this.
     //
-    // 2 here. Measured on 023 (25069 beads, 9 and 16 A cutoffs) and on 034
-    // (37200 beads in a hollow capsid, twelve times sparser, 5 and 16 A), by
-    // sweeping simulation.cellsize from 16 A down to 2 A: the best width puts
-    // the longest term at two cells on both, and the CPU loses 9% either side
-    // of that -- 6% at one cell, 8% at three.
-    //
-    // The device wants a different number and says so, in
-    // SpringNetworkOpenCL::targetStencilRadius.
-    virtual int targetStencilRadius() const { return 2; }
+    // simulation.cellsize overrides it, for every term at once.
+    float getCellWidthFor(float cutoff) const
+    {
+        if (_config.sim.cellsize > 0.0)
+            return static_cast<float>(_config.sim.cellsize);
+        if (cutoff <= 0.0f)
+            return 0.0f;
+        return cutoff + getNeighborSkin();
+    }
 
     bool isSpringEnabled() const { return _config.spring.enable; }
     // Per-family runtime toggles for the torsions that -dihedral* already
@@ -657,9 +660,6 @@ class SpringNetwork
     Energies _energies;
     NeighborSearch _nsearch;
     bool _neighborSearchesDirty;
-    // getCellWidth's answer, settled on first use. Mutable because asking for
-    // it does not change the network, and every step asks.
-    mutable float _automaticcellwidth = 0.0f;
 
 
 

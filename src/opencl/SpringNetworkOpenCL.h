@@ -112,7 +112,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 			cl_float4 origin = {{0.0f, 0.0f, 0.0f, 0.0f}};
 			cl::Buffer includedbuffer;   // N uchars: the subset binned here, if any
 			bool restricted = false;
-			float requestedwidth = 0.0f; // what getCellWidth() asked for
+			float requestedwidth = 0.0f; // what getCellWidthFor() asked for
 			float width = 0.0f;          // the cells actually built; >= requested
 			int maxstencil = 1;          // the widest stencil any term needs here
 		};
@@ -204,7 +204,6 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// walk longer for every work item on every step.
 		float defaultNeighborSkin() const override { return 0.0f; }
 
-		int targetStencilRadius() const override { return 3; }
 
 
 
@@ -446,7 +445,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// Gives `subset` the frame `_cells` already measured and bins the masked
 		// particles into it. No remeasuring: one frame serves every subset, so
 		// only the binning differs.
-		void _binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask);
+		void _binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask,
+		                         float width);
 
 		// Who each term computes a force FOR (targets) and who may appear as
 		// someone's neighbour (candidates). isDynamic, isCharged, isHydrophobic

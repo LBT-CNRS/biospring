@@ -801,8 +801,8 @@ void SpringNetworkOpenCL::idleRun()
         _kernelsteric.setArg(a++, _cells.width);
         _kernelsteric.setArg(a++, _cells.ncells);
         // How far out of its own cell this term has to look, in cells of the
-        // width the grid actually built. The grid is shared by every pairwise
-        // term; this argument is the only thing that tells them apart.
+        // width its own grid built. One with cells the size of the search
+        // radius, which is the default, so this is 1.
         _kernelsteric.setArg(a++, biospring_stencil_radius(getStericCutoff(), _cells.width));
         // The stored neighbours, or nothing: with no list the kernel falls back
         // to walking the cells, which is what it did before there was one.
@@ -843,7 +843,7 @@ void SpringNetworkOpenCL::idleRun()
     // the pairwise Coulomb one. Gated on "any", the device applied a pairwise
     // force to five examples (011, 012, 013, 021, 022) whose .msp sets
     // coulomb.enable = 0, and the CPU applied none.
-    if (isElectrostaticCoulombEnabled() && _cells.ncellstotal > 0)
+    if (isElectrostaticCoulombEnabled() && _chargedcells.ncellstotal > 0)
         {
         const unsigned wg = WORK_GROUP_SIZE;
         const unsigned global = (_nbparticlesocl / wg) * wg + wg;
@@ -853,15 +853,15 @@ void SpringNetworkOpenCL::idleRun()
         _kernelelectrostatic.setArg(a++, _inoutPositionBuffer);
         _kernelelectrostatic.setArg(a++, _inChargeBuffer);
         _kernelelectrostatic.setArg(a++, _inoutForceBuffer);
-        _kernelelectrostatic.setArg(a++, _cells.headbuffer);
-        _kernelelectrostatic.setArg(a++, _cells.nextbuffer);
-        _kernelelectrostatic.setArg(a++, _cells.origin);
-        _kernelelectrostatic.setArg(a++, _cells.width);
-        _kernelelectrostatic.setArg(a++, _cells.ncells);
+        _kernelelectrostatic.setArg(a++, _chargedcells.headbuffer);
+        _kernelelectrostatic.setArg(a++, _chargedcells.nextbuffer);
+        _kernelelectrostatic.setArg(a++, _chargedcells.origin);
+        _kernelelectrostatic.setArg(a++, _chargedcells.width);
+        _kernelelectrostatic.setArg(a++, _chargedcells.ncells);
         // How far out of its own cell this term has to look, in cells of the
-        // width the grid actually built. The grid is shared by every pairwise
-        // term; this argument is the only thing that tells them apart.
-        _kernelelectrostatic.setArg(a++, biospring_stencil_radius(getElectrostaticCutoff(), _cells.width));
+        // width its own grid built. One with cells the size of the search
+        // radius, which is the default, so this is 1.
+        _kernelelectrostatic.setArg(a++, biospring_stencil_radius(getElectrostaticCutoff(), _chargedcells.width));
         // The stored neighbours, or nothing: with no list the kernel falls back
         // to walking the cells, which is what it did before there was one.
         if (_electrostaticlist.valid)
@@ -897,7 +897,7 @@ void SpringNetworkOpenCL::idleRun()
         }
 
     // Hydrophobic attraction, over its own cell list.
-    if (isHydrophobicityEnabled() && _cells.ncellstotal > 0)
+    if (isHydrophobicityEnabled() && _hydrophobiccells.ncellstotal > 0)
         {
         const unsigned wg = WORK_GROUP_SIZE;
         const unsigned global = (_nbparticlesocl / wg) * wg + wg;
@@ -907,15 +907,15 @@ void SpringNetworkOpenCL::idleRun()
         _kernelhydrophobic.setArg(a++, _inoutPositionBuffer);
         _kernelhydrophobic.setArg(a++, _inHydrophobicityBuffer);
         _kernelhydrophobic.setArg(a++, _inoutForceBuffer);
-        _kernelhydrophobic.setArg(a++, _cells.headbuffer);
-        _kernelhydrophobic.setArg(a++, _cells.nextbuffer);
-        _kernelhydrophobic.setArg(a++, _cells.origin);
-        _kernelhydrophobic.setArg(a++, _cells.width);
-        _kernelhydrophobic.setArg(a++, _cells.ncells);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.headbuffer);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.nextbuffer);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.origin);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.width);
+        _kernelhydrophobic.setArg(a++, _hydrophobiccells.ncells);
         // How far out of its own cell this term has to look, in cells of the
-        // width the grid actually built. The grid is shared by every pairwise
-        // term; this argument is the only thing that tells them apart.
-        _kernelhydrophobic.setArg(a++, biospring_stencil_radius(getHydrophobicCutoff(), _cells.width));
+        // width its own grid built. One with cells the size of the search
+        // radius, which is the default, so this is 1.
+        _kernelhydrophobic.setArg(a++, biospring_stencil_radius(getHydrophobicCutoff(), _hydrophobiccells.width));
         // The stored neighbours, or nothing: with no list the kernel falls back
         // to walking the cells, which is what it did before there was one.
         if (_hydrophobiclist.valid)
@@ -1290,7 +1290,19 @@ void SpringNetworkOpenCL::_updateCellLists()
 	if (!isStericEnabled() && !isElectrostaticCoulombEnabled() && !isHydrophobicityEnabled())
 		return;
 
-	_buildCellList(_cells, getCellWidth());
+	// One grid per term, each with cells the size of that term's own search
+	// radius, and each holding only the particles that term can interact with.
+	// They are all rebuilt here, every step, so the cell-walk fallback never
+	// reads a frame the list build happened to skip.
+	_buildTermMasks();
+	if (isStericEnabled())
+		_buildCellList(_cells, getCellWidthFor(getStericCutoff()));
+	if (isElectrostaticCoulombEnabled())
+		_binSubsetIntoCells(_chargedcells, _masks.charged,
+		                    getCellWidthFor(getElectrostaticCutoff()));
+	if (isHydrophobicityEnabled())
+		_binSubsetIntoCells(_hydrophobiccells, _masks.hydrophobic,
+		                    getCellWidthFor(getHydrophobicCutoff()));
 	}
 
 
@@ -1321,33 +1333,23 @@ std::vector<unsigned> SpringNetworkOpenCL::neighboursFromList(const NeighbourLis
 // What it costs is one more head array per subset -- 1.2 MB on 034 -- and what
 // it buys is that a Coulomb query walks past charged particles only, where it
 // used to walk past every bead in the cell to reject four out of five.
-void SpringNetworkOpenCL::_binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask)
+void SpringNetworkOpenCL::_binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask,
+                                              float width)
 	{
-	if (_cells.ncellstotal == 0 || mask.empty())
+	if (mask.empty() || width <= 0.0f)
 		{
 		subset.ncellstotal = 0;
 		return;
 		}
 
-	subset.origin = _cells.origin;
-	subset.width = _cells.width;
-	subset.requestedwidth = _cells.requestedwidth;
-	subset.ncells = _cells.ncells;
-	subset.maxstencil = _cells.maxstencil;
-
-	if (subset.ncellstotal != _cells.ncellstotal)
+	// Its own frame, at its own width. _measureCellGrid allocates the head and
+	// next arrays and their buffers, and invalidates the grid if it cannot
+	// measure one, so a term that fails here sees "no grid" rather than last
+	// step's cells over this step's positions.
+	if (subset.ncellstotal == 0 || subset.requestedwidth != width || !_frameStillHolds(subset))
 		{
-		subset.ncellstotal = _cells.ncellstotal;
-		delete[] subset.head;
-		delete[] subset.next;
-		subset.head = new unsigned[subset.ncellstotal];
-		subset.next = new unsigned[_nbparticlesocl];
-		subset.headbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE,
-		                               sizeof(unsigned) * subset.ncellstotal, NULL, &_err);
-		checkErr("Buffer(subset cellhead)");
-		subset.nextbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE,
-		                               sizeof(unsigned) * _nbparticlesocl, NULL, &_err);
-		checkErr("Buffer(subset nextincell)");
+		if (!_measureCellGrid(subset, width))
+			return;
 		}
 
 	subset.includedbuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
@@ -1626,8 +1628,6 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 	// CANDIDATES: who may appear in a list. A static charged particle still
 	// pushes the dynamic ones, so it stays a candidate. For the steric term
 	// that is everybody, which is what an empty mask means.
-	_buildTermMasks();
-
 	if (isStericEnabled())
 		{
 		// Everyone is a candidate, so the shared grid is already the right one.
@@ -1636,10 +1636,10 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 		}
 	if (isElectrostaticCoulombEnabled())
 		{
-		// Its own grid, holding the charged particles only. The candidate mask
-		// is then redundant -- there is nothing else in there to reject -- and
-		// dropping it takes a test out of the innermost loop.
-		_binSubsetIntoCells(_chargedcells, _masks.charged);
+		// Its grid holds the charged particles only -- built in
+		// _updateCellLists -- so the candidate mask is redundant here: there is
+		// nothing else in there to reject, and dropping it takes a test out of
+		// the innermost loop.
 		listbuildinto = &listbuildcoulombtime;
 		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), _masks.dynamiccharged,
 		                    std::vector<unsigned char>(), _chargedcells);
@@ -1647,7 +1647,6 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 	listbuildinto = &listbuildtime;
 	if (isHydrophobicityEnabled())
 		{
-		_binSubsetIntoCells(_hydrophobiccells, _masks.hydrophobic);
 		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), _masks.dynamichydrophobic,
 		                    std::vector<unsigned char>(), _hydrophobiccells);
 		}
