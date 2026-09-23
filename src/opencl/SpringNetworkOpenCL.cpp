@@ -2096,6 +2096,12 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 		add("impala (the membrane is curved or doubled: a different model)");
 	if (isInsertionVectorEnabled()) add("insertionvector");
 	if (isRigidBodyEnabled())       add("rigidbody");
+	// biospring.cl has no hydrogen bond code at all: not the Morse well, not
+	// the two-sided angular weight, not the per-step re-pairing. A .msp with
+	// hbond.enable = 1 run through --opencl is therefore a DIFFERENT model,
+	// and was silently so until this line -- the very thing this warning was
+	// written to stop.
+	if (isHydrogenBondEnabled())    add("hbond (the device has no hydrogen bond kernel)");
 
 	if (!ignored.empty())
 		biospring::logging::warning(
