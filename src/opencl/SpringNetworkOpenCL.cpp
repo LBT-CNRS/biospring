@@ -744,7 +744,8 @@ void SpringNetworkOpenCL::idleRun()
     _event = _kernelfunctorspring(_inoutPositionBuffer, _inSpringBuffer,
                                  _inSpringIndexesBuffer, _inoutForceBuffer,
                                  _springEnergyBuffer,
-                                 _nbparticlesocl, springForceScale);
+                                 _nbparticlesocl, springForceScale,
+                                 getForceField()->getSpringScale());
 	_pendingevents.emplace_back(_event, &springtime);
     }
 

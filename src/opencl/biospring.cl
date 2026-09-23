@@ -375,7 +375,12 @@ __kernel void spring(const __global float4 * positions,
                      __global float4 * forces,
                      __global float * energy,
                      const uint N,
-                     const float scale)
+                     const float scale,
+                     // spring.scale ALONE. `scale` above carries it multiplied
+                     // by GLOBAL_SPRING_FORCE_CONVERT, which turns kJ/mol/A
+                     // into the integrator's units -- right for a force, wrong
+                     // for an energy by that same 1e-4.
+                     const float energyscale)
 	{
 	size_t tid = get_global_id(0);
 	if(tid>=N) return;
@@ -400,7 +405,13 @@ __kernel void spring(const __global float4 * positions,
 		// Half, because the CSR holds each spring from both of its ends and
 		// this kernel runs once per end. Summed over every particle, the halves
 		// make each spring's energy exactly once.
-		e += 0.5f * biospring_spring_energy(dist, springs[i].stiffness, springs[i].equilibrium);
+		// spring.scale belongs here, as ForceField::computeSpringEnergy
+		// applies it on the CPU. Without it this kernel reported an energy
+		// spring.scale times too small -- 65.23 kJ/mol against the CPU's 6522
+		// on 034.VirusCA, whose spring.scale is 100. The FORCES were always
+		// right, which is why the two backends' trajectories agree: only the
+		// reported number was wrong.
+		e += 0.5f * energyscale * biospring_spring_energy(dist, springs[i].stiffness, springs[i].equilibrium);
 		}
 
 	forces[tid].xyz += sum;
