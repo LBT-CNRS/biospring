@@ -73,17 +73,7 @@ Vector3f ForceField::computeIMPForceVector(float x, float y, float z, float surf
 
 // ======================================================================================
 // Hydrogen-bond energy and force (Morse potential, donor-acceptor heavy atoms only).
-float ForceField::computeHydrogenBondEnergy(float distance) const
-{
-    return _hydrogenbondscale *
-           hydrogen_bond_energy(distance, _hydrogenbondwelldepth, _hydrogenbondequilibrium, _hydrogenbondwidth);
-}
 
-float ForceField::computeHydrogenBondForceModule(float distance) const
-{
-    return _hydrogenbondscale *
-           hydrogen_bond_force_module(distance, _hydrogenbondwelldepth, _hydrogenbondequilibrium, _hydrogenbondwidth);
-}
 
 // ======================================================================================
 // Electrostatic field energy.

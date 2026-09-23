@@ -11,6 +11,7 @@
 #include "energy/spring.hpp"
 #include "energy/electrostatic.hpp"
 #include "energy/hydrophobic.hpp"
+#include "energy/hydrogenbond.hpp"
 
 namespace biospring
 {
@@ -133,8 +134,22 @@ class ForceField
 
     // Morse potential between a donor and an acceptor heavy atom (see
     // energy/hydrogenbond.hpp for the derivation of the default De/re/a).
-    virtual float computeHydrogenBondEnergy(float distance) const;
-    virtual float computeHydrogenBondForceModule(float distance) const;
+    // NOT virtual, and defined here, for the reason the electrostatic and
+    // spring pairs above are: nothing overrides them. They are read once per
+    // bond in computeHydrogenBondForces' parallel loop and again for every
+    // candidate _assignHydrogenBondPairs ranks, every step.
+    float computeHydrogenBondEnergy(float distance) const
+    {
+        return _hydrogenbondscale *
+               hydrogen_bond_energy(distance, _hydrogenbondwelldepth, _hydrogenbondequilibrium,
+                                    _hydrogenbondwidth);
+    }
+    float computeHydrogenBondForceModule(float distance) const
+    {
+        return _hydrogenbondscale *
+               hydrogen_bond_force_module(distance, _hydrogenbondwelldepth, _hydrogenbondequilibrium,
+                                          _hydrogenbondwidth);
+    }
 
     // ================================================================================
     // Getters and setters
