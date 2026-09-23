@@ -9,6 +9,8 @@
 
 #include "Vector3f.h"
 #include "energy/spring.hpp"
+#include "energy/electrostatic.hpp"
+#include "energy/hydrophobic.hpp"
 
 namespace biospring
 {
@@ -54,10 +56,20 @@ class ForceField
         return _propertiesfromname.find(name) != _propertiesfromname.end();
     }
 
-    virtual float computeElectrostaticFieldEnergy(float potential, float charge) const;
+    float computeElectrostaticFieldEnergy(float potential, float charge) const;
 
-    virtual float computeElectrostaticEnergy(float charge1, float charge2, float distance) const;
-    virtual float computeElectrostaticForceModule(float charge1, float charge2, float distance) const;
+    // NOT virtual, and defined here, for the same reason as the spring pair
+    // below: no subclass in the tree overrides either, and the four that exist
+    // override the STERIC pair instead. Every charged pair of every step was
+    // paying an indirect call, and an uninlinable one, to reach a multiply.
+    float computeElectrostaticEnergy(float charge1, float charge2, float distance) const
+    {
+        return _coulombscale * electrostatic_energy(charge1, charge2, distance, _dielectric);
+    }
+    float computeElectrostaticForceModule(float charge1, float charge2, float distance) const
+    {
+        return _coulombscale * electrostatic_force_module(charge1, charge2, distance, _dielectric);
+    }
 
     virtual float computeStericEnergy(float radius1, float radius2, float epsilon1, float epsilon2,
                                       float distance) const;
@@ -88,11 +100,21 @@ class ForceField
         return _springscale * spring_force_module(distance, stiffness, equilibrium);
     }
 
-    virtual float computeIMPEnergy(float x, float y, float z, float surface, float transfer) const;
-    virtual Vector3f computeIMPForceVector(float x, float y, float z, float surface, float transfer) const;
+    float computeIMPEnergy(float x, float y, float z, float surface, float transfer) const;
+    Vector3f computeIMPForceVector(float x, float y, float z, float surface, float transfer) const;
 
-    virtual float computeHydrophobicityEnergy(float hydrophobicity1, float hydrophobicity2, float distance) const;
-    virtual float computeHydrophobicityForceModule(float hydrophobicity1, float hydrophobicity2, float distance) const;
+    // Same again: nothing overrides these, and they sit on the hydrophobic
+    // term's per-pair path.
+    float computeHydrophobicityEnergy(float hydrophobicity1, float hydrophobicity2, float distance) const
+    {
+        return _hydrophobicityscale *
+               hydrophobic_energy(hydrophobicity1, hydrophobicity2, distance, _hydrophobicitydecaylength);
+    }
+    float computeHydrophobicityForceModule(float hydrophobicity1, float hydrophobicity2, float distance) const
+    {
+        return _hydrophobicityscale *
+               hydrophobic_force_module(hydrophobicity1, hydrophobicity2, distance, _hydrophobicitydecaylength);
+    }
 
     // ================================================================================
     // Getters and setters
