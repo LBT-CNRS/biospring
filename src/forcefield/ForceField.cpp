@@ -36,16 +36,6 @@ float ForceField::computeElectrostaticForceModule(float charge1, float charge2, 
 
 // ======================================================================================
 // Spring energy and force.
-float ForceField::computeSpringEnergy(float distance, float stiffness, float equilibrium) const
-{
-    return _springscale * spring_energy(distance, stiffness, equilibrium);
-}
-
-float ForceField::computeSpringForceModule(float distance, float stiffness, float equilibrium) const
-{
-    return _springscale * spring_force_module(distance, stiffness, equilibrium);
-}
-
 // ======================================================================================
 // IMP energy and force.
 
