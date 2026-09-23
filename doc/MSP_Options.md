@@ -58,11 +58,23 @@ Define the steps and IO settings. The values written here are the default values
 -1 defines an infinite run and you will have to kill the process manually. 
 * **simulation.samplerate = 100** *(integer)* Frequence at which energies are printed on the standard
 output.
-* **simulation.neighborskin = 0** *(distance unit, float)* Extra margin added to the steric,
-electrostatic and hydrophobic cutoffs when building their neighbor grids. When greater than
-zero, the grid is only rebuilt once a particle has moved more than this margin since the last
-rebuild, instead of every step, which reduces the cost of neighbor search. `0` (the default)
-rebuilds the grid every step, which is always correct but can be slower for large systems.
+* **simulation.neighborskin = -1** *(A, float)* Extra margin added to the steric, electrostatic
+and hydrophobic cutoffs when a term builds its list of neighbour pairs. The list holds every
+pair within `cutoff + skin`, so it stays valid until a particle has moved half the margin, and
+is reused until then instead of being rebuilt. A negative value, the default, lets the backend
+choose: **0.5 A on the CPU**, where reuse is what makes a list worth having, and **0 on the
+GPU**, where a tight list rebuilt every step is faster than any margin. `0` is a real setting
+and turns the CPU's list off, falling back to walking the cells. Measured on 034.VirusCA with
+the cell size pinned: 202 steps/s with no list against 315 at 0.5 A, 323 at 1 A and 332 at 2 A
+-- so having a margin matters much more than its value, and a large one starts to cost where
+the structure moves fast (023.Nucleosome: 43.4 steps/s at 0, 43.5 at 0.5, 41.5 at 2 A).
+* **simulation.cellsize = 0** *(A, float)* Width of one neighbour-grid cell, for every term at
+once. `0`, the default, gives each term cells the size of its own search radius, so each walks
+the 27 cells around its own. Set it smaller to trade more cells walked for fewer candidates
+tested, which pays on a dense structure: 041.Alphagalactosidase runs at 778 steps/s on the GPU
+with the default and 844 at half its Coulomb cutoff. Set it larger on a hollow one, where most
+cells are empty and visiting them is the cost. There is no value that suits every structure,
+which is why this is a knob and not a heuristic.
 ---
 * **pdbtrajectory.enable = 0** *(boolean)* Enables trajectory writing in pdb format.
 * **pdbtrajectory.frequency = 100** *(integer)* Frequence at which frames are written.
