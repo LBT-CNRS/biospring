@@ -108,7 +108,7 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _torsionenergyper;
     delete[] _particledynamic;
     delete[] _springsocl;
-    for (CellGrid * g : {&_cells})
+    for (CellGrid * g : {&_cells, &_chargedcells, &_hydrophobiccells})
         {
         delete[] g->head;
         delete[] g->next;
@@ -1249,33 +1249,8 @@ float SpringNetworkOpenCL::_largestPairwiseCutoff() const
 	}
 
 
-// The widest stencil any enabled non-bonded term asks of cells of `width`.
-//
-// This is what the grid's margin has to cover, and what tells _measureCellGrid
-// that it has not made the cells so narrow that a walk runs off the end.
-//
-// The pairwise terms only. A grid-only electrostatic configuration reads a DX
-// map and never touches the cell list, the same distinction the dispatch makes.
-int SpringNetworkOpenCL::_maxStencilRadius(float width) const
-	{
-	int k = 1;
-	const auto consider = [&](float cutoff) {
-		const int radius = biospring_stencil_radius(cutoff, width);
-		if (radius > k)
-			k = radius;
-	};
 
-	if (isStericEnabled())
-		consider(getStericCutoff());
-	if (isElectrostaticCoulombEnabled())
-		consider(getElectrostaticCutoff());
-	if (isHydrophobicityEnabled())
-		consider(getHydrophobicCutoff());
-	return k;
-	}
-
-
-// Refreshes THE grid -- one, for every enabled non-bonded term at once.
+// Refreshes every enabled term's grid.
 //
 // There used to be three, one per term, each with cells as wide as that term's
 // own cutoff. A cell is not a cutoff (see forcefield/shared/cellgrid_shared.h),
@@ -1325,14 +1300,15 @@ std::vector<unsigned> SpringNetworkOpenCL::neighboursFromList(const NeighbourLis
 	}
 
 
-// Gives a subset grid the frame `_cells` already measured, and bins into it
-// only the particles the mask keeps.
+// Measures a subset grid its own frame at `width`, and bins into it only the
+// particles the mask keeps.
 //
-// The frame is shared on purpose: one measuring pass serves every subset, the
-// origin and the cell width are the same, and only the linked lists differ.
-// What it costs is one more head array per subset -- 1.2 MB on 034 -- and what
-// it buys is that a Coulomb query walks past charged particles only, where it
-// used to walk past every bead in the cell to reject four out of five.
+// Its own frame, not a copy of _cells': the two hold different populations AND
+// want different cell sizes, since a term's cells are the size of its own
+// search radius. What it costs is a measuring pass and a head array per subset
+// -- 1.2 MB on 034 -- and what it buys is that a Coulomb query walks past
+// charged particles only, where it used to walk past every bead in the cell to
+// reject four out of five.
 void SpringNetworkOpenCL::_binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask,
                                               float width)
 	{
@@ -1630,7 +1606,7 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 	// that is everybody, which is what an empty mask means.
 	if (isStericEnabled())
 		{
-		// Everyone is a candidate, so the shared grid is already the right one.
+		// Everyone is a candidate, so the term's own grid already holds them all.
 		listbuildinto = &listbuildsterictime;
 		_buildNeighbourList(_stericlist, getStericCutoff(), _masks.dynamic, std::vector<unsigned char>(), _cells);
 		}
@@ -1702,10 +1678,11 @@ bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float requestedwidth
 	// and the pass above runs again. The stencil itself needs no margin -- it is
 	// bounds-checked, and a cell outside the grid holds nothing by construction.
 	//
-	// Fixed in angstroms because the cells are no longer the size of a cutoff:
-	// counting in cells would shrink the headroom in step with the width and
-	// remeasure several times as often for nothing.
-	const float MARGIN = 2.0f * _largestPairwiseCutoff();
+	// Two cells, which is this grid's own term reaching twice. It used to be
+	// twice the LONGEST pairwise cutoff of any term, from when one grid served
+	// them all; a 6 A steric grid then carried a 16 A term's headroom and six
+	// cells of empty margin on every side.
+	const float MARGIN = 2.0f * requestedwidth;
 	const long CELL_LIMIT = 8L * 1024L * 1024L;
 
 	// WIDER cells than asked for are still correct: every walk derives its
@@ -1776,7 +1753,6 @@ bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float requestedwidth
 	grid.origin.s[3] = 0.0f;
 	grid.requestedwidth = requestedwidth;
 	grid.width = width;
-	grid.maxstencil = _maxStencilRadius(width);
 	grid.ncells = ncells;
 
 	const unsigned ncellstotal = static_cast<unsigned>(total);

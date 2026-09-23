@@ -375,8 +375,14 @@ class SpringNetwork
     //
     // This replaced a single width shared by every term, chosen so the longest
     // cutoff walked a fixed number of cells while the short ones walked fewer,
-    // coarser ones. Measured over 16 examples the shared width was never
-    // faster and usually slower; see the commit that introduced this.
+    // coarser ones. Measured over 16 examples on both backends, per-term is
+    // faster on 12 of them and never slower on the CPU, but it DOES lose 7 to
+    // 9 % on the GPU for the two densest -- 041.Alphagalactosidase and
+    // 072.GK_RigidBodyDihedralHydrogenBond -- where cells the size of the
+    // cutoff hold so many particles that testing them costs more than the
+    // cells a finer grid would visit. simulation.cellsize is how such a
+    // structure gets its narrower cells; there is no width that suits both
+    // regimes, which is why this is not a heuristic.
     //
     // simulation.cellsize overrides it, for every term at once.
     float getCellWidthFor(float cutoff) const

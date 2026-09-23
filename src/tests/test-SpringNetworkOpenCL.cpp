@@ -267,6 +267,13 @@ void buildParticleCloud(spn::SpringNetwork & network, configuration::Configurati
                                next() * extent - 0.35f * extent));
         p.setMass(12.0f);
         p.setRadius(1.9f);
+        // Half carry a charge and a third a hydrophobicity, so the Coulomb and
+        // hydrophobic grids hold genuine SUBSETS rather than everyone. With
+        // every particle in all three, a grid that ignored its mask would pass.
+        if (i % 2 == 0)
+            p.setCharge(0.4f);
+        if (i % 3 == 0)
+            p.setHydrophobicity(1.0f);
         network.addParticle(p);
     }
 
@@ -275,9 +282,9 @@ void buildParticleCloud(spn::SpringNetwork & network, configuration::Configurati
     config.sim.timestep = 0.1;
     config.spring.enable = false;
 
-    // Three terms, three DIFFERENT cutoffs, which is what makes the shared
-    // grid worth testing: one set of bins has to answer all three, and only
-    // the stencil radius tells them apart.
+    // Three terms, three DIFFERENT cutoffs, which is what makes the per-term
+    // grids worth testing: three sets of bins, three cell widths, three
+    // populations.
     config.steric.enable = true;
     config.steric.cutoff = 6.0;
     config.electrostatic.enable = true;
@@ -303,12 +310,12 @@ std::vector<unsigned> neighborsByBruteForce(const spn::SpringNetwork & network, 
 }
 } // namespace
 
-TEST(SpringNetworkOpenCL, OneGridServesEveryTermAtItsOwnStencil)
+TEST(SpringNetworkOpenCL, EachTermGetsItsOwnGridAtItsOwnWidth)
 {
     if (!hasOpenCLDevice())
         GTEST_SKIP() << "no OpenCL device available on this machine";
 
-    const unsigned N = 400;
+    const unsigned N = 900;
     const float EXTENT = 40.0f;
 
     SpringNetworkOpenCL gpu;
@@ -316,43 +323,64 @@ TEST(SpringNetworkOpenCL, OneGridServesEveryTermAtItsOwnStencil)
     buildParticleCloud(gpu, config, N, EXTENT);
     gpu.run();
 
-    const SpringNetworkOpenCL::CellGrid & grid = gpu.cells();
-    ASSERT_GT(grid.ncellstotal, 0u) << "no cell list was built at all";
+    struct Term
+    {
+        const char * name;
+        const SpringNetworkOpenCL::CellGrid * grid;
+        float cutoff;
+        bool (*belongs)(const spn::Particle &);
+    };
+    const Term terms[] = {
+        {"steric", &gpu.cells(), 6.0f,
+         [](const spn::Particle &) { return true; }},
+        {"electrostatic", &gpu.chargedCells(), 14.0f,
+         [](const spn::Particle & p) { return p.isCharged(); }},
+        {"hydrophobic", &gpu.hydrophobicCells(), 10.0f,
+         [](const spn::Particle & p) { return p.isHydrophobic(); }},
+    };
 
-    // A 40 A cloud is nowhere near the cell limit, so the cells built are the
-    // cells asked for. Widening is the divergence path, not this one.
-    EXPECT_FLOAT_EQ(grid.width, grid.requestedwidth);
-
-    // How wide the cells came out is a tuning answer -- it depends on the
-    // density and on what a cell visit costs, and this cloud is far sparser
-    // than a protein -- so it is not asserted here. What is asserted is that
-    // one grid has to serve three cutoffs at once, which is the contract.
-    EXPECT_GT(grid.width, 0.0f);
-    EXPECT_LE(grid.width, 14.0f) << "cells wider than the longest cutoff are never worth it";
-
-    struct Term { const char * name; float cutoff; };
-    const Term terms[] = {{"steric", 6.0f}, {"electrostatic", 14.0f}, {"hydrophobic", 10.0f}};
-
-    // What tells the terms apart is now the stencil radius alone, and it has to
-    // order like the cutoffs do. Two terms close in cutoff may well land on the
-    // same radius; the shortest and the longest, a factor of 2.3 apart, may not
-    // -- if those come back equal then the short-range term is walking the
-    // long-range one's volume, which is the failure this whole change is about.
-    const int ksteric = biospring_stencil_radius(6.0f, grid.width);
-    const int khydrophobic = biospring_stencil_radius(10.0f, grid.width);
-    const int kelectrostatic = biospring_stencil_radius(14.0f, grid.width);
-    EXPECT_LE(ksteric, khydrophobic);
-    EXPECT_LE(khydrophobic, kelectrostatic);
-    EXPECT_LT(ksteric, kelectrostatic) << "6 A and 14 A ended up walking the same stencil";
-    EXPECT_EQ(kelectrostatic, grid.maxstencil) << "the grid did not size its margin on the longest reach";
+    // Three widths, all different, because each is its term's own search
+    // radius. Under the single shared grid these were equal by construction,
+    // so this is the assertion that tells the two designs apart.
+    EXPECT_NE(gpu.cells().width, gpu.chargedCells().width);
+    EXPECT_NE(gpu.cells().width, gpu.hydrophobicCells().width);
+    EXPECT_NE(gpu.chargedCells().width, gpu.hydrophobicCells().width);
 
     for (const Term & term : terms)
     {
+        const SpringNetworkOpenCL::CellGrid & grid = *term.grid;
+        ASSERT_GT(grid.ncellstotal, 0u) << term.name << " built no cell list at all";
+
+        // A 40 A cloud is nowhere near the cell limit, so the cells built are
+        // the cells asked for. Widening is the divergence path, not this one.
+        EXPECT_FLOAT_EQ(grid.width, grid.requestedwidth) << term.name;
+
+        // Cells the size of the search radius, so the walk is the 27 cells
+        // around the particle's own and no more.
+        EXPECT_EQ(biospring_stencil_radius(term.cutoff, grid.width), 1)
+            << term.name << " is not walking its own cutoff in one step of cells";
+
         size_t pairs = 0;
         for (unsigned i = 0; i < N; ++i)
         {
+            if (!term.belongs(gpu.getParticle(i)))
+                continue;
+
             std::vector<unsigned> found = gpu.neighborsFromCellList(grid, i, term.cutoff);
-            std::vector<unsigned> expected = neighborsByBruteForce(gpu, i, term.cutoff);
+
+            // Brute force over THIS term's population, not over everyone: a
+            // grid that ignored its mask would find the uncharged particles
+            // too, and this is what catches it.
+            std::vector<unsigned> expected;
+            for (unsigned j = 0; j < N; ++j)
+            {
+                if (j == i || !term.belongs(gpu.getParticle(j)))
+                    continue;
+                if ((gpu.getParticle(i).getPosition() - gpu.getParticle(j).getPosition()).norm()
+                    <= term.cutoff)
+                    expected.push_back(j);
+            }
+
             std::sort(found.begin(), found.end());
             std::sort(expected.begin(), expected.end());
 
@@ -360,7 +388,8 @@ TEST(SpringNetworkOpenCL, OneGridServesEveryTermAtItsOwnStencil)
             // is a force applied twice, and the linked list makes that possible
             // if a stencil ever visits the same cell more than once.
             ASSERT_EQ(found, expected)
-                << term.name << "'s walk over the shared grid disagrees with the O(N^2) answer for particle " << i;
+                << term.name << "'s walk over its own grid disagrees with the O(N^2) answer"
+                << " for particle " << i;
             pairs += expected.size();
         }
 

@@ -114,7 +114,6 @@ class SpringNetworkOpenCL : public SpringNetwork
 			bool restricted = false;
 			float requestedwidth = 0.0f; // what getCellWidthFor() asked for
 			float width = 0.0f;          // the cells actually built; >= requested
-			int maxstencil = 1;          // the widest stencil any term needs here
 		};
 
 		// A term's stored neighbours, in the same packed layout as the cells:
@@ -167,6 +166,10 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// The grid, for the parity test to walk. One for every term; see the
 		// CellGrid declaration for why.
 		const CellGrid & cells() const { return _cells; }
+		// The other two terms have grids of their own, at their own cell width
+		// and holding only the particles they can interact with.
+		const CellGrid & chargedCells() const { return _chargedcells; }
+		const CellGrid & hydrophobicCells() const { return _hydrophobiccells; }
 
 		// How many times the stored neighbours were rebuilt. Zero without a
 		// skin, since there is then no list; otherwise far below the step count
@@ -396,14 +399,13 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// biospring.cl for the structure: a linked list per cell, after
 		// Bannerman's exercise 3.
 		//
-		// ONE, for every non-bonded term at once. There used to be one each,
-		// because the cell width was the cutoff and the cutoffs differ --
-		// steric 8 A, electrostatic 16, hydrophobicity 15 by default -- so a
-		// shared grid meant a shared cutoff, and the shortest term would have
-		// walked the longest one's volume. Once the width is its own number
-		// (forcefield/shared/cellgrid_shared.h) the terms differ by their
-		// stencil radius instead, which costs one integer rather than a grid,
-		// a ranging and a binning pass each.
+		// One per term. _cells holds every particle at the steric term's cell
+		// width; _chargedcells and _hydrophobiccells hold their own subsets at
+		// their own widths. Each term therefore walks the 27 cells around its
+		// own and no more, whatever the other cutoffs are.
+		//
+		// The middle design, a single grid with a per-term stencil radius, was
+		// measured against this one over 16 examples: see getCellWidthFor.
 		//
 		// Must match BIOSPRING_EMPTY_CELL in biospring.cl.
 		static const unsigned EMPTY_CELL = static_cast<unsigned>(-1);
@@ -442,9 +444,8 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// outside it, which is a four-byte read rather than that pass.
 		bool _measureCellGrid(CellGrid & grid, float width);
 		void _binParticlesIntoCells(CellGrid & grid);
-		// Gives `subset` the frame `_cells` already measured and bins the masked
-		// particles into it. No remeasuring: one frame serves every subset, so
-		// only the binning differs.
+		// Measures `subset` its own frame at `width` and bins into it only the
+		// particles the mask keeps.
 		void _binSubsetIntoCells(CellGrid & subset, const std::vector<unsigned char> & mask,
 		                         float width);
 
@@ -480,7 +481,6 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelcountneighbours;
 		cl::Kernel _kernelfillneighbours;
 		// The widest stencil any enabled term asks of cells of `width`.
-		int _maxStencilRadius(float width) const;
 		// The longest reach of any enabled pairwise term, in A: what the grid's
 		// margin is measured against.
 		float _largestPairwiseCutoff() const;
