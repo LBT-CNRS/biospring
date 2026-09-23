@@ -75,6 +75,7 @@ void Particle::resetForce()
     _kineticenergy = 0.0;
     _impenergy = 0.0;
     _hydrophobicityenergy = 0.0;
+    _hydrogenbondcorerepulsionenergy = 0.0;
 }
 
 void Particle::applyViscosity(float viscosity)
@@ -322,6 +323,80 @@ void Particle::addHydrophobicityForce(std::vector<DeferredNonbondedContribution>
                         // see addElectrostaticForce for why the full energy
                         // must be credited here instead.
                         _hydrophobicityenergy += pair_energy;
+                    }
+                }
+            }
+        });
+    }
+}
+
+void Particle::addHydrogenBondCoreRepulsion(std::vector<DeferredNonbondedContribution> & deferred)
+{
+    Vector3f f = Vector3f();
+    float distance = 0.0;
+    bool apply = true;
+
+    if (_springnetwork->isHydrogenBondEnabled() && _springnetwork->getNeighborSearch().hbond)
+    {
+        const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
+        const float equilibrium = ff->getHydrogenBondEquilibrium();
+        const bool self_is_donor = isDonor();
+        const bool self_is_acceptor = isAcceptor();
+
+        _springnetwork->getNeighborSearch().hbond->for_each_neighbor(*this, [&](size_t neighbor_index) {
+            if (_springnetwork->isProbeParticle(neighbor_index))
+                return;
+
+            // Already fully handled (attraction and repulsion both) by
+            // computeHydrogenBondForces for a partner this particle is
+            // already bound to -- applying this term too would double-count.
+            // A particle can hold several bonds at once now, so this is a
+            // membership test rather than a comparison against one index.
+            if (_springnetwork->areHydrogenBonded(static_cast<size_t>(getId()), neighbor_index))
+                return;
+
+            const Particle & p = _springnetwork->getParticle(neighbor_index);
+
+            // No explicit H, so only the opposite role is meaningful (same
+            // rule as the exclusive mechanism -- see _assignHydrogenBondPairs).
+            const bool roles_match = (self_is_donor && p.isAcceptor()) || (self_is_acceptor && p.isDonor());
+            if (!roles_match)
+                return;
+
+            // See addElectrostaticForce: process each pair once, from the
+            // lower-id side when the neighbor is dynamic; a static neighbor
+            // never visits any pair on its own, so it is always processed.
+            if (p.isDynamic() && neighbor_index < static_cast<size_t>(getId()))
+                return;
+
+            apply = true;
+            if (_springnetwork->isSpringEnabled())
+                apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
+
+            if (apply)
+            {
+                f = p.getPosition() - getPosition();
+                distance = f.norm();
+                // Repulsive-only regime: the true Morse force is already
+                // zero exactly at distance=equilibrium, so cutting off here
+                // introduces no discontinuity, and leaves the attractive
+                // range (distance > equilibrium) exclusively to whichever
+                // pair is actually engaged via _assignHydrogenBondPairs.
+                if (distance < equilibrium && distance != 0.0)
+                {
+                    const float pair_energy = ff->computeHydrogenBondEnergy(distance);
+                    f.normalize();
+                    f = f * ff->computeHydrogenBondForceModule(distance);
+                    addForce(f);
+
+                    if (p.isDynamic())
+                    {
+                        _hydrogenbondcorerepulsionenergy += pair_energy / 2.0f;
+                        deferred.push_back({static_cast<unsigned>(p.getId()), -f, pair_energy / 2.0f});
+                    }
+                    else
+                    {
+                        _hydrogenbondcorerepulsionenergy += pair_energy;
                     }
                 }
             }

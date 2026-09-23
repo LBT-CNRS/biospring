@@ -30,6 +30,9 @@ void CSVTrajectoryWriter::write_header()
     if (_topology.isHydrophobicityEnabled())
         _ostream << "\t"
                  << "Hydrophobic energy (kJ.mol-1)";
+    if (_topology.isHydrogenBondEnabled())
+        _ostream << "\t"
+                 << "Hydrogen bond energy (kJ.mol-1)";
     if (_topology.isInsertionVectorEnabled())
         _ostream << "\t"
                  << "Insertion Angle (degrees) \tInsertion Depth (A)";
@@ -49,6 +52,8 @@ void CSVTrajectoryWriter::write_step()
         _ostream << "\t" << _topology.getIMPEnergy();
     if (_topology.isHydrophobicityEnabled())
         _ostream << "\t" << _topology.getHydrophobicEnergy();
+    if (_topology.isHydrogenBondEnabled())
+        _ostream << "\t" << _topology.getHydrogenBondEnergy();
     if (_topology.isInsertionVectorEnabled())
     {
         const InsertionVector & iv = _topology.getInsertionVector();
