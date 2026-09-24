@@ -1103,24 +1103,44 @@ void SpringNetworkOpenCL::idleRun()
                                       getTimeStep(), _nbparticlesocl);
 	_pendingevents.emplace_back(_event, &externalforcetime);
 
-	_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_TRUE, 0,
+	// Four transfers, ONE synchronisation. These were four BLOCKING calls with a
+	// finish() after two of them: six points per step where the host stopped and
+	// waited for the device, to do the work of one.
+	//
+	// Nothing is reordered and nothing is skipped. The queue is in-order, so
+	// none of these can start before the integration kernel ends whatever we
+	// ask for, they run in the same sequence as before, and no host code
+	// between them touches the arrays. What CL_FALSE removes is only the stall
+	// between one transfer and the next. The finish() is what makes the arrays
+	// valid -- and the profiling counters read just below, which need every
+	// event complete.
+	//
+	// The cost being removed is latency, not bandwidth: the write below was
+	// measured at 0.280 ms for 25 069 particles and 0.267 ms for 37 200, i.e.
+	// flat in the size. On 013.GLIC, which has no pairwise term at all, this
+	// block was 0.79 ms of a 0.81 ms step.
+	_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_FALSE, 0,
         sizeof(float4) * _nbparticlesocl, _particlevelocities);
-	checkErr("ComamndQueue::enqueueReadBuffer()");
+	checkErr("enqueueReadBuffer(velocities)");
 
-	_err = _queue.enqueueReadBuffer(_inoutForceBuffer, CL_TRUE, 0,
+	// Read back although nothing on the host reads it afterwards, because
+	// _inoutForceBuffer is CL_MEM_USE_HOST_PTR over this very array and
+	// SpringNetworkOpenCL::setForce writes into it -- that is MDDriver's pull,
+	// see InteractorMDDriver::syncParticleStateData. Dropping the transfer
+	// changes what the array holds, which is not this commit's business.
+	_err = _queue.enqueueReadBuffer(_inoutForceBuffer, CL_FALSE, 0,
         sizeof(float4) * _nbparticlesocl, _particleforces);
-	checkErr("ComamndQueue::enqueueReadBuffer()");
+	checkErr("enqueueReadBuffer(forces)");
 
-	_err = _queue.enqueueReadBuffer(_inoutPositionBuffer, CL_TRUE, 0,
+	_err = _queue.enqueueReadBuffer(_inoutPositionBuffer, CL_FALSE, 0,
         sizeof(float4) * _nbparticlesocl, _particlepositions);
-	_queue.finish();
-	checkErr("CommandQueue::enqueueReadBuffer()");
+	checkErr("enqueueReadBuffer(positions)");
 
-
-	_err = _queue.enqueueWriteBuffer(_inExternalForceBuffer, CL_TRUE, 0,
+	_err = _queue.enqueueWriteBuffer(_inExternalForceBuffer, CL_FALSE, 0,
         sizeof(float4) * _nbparticlesocl, _particleexternalforces);
+	checkErr("enqueueWriteBuffer(external forces)");
+
 	_queue.finish();
-	checkErr("CommandQueue::enqueueWriteBuffer()");
 
 
 
