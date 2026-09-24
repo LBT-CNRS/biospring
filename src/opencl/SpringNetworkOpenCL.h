@@ -191,21 +191,33 @@ class SpringNetworkOpenCL : public SpringNetwork
 		const NeighbourList & electrostaticList() const { return _electrostaticlist; }
 		const NeighbourList & hydrophobicList() const { return _hydrophobiclist; }
 
-		// Three cells, where the CPU wants two. Measured the same way, on the
-		// same two examples, against the kernels' own timers: 5.33 A is the best
-		// width on both -- the optimum outright on the capsid and within 1% of it
-		// on the nucleosome -- and that is the 16 A coulomb term at three cells.
+		// Wider than the CPU's 0.5 A, and for the reason the device makes
+		// visible: the build is not the cheap part. Per-kernel profiling over
+		// 1000 steps puts countNeighbours + fillNeighbours at 45% of all device
+		// time on 023 and 58% on 024 -- on 023 building the coulomb list costs
+		// 2.00 s against the 2.41 s of using it. Rebuilding every step, which is
+		// what a skin of 0 forces, pays that twice over.
 		//
-		// Finer than the CPU's because the device blanks and bins in parallel, so
-		// what is left of visiting a cell is one scattered read. Still not free,
-		// which is why it stops at three and not at the eight the geometry alone
-		// would ask for: at 2.67 A the capsid's kernels take 2.405 s against
-		// 1.341 s at 5.33 A.
-		// No skin on the device. A tight list rebuilt every step beats any
-		// skin here -- measured monotone on both 023 and 034 -- because the
-		// build is parallel and costs little, while a skin only makes the
-		// walk longer for every work item on every step.
-		float defaultNeighborSkin() const override { return 0.0f; }
+		// A skin trades it for longer lists: fewer rebuilds, more entries read on
+		// every step by every work item. Measured on four examples, three runs
+		// each, backend order reversed between runs so no width sits always on a
+		// cold or a hot machine:
+		//
+		//   skin (A)        0      0.5      1.0      2.0
+		//   023        158.98  +27.1%  +30.0%   +22.4%     165 rebuilds / 1000
+		//   024        301.20  +35.5%  +43.1%   +40.1%     188
+		//   034        512.82  +38.3%  +37.3%   +36.4%       9
+		//   042        523.56  +45.8%  +49.2%   +52.8%       3
+		//
+		// Every example gains, and 1.0 A is the optimum on two of them and
+		// within 3.5% of it on the other two, so it is the default rather than
+		// the per-example best. 024 crosses over from 0.85x the CPU to 1.22x.
+		//
+		// The earlier claim here -- "the build is parallel and costs little" --
+		// came from comparing a tight list against walking the cells, which is a
+		// different question and still answered the same way. What it never
+		// tested was a list that SURVIVES a few steps.
+		float defaultNeighborSkin() const override { return 1.0f; }
 
 
 

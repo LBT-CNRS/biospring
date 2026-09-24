@@ -1253,11 +1253,11 @@ float SpringNetworkOpenCL::_largestPairwiseCutoff() const
 
 // Refreshes every enabled term's grid.
 //
-// There used to be three, one per term, each with cells as wide as that term's
-// own cutoff. A cell is not a cutoff (see forcefield/shared/cellgrid_shared.h),
-// so they can share: the bins are the same, and each kernel takes its own
-// stencil radius out of them. That removes two of the three rangings per step
-// and lets the cells be narrower than any cutoff, which is where the work goes.
+// One grid per term, each with cells as wide as that term's own search radius
+// (cutoff + skin), so every kernel reads a stencil of radius 1. A single shared
+// grid with a per-term stencil radius was tried and reverted: it saves two
+// rangings per step and loses more than that to the cells it makes every kernel
+// visit. See getCellWidthFor().
 //
 // Nothing here if no pairwise term is on: the cheapest neighbour search is the
 // one that does not run.
@@ -1571,26 +1571,21 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 		return;
 		}
 
-	// ALWAYS, and with no skin unless one was asked for. This is where the
-	// device parts company with the CPU, and it is measured rather than
-	// assumed: a list rebuilt at EVERY step, holding exactly this step's
-	// neighbours, beats walking the cells by 34% on 023 and 45% on 034 before
-	// any subset filtering, and by 62% and 92% with it.
+	// A list beats walking the cells -- by 34% on 023 and 45% on 034 before any
+	// subset filtering, 62% and 92% with it -- because the force kernel stops
+	// chasing `nextincell[p]`, whose every load waits for the previous one to
+	// return, and reads a contiguous run of indices instead.
 	//
-	// It is not a Verlet list and there is nothing to amortise. What it buys is
-	// that the force kernel stops chasing `nextincell[p]`, whose every load has
-	// to wait for the previous one to return, and reads a contiguous run of
-	// indices instead -- loads that can all be issued at once. The walk is still
-	// paid, once, in a small kernel that hides the latency better than the force
-	// kernel could.
+	// It IS a Verlet list and there IS something to amortise, which is the part
+	// this used to deny. Built at cutoff + skin, it survives until something
+	// moves half the skin, and at the 1.0 A default that is 165 rebuilds in 1000
+	// steps on 023 and 9 on the capsid. That matters because the build is not
+	// cheap: countNeighbours + fillNeighbours are 45% of all device time on 023
+	// and 58% on 024 when they run every step. See defaultNeighborSkin().
 	//
-	// A skin only widens the list here, and every extra entry is read again at
-	// every step: measured on 034, a 2 A skin costs 0.063 against 0.0096
-	// normalised. So simulation.neighborskin stays the CPU's knob, where the
-	// build is serial and amortising it is the whole point.
-	//
-	// Rebuilding every step also means nothing is ever stale: no pair can be
-	// missed, and an interactive pull cannot invalidate anything.
+	// _listsNeedRebuilding() is what keeps it exact -- no pair can be missed,
+	// and an interactive pull that moves a bead far triggers a rebuild like any
+	// other motion.
 	if (getNeighborSkin() > 0.0f && !_listsNeedRebuilding())
 		return;
 

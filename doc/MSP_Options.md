@@ -62,12 +62,22 @@ output.
 and hydrophobic cutoffs when a term builds its list of neighbour pairs. The list holds every
 pair within `cutoff + skin`, so it stays valid until a particle has moved half the margin, and
 is reused until then instead of being rebuilt. A negative value, the default, lets the backend
-choose: **0.5 A on the CPU**, where reuse is what makes a list worth having, and **0 on the
-GPU**, where a tight list rebuilt every step is faster than any margin. `0` is a real setting
-and turns the CPU's list off, falling back to walking the cells. Measured on 034.VirusCA with
-the cell size pinned: 202 steps/s with no list against 315 at 0.5 A, 323 at 1 A and 332 at 2 A
--- so having a margin matters much more than its value, and a large one starts to cost where
-the structure moves fast (023.Nucleosome: 43.4 steps/s at 0, 43.5 at 0.5, 41.5 at 2 A).
+choose: **0.5 A on the CPU** and **1.0 A on the GPU**. `0` is a real setting and turns reuse
+off, so every step rebuilds; on the CPU it falls back to walking the cells.
+
+Reuse matters more than the exact margin, and it matters on both backends. On the GPU, median
+steps/s over three runs of 1000 steps, against the same run at `0`:
+
+| skin (A) | 023.Nucleosome | 024.CoarseGrain | 034.VirusCA | 042.FepA |
+|---|---:|---:|---:|---:|
+| 0 | 158.98 | 301.20 | 512.82 | 523.56 |
+| 0.5 | +27.1 % | +35.5 % | **+38.3 %** | +45.8 % |
+| **1.0** | **+30.0 %** | **+43.1 %** | +37.3 % | +49.2 % |
+| 2.0 | +22.4 % | +40.1 % | +36.4 % | **+52.8 %** |
+
+The optimum moves with how fast the structure drifts -- 023 rebuilds 165 times in 1000 steps at
+1 A where the capsid rebuilds 9 -- but 1.0 A is the best of the four on two of them and within
+3.5 % of it on the others, which is why it is the default.
 * **simulation.cellsize = 0** *(A, float)* Width of one neighbour-grid cell, for every term at
 once. `0`, the default, gives each term cells the size of its own search radius, so each walks
 the 27 cells around its own. Set it smaller to trade more cells walked for fewer candidates
