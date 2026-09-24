@@ -575,6 +575,11 @@ class SpringNetworkOpenCL : public SpringNetwork
 		float * _torsionenergyper = nullptr;
 
 		// Whether the step now running will have its energies reported.
+		// An interactor has set a force that the device has not been given yet,
+		// and: the device holds one that the host copy must stop repeating.
+		bool _externalforcespending = false;
+		bool _externalforcesneedclearing = false;
+
 		bool _measuringthisstep = false;
 		bool _willLogAfterThisStep() const
 			{

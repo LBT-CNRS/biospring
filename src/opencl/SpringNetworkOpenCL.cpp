@@ -10,6 +10,7 @@
 #include "IO/PDBTrajectoryWriter.h"
 #include "IO/CSVSampleWriter.h"
 #include "KernelSource.h"
+#include <cstring>
 #include <cmath>
 #include "logging.h"
 
@@ -711,6 +712,22 @@ void SpringNetworkOpenCL::idleRun()
 	// increments it below, and run() tests _isTimeToLogData() after that.
 	_measuringthisstep = _willLogAfterThisStep();
 
+	// The CPU gives its interactors their turn at the TOP of a step --
+	// SpringNetwork::computeStep() calls idleRun() before computeForces() --
+	// while this backend calls SpringNetwork::idleRun() at the BOTTOM, after
+	// the kernels. Every step is therefore fed by the previous step's sync,
+	// which saw exactly the positions the CPU's sync would have seen, so the
+	// two agree -- except for the very first step, which has no previous sync
+	// at all and so ran with no external force where the CPU had one.
+	//
+	// Measured on a constant pull over 100 steps: the device applied 99 of the
+	// CPU's 100 and landed at 4950 against 5050. One sync here, at the same
+	// point of the same step the CPU uses, closes it exactly.
+	if (_nbiter == 0)
+		for (Interactor * interactor : getInteractors())
+			if (interactor != nullptr)
+				interactor->syncSystemStateData();
+
 	// The neighbour structure the non-bonded terms need. Built from the box the
 	// positions read back last step occupy, which is one step stale -- hence the
 	// cell of margin _buildCellList adds, the same reason the CPU's grid carries
@@ -1095,13 +1112,34 @@ void SpringNetworkOpenCL::idleRun()
 	_pendingevents.emplace_back(_event, &dampingtime);
 
 
-	_event=_kernelfunctorexternal(_inoutForceBuffer,_inExternalForceBuffer,_nbparticlesocl);
-	_pendingevents.emplace_back(_event, &integrationtime);
+	// Nothing to add and nothing to send when no interactor pulled: this used to
+	// upload the same buffer of zeros and launch a kernel to add them, at every
+	// step of every run, interactive or not.
+	//
+	// The upload sits HERE, immediately before the kernel that reads it, rather
+	// than at the end of the step where it used to be. There it ran before
+	// SpringNetwork::idleRun() had given the interactors their turn, so it
+	// always carried the previous sync's values.
+	if (_externalforcespending)
+		{
+		_err = _queue.enqueueWriteBuffer(_inExternalForceBuffer, CL_FALSE, 0,
+		        sizeof(float4) * _nbparticlesocl, _particleexternalforces);
+		checkErr("enqueueWriteBuffer(external forces)");
+
+		_event=_kernelfunctorexternal(_inoutForceBuffer,_inExternalForceBuffer,_nbparticlesocl);
+		_pendingevents.emplace_back(_event, &externalforcetime);
+
+		// Cleared for the next step, as the CPU clears its accumulator. The
+		// write above is non-blocking, so this cannot touch the array until
+		// the finish() at the end of the step has let the transfer complete.
+		_externalforcespending = false;
+		_externalforcesneedclearing = true;
+		}
 
     _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
                                       _inoutForceBuffer, _inMassBuffer, _inDynamicBuffer,
                                       getTimeStep(), _nbparticlesocl);
-	_pendingevents.emplace_back(_event, &externalforcetime);
+	_pendingevents.emplace_back(_event, &integrationtime);
 
 	// Four transfers, ONE synchronisation. These were four BLOCKING calls with a
 	// finish() after two of them: six points per step where the host stopped and
@@ -1123,24 +1161,22 @@ void SpringNetworkOpenCL::idleRun()
         sizeof(float4) * _nbparticlesocl, _particlevelocities);
 	checkErr("enqueueReadBuffer(velocities)");
 
-	// Read back although nothing on the host reads it afterwards, because
-	// _inoutForceBuffer is CL_MEM_USE_HOST_PTR over this very array and
-	// SpringNetworkOpenCL::setForce writes into it -- that is MDDriver's pull,
-	// see InteractorMDDriver::syncParticleStateData. Dropping the transfer
-	// changes what the array holds, which is not this commit's business.
-	_err = _queue.enqueueReadBuffer(_inoutForceBuffer, CL_FALSE, 0,
-        sizeof(float4) * _nbparticlesocl, _particleforces);
-	checkErr("enqueueReadBuffer(forces)");
-
 	_err = _queue.enqueueReadBuffer(_inoutPositionBuffer, CL_FALSE, 0,
         sizeof(float4) * _nbparticlesocl, _particlepositions);
 	checkErr("enqueueReadBuffer(positions)");
 
-	_err = _queue.enqueueWriteBuffer(_inExternalForceBuffer, CL_FALSE, 0,
-        sizeof(float4) * _nbparticlesocl, _particleexternalforces);
-	checkErr("enqueueWriteBuffer(external forces)");
+	// The forces are no longer read back. Nothing on the host consumed them:
+	// the one caller that wrote this array was setForce, which now writes the
+	// external-force array instead.
 
 	_queue.finish();
+
+	// After the finish(), so the transfer that read it has completed.
+	if (_externalforcesneedclearing)
+		{
+		std::memset(_particleexternalforces, 0, sizeof(float4) * _nbparticlesocl);
+		_externalforcesneedclearing = false;
+		}
 
 
 
@@ -2584,11 +2620,29 @@ unsigned SpringNetworkOpenCL::getNumberOfSprings() const
 	}
 
 
+// An interactor's force for the step about to run. This is MDDriver's pull:
+// InteractorMDDriver::syncParticleStateData calls it once per particle per
+// sync, and the CPU's version adds it to the particle's force accumulator,
+// which the integrator then uses and resets.
+//
+// It used to write _particleforces, which is the host array _inoutForceBuffer
+// was created over with CL_MEM_USE_HOST_PTR. On a unified-memory device that
+// buffer IS this array, so the pull did reach the kernels -- by aliasing, not
+// by any transfer, and therefore only where the runtime happens to alias.
+// Nothing uploaded it, and on a discrete card it would have done nothing at
+// all. _particleexternalforces and the `external` kernel exist for exactly
+// this and had never been wired to anything.
 void SpringNetworkOpenCL::setForce(unsigned i, float force[3])
 	{
-	_particleforces[i].x=force[0];
-	_particleforces[i].y=force[1];
-	_particleforces[i].z=force[2];
+	if (_particleexternalforces == nullptr || i >= _nbparticlesocl)
+		return;
+	// Accumulated, like Particle::addForce, and cleared once the kernel has
+	// read it -- the CPU's forces are reset at the end of every step too, so a
+	// pull lasts exactly the step it was set for.
+	_particleexternalforces[i].x += force[0];
+	_particleexternalforces[i].y += force[1];
+	_particleexternalforces[i].z += force[2];
+	_externalforcespending = true;
 	}
 
 const char* SpringNetworkOpenCL::oclErrorString(cl_int error)

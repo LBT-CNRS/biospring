@@ -6,6 +6,7 @@
 #include "Particle.h"
 #include "SpringNetwork.h"
 #include "SpringNetworkOpenCL.h"
+#include "interactor/Interactor.h"
 #include "Vector3f.h"
 #include "configuration/Configuration.hpp"
 
@@ -1107,4 +1108,111 @@ TEST(SpringNetworkOpenCL, HydrophobicityMatchesTheCPU)
     // Measured agreement is 5.4e-06 A. The bar is over two orders above it, and
     // still far below anything a wrong law or a missing exclusion would cause.
     EXPECT_LT(worst, 1.0e-3f) << "the GPU's hydrophobicity ended up " << worst << " A from the CPU's";
+}
+
+// An interactor is the only way a force from outside the model reaches a
+// particle: MDDriver's pull arrives through Interactor::syncSystemStateData(),
+// which calls SpringNetwork::setForce(), which adds to the particle's force for
+// the step about to be computed. This is the same entry point, with the same
+// call, so whatever it exercises is what an interactive pull exercises.
+namespace
+{
+
+class ConstantPull : public Interactor
+{
+  public:
+    explicit ConstantPull(float fx) : _fx(fx) {}
+    bool continueInteractionThread() override { return false; }
+    void stopInteractionThread() override {}
+    void startInteractionThread() override {}   // no thread: this pulls in-line
+    void syncParticleStateData(unsigned) override {}
+    void setupInteraction() override {}
+    void processInteractions() override {}
+
+    void syncSystemStateData() override
+    {
+        float force[3] = {_fx, 0.0f, 0.0f};
+        _springnetwork->setForce(0, force);
+    }
+
+  private:
+    float _fx;
+};
+
+void buildFreeParticlePair(spn::SpringNetwork & network, configuration::Configuration & config)
+{
+    // Nothing but the integrator: no spring, no pairwise term, no viscosity.
+    // Whatever the particle does is then entirely the external force's doing,
+    // which is what this test is about.
+    spn::Particle first;
+    first.setPosition(Vector3f(0.0f, 0.0f, 0.0f));
+    first.setMass(1.0f);
+    first.setDynamic(true);
+    network.addParticle(first);
+
+    spn::Particle second;
+    second.setPosition(Vector3f(50.0f, 0.0f, 0.0f));
+    second.setMass(1.0f);
+    second.setDynamic(true);
+    network.addParticle(second);
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = 100;
+    config.sim.timestep = 1.0;
+    config.spring.enable = false;
+    config.steric.enable = false;
+    config.electrostatic.enable = false;
+    config.viscosity.enable = false;
+
+    network.setup(config);
+}
+
+} // namespace
+
+// A pull applied through an interactor has to move the particle on the device
+// exactly as it does on the CPU.
+//
+// It did not. SpringNetworkOpenCL::setForce() wrote _particleforces, a host
+// array that the end of every step overwrites with what the device just
+// returned, and that nothing ever uploads. The buffer that WOULD have carried
+// it, _inExternalForceBuffer, was fed from an array nobody wrote, so the device
+// added zeros to its forces at every step and an interactive pull did nothing
+// unless it went through the probe kernel.
+TEST(SpringNetworkOpenCL, AnInteractorsPullReachesTheDevice)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const float PULL = 1.0f;
+
+    spn::SpringNetwork cpu;
+    configuration::Configuration cpuconfig;
+    buildFreeParticlePair(cpu, cpuconfig);
+    ConstantPull cpupull(PULL);
+    cpupull.setSpringNetwork(&cpu);
+    cpu.addInteractor(&cpupull);
+    cpu.run();
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration gpuconfig;
+    buildFreeParticlePair(gpu, gpuconfig);
+    ConstantPull gpupull(PULL);
+    gpupull.setSpringNetwork(&gpu);
+    gpu.addInteractor(&gpupull);
+    gpu.run();
+
+    const float cpux = cpu.getParticle(0).getPosition().getX();
+    const float gpux = gpu.getParticle(0).getPosition().getX();
+
+    // Guard against agreeing because neither moved, which is exactly how this
+    // defect hid: a pull that does nothing on both sides compares perfectly.
+    EXPECT_GT(cpux, 1.0f) << "the CPU did not apply the interactor's force at all";
+    EXPECT_GT(gpux, 1.0f) << "the device never received the interactor's force";
+
+    EXPECT_NEAR(cpux, gpux, 1.0e-3f)
+        << "CPU and OpenCL disagree on where an external pull takes the particle";
+
+    // The particle that was not pulled must not have moved on either side.
+    EXPECT_NEAR(cpu.getParticle(1).getPosition().getX(), 50.0f, 1.0e-4f);
+    EXPECT_NEAR(gpu.getParticle(1).getPosition().getX(), 50.0f, 1.0e-4f);
 }
