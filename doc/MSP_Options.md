@@ -78,6 +78,19 @@ steps/s over three runs of 1000 steps, against the same run at `0`:
 The optimum moves with how fast the structure drifts -- 023 rebuilds 165 times in 1000 steps at
 1 A where the capsid rebuilds 9 -- but 1.0 A is the best of the four on two of them and within
 3.5 % of it on the others, which is why it is the default.
+
+The CPU wants a skin too, and a narrower one, so the two defaults differ on purpose:
+
+| skin (A) | 023.Nucleosome | 024.CoarseGrain | 034.VirusCA | 042.FepA |
+|---|---:|---:|---:|---:|
+| 0 | 46.47 | 338.98 | 231.48 | 3846.15 |
+| **0.5** | **+2.1 %** | **+4.6 %** | +57.1 % | +4.0 % |
+| 1.0 | +0.6 % | +2.8 % | +58.8 % | +4.0 % |
+| 2.0 | -5.5 % | +1.0 % | **+60.6 %** | +4.0 % |
+
+0.5 A is the outright best on two of them and within 1.7 % on a third; 042's framerate print
+quantises at 4000 steps/s, so its three margins are indistinguishable. Note 034: on the CPU any
+margin at all is worth 57 to 61 %, which is what makes a list worth building there.
 * **simulation.cellsize = 0** *(A, float)* Width of one neighbour-grid cell, for every term at
 once. `0`, the default, gives each term cells the size of its own search radius, so each walks
 the 27 cells around its own. Set it smaller to trade more cells walked for fewer candidates
