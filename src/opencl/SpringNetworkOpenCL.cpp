@@ -1165,9 +1165,22 @@ void SpringNetworkOpenCL::idleRun()
 	// measured at 0.280 ms for 25 069 particles and 0.267 ms for 37 200, i.e.
 	// flat in the size. On 013.GLIC, which has no pairwise term at all, this
 	// block was 0.79 ms of a 0.81 ms step.
-	_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_FALSE, 0,
-        sizeof(float4) * _nbparticlesocl, _particlevelocities);
-	checkErr("enqueueReadBuffer(velocities)");
+	// The velocities come back only on the steps that report an energy. The
+	// ONLY thing that reads Particle::getVelocity() on this path is the
+	// kinetic energy in _computeEnergiesFromDeviceState, which is already
+	// behind the same flag; the trajectory writers do not write velocities and
+	// MDDriver does not send them. On every other step this was a full array
+	// nobody looked at.
+	//
+	// The positions cannot follow: _listsNeedRebuilding, _frameStillHolds and
+	// _measureCellGrid are host loops over them, and so is the non-finite
+	// check that makes this backend die at the same step as the CPU.
+	if (_measuringthisstep)
+		{
+		_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_FALSE, 0,
+		    sizeof(float4) * _nbparticlesocl, _particlevelocities);
+		checkErr("enqueueReadBuffer(velocities)");
+		}
 
 	_err = _queue.enqueueReadBuffer(_inoutPositionBuffer, CL_FALSE, 0,
         sizeof(float4) * _nbparticlesocl, _particlepositions);
@@ -2492,8 +2505,11 @@ void SpringNetworkOpenCL::_syncParticlesFromDevice()
 			biospring::logging::die("Found non-finite position for particle %d.", particle.getId());
 
 		particle.setPosition(Vector3f(x, y, z));
-		particle.setVelocity(Vector3f(_particlevelocities[i].x, _particlevelocities[i].y,
-		                              _particlevelocities[i].z));
+		// Only when they were actually fetched; otherwise this would copy the
+		// previous reporting step's velocities over and make them look fresh.
+		if (_measuringthisstep)
+			particle.setVelocity(Vector3f(_particlevelocities[i].x, _particlevelocities[i].y,
+			                              _particlevelocities[i].z));
 		}
 	}
 
