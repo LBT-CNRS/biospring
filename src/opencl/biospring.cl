@@ -1456,60 +1456,9 @@ __kernel void measureBoundsFinal(const __global float * blockbounds, const __glo
 // slipping through -- every comparison with a NaN is false, and the naive form
 // would call it inside.
 
-__kernel void resetFlag(__global int * flag)
-	{
-	if (get_global_id(0) == 0u)
-		flag[0] = 1;
-	}
-
-__kernel void checkFrame(const __global float4 * positions,
-                         const float4 origin, const float width, const int4 ncells,
-                         __local int * scratch, __global int * flag, const uint N)
-	{
-	uint gid = get_global_id(0);
-	uint lid = get_local_id(0);
-	uint wg = get_local_size(0);
-
-	int inside = 1;
-	if (gid < N)
-		{
-		float4 p = positions[gid];
-		float lx = (p.x - origin.x) / width;
-		float ly = (p.y - origin.y) / width;
-		float lz = (p.z - origin.z) / width;
-		if (!(lx >= 0.0f) || lx >= (float)ncells.x) inside = 0;
-		if (!(ly >= 0.0f) || ly >= (float)ncells.y) inside = 0;
-		if (!(lz >= 0.0f) || lz >= (float)ncells.z) inside = 0;
-		}
-	scratch[lid] = inside;
-	barrier(CLK_LOCAL_MEM_FENCE);
-
-	for (uint stride = wg >> 1; stride > 0u; stride >>= 1)
-		{
-		if (lid < stride)
-			scratch[lid] = scratch[lid] & scratch[lid + stride];
-		barrier(CLK_LOCAL_MEM_FENCE);
-		}
-
-	// One atomic per work group rather than one per particle, and only ever
-	// clearing a bit, so the order the groups arrive in cannot matter.
-	if (lid == 0u && scratch[0] == 0)
-		atomic_and(flag, 0);
-	}
-
-// ======================================================================
-// LIST DRIFT
-//
-// Have the particles moved far enough that the stored neighbour lists are
-// stale? A list is built at cutoff + skin and stays exact until something has
-// moved half the skin from where it stood when the list was made -- two
-// particles each moving half the skin towards each other close exactly the
-// skin between them.
-//
-// The last of the three host passes over the positions, and the same shape as
-// the other two: a local reduction, one atomic per work group, only ever
-// clearing a bit.
-
+// One buffer for every question the host used to answer by walking the
+// positions, so it asks once a step instead of once per grid. Slot names are
+// on the host side, BIOSPRING_FLAG_*.
 // The positions the current lists were built from. Copied on the device, so
 // the reference never travels either.
 __kernel void snapshotPositions(const __global float4 * positions, __global float4 * reference,
@@ -1521,31 +1470,98 @@ __kernel void snapshotPositions(const __global float4 * positions, __global floa
 	reference[gid] = positions[gid];
 	}
 
-__kernel void checkDrift(const __global float4 * positions, const __global float4 * reference,
-                         const float halfskinsquared, const int probeid,
-                         __local int * scratch, __global int * flag, const uint N)
+
+// ---------------------------------------------------------------------------
+// Every question the host used to answer by walking the positions, in ONE pass.
+//
+// There were four kernels here -- finite, drift, and one frame test per grid --
+// and up to seven launches a step. They all read the same float4 and they all
+// reduce to a yes/no, so they are one kernel over one read, and their answers
+// are BITS OF ONE INT. That makes the per-work-group reduction a single AND and
+// the global combine a single atomic, instead of one of each per question.
+//
+// The host reads the two ints ONCE, at the end of the step, in the same batch
+// as the positions and behind the same finish(). Asking at the top of the next
+// step instead costs a second synchronisation per step, which is the whole of
+// the difference -- measured, see _enqueueDeviceFlags.
+//
+// Bit set = that question's answer is still yes.
+#define BIOSPRING_BIT_FINITE 1
+#define BIOSPRING_BIT_DRIFT  2
+#define BIOSPRING_BIT_FRAME  4    // and the next grid's bit is the one above
+
+__kernel void resetFlags(__global int * flags, const int mask, const int high)
+	{
+	if (get_global_id(0) != 0u)
+		return;
+	flags[0] = mask;   // every question asked starts at yes
+	flags[1] = high;   // the bad index is a minimum: start above every index
+	}
+
+
+/// @param reference   Where the particles were when the lists were built.
+/// @param frames      One per grid; .w carries the cell width, so the frame is
+///                    one vector rather than three arguments per grid.
+/// @param flags       [0] the answer bits, [1] the first non-finite index.
+__kernel void checkPositions(const __global float4 * positions,
+                             const __global float4 * reference,
+                             const float halfskinsquared, const int probeid,
+                             const __global float4 * frames,
+                             const __global int4 * framencells,
+                             const int questions, const uint nframes,
+                             __local int * scratch, __global int * flags, const uint N)
 	{
 	uint gid = get_global_id(0);
 	uint lid = get_local_id(0);
 	uint wg = get_local_size(0);
 
-	int stillgood = 1;
-	// The probe moves under someone's hand, by as much as they like, and it is
-	// not what the lists are about: its interactions are the probe kernel's,
-	// pair by pair against everything, with no list at all. Counting its drift
-	// would rebuild every list at every step of an interactive session for
-	// nothing. The host pass skips it and so does the CPU's own searcher.
-	if (gid < N && gid != (uint)probeid)
+	int ok = questions;   // a particle past the end answers yes to everything
+	if (gid < N)
 		{
-		float3 d = positions[gid].xyz - reference[gid].xyz;
-		float moved = dot(d, d);
-		// Negated, as the host writes it: a NaN fails every comparison, so
-		// `moved <= limit` is false for one and the list is rebuilt. The naive
-		// `moved > limit` would call it unmoved.
-		if (!(moved <= halfskinsquared))
-			stillgood = 0;
+		float4 p = positions[gid];
+
+		if (!(isfinite(p.x) && isfinite(p.y) && isfinite(p.z)))
+			{
+			ok &= ~BIOSPRING_BIT_FINITE;
+			// Whichever wins the race names the particle; any of them is a
+			// true answer to "which one went".
+			atomic_min(flags + 1, (int)gid);
+			}
+
+		// The probe moves under someone's hand, by as much as they like, and
+		// it is not what the lists are about: its interactions are the probe
+		// kernel's, pair by pair against everything, with no list at all.
+		// Counting its drift would rebuild every list at every step of an
+		// interactive session for nothing. The CPU's own searcher skips it too.
+		if ((questions & BIOSPRING_BIT_DRIFT) && gid != (uint)probeid)
+			{
+			float3 d = p.xyz - reference[gid].xyz;
+			float moved = dot(d, d);
+			// Negated, as the host writes it: a NaN fails every comparison, so
+			// `moved <= limit` is false for one and the list is rebuilt. The
+			// naive `moved > limit` would call it unmoved.
+			if (!(moved <= halfskinsquared))
+				ok &= ~BIOSPRING_BIT_DRIFT;
+			}
+
+		for (uint g = 0u; g < nframes; g++)
+			{
+			int bit = BIOSPRING_BIT_FRAME << g;
+			if (!(questions & bit))
+				continue;
+			float4 frame = frames[g];
+			int4 ncells = framencells[g];
+			float lx = (p.x - frame.x) / frame.w;
+			float ly = (p.y - frame.y) / frame.w;
+			float lz = (p.z - frame.z) / frame.w;
+			if (!(lx >= 0.0f) || lx >= (float)ncells.x ||
+			    !(ly >= 0.0f) || ly >= (float)ncells.y ||
+			    !(lz >= 0.0f) || lz >= (float)ncells.z)
+				ok &= ~bit;
+			}
 		}
-	scratch[lid] = stillgood;
+
+	scratch[lid] = ok;
 	barrier(CLK_LOCAL_MEM_FENCE);
 
 	for (uint stride = wg >> 1; stride > 0u; stride >>= 1)
@@ -1555,8 +1571,10 @@ __kernel void checkDrift(const __global float4 * positions, const __global float
 		barrier(CLK_LOCAL_MEM_FENCE);
 		}
 
-	if (lid == 0u && scratch[0] == 0)
-		atomic_and(flag, 0);
+	// One atomic per work group rather than one per particle, and only ever
+	// clearing bits, so the order the groups arrive in cannot matter.
+	if (lid == 0u && scratch[0] != questions)
+		atomic_and(flags, scratch[0]);
 	}
 
 // ======================================================================

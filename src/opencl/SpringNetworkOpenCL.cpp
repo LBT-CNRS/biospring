@@ -486,12 +486,10 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel(baoabFinalKick)");
 	_kernelsnapshot   = cl::Kernel(_program, "snapshotPositions", &_err);
 	checkErr("Kernel(snapshotPositions)");
-	_kernelcheckdrift = cl::Kernel(_program, "checkDrift", &_err);
-	checkErr("Kernel(checkDrift)");
-	_kernelresetflag  = cl::Kernel(_program, "resetFlag", &_err);
-	checkErr("Kernel(resetFlag)");
-	_kernelcheckframe = cl::Kernel(_program, "checkFrame", &_err);
-	checkErr("Kernel(checkFrame)");
+	_kernelresetflags = cl::Kernel(_program, "resetFlags", &_err);
+	checkErr("Kernel(resetFlags)");
+	_kernelcheckpositions = cl::Kernel(_program, "checkPositions", &_err);
+	checkErr("Kernel(checkPositions)");
 	_kernelboundsblocks = cl::Kernel(_program, "measureBoundsBlocks", &_err);
 	checkErr("Kernel(measureBoundsBlocks)");
 	_kernelboundsfinal  = cl::Kernel(_program, "measureBoundsFinal", &_err);
@@ -1187,6 +1185,11 @@ void SpringNetworkOpenCL::idleRun()
 	// The positions cannot follow: _listsNeedRebuilding, _frameStillHolds and
 	// _measureCellGrid are host loops over them, and so is the non-finite
 	// check that makes this backend die at the same step as the CPU.
+	// The questions the next step will ask about these positions, asked now so
+	// that their answer rides home with the positions themselves. One
+	// synchronisation covers the lot -- see _enqueueDeviceFlags.
+	_enqueueDeviceFlags();
+
 	if (_measuringthisstep)
 		{
 		_err = _queue.enqueueReadBuffer(_inoutVelocityBuffer, CL_FALSE, 0,
@@ -1453,6 +1456,13 @@ bool SpringNetworkOpenCL::_listsNeedRebuilding()
 	{
 	if (!_listsarebuilt || _listreference.size() != _nbparticlesocl)
 		return true;
+
+	// The device answered this at the end of the last step, over the very
+	// positions in question, and the answer came home with them. Absent -- the
+	// first step, or a step whose reference was not in place -- falls through
+	// to the host pass below rather than guessing.
+	if (_deviceflagsasked & BIOSPRING_BIT_DRIFT)
+		return !_deviceFlagSaid(BIOSPRING_BIT_DRIFT, false);
 
 	const float half = 0.5f * getNeighborSkin();
 	const float halfsquared = half * half;
@@ -1857,16 +1867,97 @@ void SpringNetworkOpenCL::_snapshotListReferenceOnDevice()
 	}
 
 
-// The drift criterion, on the device. Same answer as _listsNeedRebuilding.
-bool SpringNetworkOpenCL::_listsNeedRebuildingOnDevice()
+// Every question the host used to answer by walking the positions, asked of
+// the device in one pass -- finite, drift, and one frame per grid.
+//
+// WHERE this sits is the whole performance story, and it cost a measured
+// regression to learn. The obvious place is the top of the step, where the
+// answers are needed. But the host cannot read a device buffer without
+// stopping for it, and the step already stops exactly once, at the end, for
+// the positions. Asking at the top therefore makes TWO stops a step -- and a
+// stop costs the same whatever it carries, four bytes or four hundred
+// kilobytes, because on unified memory what is paid for is the round trip and
+// not the transfer.
+//
+// So the questions are asked HERE, at the end of the step, and their read joins
+// the batch the positions are already in: one finish() covers both, and the
+// next step finds the answers in _deviceflags with nothing to wait for.
+//
+// The answers describe the positions at the end of step N, which are exactly
+// the positions step N+1 starts from. No staleness is introduced.
+void SpringNetworkOpenCL::_enqueueDeviceFlags()
 	{
-	if (_nbparticlesocl == 0 || _referencefor != _nbparticlesocl)
-		return true;   // nothing to compare against yet
+	_deviceflagsasked = 0;
+	if (_nbparticlesocl == 0)
+		return;
 
-	if (_driftflagbuffer() == NULL)
+	if (_deviceflagsbuffer() == NULL)
 		{
-		_driftflagbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(int), NULL, &_err);
-		checkErr("Buffer(drift flag)");
+		_deviceflagsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(int) * 2, NULL, &_err);
+		checkErr("Buffer(device flags)");
+		_framesbuffer = cl::Buffer(_context, CL_MEM_READ_ONLY,
+		                           sizeof(cl_float4) * BIOSPRING_MAX_FRAMES, NULL, &_err);
+		checkErr("Buffer(frames)");
+		_framencellsbuffer = cl::Buffer(_context, CL_MEM_READ_ONLY,
+		                                sizeof(cl_int4) * BIOSPRING_MAX_FRAMES, NULL, &_err);
+		checkErr("Buffer(frame cells)");
+		}
+
+	// Which questions are worth asking. A grid that was never measured has no
+	// frame to be inside of, and there is nothing to have drifted from before
+	// the first list is built. A question not asked leaves its bit clear, and
+	// _deviceFlagSaid gives the caller its own safe answer rather than reading
+	// the clear bit as a "no".
+	int asked = BIOSPRING_BIT_FINITE;
+	const bool candrift = (_referencefor == _nbparticlesocl && _listreferencebuffer() != NULL);
+	if (candrift)
+		asked |= BIOSPRING_BIT_DRIFT;
+
+	const CellGrid * candidates[BIOSPRING_MAX_FRAMES] =
+		{&_cells, &_chargedcells, &_hydrophobiccells, &_hydrogenbondcells};
+	unsigned nframes = 0;
+	for (unsigned g = 0; g < BIOSPRING_MAX_FRAMES; ++g)
+		{
+		_flaggedgrids[g] = nullptr;
+		const CellGrid * grid = candidates[g];
+		if (grid->ncellstotal == 0)
+			continue;
+		cl_float4 frame = grid->origin;
+		frame.s[3] = grid->width;   // the width rides in .w: one vector a grid
+		if (std::memcmp(&_uploadedframes[nframes], &frame, sizeof(frame)) != 0 ||
+		    std::memcmp(&_uploadedncells[nframes], &grid->ncells, sizeof(cl_int4)) != 0)
+			{
+			_uploadedframes[nframes] = frame;
+			_uploadedncells[nframes] = grid->ncells;
+			_framesuploaded = false;
+			}
+		_flaggedgrids[nframes] = grid;
+		asked |= BIOSPRING_BIT_FRAME << nframes;
+		nframes++;
+		}
+
+	// Nothing here is worth a pass of its own. The finite check is not a reason
+	// to walk the positions on the device: _syncParticlesFromDevice already
+	// walks them on the host, to copy them into the Particle objects, and tests
+	// finiteness inside that loop for free. So a run with no grid and no
+	// neighbour list -- 013.GLIC has neither, having no pairwise term at all --
+	// must enqueue nothing at all, or it pays a 25 000-particle pass to replace
+	// work that was never happening. Measured there: -11.9% when it ran
+	// unconditionally, exactly nothing when it does not.
+	if (nframes == 0 && !candrift)
+		return;
+
+	// Only when a grid was re-measured, which is rare -- 165 steps in 1000 on
+	// 023 at the default skin, 9 on the capsid. Every other step sends nothing.
+	if (!_framesuploaded && nframes > 0)
+		{
+		_err = _queue.enqueueWriteBuffer(_framesbuffer, CL_FALSE, 0,
+		    sizeof(cl_float4) * nframes, _uploadedframes);
+		checkErr("enqueueWriteBuffer(frames)");
+		_err = _queue.enqueueWriteBuffer(_framencellsbuffer, CL_FALSE, 0,
+		    sizeof(cl_int4) * nframes, _uploadedncells);
+		checkErr("enqueueWriteBuffer(frame cells)");
+		_framesuploaded = true;
 		}
 
 	const unsigned wg = WORK_GROUP_SIZE;
@@ -1874,69 +1965,69 @@ bool SpringNetworkOpenCL::_listsNeedRebuildingOnDevice()
 	const float half = 0.5f * getNeighborSkin();
 	const int probeid = isProbeEnabled() ? static_cast<int>(SpringNetwork::getNumberOfParticles()) : -1;
 
-	_kernelresetflag.setArg(0, _driftflagbuffer);
-	_err = _queue.enqueueNDRangeKernel(_kernelresetflag, cl::NullRange,
+	_kernelresetflags.setArg(0, _deviceflagsbuffer);
+	_kernelresetflags.setArg(1, asked);
+	_kernelresetflags.setArg(2, static_cast<int>(_nbparticlesocl));
+	_err = _queue.enqueueNDRangeKernel(_kernelresetflags, cl::NullRange,
 	                                   cl::NDRange(1), cl::NDRange(1), NULL, &_event);
-	checkErr("enqueueNDRangeKernel(resetFlag)");
+	checkErr("enqueueNDRangeKernel(resetFlags)");
 	_pendingevents.emplace_back(_event, &celllisttime);
 
 	unsigned a = 0;
-	_kernelcheckdrift.setArg(a++, _inoutPositionBuffer);
-	_kernelcheckdrift.setArg(a++, _listreferencebuffer);
-	_kernelcheckdrift.setArg(a++, half * half);
-	_kernelcheckdrift.setArg(a++, probeid);
-	_kernelcheckdrift.setArg(a++, cl::__local(sizeof(int) * wg));
-	_kernelcheckdrift.setArg(a++, _driftflagbuffer);
-	_kernelcheckdrift.setArg(a++, _nbparticlesocl);
-	_err = _queue.enqueueNDRangeKernel(_kernelcheckdrift, cl::NullRange,
+	_kernelcheckpositions.setArg(a++, _inoutPositionBuffer);
+	// A buffer must be bound even when the question is not asked; the positions
+	// stand in, and the kernel never reads them under a clear bit.
+	_kernelcheckpositions.setArg(a++, candrift ? _listreferencebuffer : _inoutPositionBuffer);
+	_kernelcheckpositions.setArg(a++, half * half);
+	_kernelcheckpositions.setArg(a++, probeid);
+	_kernelcheckpositions.setArg(a++, _framesbuffer);
+	_kernelcheckpositions.setArg(a++, _framencellsbuffer);
+	_kernelcheckpositions.setArg(a++, asked);
+	_kernelcheckpositions.setArg(a++, nframes);
+	_kernelcheckpositions.setArg(a++, cl::__local(sizeof(int) * wg));
+	_kernelcheckpositions.setArg(a++, _deviceflagsbuffer);
+	_kernelcheckpositions.setArg(a++, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelcheckpositions, cl::NullRange,
 	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
-	checkErr("enqueueNDRangeKernel(checkDrift)");
+	checkErr("enqueueNDRangeKernel(checkPositions)");
 	_pendingevents.emplace_back(_event, &celllisttime);
 
-	int stillgood = 0;
-	_err = _queue.enqueueReadBuffer(_driftflagbuffer, CL_TRUE, 0, sizeof(int), &stillgood);
-	checkErr("enqueueReadBuffer(drift flag)");
-	return stillgood == 0;
+	// NOT blocking, and not followed by a wait: this read rides in the same
+	// batch as the positions and is made valid by the step's one finish().
+	_err = _queue.enqueueReadBuffer(_deviceflagsbuffer, CL_FALSE, 0, sizeof(int) * 2, _deviceflags);
+	checkErr("enqueueReadBuffer(device flags)");
+	_deviceflagsasked = asked;
+	}
+
+
+// Which bit of the last evaluation belongs to this grid, or 0 if it was not
+// among them -- a grid with no cells is not asked about.
+int SpringNetworkOpenCL::_gridFlagBit(const CellGrid & grid) const
+	{
+	for (unsigned g = 0; g < BIOSPRING_MAX_FRAMES; ++g)
+		if (_flaggedgrids[g] == &grid)
+			return BIOSPRING_BIT_FRAME << g;
+	return 0;
+	}
+
+
+// The two below ask and wait, which is what a test wants and what the step
+// deliberately does not do. Production reads the cache: see _frameStillHolds
+// and _listsNeedRebuilding.
+bool SpringNetworkOpenCL::_listsNeedRebuildingOnDevice()
+	{
+	_enqueueDeviceFlags();
+	_queue.finish();
+	return !_deviceFlagSaid(BIOSPRING_BIT_DRIFT, false);
 	}
 
 
 bool SpringNetworkOpenCL::_frameStillHoldsOnDevice(const CellGrid & grid)
 	{
-	if (grid.ncellstotal == 0 || _nbparticlesocl == 0)
-		return false;
-
-	if (_frameflagbuffer() == NULL)
-		{
-		_frameflagbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(int), NULL, &_err);
-		checkErr("Buffer(frame flag)");
-		}
-
-	const unsigned wg = WORK_GROUP_SIZE;
-	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
-
-	_kernelresetflag.setArg(0, _frameflagbuffer);
-	_err = _queue.enqueueNDRangeKernel(_kernelresetflag, cl::NullRange,
-	                                   cl::NDRange(1), cl::NDRange(1), NULL, &_event);
-	checkErr("enqueueNDRangeKernel(resetFlag)");
-	_pendingevents.emplace_back(_event, &celllisttime);
-
-	unsigned a = 0;
-	_kernelcheckframe.setArg(a++, _inoutPositionBuffer);
-	_kernelcheckframe.setArg(a++, grid.origin);
-	_kernelcheckframe.setArg(a++, grid.width);
-	_kernelcheckframe.setArg(a++, grid.ncells);
-	_kernelcheckframe.setArg(a++, cl::__local(sizeof(int) * wg));
-	_kernelcheckframe.setArg(a++, _frameflagbuffer);
-	_kernelcheckframe.setArg(a++, _nbparticlesocl);
-	_err = _queue.enqueueNDRangeKernel(_kernelcheckframe, cl::NullRange,
-	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
-	checkErr("enqueueNDRangeKernel(checkFrame)");
-	_pendingevents.emplace_back(_event, &celllisttime);
-
-	int inside = 0;
-	_err = _queue.enqueueReadBuffer(_frameflagbuffer, CL_TRUE, 0, sizeof(int), &inside);
-	checkErr("enqueueReadBuffer(frame flag)");
-	return inside != 0;
+	_enqueueDeviceFlags();
+	_queue.finish();
+	const int bit = _gridFlagBit(grid);
+	return bit != 0 && _deviceFlagSaid(bit, false);
 	}
 
 
@@ -2180,6 +2271,11 @@ bool SpringNetworkOpenCL::_frameStillHolds(const CellGrid & grid) const
 	{
 	if (grid.ncellstotal == 0)
 		return false;
+
+	// Answered by the device at the end of the last step; see above.
+	const int bit = _gridFlagBit(grid);
+	if (bit != 0 && (_deviceflagsasked & bit))
+		return _deviceFlagSaid(bit, false);
 
 	for (unsigned i = 0; i < _nbparticlesocl; ++i)
 		{

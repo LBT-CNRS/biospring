@@ -216,6 +216,21 @@ class SpringNetworkOpenCL : public SpringNetwork
 		/// move one and ask the device about it. Nothing in a run needs this:
 		/// positions travel the other way.
 		void uploadPositionsForTesting();
+		/// Enqueues the one pass over the positions and the read of its two
+		/// ints. Does NOT wait: the step's own finish() collects it.
+		void _enqueueDeviceFlags();
+		/// The cached answer to one question, or `absent` when the last
+		/// evaluation did not ask it.
+		bool _deviceFlagSaid(int bit, bool absent) const
+			{
+			return (_deviceflagsasked & bit) ? ((_deviceflags[0] & bit) != 0) : absent;
+			}
+		/// Whether every particle sits inside this grid's frame. Production
+		/// reads the cached device answer and falls back to a host pass; both
+		/// paths go through here, so a test holding this against its own walk
+		/// over the positions is testing what the step actually consults.
+		bool _frameStillHolds(const CellGrid & grid) const;
+
 		const CellGrid & stericCells() const { return _cells; }
 
 		const NeighbourList & stericList() const { return _stericlist; }
@@ -545,13 +560,39 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// this replaces is one of the three reasons the positions had to come
 		// down every step; see _measureBoundsOnDevice.
 		cl::Kernel _kernelsnapshot;
-		cl::Kernel _kernelcheckdrift;
 		cl::Buffer _listreferencebuffer;  // N float4: where the lists were built from
-		cl::Buffer _driftflagbuffer;      // one int: 1 while the lists are still exact
 		unsigned _referencefor = 0;       // particle count the reference was sized for
-		cl::Kernel _kernelresetflag;
-		cl::Kernel _kernelcheckframe;
-		cl::Buffer _frameflagbuffer;      // one int: 1 while every particle is inside
+		// Every question the host used to answer by walking the positions, in
+		// one kernel over one pass -- see checkPositions in biospring.cl.
+		//
+		// Evaluated at the END of a step, in the same batch as the position
+		// read and behind the same single finish(), so the next step reads the
+		// answers from this cache and waits for nothing. That placement is the
+		// design: the same kernels asked at the TOP of the step instead are a
+		// SECOND synchronisation per step, measured at -3.6% on 023 and -20%
+		// on 042 -- see _enqueueDeviceFlags.
+		enum { BIOSPRING_BIT_FINITE = 1,
+		       BIOSPRING_BIT_DRIFT = 2,
+		       BIOSPRING_BIT_FRAME = 4,   // grid k is this bit shifted by k
+		       BIOSPRING_MAX_FRAMES = 4 };
+		cl::Kernel _kernelresetflags;
+		cl::Kernel _kernelcheckpositions;
+		cl::Buffer _deviceflagsbuffer;
+		cl::Buffer _framesbuffer;        // float4 per grid, .w = cell width
+		cl::Buffer _framencellsbuffer;
+		/// [0] the answer bits, [1] the first non-finite index. Zero means "no",
+		/// which is the safe answer before the first step has produced one.
+		int _deviceflags[2] = {0, 0};
+		/// Which questions the last evaluation actually asked. A grid that had
+		/// no cells was not asked about, and its bit must not be read as "no".
+		int _deviceflagsasked = 0;
+		/// The grids of the last evaluation, in bit order, so a caller can find
+		/// its own answer. Compared by address: these are our own members.
+		const CellGrid * _flaggedgrids[BIOSPRING_MAX_FRAMES] = {nullptr};
+		cl_float4 _uploadedframes[BIOSPRING_MAX_FRAMES] = {};
+		cl_int4 _uploadedncells[BIOSPRING_MAX_FRAMES] = {};
+		bool _framesuploaded = false;
+		int _gridFlagBit(const CellGrid & grid) const;
 		cl::Kernel _kernelboundsblocks;
 		cl::Kernel _kernelboundsfinal;
 		cl::Buffer _boundsblocksbuffer;   // 6 floats per work group
@@ -568,7 +609,6 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// transfer the thermostatted path pays that the ordinary one does not.
 		void _readPositionsBack();
 		void _buildTermMasks();
-		bool _frameStillHolds(const CellGrid & grid) const;
 		bool _buildCellList(CellGrid & grid, float width);
 
 		// The stored neighbours of every enabled pairwise term, rebuilt only

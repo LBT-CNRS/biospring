@@ -1304,6 +1304,95 @@ TEST(SpringNetworkOpenCL, TheDeviceChecksTheFrameLikeTheHost)
     }
 }
 
+// The cached answer is the one production reads, and it has to be the answer a
+// host pass would have given.
+//
+// The two tests above drive the kernels directly. Production does not: it reads
+// what the previous step left in _deviceflags and never asks again. So what can
+// break here is not the kernel -- it is the wiring around it: a bit mapped to
+// the wrong grid, a frame uploaded stale after a re-measure, a cache read on a
+// step that never filled it. Every one of those is silent. A particle outside
+// the frame is binned nowhere and stops interacting, and both backends would
+// agree on a structure that is quietly wrong.
+//
+// So the assertion is an equality, not a value: whatever the device says, a
+// walk over the same positions on the host must say the same. Both answers are
+// exercised -- a settled cloud, then one particle a million angstroms out.
+TEST(SpringNetworkOpenCL, TheCachedFrameAnswerIsTheHostsAnswer)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 2000;
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration config;
+    buildParticleCloud(gpu, config, N, /*extent=*/60.0f);
+    gpu.run();
+
+    // The host pass this cache replaced, written out here rather than called,
+    // so that a change to the production one cannot quietly change the test's
+    // idea of the right answer too.
+    const auto hostSays = [&gpu, N](const SpringNetworkOpenCL::CellGrid & grid) {
+        for (unsigned i = 0; i < N; ++i)
+        {
+            const Vector3f p = gpu.getParticle(i).getPosition();
+            const float local[3] = {(p.getX() - grid.origin.s[0]) / grid.width,
+                                    (p.getY() - grid.origin.s[1]) / grid.width,
+                                    (p.getZ() - grid.origin.s[2]) / grid.width};
+            for (int d = 0; d < 3; ++d)
+                if (!(local[d] >= 0.0f) || local[d] >= static_cast<float>(grid.ncells.s[d]))
+                    return false;
+        }
+        return true;
+    };
+
+    const SpringNetworkOpenCL::CellGrid * grids[3] = {
+        &gpu.stericCells(), &gpu.chargedCells(), &gpu.hydrophobicCells()};
+    const char * names[3] = {"steric", "charged", "hydrophobic"};
+
+    for (int g = 0; g < 3; ++g)
+    {
+        ASSERT_GT(grids[g]->ncellstotal, 0u) << names[g] << " should have a grid at all";
+        EXPECT_TRUE(hostSays(*grids[g])) << "precondition: " << names[g]
+            << " grid should hold a settled cloud";
+        EXPECT_EQ(gpu._frameStillHolds(*grids[g]), hostSays(*grids[g]))
+            << "cached answer disagrees with the host pass on the " << names[g] << " grid";
+    }
+
+    // Now the other answer, without a second run(): asking the device directly
+    // refills the cache, so what is tested afterwards is the cached READ --
+    // the bit mapped to each grid, and _deviceFlagSaid's handling of a
+    // question that was asked. run() cannot be called twice on one network, so
+    // an escape cannot be provoked mid-run here; the kernel's own answer to
+    // one is covered by TheDeviceChecksTheFrameLikeTheHost above.
+    //
+    // Placed JUST outside the steric frame rather than a million angstroms out,
+    // because the three grids have three different widths and extents and this
+    // is the one placement that separates them: the particle leaves one frame
+    // and stays inside the others. Moved far enough to leave all three, every
+    // bit would be clear and a mapping that returned the same bit for every
+    // grid would pass -- which it did, until this placement.
+    const auto & steric = *grids[0];
+    const float justoutside = steric.origin.s[0]
+                            + static_cast<float>(steric.ncells.s[0]) * steric.width + 0.5f;
+    gpu.getParticle(N - 1).setPosition(Vector3f(justoutside, 0.0f, 0.0f));
+    gpu.uploadPositionsForTesting();
+
+    ASSERT_FALSE(hostSays(*grids[0])) << "precondition: it should have left the steric frame";
+    ASSERT_TRUE(hostSays(*grids[1]) || hostSays(*grids[2]))
+        << "precondition: it should still be inside at least one other frame, "
+        << "or this placement separates nothing";
+
+    for (int g = 0; g < 3; ++g)
+    {
+        ASSERT_FALSE(gpu._frameStillHoldsOnDevice(*grids[0]))
+            << "precondition: the device itself should see it leave the steric grid";
+        EXPECT_EQ(gpu._frameStillHolds(*grids[g]), hostSays(*grids[g]))
+            << "the cached read lost the device's answer on the " << names[g] << " grid";
+    }
+}
+
+
 // The drift criterion, asked of the device instead of walked on the host.
 //
 // This is the one whose two failure modes are asymmetric. Too eager, and the
