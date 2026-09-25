@@ -536,6 +536,8 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel(hbondConfirm)");
 	_kernelhbondforce   = cl::Kernel(_program, "hbondForce", &_err);
 	checkErr("Kernel(hbondForce)");
+	_kernelhbondrepulsion = cl::Kernel(_program, "hbondCoreRepulsion", &_err);
+	checkErr("Kernel(hbondCoreRepulsion)");
 	_kernelhydrophobic = cl::Kernel(_program, "hydrophobic", &_err);
 	checkErr("Kernel::Kernel()");
 	_kernelelectrostaticfield = cl::Kernel(_program, "electrostaticfield", &_err);
@@ -1142,6 +1144,43 @@ void SpringNetworkOpenCL::idleRun()
 		                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
 		checkErr("enqueueNDRangeKernel(hbondForce)");
 		_pendingevents.emplace_back(_event, &hbondtime);
+
+		// After hbondForce, which ASSIGNS the per-particle energy where this
+		// one adds to it -- the CPU reports the two as one number.
+		if (_hydrogenbondlist.valid && _hydrogenbondcells.ncellstotal > 0)
+			{
+			a = 0;
+			_kernelhbondrepulsion.setArg(a++, _inoutPositionBuffer);
+			_kernelhbondrepulsion.setArg(a++, _inoutForceBuffer);
+			_kernelhbondrepulsion.setArg(a++, _hydrogenbondcells.headbuffer);
+			_kernelhbondrepulsion.setArg(a++, _hydrogenbondcells.nextbuffer);
+			_kernelhbondrepulsion.setArg(a++, _hydrogenbondcells.origin);
+			_kernelhbondrepulsion.setArg(a++, _hydrogenbondcells.width);
+			_kernelhbondrepulsion.setArg(a++, _hydrogenbondcells.ncells);
+			_kernelhbondrepulsion.setArg(a++, biospring_stencil_radius(getHydrogenBondCutoff(),
+			                                                           _hydrogenbondcells.width));
+			_kernelhbondrepulsion.setArg(a++, _hydrogenbondlist.offsetsbuffer);
+			_kernelhbondrepulsion.setArg(a++, _hydrogenbondlist.itemsbuffer);
+			_kernelhbondrepulsion.setArg(a++, _inSpringBuffer);
+			_kernelhbondrepulsion.setArg(a++, _inSpringIndexesBuffer);
+			_kernelhbondrepulsion.setArg(a++, static_cast<int>(isSpringEnabled() && _nbspringsocl > 0));
+			_kernelhbondrepulsion.setArg(a++, _hbond.donoroffsetbuffer);
+			_kernelhbondrepulsion.setArg(a++, _hbond.donorslotbuffer);
+			_kernelhbondrepulsion.setArg(a++, _hbond.acceptoroffsetbuffer);
+			_kernelhbondrepulsion.setArg(a++, _hbond.acceptorslotbuffer);
+			_kernelhbondrepulsion.setArg(a++, getHydrogenBondCutoff());
+			_kernelhbondrepulsion.setArg(a++, getForceField()->getHydrogenBondWellDepth());
+			_kernelhbondrepulsion.setArg(a++, getForceField()->getHydrogenBondEquilibrium());
+			_kernelhbondrepulsion.setArg(a++, getForceField()->getHydrogenBondWidth());
+			_kernelhbondrepulsion.setArg(a++, getForceField()->getHydrogenBondScale());
+			_kernelhbondrepulsion.setArg(a++, static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
+			_kernelhbondrepulsion.setArg(a++, _hbond.energybuffer);
+			_kernelhbondrepulsion.setArg(a++, _nbparticlesocl);
+			_err = _queue.enqueueNDRangeKernel(_kernelhbondrepulsion, cl::NullRange,
+			                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+			checkErr("enqueueNDRangeKernel(hbondCoreRepulsion)");
+			_pendingevents.emplace_back(_event, &hbondtime);
+			}
 		}
 
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
@@ -2384,11 +2423,9 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	// hbond.enable = 1 run through --opencl is therefore a DIFFERENT model,
 	// and was silently so until this line -- the very thing this warning was
 	// written to stop.
-	// hbond is no longer here: biospring.cl carries the Morse well, the
-	// two-sided angular weight AND the per-step re-pairing. What it does not
-	// yet carry is the core repulsion, which is a different term under the
-	// same switch.
-	if (isHydrogenBondEnabled())    add("hbond core repulsion (the device has the bonds, not the repulsion)");
+	// hbond is no longer listed: biospring.cl now carries the Morse well, the
+	// two-sided angular weight, the per-step re-pairing AND the core
+	// repulsion.
 
 	if (!ignored.empty())
 		biospring::logging::warning(

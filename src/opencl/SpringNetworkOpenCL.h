@@ -515,6 +515,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelhbondscore;
 		cl::Kernel _kernelhbondconfirm;
 		cl::Kernel _kernelhbondforce;
+		cl::Kernel _kernelhbondrepulsion;
 		void _buildTermMasks();
 		bool _frameStillHolds(const CellGrid & grid) const;
 		bool _buildCellList(CellGrid & grid, float width);

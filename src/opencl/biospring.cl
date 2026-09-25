@@ -1087,6 +1087,66 @@ __kernel void hbondConfirm(const __global int * nearest,
 	}
 
 
+// The core repulsion: the SAME Morse well, on every donor/acceptor pair that
+// is NOT engaged, and only below the equilibrium distance.
+//
+// Cutting it there introduces no discontinuity, because the Morse force is
+// exactly zero at equilibrium; what it does is leave the attractive range to
+// whichever pair actually won each other's slot, so a particle cannot be
+// pulled by every candidate around it at once. It is a separate term from the
+// bonds above and the CPU reports the two added together -- on 072 it carries
+// -898.37 of the -1064.32, so leaving it out is not a detail.
+//
+// Evaluated from BOTH ends like every other pairwise kernel here: one writer
+// per particle, no atomics, and each side takes half the pair energy so the
+// total is counted once.
+__kernel void hbondCoreRepulsion(const __global float4 * positions, __global float4 * forces,
+                                 const __global uint * cellhead, const __global uint * nextincell,
+                                 const float4 origin, const float cellwidth, const int4 ncells,
+                                 const int stencilradius,
+                                 const __global uint * listoffsets, const __global uint * listitems,
+                                 const __global Springocl * springs, const __global int * springoffsets,
+                                 const int springsenabled,
+                                 const __global uint * donoroffsets, const __global int * donorslots,
+                                 const __global uint * acceptoroffsets, const __global int * acceptorslots,
+                                 const float cutoff, const float welldepth, const float equilibrium,
+                                 const float width, const float hbondscale, const float convert,
+                                 __global float * energyper, const uint N)
+	{
+	const uint tid = get_global_id(0);
+	if (tid >= N) return;
+
+	const float4 here = positions[tid];
+	const float cutoffsq = cutoff * cutoff;
+	// Capacity, not occupancy: whether the particle CAN donate or accept.
+	const bool self_donor = donoroffsets[tid + 1] > donoroffsets[tid];
+	const bool self_acceptor = acceptoroffsets[tid + 1] > acceptoroffsets[tid];
+
+	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
+	float e = 0.0f;
+
+	BIOSPRING_FOR_EACH_CANDIDATE(
+		if (!((self_donor && acceptoroffsets[p + 1] > acceptoroffsets[p])
+		   || (self_acceptor && donoroffsets[p + 1] > donoroffsets[p])))
+			continue;
+		// An engaged pair is handled in full -- attraction and repulsion --
+		// by hbondForce, so counting it here too would double it.
+		if (biospring_hb_already_bonded(donoroffsets, donorslots, acceptoroffsets, acceptorslots, tid, p))
+			continue;
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+			continue;
+		const float dist = sqrt(distsq);
+		if (dist >= equilibrium)
+			continue;
+		const float module = hbondscale * biospring_hbond_force_module(dist, welldepth, equilibrium, width, convert);
+		sum += (axis / dist) * module;
+		e += 0.5f * hbondscale * biospring_hbond_energy(dist, welldepth, equilibrium, width);
+	)
+
+	forces[tid].xyz += sum;
+	energyper[tid] += e;
+	}
+
 // A float add that several work items may aim at the same address. OpenCL 1.2
 // has no atomic float, so this is the usual compare-and-swap loop over the
 // bit pattern; cl_khr_global_int32_base_atomics is what makes it legal, and
