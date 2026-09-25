@@ -306,6 +306,21 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inoutPositionBuffer;
 		cl::Buffer _inoutVelocityBuffer;
 		cl::Buffer _inoutForceBuffer;
+		// Where the BONDED terms accumulate, so that they can run beside the
+		// non-bonded ones instead of behind them. Two kernels doing
+		// forces[tid] += ... at the same time would race; two kernels writing
+		// two arrays do not. The integrators regroup the pair -- see
+		// biospring.cl -- which costs one load and one store per particle and
+		// no kernel of its own.
+		cl::Buffer _bondedForceBuffer;
+		// The bonded terms' own in-order queue. Apple's OpenCL has no
+		// out-of-order queue (checked at run time), and several in-order queues
+		// is the portable construct anyway: it is what CUDA streams are.
+		cl::CommandQueue _queuebonded;
+		cl::Event _forceszeroedevent;   // the integrator that cleared both arrays
+		cl::Event _bondeddoneevent;     // the last bonded kernel of this step
+		bool _forceszeroed = false;
+		bool _bondedpending = false;
 
 		cl::Buffer _inSpringBuffer;
 		cl::Buffer _inSpringIndexesBuffer;

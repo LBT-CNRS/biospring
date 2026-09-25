@@ -1664,7 +1664,8 @@ __kernel void addBlockSums(__global uint * offsets, const __global uint * blocks
 // Static particles return before anything: they are not integrated, so they
 // have no temperature to hold either.
 __kernel void baoabDriftBath(__global float4 * positions, __global float4 * velocities,
-                             __global float4 * forces, const __global float * masses,
+                             __global float4 * forces, __global float4 * bondedforces,
+                             const __global float * masses,
                              const __global int * isdynamic, const float timestep,
                              const float gamma, const float boltzmanntemperature,
                              const uint step, const uint seed, const uint N)
@@ -1681,7 +1682,7 @@ __kernel void baoabDriftBath(__global float4 * positions, __global float4 * velo
 	float halfstep = 0.5f * timestep;
 	float mass = masses[tid];
 	if(mass>0.0f)
-		velocities[tid]+=(forces[tid]/mass)*halfstep;      // B
+		velocities[tid]+=((forces[tid]+bondedforces[tid])/mass)*halfstep;   // B
 
 	positions[tid]+=velocities[tid]*halfstep;              // A
 
@@ -1700,6 +1701,7 @@ __kernel void baoabDriftBath(__global float4 * positions, __global float4 * velo
 	positions[tid]+=velocities[tid]*halfstep;              // A
 
 	forces[tid]=(float4)0;
+	bondedforces[tid]=(float4)0;
 	}
 
 // BAOAB, closing half kick, with the force at the position the half above
@@ -1707,6 +1709,7 @@ __kernel void baoabDriftBath(__global float4 * positions, __global float4 * velo
 // the two half kicks are not merged into one: the merged form reports a
 // velocity half a step out of date.
 __kernel void baoabFinalKick(__global float4 * velocities, __global float4 * forces,
+                             const __global float4 * bondedforces,
                              const __global float * masses, const __global int * isdynamic,
                              const float timestep, const uint N)
 	{
@@ -1717,7 +1720,7 @@ __kernel void baoabFinalKick(__global float4 * velocities, __global float4 * for
 		return;
 	float mass = masses[tid];
 	if(mass>0.0f)
-		velocities[tid]+=(forces[tid]/mass)*(0.5f*timestep);
+		velocities[tid]+=((forces[tid]+bondedforces[tid])/mass)*(0.5f*timestep);
 	}
 
 // Same two steps, in the same order, as Particle::IntegrateEuler: the velocity
@@ -1727,8 +1730,15 @@ __kernel void baoabFinalKick(__global float4 * velocities, __global float4 * for
 // velocities += forces*timestep, which is only the CPU's answer when every
 // particle weighs 1 Da. The zero guard matches the CPU's, which exists because
 // a topology may declare a mass of 0.
+// The force terms no longer all land in one array. The bonded ones accumulate
+// into their own, so that they can run at the same time as the non-bonded ones
+// without two kernels doing a read-modify-write on the same forces[tid]. The
+// two are regrouped HERE, where an integrator already reads the force and
+// already zeroes it: the regrouping costs one more load and one more store per
+// particle, and no kernel of its own.
 __kernel void integration(__global float4 * positions, __global float4 * velocities,
-                          __global float4 * forces, const __global float * masses,
+                          __global float4 * forces, __global float4 * bondedforces,
+                          const __global float * masses,
                           const __global int * isdynamic, const float timestep, const uint N)
 	{
 	size_t tid = get_global_id(0);
@@ -1747,7 +1757,8 @@ __kernel void integration(__global float4 * positions, __global float4 * velocit
 
 	float mass = masses[tid];
 	if(mass>0.0f)
-		velocities[tid]+=(forces[tid]/mass)*timestep;
+		velocities[tid]+=((forces[tid]+bondedforces[tid])/mass)*timestep;
 	positions[tid]+=velocities[tid]*timestep;	
 	forces[tid]=(float4)0;
+	bondedforces[tid]=(float4)0;
 	}

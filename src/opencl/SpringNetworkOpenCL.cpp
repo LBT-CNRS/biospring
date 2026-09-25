@@ -142,6 +142,16 @@ void SpringNetworkOpenCL::createBuffer()
 								   &_err);
 		checkErr( "Buffer::Buffer() 2");
 
+		// Zeroed at birth: the first integration reads it before any bonded
+		// kernel has written it.
+		{
+		std::vector<float4> zeros(_nbparticlesocl);
+		std::memset(zeros.data(), 0, sizeof(float4) * _nbparticlesocl);
+		_bondedForceBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+		                                sizeof(float4) * _nbparticlesocl, zeros.data(), &_err);
+		checkErr("Buffer(bonded forces)");
+		}
+
 		_inoutForceBuffer=cl::Buffer (
 							_context,
 							CL_MEM_READ_WRITE| CL_MEM_USE_HOST_PTR,
@@ -344,6 +354,11 @@ void SpringNetworkOpenCL::createBuffer()
 
 	_queue=cl::CommandQueue(_context, _devices[0], CL_QUEUE_PROFILING_ENABLE, &_err);
 	checkErr("CommandQueue::CommandQueue()");
+	// A second in-order queue for the bonded terms. Out-of-order queues are not
+	// available on every implementation -- Apple's reports none -- and several
+	// in-order queues is the portable construct: it is what a CUDA stream is.
+	_queuebonded=cl::CommandQueue(_context, _devices[0], CL_QUEUE_PROFILING_ENABLE, &_err);
+	checkErr("CommandQueue::CommandQueue(bonded)");
 
 	// See _profilingtickns: APPLE'S profiling timestamps are mach ticks where
 	// OpenCL says nanoseconds, a factor of 41.667 that made the kernels look
@@ -642,6 +657,7 @@ void SpringNetworkOpenCL::idleRun()
 		_kernelbaoabdrift.setArg(a++, _inoutPositionBuffer);
 		_kernelbaoabdrift.setArg(a++, _inoutVelocityBuffer);
 		_kernelbaoabdrift.setArg(a++, _inoutForceBuffer);
+		_kernelbaoabdrift.setArg(a++, _bondedForceBuffer);
 		_kernelbaoabdrift.setArg(a++, _inMassBuffer);
 		_kernelbaoabdrift.setArg(a++, _inDynamicBuffer);
 		_kernelbaoabdrift.setArg(a++, getTimeStep());
@@ -653,6 +669,10 @@ void SpringNetworkOpenCL::idleRun()
 		_err = _queue.enqueueNDRangeKernel(_kernelbaoabdrift, cl::NullRange,
 		                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
 		checkErr("enqueueNDRangeKernel(baoabDriftBath)");
+		// What the bonded queue has to wait for: this is the kernel that
+		// cleared the accumulator it writes into.
+		_forceszeroedevent = _event;
+		_forceszeroed = true;
 		_pendingevents.emplace_back(_event, &integrationtime);
 		_readPositionsBack();
 		}
@@ -679,12 +699,32 @@ void SpringNetworkOpenCL::idleRun()
     const float springForceScale =
         getForceField()->getSpringScale() *
         static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
-    _event = _kernelfunctorspring(_inoutPositionBuffer, _inSpringBuffer,
-                                 _inSpringIndexesBuffer, _inoutForceBuffer,
-                                 _springEnergyBuffer,
-                                 _nbparticlesocl, springForceScale,
-                                 getForceField()->getSpringScale());
-	_pendingevents.emplace_back(_event, &springtime);
+    // On the bonded queue, into the bonded accumulator: this runs BESIDE the
+    // non-bonded terms below rather than in front of them. The only ordering it
+    // needs is against the integrator that cleared the accumulator, and that is
+    // an event, not a stop -- the host does not wait.
+    const unsigned springwg = WORK_GROUP_SIZE;
+    const unsigned springglobal = (_nbparticlesocl / springwg) * springwg + springwg;
+    unsigned sa = 0;
+    _kernelspring.setArg(sa++, _inoutPositionBuffer);
+    _kernelspring.setArg(sa++, _inSpringBuffer);
+    _kernelspring.setArg(sa++, _inSpringIndexesBuffer);
+    _kernelspring.setArg(sa++, _bondedForceBuffer);
+    _kernelspring.setArg(sa++, _springEnergyBuffer);
+    _kernelspring.setArg(sa++, _nbparticlesocl);
+    _kernelspring.setArg(sa++, springForceScale);
+    _kernelspring.setArg(sa++, getForceField()->getSpringScale());
+    std::vector<cl::Event> springwait;
+    if (_forceszeroed)
+        springwait.push_back(_forceszeroedevent);
+    _err = _queuebonded.enqueueNDRangeKernel(_kernelspring, cl::NullRange,
+        cl::NDRange(springglobal), cl::NDRange(springwg),
+        springwait.empty() ? NULL : &springwait, &_event);
+    checkErr("enqueueNDRangeKernel(spring)");
+    _pendingevents.emplace_back(_event, &springtime);
+    _bondeddoneevent = _event;
+    _bondedpending = true;
+    _queuebonded.flush();   // start it now, not at the next synchronisation
     }
 
 
@@ -699,7 +739,7 @@ void SpringNetworkOpenCL::idleRun()
 
         unsigned a = 0;
         _kerneltorsion.setArg(a++, _inoutPositionBuffer);
-        _kerneltorsion.setArg(a++, _inoutForceBuffer);
+        _kerneltorsion.setArg(a++, _bondedForceBuffer);
         _kerneltorsion.setArg(a++, _torsionEnergyBuffer);
         _kerneltorsion.setArg(a++, _inTorsionAtomsBuffer);
         _kerneltorsion.setArg(a++, _inTorsionTableBuffer);
@@ -714,9 +754,17 @@ void SpringNetworkOpenCL::idleRun()
         _kerneltorsion.setArg(a++, unit);
         _kerneltorsion.setArg(a++, _nbparticlesocl);
 
-        _err = _queue.enqueueNDRangeKernel(_kerneltorsion, cl::NullRange,
-                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        // Same queue and same accumulator as the springs: the bonded terms are
+        // one chain, ordered among themselves by their in-order queue.
+        std::vector<cl::Event> torsionwait;
+        if (!_bondedpending && _forceszeroed)
+            torsionwait.push_back(_forceszeroedevent);
+        _err = _queuebonded.enqueueNDRangeKernel(_kerneltorsion, cl::NullRange,
+            cl::NDRange(global), cl::NDRange(wg),
+            torsionwait.empty() ? NULL : &torsionwait, &_event);
         checkErr("enqueueNDRangeKernel(torsion)");
+        _bondeddoneevent = _event;
+        _bondedpending = true;
 	_pendingevents.emplace_back(_event, &torsiontime);
         }
 
@@ -1132,6 +1180,17 @@ void SpringNetworkOpenCL::idleRun()
 		_externalforcesneedclearing = true;
 		}
 
+    // The join. Everything the bonded queue was asked for has to be in the
+    // accumulator before an integrator reads it -- and this is an event, so the
+    // host still does not stop: the device orders the two queues itself.
+    if (_bondedpending)
+        {
+        std::vector<cl::Event> bonded(1, _bondeddoneevent);
+        _err = _queue.enqueueWaitForEvents(bonded);
+        checkErr("enqueueWaitForEvents(bonded)");
+        _bondedpending = false;
+        }
+
     if (isThermostatEnabled())
         {
         // BAOAB's closing half kick, with the force just evaluated at the
@@ -1142,6 +1201,7 @@ void SpringNetworkOpenCL::idleRun()
         unsigned a = 0;
         _kernelbaoabkick.setArg(a++, _inoutVelocityBuffer);
         _kernelbaoabkick.setArg(a++, _inoutForceBuffer);
+        _kernelbaoabkick.setArg(a++, _bondedForceBuffer);
         _kernelbaoabkick.setArg(a++, _inMassBuffer);
         _kernelbaoabkick.setArg(a++, _inDynamicBuffer);
         _kernelbaoabkick.setArg(a++, getTimeStep());
@@ -1154,9 +1214,12 @@ void SpringNetworkOpenCL::idleRun()
     else
         {
         _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
-                                          _inoutForceBuffer, _inMassBuffer, _inDynamicBuffer,
+                                          _inoutForceBuffer, _bondedForceBuffer,
+                                          _inMassBuffer, _inDynamicBuffer,
                                           getTimeStep(), _nbparticlesocl);
         _pendingevents.emplace_back(_event, &integrationtime);
+        _forceszeroedevent = _event;
+        _forceszeroed = true;
         }
 
 	// Four transfers, ONE synchronisation. These were four BLOCKING calls with a
