@@ -1266,3 +1266,40 @@ TEST(SpringNetworkOpenCL, TheDeviceMeasuresTheSameBoxAsTheHost)
         EXPECT_FLOAT_EQ(hi[d], expectedhi[d]) << "upper bound on axis " << d;
     }
 }
+
+// The frame check, asked of the device instead of walked on the host.
+//
+// A particle outside the grid's frame is binned nowhere and is invisible to
+// every neighbour walk, so getting this wrong is silent: no crash, no warning,
+// just a term quietly missing its pairs. The two answers have to agree.
+TEST(SpringNetworkOpenCL, TheDeviceChecksTheFrameLikeTheHost)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 2000;
+
+    {   // Everyone inside: both must say so.
+        SpringNetworkOpenCL gpu;
+        configuration::Configuration config;
+        buildParticleCloud(gpu, config, N, /*extent=*/60.0f);
+        gpu.run();
+        EXPECT_TRUE(gpu._frameStillHoldsOnDevice(gpu.stericCells()))
+            << "a settled cloud should sit inside the frame measured around it";
+    }
+
+    {   // One particle far outside, and in the LAST block, where a tree
+        // reduction drops it if it drops anything. Placed after the run so
+        // nothing re-measures the frame around it.
+        SpringNetworkOpenCL gpu;
+        configuration::Configuration config;
+        buildParticleCloud(gpu, config, N, /*extent=*/60.0f);
+        gpu.run();
+        ASSERT_TRUE(gpu._frameStillHoldsOnDevice(gpu.stericCells())) << "precondition";
+
+        gpu.getParticle(N - 1).setPosition(Vector3f(1.0e6f, 0.0f, 0.0f));
+        gpu.uploadPositionsForTesting();
+        EXPECT_FALSE(gpu._frameStillHoldsOnDevice(gpu.stericCells()))
+            << "a particle a million angstroms away is not inside anything";
+    }
+}

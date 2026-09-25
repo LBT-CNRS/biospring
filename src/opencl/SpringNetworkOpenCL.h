@@ -197,6 +197,19 @@ class SpringNetworkOpenCL : public SpringNetwork
 		/// only way to see that is to hold the two answers against each other.
 		bool _measureBoundsOnDevice(float lo[3], float hi[3]);
 
+		/// The same question _frameStillHolds answers, asked of the device.
+		/// Public for the same reason: a frame check that disagrees with the
+		/// host pass does not crash, it just re-measures the grid at different
+		/// moments -- or fails to -- and a particle outside a frame is
+		/// invisible to every walk without a word.
+		bool _frameStillHoldsOnDevice(const CellGrid & grid);
+
+		/// Pushes the Particle objects' positions back down, so a test can
+		/// move one and ask the device about it. Nothing in a run needs this:
+		/// positions travel the other way.
+		void uploadPositionsForTesting();
+		const CellGrid & stericCells() const { return _cells; }
+
 		const NeighbourList & stericList() const { return _stericlist; }
 		const NeighbourList & electrostaticList() const { return _electrostaticlist; }
 		const NeighbourList & hydrophobicList() const { return _hydrophobiclist; }
@@ -523,6 +536,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// The structure's bounding box, measured on the device. The host loop
 		// this replaces is one of the three reasons the positions had to come
 		// down every step; see _measureBoundsOnDevice.
+		cl::Kernel _kernelresetflag;
+		cl::Kernel _kernelcheckframe;
+		cl::Buffer _frameflagbuffer;      // one int: 1 while every particle is inside
 		cl::Kernel _kernelboundsblocks;
 		cl::Kernel _kernelboundsfinal;
 		cl::Buffer _boundsblocksbuffer;   // 6 floats per work group

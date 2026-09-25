@@ -1443,6 +1443,61 @@ __kernel void measureBoundsFinal(const __global float * blockbounds, const __glo
 
 
 // ======================================================================
+// FRAME CHECK
+//
+// Does every particle still fall inside the grid's frame? A particle outside
+// is binned nowhere and is invisible to every neighbour walk, so the frame has
+// to be re-measured as soon as the first one leaves.
+//
+// The host pass this replaces walks every position, which is one of the three
+// reasons they have to come down at every step. The test is written exactly as
+// that pass writes it, negation included: `!(local >= 0)` rather than
+// `local < 0`, so that a coordinate which is not a number fails it instead of
+// slipping through -- every comparison with a NaN is false, and the naive form
+// would call it inside.
+
+__kernel void resetFlag(__global int * flag)
+	{
+	if (get_global_id(0) == 0u)
+		flag[0] = 1;
+	}
+
+__kernel void checkFrame(const __global float4 * positions,
+                         const float4 origin, const float width, const int4 ncells,
+                         __local int * scratch, __global int * flag, const uint N)
+	{
+	uint gid = get_global_id(0);
+	uint lid = get_local_id(0);
+	uint wg = get_local_size(0);
+
+	int inside = 1;
+	if (gid < N)
+		{
+		float4 p = positions[gid];
+		float lx = (p.x - origin.x) / width;
+		float ly = (p.y - origin.y) / width;
+		float lz = (p.z - origin.z) / width;
+		if (!(lx >= 0.0f) || lx >= (float)ncells.x) inside = 0;
+		if (!(ly >= 0.0f) || ly >= (float)ncells.y) inside = 0;
+		if (!(lz >= 0.0f) || lz >= (float)ncells.z) inside = 0;
+		}
+	scratch[lid] = inside;
+	barrier(CLK_LOCAL_MEM_FENCE);
+
+	for (uint stride = wg >> 1; stride > 0u; stride >>= 1)
+		{
+		if (lid < stride)
+			scratch[lid] = scratch[lid] & scratch[lid + stride];
+		barrier(CLK_LOCAL_MEM_FENCE);
+		}
+
+	// One atomic per work group rather than one per particle, and only ever
+	// clearing a bit, so the order the groups arrive in cannot matter.
+	if (lid == 0u && scratch[0] == 0)
+		atomic_and(flag, 0);
+	}
+
+// ======================================================================
 // EXCLUSIVE PREFIX SCAN
 //
 // The per-particle neighbour COUNTS become the OFFSETS where each particle's

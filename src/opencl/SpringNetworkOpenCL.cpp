@@ -484,6 +484,10 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel(baoabDriftBath)");
 	_kernelbaoabkick  = cl::Kernel(_program, "baoabFinalKick", &_err);
 	checkErr("Kernel(baoabFinalKick)");
+	_kernelresetflag  = cl::Kernel(_program, "resetFlag", &_err);
+	checkErr("Kernel(resetFlag)");
+	_kernelcheckframe = cl::Kernel(_program, "checkFrame", &_err);
+	checkErr("Kernel(checkFrame)");
 	_kernelboundsblocks = cl::Kernel(_program, "measureBoundsBlocks", &_err);
 	checkErr("Kernel(measureBoundsBlocks)");
 	_kernelboundsfinal  = cl::Kernel(_program, "measureBoundsFinal", &_err);
@@ -1807,6 +1811,63 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 // on the device is what comes next: once the frame check and the rebuild
 // criterion follow, nothing needs the positions themselves and only these few
 // bytes cross.
+// The frame check, on the device. Same answer as _frameStillHolds, which walks
+// _particlepositions -- one of the three host passes that keep the positions
+// crossing at every step.
+//
+// Four bytes still come back, because the caller is host code that decides
+// whether to re-measure and re-allocate. What removes even those is the step
+// after this one: the binning kernels reading the flag themselves and doing
+// nothing when it is down, so the host never asks.
+void SpringNetworkOpenCL::uploadPositionsForTesting()
+	{
+	computeOpenCLPositions();
+	_err = _queue.enqueueWriteBuffer(_inoutPositionBuffer, CL_TRUE, 0,
+	                                 sizeof(float4) * _nbparticlesocl, _particlepositions);
+	checkErr("enqueueWriteBuffer(positions for testing)");
+	}
+
+
+bool SpringNetworkOpenCL::_frameStillHoldsOnDevice(const CellGrid & grid)
+	{
+	if (grid.ncellstotal == 0 || _nbparticlesocl == 0)
+		return false;
+
+	if (_frameflagbuffer() == NULL)
+		{
+		_frameflagbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(int), NULL, &_err);
+		checkErr("Buffer(frame flag)");
+		}
+
+	const unsigned wg = WORK_GROUP_SIZE;
+	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+
+	_kernelresetflag.setArg(0, _frameflagbuffer);
+	_err = _queue.enqueueNDRangeKernel(_kernelresetflag, cl::NullRange,
+	                                   cl::NDRange(1), cl::NDRange(1), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(resetFlag)");
+	_pendingevents.emplace_back(_event, &celllisttime);
+
+	unsigned a = 0;
+	_kernelcheckframe.setArg(a++, _inoutPositionBuffer);
+	_kernelcheckframe.setArg(a++, grid.origin);
+	_kernelcheckframe.setArg(a++, grid.width);
+	_kernelcheckframe.setArg(a++, grid.ncells);
+	_kernelcheckframe.setArg(a++, cl::__local(sizeof(int) * wg));
+	_kernelcheckframe.setArg(a++, _frameflagbuffer);
+	_kernelcheckframe.setArg(a++, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelcheckframe, cl::NullRange,
+	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(checkFrame)");
+	_pendingevents.emplace_back(_event, &celllisttime);
+
+	int inside = 0;
+	_err = _queue.enqueueReadBuffer(_frameflagbuffer, CL_TRUE, 0, sizeof(int), &inside);
+	checkErr("enqueueReadBuffer(frame flag)");
+	return inside != 0;
+	}
+
+
 bool SpringNetworkOpenCL::_measureBoundsOnDevice(float lo[3], float hi[3])
 	{
 	if (_nbparticlesocl == 0)
