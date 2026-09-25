@@ -429,6 +429,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// walking past four beads in five.
 		CellGrid _chargedcells;
 		CellGrid _hydrophobiccells;
+		CellGrid _hydrogenbondcells;
 
 
 		NeighbourList _stericlist;
@@ -474,9 +475,46 @@ class SpringNetworkOpenCL : public SpringNetwork
 			std::vector<unsigned char> charged;            // Coulomb candidates
 			std::vector<unsigned char> dynamichydrophobic; // hydrophobic targets
 			std::vector<unsigned char> hydrophobic;        // hydrophobic candidates
+			// Donors AND acceptors together, as targets and as candidates:
+			// the hydrogen bond term filters roles inside its own kernels
+			// rather than keeping two grids, because a hydroxyl is both.
+			std::vector<unsigned char> hydrogenbond;
 			unsigned builtfor = 0;                         // particle count they were built for
 			};
 		TermMasks _masks;
+
+		// Everything the hydrogen bond term keeps on the device. It is unlike
+		// every other pairwise term in that it CHOOSES its pairs and holds
+		// them between steps, so the slots are device state rather than a list
+		// rebuilt from the geometry. Nothing here comes back to the host: the
+		// four rounds of the assignment run as kernels, so an interactive step
+		// pays no transfer for it at all.
+		struct HydrogenBondState
+			{
+			cl::Buffer donoroffsetbuffer;     // N + 1 uints, CSR
+			cl::Buffer donorslotbuffer;       // one int per donatable hydrogen, -1 = free
+			cl::Buffer acceptoroffsetbuffer;  // N + 1 uints, CSR
+			cl::Buffer acceptorslotbuffer;    // one int per lone pair
+			cl::Buffer antecedentbuffer;      // N int2, -1 where there is none
+			cl::Buffer residbuffer;           // N ints
+			cl::Buffer chainbuffer;           // N ints: chain NAMES, mapped to indices here
+			cl::Buffer nearestbuffer;         // N ints, one round's proposal
+			cl::Buffer strengthbuffer;        // N floats, what that proposal is worth
+			cl::Buffer energybuffer;          // N floats, one per donor
+			bool uploaded = false;
+			};
+		HydrogenBondState _hbond;
+		NeighbourList _hydrogenbondlist;
+		float * _hbondenergyper = nullptr;
+		// Uploaded once: capacities, antecedents, residue and chain identity
+		// are all fixed for the run.
+		void _uploadHydrogenBondTopology();
+		// The four rounds, entirely on the device.
+		void _assignHydrogenBondPairsOnDevice();
+		cl::Kernel _kernelhbondbreak;
+		cl::Kernel _kernelhbondscore;
+		cl::Kernel _kernelhbondconfirm;
+		cl::Kernel _kernelhbondforce;
 		void _buildTermMasks();
 		bool _frameStillHolds(const CellGrid & grid) const;
 		bool _buildCellList(CellGrid & grid, float width);

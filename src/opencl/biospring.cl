@@ -871,6 +871,400 @@ __kernel void damping(__global float4 * forces,   const __global float4 * veloci
 	}
 
 
+
+// ======================================================================
+// HYDROGEN BONDS
+//
+// Unlike every other pairwise term, this one CHOOSES its pairs: a donor slot
+// and an acceptor slot are consumed by a bond and stay consumed until the bond
+// breaks, so the assignment persists between steps and is not a neighbour list.
+// The CPU does it in four rounds of "propose, then confirm the reciprocal
+// bests", and the same four rounds run here, as three small kernels, entirely
+// on the device -- the host never sees the assignment, so nothing is paid to
+// bring it back and send it down again.
+//
+// Why that is safe to parallelise: each round writes ONE best partner per
+// particle, so "i's best is j and j's best is i" designates a couple without
+// ambiguity, and a particle belongs to at most one such couple per round.
+// Confirmations are therefore independent and need no lock -- only the i < j
+// test, so that exactly one of the two acts.
+
+// A free slot, or -1 when the particle has none left.
+inline int biospring_hb_free_slot(const __global uint * offsets, const __global int * slots, uint i)
+	{
+	for (uint s = offsets[i]; s < offsets[i + 1]; s++)
+		if (slots[s] < 0)
+			return (int)s;
+	return -1;
+	}
+
+inline bool biospring_hb_already_bonded(const __global uint * donoroffsets, const __global int * donorslots,
+                                        const __global uint * acceptoroffsets, const __global int * acceptorslots,
+                                        uint a, uint b)
+	{
+	for (uint s = donoroffsets[a]; s < donoroffsets[a + 1]; s++)
+		if (donorslots[s] == (int)b)
+			return true;
+	for (uint s = acceptoroffsets[a]; s < acceptoroffsets[a + 1]; s++)
+		if (acceptorslots[s] == (int)b)
+			return true;
+	return false;
+	}
+
+// "Where the hydrogen points", or the lone pair: away from the antecedent, or
+// along the bisector when there are two (planar sp2, exact). Returns false
+// when the particle has no antecedent at all, in which case the side imposes
+// no direction and its weight is 1.
+inline bool biospring_hb_direction(const __global float4 * positions, const __global int2 * antecedents,
+                                   uint i, float3 * outdir)
+	{
+	int a1 = antecedents[i].x;
+	if (a1 < 0)
+		return false;
+	float3 here = positions[i].xyz;
+	float3 u1 = here - positions[a1].xyz;
+	float l1 = length(u1);
+	if (l1 <= 1e-6f)
+		return false;
+	float3 h = u1 / l1;
+	int a2 = antecedents[i].y;
+	if (a2 >= 0)
+		{
+		float3 u2 = here - positions[a2].xyz;
+		float l2 = length(u2);
+		if (l2 > 1e-6f)
+			h += u2 / l2;
+		}
+	float hlen = length(h);
+	if (hlen <= 1e-6f)
+		return false;
+	*outdir = h / hlen;
+	return true;
+	}
+
+// Step 1 of a step: release any bond whose two ends have drifted past the
+// cutoff. Only the donor side is walked; the acceptor side is cleared with it,
+// so the two can never disagree.
+__kernel void hbondBreak(const __global float4 * positions,
+                         const __global uint * donoroffsets, __global int * donorslots,
+                         const __global uint * acceptoroffsets, __global int * acceptorslots,
+                         const float cutoff, const uint N)
+	{
+	uint tid = get_global_id(0);
+	if (tid >= N) return;
+	for (uint s = donoroffsets[tid]; s < donoroffsets[tid + 1]; s++)
+		{
+		int j = donorslots[s];
+		if (j < 0)
+			continue;
+		if (distance(positions[tid].xyz, positions[j].xyz) <= cutoff)
+			continue;
+		donorslots[s] = -1;
+		for (uint sa = acceptoroffsets[j]; sa < acceptoroffsets[j + 1]; sa++)
+			if (acceptorslots[sa] == (int)tid)
+				{
+				acceptorslots[sa] = -1;
+				break;
+				}
+		}
+	}
+
+// Step 2, once per round: every particle with a free slot proposes its best
+// partner. Ranked by what the bond is WORTH -- the Morse well times both
+// angular factors -- and not by distance, because the nearest candidate is
+// very often one the angle forbids, and it would still occupy the slot.
+__kernel void hbondScore(const __global float4 * positions,
+                         const __global uint * donoroffsets, const __global int * donorslots,
+                         const __global uint * acceptoroffsets, const __global int * acceptorslots,
+                         const __global int2 * antecedents,
+                         const __global int * resids, const __global int * chains,
+                         const __global uint * listoffsets, const __global uint * listitems,
+                         const __global Springocl * springs, const __global int * springoffsets,
+                         const int springsenabled, const int probeid,
+                         const float cutoff, const float welldepth, const float equilibrium,
+                         const float width, const float hbondscale,
+                         __global int * nearest, __global float * strength, const uint N)
+	{
+	uint tid = get_global_id(0);
+	if (tid >= N) return;
+	nearest[tid] = -1;
+	// Zero, not -infinity: a candidate whose angular factor kills it is worth
+	// exactly nothing and must not take a slot from a real partner.
+	strength[tid] = 0.0f;
+	if (tid == (uint)probeid) return;
+
+	bool i_donor = biospring_hb_free_slot(donoroffsets, donorslots, tid) >= 0;
+	bool i_acceptor = biospring_hb_free_slot(acceptoroffsets, acceptorslots, tid) >= 0;
+	if (!i_donor && !i_acceptor) return;
+
+	float3 here = positions[tid].xyz;
+	float3 dirhere;
+	bool hashere = biospring_hb_direction(positions, antecedents, tid, &dirhere);
+
+	int best = -1;
+	float beststrength = 0.0f;
+	uint last = listoffsets[tid + 1];
+	for (uint slot = listoffsets[tid]; slot < last; slot++)
+		{
+		uint j = listitems[slot];
+		if (j == (uint)probeid)
+			continue;
+
+		// A free donor slot needs a free acceptor slot facing it. A particle
+		// that is both -- a hydroxyl -- may pair either way, but never twice
+		// with the SAME partner: that would be one bond counted as two.
+		bool roles_match = (i_donor && biospring_hb_free_slot(acceptoroffsets, acceptorslots, j) >= 0)
+		                || (i_acceptor && biospring_hb_free_slot(donoroffsets, donorslots, j) >= 0);
+		if (!roles_match)
+			continue;
+		if (biospring_hb_already_bonded(donoroffsets, donorslots, acceptoroffsets, acceptorslots, tid, j))
+			continue;
+
+		// A residue's own backbone N and O sit at a fixed covalent distance.
+		// That is not a hydrogen bond, and without this it is invariably the
+		// closest candidate and starves the real inter-residue one.
+		if (resids[tid] == resids[j] && chains[tid] == chains[j])
+			continue;
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, j))
+			continue;
+
+		float3 axis = positions[j].xyz - here;
+		float dist = length(axis);
+		if (dist >= cutoff || dist <= 1e-6f)
+			continue;
+		float3 vhat = axis / dist;
+
+		float weight = 1.0f;
+		if (hashere)
+			weight *= biospring_hbond_angular_factor(dot(dirhere, vhat));
+		float3 dirthere;
+		if (biospring_hb_direction(positions, antecedents, j, &dirthere))
+			weight *= biospring_hbond_angular_factor(dot(dirthere, -vhat));
+
+		float s = hbondscale * biospring_hbond_energy(dist, welldepth, equilibrium, width) * weight;
+		if (s < beststrength)
+			{
+			beststrength = s;
+			best = (int)j;
+			}
+		}
+	nearest[tid] = best;
+	strength[tid] = beststrength;
+	}
+
+// Step 3, once per round: confirm the reciprocal bests. `nearest` is fixed by
+// now, so the outcome does not depend on the order pairs are confirmed in --
+// which is what lets this run in parallel at all. i < j so exactly one of the
+// two work items acts on the couple.
+__kernel void hbondConfirm(const __global int * nearest,
+                           const __global uint * donoroffsets, __global int * donorslots,
+                           const __global uint * acceptoroffsets, __global int * acceptorslots,
+                           const uint N)
+	{
+	uint tid = get_global_id(0);
+	if (tid >= N) return;
+	int j = nearest[tid];
+	if (j < 0 || (uint)j <= tid) return;
+	if (nearest[j] != (int)tid) return;
+
+	// Which way round: whoever has a free donor slot facing the other's free
+	// acceptor slot. Tried donor-side-first, exactly as the CPU does.
+	int sd = biospring_hb_free_slot(donoroffsets, donorslots, tid);
+	int sa = biospring_hb_free_slot(acceptoroffsets, acceptorslots, (uint)j);
+	if (sd >= 0 && sa >= 0)
+		{
+		donorslots[sd] = j;
+		acceptorslots[sa] = (int)tid;
+		return;
+		}
+	sd = biospring_hb_free_slot(donoroffsets, donorslots, (uint)j);
+	sa = biospring_hb_free_slot(acceptoroffsets, acceptorslots, tid);
+	if (sd >= 0 && sa >= 0)
+		{
+		donorslots[sd] = (int)tid;
+		acceptorslots[sa] = j;
+		}
+	}
+
+
+// A float add that several work items may aim at the same address. OpenCL 1.2
+// has no atomic float, so this is the usual compare-and-swap loop over the
+// bit pattern; cl_khr_global_int32_base_atomics is what makes it legal, and
+// the device advertises it.
+//
+// It makes the summation order between bonds unspecified, so two runs can
+// differ in the last bits. That is already true of this backend (see the
+// non-determinism the parity tests are written against) and the error is far
+// below what the comparison against the CPU asserts.
+inline void biospring_atomic_add_float(volatile __global float * address, float value)
+	{
+	volatile __global int * as_int = (volatile __global int *)address;
+	int expected, wanted;
+	do
+		{
+		expected = *as_int;
+		wanted = as_int(as_float(expected) + value);
+		}
+	while (atomic_cmpxchg(as_int, expected, wanted) != expected);
+	}
+
+inline void biospring_atomic_add_float3(volatile __global float4 * forces, uint i, float3 value)
+	{
+	volatile __global float * base = (volatile __global float *)(forces + i);
+	biospring_atomic_add_float(base + 0, value.x);
+	biospring_atomic_add_float(base + 1, value.y);
+	biospring_atomic_add_float(base + 2, value.z);
+	}
+
+// The force of every engaged bond. One work item per particle, walking its own
+// DONOR slots, so each bond is evaluated exactly once and by the side that
+// donated -- which is what the angular weight needs to know.
+//
+// Six atoms receive a contribution: the donor, the acceptor, and up to two
+// antecedents on each side, because the angular weight makes them third
+// bodies. The three sub-terms are each balanced on their OWN atoms rather than
+// letting one global "donor takes the rest" absorb everything: the acceptor
+// term acts on the DONOR through the same axis the donor term acts on the
+// acceptor through, and folding both into one balance puts that reaction on
+// the wrong atom with the wrong sign.
+__kernel void hbondForce(const __global float4 * positions, volatile __global float4 * forces,
+                         const __global uint * donoroffsets, const __global int * donorslots,
+                         const __global int2 * antecedents,
+                         const float welldepth, const float equilibrium, const float width,
+                         const float hbondscale, const float convert,
+                         __global float * energyper, const uint N)
+	{
+	uint tid = get_global_id(0);
+	if (tid >= N) return;
+	energyper[tid] = 0.0f;
+
+	float3 pd = positions[tid].xyz;
+	float e = 0.0f;
+
+	for (uint s = donoroffsets[tid]; s < donoroffsets[tid + 1]; s++)
+		{
+		int acceptor = donorslots[s];
+		if (acceptor < 0)
+			continue;
+
+		float3 pa = positions[acceptor].xyz;
+		float3 v = pa - pd;
+		float dist = length(v);
+		if (dist < 1e-6f)
+			continue;
+		float3 vhat = v / dist;
+
+		float morse  = hbondscale * biospring_hbond_energy(dist, welldepth, equilibrium, width);
+		float dmorse = hbondscale * biospring_hbond_force_module(dist, welldepth, equilibrium, width, convert);
+
+		// Each side's direction, and the lengths the gradient needs.
+		int d1i = antecedents[tid].x, d2i = antecedents[tid].y;
+		int a1i = antecedents[acceptor].x, a2i = antecedents[acceptor].y;
+		float3 dhat = (float3)(0.0f), ahat = (float3)(0.0f);
+		float3 d1 = (float3)(0.0f), d2 = (float3)(0.0f), a1 = (float3)(0.0f), a2 = (float3)(0.0f);
+		float dl1 = 0.0f, dl2 = 0.0f, dhlen = 0.0f, al1 = 0.0f, al2 = 0.0f, ahlen = 0.0f;
+		bool hasD = false, hasA = false;
+
+		if (d1i >= 0)
+			{
+			float3 u1 = pd - positions[d1i].xyz;
+			dl1 = length(u1);
+			if (dl1 > 1e-6f)
+				{
+				d1 = u1 / dl1;
+				float3 h = d1;
+				if (d2i >= 0)
+					{
+					float3 u2 = pd - positions[d2i].xyz;
+					dl2 = length(u2);
+					if (dl2 > 1e-6f) { d2 = u2 / dl2; h += d2; }
+					}
+				dhlen = length(h);
+				if (dhlen > 1e-6f) { dhat = h / dhlen; hasD = true; }
+				}
+			}
+		if (a1i >= 0)
+			{
+			float3 u1 = pa - positions[a1i].xyz;
+			al1 = length(u1);
+			if (al1 > 1e-6f)
+				{
+				a1 = u1 / al1;
+				float3 h = a1;
+				if (a2i >= 0)
+					{
+					float3 u2 = pa - positions[a2i].xyz;
+					al2 = length(u2);
+					if (al2 > 1e-6f) { a2 = u2 / al2; h += a2; }
+					}
+				ahlen = length(h);
+				if (ahlen > 1e-6f) { ahat = h / ahlen; hasA = true; }
+				}
+			}
+
+		float cd = hasD ? dot(dhat, vhat) : 1.0f;
+		float ca = hasA ? dot(ahat, -vhat) : 1.0f;
+		float wd = hasD ? biospring_hbond_angular_factor(cd) : 1.0f;
+		float wa = hasA ? biospring_hbond_angular_factor(ca) : 1.0f;
+		float dwd = hasD ? biospring_hbond_angular_derivative(cd) : 0.0f;
+		float dwa = hasA ? biospring_hbond_angular_derivative(ca) : 0.0f;
+		float w = wd * wa;
+
+		float3 f_donor = (float3)(0.0f), f_acceptor = (float3)(0.0f);
+		float3 f_d1 = (float3)(0.0f), f_d2 = (float3)(0.0f);
+		float3 f_a1 = (float3)(0.0f), f_a2 = (float3)(0.0f);
+
+		// (A) radial, on the pair.
+		float3 radial = vhat * (-dmorse * w);
+		f_acceptor += radial;
+		f_donor -= radial;
+
+		// (B) the donor's angular factor: explicit on its antecedents, its
+		// axis dependence on the acceptor, the donor balancing the three.
+		if (hasD && dwd != 0.0f)
+			{
+			float3 t = vhat - dhat * cd;
+			float g = morse * wa * dwd * convert / dhlen;
+			f_d1 = (t - d1 * dot(d1, t)) * (g / dl1);
+			if (d2i >= 0 && dl2 > 1e-6f)
+				f_d2 = (t - d2 * dot(d2, t)) * (g / dl2);
+			float3 on_acceptor = (dhat - vhat * cd) * (-morse * wa * dwd * convert / dist);
+			f_acceptor += on_acceptor;
+			f_donor -= (f_d1 + f_d2 + on_acceptor);
+			}
+
+		// (C) the acceptor's, the same with the roles swapped: its partner
+		// direction is -vhat and its axis dependence lands on the DONOR.
+		if (hasA && dwa != 0.0f)
+			{
+			float3 t = -vhat - ahat * ca;
+			float g = morse * wd * dwa * convert / ahlen;
+			f_a1 = (t - a1 * dot(a1, t)) * (g / al1);
+			if (a2i >= 0 && al2 > 1e-6f)
+				f_a2 = (t - a2 * dot(a2, t)) * (g / al2);
+			float3 on_donor = (ahat + vhat * ca) * (-morse * wd * dwa * convert / dist);
+			f_donor += on_donor;
+			f_acceptor -= (f_a1 + f_a2 + on_donor);
+			}
+
+		// The donor's own contribution is the only one nobody else can be
+		// writing at the same time, but it goes through the same path for the
+		// sake of one expression rather than two.
+		if (d1i >= 0)            biospring_atomic_add_float3(forces, (uint)d1i, f_d1);
+		if (d2i >= 0)            biospring_atomic_add_float3(forces, (uint)d2i, f_d2);
+		if (a1i >= 0)            biospring_atomic_add_float3(forces, (uint)a1i, f_a1);
+		if (a2i >= 0)            biospring_atomic_add_float3(forces, (uint)a2i, f_a2);
+		biospring_atomic_add_float3(forces, tid, f_donor);
+		biospring_atomic_add_float3(forces, (uint)acceptor, f_acceptor);
+
+		e += morse * w;
+		}
+
+	// Owned by the donor, so no atomic: a bond is counted once, by the side
+	// whose slot holds it.
+	energyper[tid] = e;
+	}
+
 __kernel void external(__global float4 * forces,   const __global float4 * externalforces, const uint N)
 	{
 	size_t tid = get_global_id(0);

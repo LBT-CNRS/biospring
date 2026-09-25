@@ -109,7 +109,7 @@ SpringNetworkOpenCL::~SpringNetworkOpenCL()
     delete[] _torsionenergyper;
     delete[] _particledynamic;
     delete[] _springsocl;
-    for (CellGrid * g : {&_cells, &_chargedcells, &_hydrophobiccells})
+    for (CellGrid * g : {&_cells, &_chargedcells, &_hydrophobiccells, &_hydrogenbondcells})
         {
         delete[] g->head;
         delete[] g->next;
@@ -528,6 +528,14 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel::Kernel()");
 	_kernelsteric = cl::Kernel(_program, "steric", &_err);
 	checkErr("Kernel::Kernel()");
+	_kernelhbondbreak   = cl::Kernel(_program, "hbondBreak", &_err);
+	checkErr("Kernel(hbondBreak)");
+	_kernelhbondscore   = cl::Kernel(_program, "hbondScore", &_err);
+	checkErr("Kernel(hbondScore)");
+	_kernelhbondconfirm = cl::Kernel(_program, "hbondConfirm", &_err);
+	checkErr("Kernel(hbondConfirm)");
+	_kernelhbondforce   = cl::Kernel(_program, "hbondForce", &_err);
+	checkErr("Kernel(hbondForce)");
 	_kernelhydrophobic = cl::Kernel(_program, "hydrophobic", &_err);
 	checkErr("Kernel::Kernel()");
 	_kernelelectrostaticfield = cl::Kernel(_program, "electrostaticfield", &_err);
@@ -681,6 +689,7 @@ double electrostatictime=0.0;
 double sterictime=0.0;
 double torsiontime=0.0;
 double hydrophobictime=0.0;
+double hbondtime=0.0;
 double electrostaticfieldtime=0.0;
 double densityfieldtime=0.0;
 double probetime=0.0;
@@ -1106,6 +1115,35 @@ void SpringNetworkOpenCL::idleRun()
         _pendingevents.emplace_back(_event, &probetime);
         }
 
+	// Hydrogen bonds. The assignment is four rounds of kernels and the force
+	// is one more; nothing crosses to the host, so an interactive step pays
+	// nothing for a term that chooses its own pairs.
+	if (isHydrogenBondEnabled())
+		{
+		_uploadHydrogenBondTopology();
+		_assignHydrogenBondPairsOnDevice();
+
+		const unsigned wg = WORK_GROUP_SIZE;
+		const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+		unsigned a = 0;
+		_kernelhbondforce.setArg(a++, _inoutPositionBuffer);
+		_kernelhbondforce.setArg(a++, _inoutForceBuffer);
+		_kernelhbondforce.setArg(a++, _hbond.donoroffsetbuffer);
+		_kernelhbondforce.setArg(a++, _hbond.donorslotbuffer);
+		_kernelhbondforce.setArg(a++, _hbond.antecedentbuffer);
+		_kernelhbondforce.setArg(a++, getForceField()->getHydrogenBondWellDepth());
+		_kernelhbondforce.setArg(a++, getForceField()->getHydrogenBondEquilibrium());
+		_kernelhbondforce.setArg(a++, getForceField()->getHydrogenBondWidth());
+		_kernelhbondforce.setArg(a++, getForceField()->getHydrogenBondScale());
+		_kernelhbondforce.setArg(a++, static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
+		_kernelhbondforce.setArg(a++, _hbond.energybuffer);
+		_kernelhbondforce.setArg(a++, _nbparticlesocl);
+		_err = _queue.enqueueNDRangeKernel(_kernelhbondforce, cl::NullRange,
+		                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+		checkErr("enqueueNDRangeKernel(hbondForce)");
+		_pendingevents.emplace_back(_event, &hbondtime);
+		}
+
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
     _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
                                   viscosity, _nbparticlesocl);
@@ -1261,7 +1299,7 @@ void SpringNetworkOpenCL::endRun()
 	         <<", steric: "<<sterictime
 	         <<", electrostatic: "<<electrostatictime
 	         <<", electrostaticfield: "<<electrostaticfieldtime<<", densityfield: "<<densityfieldtime<<", probe: "<<probetime<<", listes de cellules: "<<celllisttime<<", construction steric: "<<listbuildsterictime<<", construction coulomb: "<<listbuildcoulombtime<<", construction autre: "<<listbuildtime<<", impala: "<<impalatime
-	         <<", hydrophobic: "<<hydrophobictime
+	         <<", hydrophobic: "<<hydrophobictime<<", hbond: "<<hbondtime
 	         <<", damping: "<<dampingtime<<", integration: "<<integrationtime
 	         <<", external: "<<externalforcetime<<" )"<<std::endl;
 	if (getNeighborSkin() > 0.0f)
@@ -1319,7 +1357,8 @@ float SpringNetworkOpenCL::_largestPairwiseCutoff() const
 // one that does not run.
 void SpringNetworkOpenCL::_updateCellLists()
 	{
-	if (!isStericEnabled() && !isElectrostaticCoulombEnabled() && !isHydrophobicityEnabled())
+	if (!isStericEnabled() && !isElectrostaticCoulombEnabled() && !isHydrophobicityEnabled()
+	    && !isHydrogenBondEnabled())
 		return;
 
 	// One grid per term, each with cells the size of that term's own search
@@ -1335,6 +1374,11 @@ void SpringNetworkOpenCL::_updateCellLists()
 	if (isHydrophobicityEnabled())
 		_binSubsetIntoCells(_hydrophobiccells, _masks.hydrophobic,
 		                    getCellWidthFor(getHydrophobicCutoff()));
+	// One grid for the hydrogen bond term, holding donors AND acceptors
+	// together: a hydroxyl is both, and the kernels filter roles themselves.
+	if (isHydrogenBondEnabled())
+		_binSubsetIntoCells(_hydrogenbondcells, _masks.hydrogenbond,
+		                    getCellWidthFor(getHydrogenBondCutoff()));
 	}
 
 
@@ -1572,10 +1616,12 @@ void SpringNetworkOpenCL::_buildTermMasks()
 	{
 	const bool wantcoulomb = isElectrostaticCoulombEnabled();
 	const bool wanthydrophobic = isHydrophobicityEnabled();
+	const bool wanthbond = isHydrogenBondEnabled();
 	if (_masks.builtfor == _nbparticlesocl &&
 	    _masks.dynamic.size() == _nbparticlesocl &&
 	    _masks.charged.empty() != wantcoulomb &&
-	    _masks.hydrophobic.empty() != wanthydrophobic)
+	    _masks.hydrophobic.empty() != wanthydrophobic &&
+	    _masks.hydrogenbond.empty() != wanthbond)
 		return;
 
 	const unsigned n = std::min<unsigned>(SpringNetwork::getNumberOfParticles(), _nbparticlesocl);
@@ -1584,10 +1630,13 @@ void SpringNetworkOpenCL::_buildTermMasks()
 	_masks.charged.clear();
 	_masks.dynamichydrophobic.clear();
 	_masks.hydrophobic.clear();
+	_masks.hydrogenbond.clear();
 	if (wantcoulomb)
 		{ _masks.dynamiccharged.assign(_nbparticlesocl, 0); _masks.charged.assign(_nbparticlesocl, 0); }
 	if (wanthydrophobic)
 		{ _masks.dynamichydrophobic.assign(_nbparticlesocl, 0); _masks.hydrophobic.assign(_nbparticlesocl, 0); }
+	if (wanthbond)
+		_masks.hydrogenbond.assign(_nbparticlesocl, 0);
 
 	for (unsigned i = 0; i < n; ++i)
 		{
@@ -1610,20 +1659,29 @@ void SpringNetworkOpenCL::_buildTermMasks()
 			_masks.hydrophobic[i] = 1;
 			_masks.dynamichydrophobic[i] = isdynamic ? 1 : 0;
 			}
+		// Donors and acceptors are both targets AND candidates here, unlike
+		// every other term: a bond needs a free slot at each end, and which
+		// end donates is decided pair by pair rather than by particle. A
+		// STATIC donor still anchors a bond, so it is not filtered out.
+		if (wanthbond && (particle.donorCapacity() > 0 || particle.acceptorCapacity() > 0))
+			_masks.hydrogenbond[i] = 1;
 		}
 
 	_masks.builtfor = _nbparticlesocl;
 	_stericlist.targetsuploaded = false;
 	_electrostaticlist.targetsuploaded = false;
 	_hydrophobiclist.targetsuploaded = false;
+	_hydrogenbondlist.targetsuploaded = false;
 	}
 
 
 void SpringNetworkOpenCL::_updateNeighbourLists()
 	{
-	if (!isStericEnabled() && !isElectrostaticCoulombEnabled() && !isHydrophobicityEnabled())
+	if (!isStericEnabled() && !isElectrostaticCoulombEnabled() && !isHydrophobicityEnabled()
+	    && !isHydrogenBondEnabled())
 		{
 		_stericlist.valid = _electrostaticlist.valid = _hydrophobiclist.valid = false;
+		_hydrogenbondlist.valid = false;
 		return;
 		}
 
@@ -1677,6 +1735,15 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 		{
 		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), _masks.dynamichydrophobic,
 		                    std::vector<unsigned char>(), _hydrophobiccells);
+		}
+	// Targets are donors and acceptors alike, STATIC ONES INCLUDED: a static
+	// donor still holds a bond and still pulls the dynamic partner, and the
+	// assignment is symmetric, so restricting targets to the dynamic ones
+	// would lose every bond a static side happens to donate.
+	if (isHydrogenBondEnabled())
+		{
+		_buildNeighbourList(_hydrogenbondlist, getHydrogenBondCutoff(), _masks.hydrogenbond,
+		                    std::vector<unsigned char>(), _hydrogenbondcells);
 		}
 
 	_listreference.assign(_particlepositions, _particlepositions + _nbparticlesocl);
@@ -2118,6 +2185,18 @@ void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 			_energies.dihedral += _torsionenergyper[i];
 		}
 
+	// Summed on the host like the spring energy above, and for the same
+	// reason: the transfer that brings it back costs more than the sum.
+	_energies.hbond = 0.0f;
+	if (isHydrogenBondEnabled() && _hbond.uploaded && _hbondenergyper != nullptr)
+		{
+		_err = _queue.enqueueReadBuffer(_hbond.energybuffer, CL_TRUE, 0,
+		                                sizeof(float) * _nbparticlesocl, _hbondenergyper);
+		checkErr("enqueueReadBuffer(hydrogen bond energy)");
+		for (unsigned i = 0; i < _nbparticlesocl; ++i)
+			_energies.hbond += _hbondenergyper[i];
+		}
+
 	float kinetic = 0.0f;
 	for (size_t i = 0; i < _dynamicparticules.size(); ++i)
 		{
@@ -2127,6 +2206,159 @@ void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 		           biospring::forcefield::GLOBAL_KINETIC_ENERGY_CONVERT;
 		}
 	_energies.kinetic = kinetic;
+	}
+
+
+// Uploaded once. Capacities, antecedents, residue numbers and chain identity
+// are all fixed when the network is loaded, and the slots themselves start
+// empty -- the base class sized them in setup(), so this only has to move them
+// across.
+//
+// Chain NAMES are strings, which a kernel cannot compare. They are mapped to
+// indices here, in first-appearance order: the kernel only ever tests two
+// particles for the same chain, so any injective mapping does.
+void SpringNetworkOpenCL::_uploadHydrogenBondTopology()
+	{
+	if (_hbond.uploaded || _nbparticlesocl == 0)
+		return;
+
+	const unsigned n = std::min<unsigned>(SpringNetwork::getNumberOfParticles(), _nbparticlesocl);
+
+	std::vector<unsigned> donoroffset(_nbparticlesocl + 1, 0);
+	std::vector<unsigned> acceptoroffset(_nbparticlesocl + 1, 0);
+	std::vector<cl_int2> antecedent(_nbparticlesocl);
+	std::vector<int> resid(_nbparticlesocl, -1);
+	std::vector<int> chain(_nbparticlesocl, -1);
+
+	std::map<std::string, int> chainindex;
+	for (unsigned i = 0; i < _nbparticlesocl; ++i)
+		{
+		antecedent[i].s[0] = -1;
+		antecedent[i].s[1] = -1;
+		if (i >= n)
+			{
+			donoroffset[i + 1] = donoroffset[i];
+			acceptoroffset[i + 1] = acceptoroffset[i];
+			continue;
+			}
+		const Particle & p = SpringNetwork::getParticle(i);
+		donoroffset[i + 1] = donoroffset[i] + static_cast<unsigned>(p.donorCapacity());
+		acceptoroffset[i + 1] = acceptoroffset[i] + static_cast<unsigned>(p.acceptorCapacity());
+		antecedent[i].s[0] = p.antecedentIndex();
+		antecedent[i].s[1] = p.antecedentIndex2();
+		resid[i] = static_cast<int>(p.getResId());
+		const auto inserted = chainindex.emplace(p.getChainName(), static_cast<int>(chainindex.size()));
+		chain[i] = inserted.first->second;
+		}
+
+	const unsigned totaldonor = donoroffset[_nbparticlesocl];
+	const unsigned totalacceptor = acceptoroffset[_nbparticlesocl];
+	// Every slot starts free. A zero-sized buffer is rejected by OpenCL, so a
+	// network with no donor at all still gets one entry that nothing reads.
+	std::vector<int> donorslot(std::max(1u, totaldonor), -1);
+	std::vector<int> acceptorslot(std::max(1u, totalacceptor), -1);
+
+	const auto upload = [&](cl::Buffer & buffer, const void * data, size_t bytes, cl_mem_flags flags) {
+		buffer = cl::Buffer(_context, flags | CL_MEM_COPY_HOST_PTR, bytes, const_cast<void *>(data), &_err);
+		checkErr("Buffer(hydrogen bond)");
+	};
+	upload(_hbond.donoroffsetbuffer, donoroffset.data(), sizeof(unsigned) * donoroffset.size(), CL_MEM_READ_ONLY);
+	upload(_hbond.acceptoroffsetbuffer, acceptoroffset.data(), sizeof(unsigned) * acceptoroffset.size(), CL_MEM_READ_ONLY);
+	upload(_hbond.donorslotbuffer, donorslot.data(), sizeof(int) * donorslot.size(), CL_MEM_READ_WRITE);
+	upload(_hbond.acceptorslotbuffer, acceptorslot.data(), sizeof(int) * acceptorslot.size(), CL_MEM_READ_WRITE);
+	upload(_hbond.antecedentbuffer, antecedent.data(), sizeof(cl_int2) * antecedent.size(), CL_MEM_READ_ONLY);
+	upload(_hbond.residbuffer, resid.data(), sizeof(int) * resid.size(), CL_MEM_READ_ONLY);
+	upload(_hbond.chainbuffer, chain.data(), sizeof(int) * chain.size(), CL_MEM_READ_ONLY);
+
+	_hbond.nearestbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(int) * _nbparticlesocl, NULL, &_err);
+	checkErr("Buffer(hbond nearest)");
+	_hbond.strengthbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(float) * _nbparticlesocl, NULL, &_err);
+	checkErr("Buffer(hbond strength)");
+	_hbond.energybuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(float) * _nbparticlesocl, NULL, &_err);
+	checkErr("Buffer(hbond energy)");
+	delete[] _hbondenergyper;
+	_hbondenergyper = new float[_nbparticlesocl];
+
+	biospring::logging::info("Hydrogen bond slots on device: %u donor, %u acceptor.", totaldonor, totalacceptor);
+	_hbond.uploaded = true;
+	}
+
+
+// The CPU's four rounds, as kernels. The host neither sees nor decides any of
+// it -- which is the whole point: an assignment computed on the host would have
+// to come down, be walked serially, and go back up, on the critical path of
+// every step.
+//
+// Four rounds fixed rather than "until a round confirms nothing". The CPU stops
+// early by counting confirmations, which on the device would mean reading a
+// counter back between rounds -- four round trips to save at most two kernel
+// launches that cost microseconds. One round fills one slot per particle, and
+// the largest capacity in the data is two, so four is already generous.
+void SpringNetworkOpenCL::_assignHydrogenBondPairsOnDevice()
+	{
+	const unsigned wg = WORK_GROUP_SIZE;
+	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+	const float cutoff = getHydrogenBondCutoff();
+	const int probeid = isProbeEnabled() ? static_cast<int>(SpringNetwork::getNumberOfParticles()) : -1;
+
+	unsigned a = 0;
+	_kernelhbondbreak.setArg(a++, _inoutPositionBuffer);
+	_kernelhbondbreak.setArg(a++, _hbond.donoroffsetbuffer);
+	_kernelhbondbreak.setArg(a++, _hbond.donorslotbuffer);
+	_kernelhbondbreak.setArg(a++, _hbond.acceptoroffsetbuffer);
+	_kernelhbondbreak.setArg(a++, _hbond.acceptorslotbuffer);
+	_kernelhbondbreak.setArg(a++, cutoff);
+	_kernelhbondbreak.setArg(a++, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelhbondbreak, cl::NullRange,
+	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(hbondBreak)");
+	_pendingevents.emplace_back(_event, &hbondtime);
+
+	if (!_hydrogenbondlist.valid)
+		return;   // no list, no candidates to propose from
+
+	for (unsigned round = 0; round < 4; ++round)
+		{
+		a = 0;
+		_kernelhbondscore.setArg(a++, _inoutPositionBuffer);
+		_kernelhbondscore.setArg(a++, _hbond.donoroffsetbuffer);
+		_kernelhbondscore.setArg(a++, _hbond.donorslotbuffer);
+		_kernelhbondscore.setArg(a++, _hbond.acceptoroffsetbuffer);
+		_kernelhbondscore.setArg(a++, _hbond.acceptorslotbuffer);
+		_kernelhbondscore.setArg(a++, _hbond.antecedentbuffer);
+		_kernelhbondscore.setArg(a++, _hbond.residbuffer);
+		_kernelhbondscore.setArg(a++, _hbond.chainbuffer);
+		_kernelhbondscore.setArg(a++, _hydrogenbondlist.offsetsbuffer);
+		_kernelhbondscore.setArg(a++, _hydrogenbondlist.itemsbuffer);
+		_kernelhbondscore.setArg(a++, _inSpringBuffer);
+		_kernelhbondscore.setArg(a++, _inSpringIndexesBuffer);
+		_kernelhbondscore.setArg(a++, static_cast<int>(isSpringEnabled() && _nbspringsocl > 0));
+		_kernelhbondscore.setArg(a++, probeid);
+		_kernelhbondscore.setArg(a++, cutoff);
+		_kernelhbondscore.setArg(a++, getForceField()->getHydrogenBondWellDepth());
+		_kernelhbondscore.setArg(a++, getForceField()->getHydrogenBondEquilibrium());
+		_kernelhbondscore.setArg(a++, getForceField()->getHydrogenBondWidth());
+		_kernelhbondscore.setArg(a++, getForceField()->getHydrogenBondScale());
+		_kernelhbondscore.setArg(a++, _hbond.nearestbuffer);
+		_kernelhbondscore.setArg(a++, _hbond.strengthbuffer);
+		_kernelhbondscore.setArg(a++, _nbparticlesocl);
+		_err = _queue.enqueueNDRangeKernel(_kernelhbondscore, cl::NullRange,
+		                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+		checkErr("enqueueNDRangeKernel(hbondScore)");
+		_pendingevents.emplace_back(_event, &hbondtime);
+
+		a = 0;
+		_kernelhbondconfirm.setArg(a++, _hbond.nearestbuffer);
+		_kernelhbondconfirm.setArg(a++, _hbond.donoroffsetbuffer);
+		_kernelhbondconfirm.setArg(a++, _hbond.donorslotbuffer);
+		_kernelhbondconfirm.setArg(a++, _hbond.acceptoroffsetbuffer);
+		_kernelhbondconfirm.setArg(a++, _hbond.acceptorslotbuffer);
+		_kernelhbondconfirm.setArg(a++, _nbparticlesocl);
+		_err = _queue.enqueueNDRangeKernel(_kernelhbondconfirm, cl::NullRange,
+		                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+		checkErr("enqueueNDRangeKernel(hbondConfirm)");
+		_pendingevents.emplace_back(_event, &hbondtime);
+		}
 	}
 
 
@@ -2152,7 +2384,11 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	// hbond.enable = 1 run through --opencl is therefore a DIFFERENT model,
 	// and was silently so until this line -- the very thing this warning was
 	// written to stop.
-	if (isHydrogenBondEnabled())    add("hbond (the device has no hydrogen bond kernel)");
+	// hbond is no longer here: biospring.cl carries the Morse well, the
+	// two-sided angular weight AND the per-step re-pairing. What it does not
+	// yet carry is the core repulsion, which is a different term under the
+	// same switch.
+	if (isHydrogenBondEnabled())    add("hbond core repulsion (the device has the bonds, not the repulsion)");
 
 	if (!ignored.empty())
 		biospring::logging::warning(
@@ -2175,6 +2411,11 @@ void SpringNetworkOpenCL::_displayFrameData()
 		biospring::logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
 		biospring::logging::info("Dihedral energy: %5.2f kJ.mol-1", _energies.dihedral);
 		}
+	// Reported without the bond COUNT the CPU prints beside it: the count
+	// lives in the device's slot arrays, and bringing them back every logged
+	// step to print a number would cost a transfer the energy does not need.
+	if (isHydrogenBondEnabled())
+		biospring::logging::info("Hydrogen bond energy: %5.2f kJ.mol-1", _energies.hbond);
 	// Measurements rather than energies, and the ones an IMPALA run is read on.
 	if (isInsertionVectorEnabled() && _insertionVector)
 		{
@@ -2538,6 +2779,7 @@ void SpringNetworkOpenCL::computeOpenCLDynamicState()
 void SpringNetworkOpenCL::computeOpenCLForces()
 {
 	delete[] _particleforces;
+	delete[] _hbondenergyper;
 	delete[] _particleexternalforces;
 	_particleforces = _nbparticlesocl == 0 ? nullptr : new float4[_nbparticlesocl];
 	_particleexternalforces = _nbparticlesocl == 0 ? nullptr : new float4[_nbparticlesocl];
