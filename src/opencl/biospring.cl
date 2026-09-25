@@ -1335,6 +1335,74 @@ __kernel void external(__global float4 * forces,   const __global float4 * exter
 
 
 
+// BAOAB, first half: half kick on the force standing from the previous step,
+// half drift, the bath over the whole step, half drift. Mirrors
+// Particle::baoabKickDriftBathDrift line for line, including the order of the
+// operations -- floating point is not associative and the two backends are
+// compared to the digit.
+//
+// The forces are zeroed here because what the closing kick needs is the force
+// at the position this leaves behind, which nobody has computed yet.
+//
+// Static particles return before anything: they are not integrated, so they
+// have no temperature to hold either.
+__kernel void baoabDriftBath(__global float4 * positions, __global float4 * velocities,
+                             __global float4 * forces, const __global float * masses,
+                             const __global int * isdynamic, const float timestep,
+                             const float gamma, const float boltzmanntemperature,
+                             const uint step, const uint seed, const uint N)
+	{
+	size_t tid = get_global_id(0);
+	if(tid>=N)
+		return;
+	if(!isdynamic[tid])
+		return;
+
+	// Not `half`: that is a reserved type name in OpenCL C, and naming a
+	// variable after it makes the kernel fail to compile at runtime with a
+	// message about a function-style cast.
+	float halfstep = 0.5f * timestep;
+	float mass = masses[tid];
+	if(mass>0.0f)
+		velocities[tid]+=(forces[tid]/mass)*halfstep;      // B
+
+	positions[tid]+=velocities[tid]*halfstep;              // A
+
+	float decay = biospring_langevin_decay(gamma, mass, timestep);
+	float kick = biospring_langevin_kick(decay, mass, boltzmanntemperature);
+	velocities[tid] *= decay;                              // O, over the whole step
+	if(kick > 0.0f)
+		{
+		float4 xi = (float4)(biospring_random_normal(step, (unsigned)tid, 0, seed),
+		                     biospring_random_normal(step, (unsigned)tid, 1, seed),
+		                     biospring_random_normal(step, (unsigned)tid, 2, seed),
+		                     0.0f);
+		velocities[tid] += kick * xi;
+		}
+
+	positions[tid]+=velocities[tid]*halfstep;              // A
+
+	forces[tid]=(float4)0;
+	}
+
+// BAOAB, closing half kick, with the force at the position the half above
+// left. The velocity this produces is the one the step reports, which is why
+// the two half kicks are not merged into one: the merged form reports a
+// velocity half a step out of date.
+__kernel void baoabFinalKick(__global float4 * velocities, __global float4 * forces,
+                             const __global float * masses, const __global int * isdynamic,
+                             const float timestep, const uint N)
+	{
+	size_t tid = get_global_id(0);
+	if(tid>=N)
+		return;
+	if(!isdynamic[tid])
+		return;
+	float mass = masses[tid];
+	if(mass>0.0f)
+		velocities[tid]+=(forces[tid]/mass)*(0.5f*timestep);
+	}
+
 // Same two steps, in the same order, as Particle::IntegrateEuler: the velocity
 // takes the acceleration, then the position takes the UPDATED velocity.
 //
@@ -1344,9 +1412,7 @@ __kernel void external(__global float4 * forces,   const __global float4 * exter
 // a topology may declare a mass of 0.
 __kernel void integration(__global float4 * positions, __global float4 * velocities,
                           __global float4 * forces, const __global float * masses,
-                          const __global int * isdynamic, const float timestep,
-                          const float gamma, const float boltzmanntemperature,
-                          const uint step, const uint seed, const uint N)
+                          const __global int * isdynamic, const float timestep, const uint N)
 	{
 	size_t tid = get_global_id(0);
 	if(tid>=N) 
@@ -1365,32 +1431,6 @@ __kernel void integration(__global float4 * positions, __global float4 * velocit
 	float mass = masses[tid];
 	if(mass>0.0f)
 		velocities[tid]+=(forces[tid]/mass)*timestep;
-
-	// The bath, between the kick and the drift. This is where the CPU's
-	// Particle::IntegrateEulerLangevin puts it, and for the same reason: it
-	// acts on the velocity, so it must see the one the force has just changed,
-	// and the position must move with the one the bath has just changed.
-	//
-	// The static particles never reach here -- the isdynamic guard above
-	// returned -- which is right: a frozen bead has no temperature to hold.
-	//
-	// At boltzmanntemperature == 0 the kick is zero and this is the plain
-	// friction the `damping` kernel used to fold into the force, only integrated
-	// exactly rather than to first order.
-	float decay = biospring_langevin_decay(gamma, mass, timestep);
-	float kick = biospring_langevin_kick(decay, mass, boltzmanntemperature);
-	velocities[tid] *= decay;
-	if(kick > 0.0f)
-		{
-		// The SAME counter-based draw the CPU makes, keyed identically, so the
-		// two backends can still be compared to the digit.
-		float4 xi = (float4)(biospring_random_normal(step, (unsigned)tid, 0, seed),
-		                     biospring_random_normal(step, (unsigned)tid, 1, seed),
-		                     biospring_random_normal(step, (unsigned)tid, 2, seed),
-		                     0.0f);
-		velocities[tid] += kick * xi;
-		}
-
 	positions[tid]+=velocities[tid]*timestep;	
 	forces[tid]=(float4)0;
 	}

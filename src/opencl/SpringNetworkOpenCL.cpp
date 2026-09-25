@@ -543,6 +543,10 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel(hbondForce)");
 	_kernelhbondrepulsion = cl::Kernel(_program, "hbondCoreRepulsion", &_err);
 	checkErr("Kernel(hbondCoreRepulsion)");
+	_kernelbaoabdrift = cl::Kernel(_program, "baoabDriftBath", &_err);
+	checkErr("Kernel(baoabDriftBath)");
+	_kernelbaoabkick  = cl::Kernel(_program, "baoabFinalKick", &_err);
+	checkErr("Kernel(baoabFinalKick)");
 	_kernelhydrophobic = cl::Kernel(_program, "hydrophobic", &_err);
 	checkErr("Kernel::Kernel()");
 	_kernelelectrostaticfield = cl::Kernel(_program, "electrostaticfield", &_err);
@@ -780,6 +784,34 @@ void SpringNetworkOpenCL::idleRun()
 		for (Interactor * interactor : getInteractors())
 			if (interactor != nullptr)
 				interactor->syncSystemStateData();
+
+	// BAOAB's first half, when the thermostat is on: half kick on the force
+	// left standing by the previous step, half drift, the bath, half drift.
+	// It moves the positions BEFORE anything is evaluated on them, so the
+	// grids below have to see the moved ones -- which costs the one read this
+	// path has that the ordinary one does not.
+	if (isThermostatEnabled())
+		{
+		const unsigned wg = WORK_GROUP_SIZE;
+		const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+		unsigned a = 0;
+		_kernelbaoabdrift.setArg(a++, _inoutPositionBuffer);
+		_kernelbaoabdrift.setArg(a++, _inoutVelocityBuffer);
+		_kernelbaoabdrift.setArg(a++, _inoutForceBuffer);
+		_kernelbaoabdrift.setArg(a++, _inMassBuffer);
+		_kernelbaoabdrift.setArg(a++, _inDynamicBuffer);
+		_kernelbaoabdrift.setArg(a++, getTimeStep());
+		_kernelbaoabdrift.setArg(a++, isViscosityEnabled() ? getViscosity() : 0.0f);
+		_kernelbaoabdrift.setArg(a++, getBoltzmannTemperature());
+		_kernelbaoabdrift.setArg(a++, ++_thermostatstep);
+		_kernelbaoabdrift.setArg(a++, THERMOSTAT_SEED);
+		_kernelbaoabdrift.setArg(a++, _nbparticlesocl);
+		_err = _queue.enqueueNDRangeKernel(_kernelbaoabdrift, cl::NullRange,
+		                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+		checkErr("enqueueNDRangeKernel(baoabDriftBath)");
+		_pendingevents.emplace_back(_event, &integrationtime);
+		_readPositionsBack();
+		}
 
 	// The neighbour structure the non-bonded terms need. Built from the box the
 	// positions read back last step occupy, which is one step stale -- hence the
@@ -1265,13 +1297,32 @@ void SpringNetworkOpenCL::idleRun()
 		_externalforcesneedclearing = true;
 		}
 
-    _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
-                                      _inoutForceBuffer, _inMassBuffer, _inDynamicBuffer,
-                                      getTimeStep(), isThermostatEnabled() ? viscosity : 0.0f,
-                                      getBoltzmannTemperature(),
-                                      ++_thermostatstep, THERMOSTAT_SEED,
-                                      _nbparticlesocl);
-	_pendingevents.emplace_back(_event, &integrationtime);
+    if (isThermostatEnabled())
+        {
+        // BAOAB's closing half kick, with the force just evaluated at the
+        // position the drift reached. The positions are already where they
+        // belong; only the velocity is completed here.
+        const unsigned wg = WORK_GROUP_SIZE;
+        const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+        unsigned a = 0;
+        _kernelbaoabkick.setArg(a++, _inoutVelocityBuffer);
+        _kernelbaoabkick.setArg(a++, _inoutForceBuffer);
+        _kernelbaoabkick.setArg(a++, _inMassBuffer);
+        _kernelbaoabkick.setArg(a++, _inDynamicBuffer);
+        _kernelbaoabkick.setArg(a++, getTimeStep());
+        _kernelbaoabkick.setArg(a++, _nbparticlesocl);
+        _err = _queue.enqueueNDRangeKernel(_kernelbaoabkick, cl::NullRange,
+                                           cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+        checkErr("enqueueNDRangeKernel(baoabFinalKick)");
+        _pendingevents.emplace_back(_event, &integrationtime);
+        }
+    else
+        {
+        _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
+                                          _inoutForceBuffer, _inMassBuffer, _inDynamicBuffer,
+                                          getTimeStep(), _nbparticlesocl);
+        _pendingevents.emplace_back(_event, &integrationtime);
+        }
 
 	// Four transfers, ONE synchronisation. These were four BLOCKING calls with a
 	// finish() after two of them: six points per step where the host stopped and
@@ -2314,6 +2365,19 @@ void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 // Chain NAMES are strings, which a kernel cannot compare. They are mapped to
 // indices here, in first-appearance order: the kernel only ever tests two
 // particles for the same chain, so any injective mapping does.
+// The one transfer the thermostatted path adds. BAOAB drifts before anything
+// is evaluated, and the grid frame, the list rebuild criterion and the
+// bounding box are all host loops over _particlepositions, so they have to see
+// the drifted ones or they would be a full step behind what the force kernels
+// read.
+void SpringNetworkOpenCL::_readPositionsBack()
+	{
+	_err = _queue.enqueueReadBuffer(_inoutPositionBuffer, CL_TRUE, 0,
+	                                sizeof(float4) * _nbparticlesocl, _particlepositions);
+	checkErr("enqueueReadBuffer(positions after drift)");
+	}
+
+
 void SpringNetworkOpenCL::_uploadHydrogenBondTopology()
 	{
 	if (_hbond.uploaded || _nbparticlesocl == 0)

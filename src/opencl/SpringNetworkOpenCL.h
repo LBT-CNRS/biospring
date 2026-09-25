@@ -523,6 +523,13 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelhbondconfirm;
 		cl::Kernel _kernelhbondforce;
 		cl::Kernel _kernelhbondrepulsion;
+		cl::Kernel _kernelbaoabdrift;
+		cl::Kernel _kernelbaoabkick;
+		// BAOAB moves the positions BEFORE the forces are evaluated, so the
+		// grids and the neighbour lists have to be measured on the moved ones.
+		// The host only has last step's copy, hence this extra read -- the one
+		// transfer the thermostatted path pays that the ordinary one does not.
+		void _readPositionsBack();
 		void _buildTermMasks();
 		bool _frameStillHolds(const CellGrid & grid) const;
 		bool _buildCellList(CellGrid & grid, float width);
