@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "../constants.hpp"
+#include "../shared/hbond_shared.h"
 
 namespace biospring
 {
@@ -30,9 +31,7 @@ namespace forcefield
 ///     at distance == equilibrium).
 inline float hydrogen_bond_energy(float distance, float wellDepth, float equilibrium, float width)
 {
-    const float u = std::exp(-width * (distance - equilibrium));
-    const float one_minus_u = 1.0f - u;
-    return wellDepth * one_minus_u * one_minus_u - wellDepth;
+    return biospring_hbond_energy(distance, wellDepth, equilibrium, width);
 }
 
 /// @return dV/dr, i.e. the force module in the "self -> neighbor" convention
@@ -42,10 +41,8 @@ inline float hydrogen_bond_energy(float distance, float wellDepth, float equilib
 ///     stiffness and steric epsilon.
 inline float hydrogen_bond_force_module(float distance, float wellDepth, float equilibrium, float width)
 {
-    const float u = std::exp(-width * (distance - equilibrium));
-    float force_module = 2.0f * width * wellDepth * u * (1.0f - u);
-    force_module *= GLOBAL_SPRING_FORCE_CONVERT;
-    return force_module;
+    return biospring_hbond_force_module(distance, wellDepth, equilibrium, width,
+                                        static_cast<float>(GLOBAL_SPRING_FORCE_CONVERT));
 }
 
 // ---- Angular weight -----------------------------------------------------
@@ -75,13 +72,13 @@ inline float hydrogen_bond_force_module(float distance, float wellDepth, float e
 /// @return Dimensionless weight in [0, 1].
 inline float hydrogen_bond_angular_factor(float cos_theta)
 {
-    return cos_theta > 0.0f ? cos_theta * cos_theta : 0.0f;
+    return biospring_hbond_angular_factor(cos_theta);
 }
 
 /// d(weight)/d(cos theta), for the force.
 inline float hydrogen_bond_angular_derivative(float cos_theta)
 {
-    return cos_theta > 0.0f ? 2.0f * cos_theta : 0.0f;
+    return biospring_hbond_angular_derivative(cos_theta);
 }
 
 } // namespace forcefield
