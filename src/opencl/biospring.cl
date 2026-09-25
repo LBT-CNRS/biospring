@@ -1336,6 +1336,113 @@ __kernel void external(__global float4 * forces,   const __global float4 * exter
 
 
 // ======================================================================
+// BOUNDING BOX
+//
+// The box the structure occupies, which is what a cell grid is measured
+// against. The host used to walk every position for it, which is why the
+// positions had to come down every step -- along with the frame check and the
+// list rebuild criterion, all three host loops over the same array.
+//
+// Two passes: each work group reduces its own block, then one work item
+// reduces the blocks. With 256 to a block there are 146 of them for the
+// capsid, so the second pass is a hundred-odd iterations and a parallel
+// version of it would cost more in launch than it saves.
+//
+// A non-finite coordinate is reported rather than folded in. A diverging
+// structure has no box to measure, and a min/max that quietly swallowed a NaN
+// would hand back a frame describing nothing.
+
+#define BIOSPRING_BOUNDS_FLOATS 6u   // minx miny minz maxx maxy maxz
+
+__kernel void measureBoundsBlocks(const __global float4 * positions,
+                                  __global float * blockbounds, __global int * blockfinite,
+                                  __local float * lmin, __local float * lmax, __local int * lfinite,
+                                  const uint N)
+	{
+	uint gid = get_global_id(0);
+	uint lid = get_local_id(0);
+	uint wg = get_local_size(0);
+
+	// A lane past the end contributes nothing: +inf to a minimum and -inf to a
+	// maximum are the identities of those operations.
+	float3 p = (float3)(INFINITY, INFINITY, INFINITY);
+	float3 q = (float3)(-INFINITY, -INFINITY, -INFINITY);
+	int finite = 1;
+	if (gid < N)
+		{
+		float4 here = positions[gid];
+		finite = (isfinite(here.x) && isfinite(here.y) && isfinite(here.z)) ? 1 : 0;
+		if (finite)
+			{
+			p = here.xyz;
+			q = here.xyz;
+			}
+		}
+	lmin[3u*lid+0u] = p.x; lmin[3u*lid+1u] = p.y; lmin[3u*lid+2u] = p.z;
+	lmax[3u*lid+0u] = q.x; lmax[3u*lid+1u] = q.y; lmax[3u*lid+2u] = q.z;
+	lfinite[lid] = finite;
+	barrier(CLK_LOCAL_MEM_FENCE);
+
+	for (uint stride = wg >> 1; stride > 0u; stride >>= 1)
+		{
+		if (lid < stride)
+			{
+			for (uint d = 0u; d < 3u; d++)
+				{
+				lmin[3u*lid+d] = fmin(lmin[3u*lid+d], lmin[3u*(lid+stride)+d]);
+				lmax[3u*lid+d] = fmax(lmax[3u*lid+d], lmax[3u*(lid+stride)+d]);
+				}
+			lfinite[lid] = lfinite[lid] & lfinite[lid + stride];
+			}
+		barrier(CLK_LOCAL_MEM_FENCE);
+		}
+
+	if (lid == 0u)
+		{
+		uint g = get_group_id(0);
+		for (uint d = 0u; d < 3u; d++)
+			{
+			blockbounds[BIOSPRING_BOUNDS_FLOATS*g + d]      = lmin[d];
+			blockbounds[BIOSPRING_BOUNDS_FLOATS*g + 3u + d] = lmax[d];
+			}
+		blockfinite[g] = lfinite[0];
+		}
+	}
+
+// The blocks reduced in turn, into bounds[0..5] and finite[0].
+__kernel void measureBoundsFinal(const __global float * blockbounds, const __global int * blockfinite,
+                                 __global float * bounds, __global int * finite, const uint nblocks)
+	{
+	if (get_global_id(0) != 0u)
+		return;
+
+	// Scalars rather than private float lo[3]. A private array indexed by a
+	// loop variable is legal and was silently miscompiled here: every block
+	// was read, nblocks arrived correct, the per-block minima were correct --
+	// and the reduction still returned the cloud's extent instead of the two
+	// corners deliberately placed in the last block. Written out, it is also
+	// three registers instead of an array the compiler has to place.
+	float lo0 = INFINITY, lo1 = INFINITY, lo2 = INFINITY;
+	float hi0 = -INFINITY, hi1 = -INFINITY, hi2 = -INFINITY;
+	int allfinite = 1;
+	for (uint b = 0u; b < nblocks; b++)
+		{
+		uint o = BIOSPRING_BOUNDS_FLOATS * b;
+		lo0 = fmin(lo0, blockbounds[o + 0u]);
+		lo1 = fmin(lo1, blockbounds[o + 1u]);
+		lo2 = fmin(lo2, blockbounds[o + 2u]);
+		hi0 = fmax(hi0, blockbounds[o + 3u]);
+		hi1 = fmax(hi1, blockbounds[o + 4u]);
+		hi2 = fmax(hi2, blockbounds[o + 5u]);
+		allfinite = allfinite & blockfinite[b];
+		}
+	bounds[0] = lo0; bounds[1] = lo1; bounds[2] = lo2;
+	bounds[3] = hi0; bounds[4] = hi1; bounds[5] = hi2;
+	finite[0] = allfinite;
+	}
+
+
+// ======================================================================
 // EXCLUSIVE PREFIX SCAN
 //
 // The per-particle neighbour COUNTS become the OFFSETS where each particle's

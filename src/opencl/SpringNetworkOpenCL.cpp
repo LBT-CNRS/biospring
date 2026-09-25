@@ -484,6 +484,10 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel(baoabDriftBath)");
 	_kernelbaoabkick  = cl::Kernel(_program, "baoabFinalKick", &_err);
 	checkErr("Kernel(baoabFinalKick)");
+	_kernelboundsblocks = cl::Kernel(_program, "measureBoundsBlocks", &_err);
+	checkErr("Kernel(measureBoundsBlocks)");
+	_kernelboundsfinal  = cl::Kernel(_program, "measureBoundsFinal", &_err);
+	checkErr("Kernel(measureBoundsFinal)");
 	_kernelscancounts    = cl::Kernel(_program, "scanCounts", &_err);
 	checkErr("Kernel(scanCounts)");
 	_kernelscanblocksums = cl::Kernel(_program, "scanBlockSums", &_err);
@@ -1794,6 +1798,78 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 // outside the grid is invisible to every neighbour walk. The device says when
 // that has happened (see binParticles), so the pass below runs on the first
 // step and then only when someone has actually left.
+// The box, on the device. Same answer as the host pass in _measureCellGrid,
+// which walks _particlepositions -- and that pass is one of the three reasons
+// the positions have to come down at every step.
+//
+// It is still read back here, six floats and a flag, because the caller is
+// still host code that sizes buffers from the result. The point of having it
+// on the device is what comes next: once the frame check and the rebuild
+// criterion follow, nothing needs the positions themselves and only these few
+// bytes cross.
+bool SpringNetworkOpenCL::_measureBoundsOnDevice(float lo[3], float hi[3])
+	{
+	if (_nbparticlesocl == 0)
+		return false;
+
+	const unsigned wg = WORK_GROUP_SIZE;
+	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+	const unsigned nblocks = global / wg;
+
+	if (_boundsblocksfor != nblocks)
+		{
+		_boundsblocksbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(float) * 6 * nblocks, NULL, &_err);
+		checkErr("Buffer(block bounds)");
+		_boundsfiniteblocks = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(int) * nblocks, NULL, &_err);
+		checkErr("Buffer(block finite)");
+		_boundsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(float) * 6, NULL, &_err);
+		checkErr("Buffer(bounds)");
+		_boundsfinitebuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(int), NULL, &_err);
+		checkErr("Buffer(finite)");
+		_boundsblocksfor = nblocks;
+		}
+
+	unsigned a = 0;
+	_kernelboundsblocks.setArg(a++, _inoutPositionBuffer);
+	_kernelboundsblocks.setArg(a++, _boundsblocksbuffer);
+	_kernelboundsblocks.setArg(a++, _boundsfiniteblocks);
+	_kernelboundsblocks.setArg(a++, cl::__local(sizeof(float) * 3 * wg));
+	_kernelboundsblocks.setArg(a++, cl::__local(sizeof(float) * 3 * wg));
+	_kernelboundsblocks.setArg(a++, cl::__local(sizeof(int) * wg));
+	_kernelboundsblocks.setArg(a++, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelboundsblocks, cl::NullRange,
+	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(measureBoundsBlocks)");
+	_pendingevents.emplace_back(_event, &celllisttime);
+
+	a = 0;
+	_kernelboundsfinal.setArg(a++, _boundsblocksbuffer);
+	_kernelboundsfinal.setArg(a++, _boundsfiniteblocks);
+	_kernelboundsfinal.setArg(a++, _boundsbuffer);
+	_kernelboundsfinal.setArg(a++, _boundsfinitebuffer);
+	_kernelboundsfinal.setArg(a++, nblocks);
+	_err = _queue.enqueueNDRangeKernel(_kernelboundsfinal, cl::NullRange,
+	                                   cl::NDRange(1), cl::NDRange(1), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(measureBoundsFinal)");
+	_pendingevents.emplace_back(_event, &celllisttime);
+
+	float bounds[6] = {0.0f};
+	int finite = 0;
+	_err = _queue.enqueueReadBuffer(_boundsbuffer, CL_TRUE, 0, sizeof(bounds), bounds);
+	checkErr("enqueueReadBuffer(bounds)");
+	_err = _queue.enqueueReadBuffer(_boundsfinitebuffer, CL_TRUE, 0, sizeof(int), &finite);
+	checkErr("enqueueReadBuffer(finite)");
+	if (!finite)
+		return false;
+	for (int d = 0; d < 3; ++d)
+		{
+		lo[d] = bounds[d];
+		hi[d] = bounds[3 + d];
+		}
+	return true;
+	}
+
+
 bool SpringNetworkOpenCL::_measureCellGrid(CellGrid & grid, float requestedwidth)
 	{
 	if (_nbparticlesocl == 0 || requestedwidth <= 0.0f)

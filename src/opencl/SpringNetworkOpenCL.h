@@ -186,6 +186,17 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// has to be held against the O(N^2) answer.
 		std::vector<unsigned> neighboursFromList(const NeighbourList & list, unsigned i);
 
+		/// Measures the structure's box on the device. Returns false when a
+		/// coordinate is not finite, exactly as the host pass it replaces
+		/// does: a diverging structure has no box, and a frame measured around
+		/// one describes nothing.
+		///
+		/// Public for the same reason neighboursFromList is: a reduction that
+		/// quietly disagrees with the host pass does not crash and does not
+		/// look wrong, it just sizes every grid slightly differently, and the
+		/// only way to see that is to hold the two answers against each other.
+		bool _measureBoundsOnDevice(float lo[3], float hi[3]);
+
 		const NeighbourList & stericList() const { return _stericlist; }
 		const NeighbourList & electrostaticList() const { return _electrostaticlist; }
 		const NeighbourList & hydrophobicList() const { return _hydrophobiclist; }
@@ -509,6 +520,16 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelhbondrepulsion;
 		cl::Kernel _kernelbaoabdrift;
 		cl::Kernel _kernelbaoabkick;
+		// The structure's bounding box, measured on the device. The host loop
+		// this replaces is one of the three reasons the positions had to come
+		// down every step; see _measureBoundsOnDevice.
+		cl::Kernel _kernelboundsblocks;
+		cl::Kernel _kernelboundsfinal;
+		cl::Buffer _boundsblocksbuffer;   // 6 floats per work group
+		cl::Buffer _boundsfiniteblocks;   // one int per work group
+		cl::Buffer _boundsbuffer;         // 6 floats: min xyz then max xyz
+		cl::Buffer _boundsfinitebuffer;   // one int, 0 when a coordinate is not a number
+		unsigned _boundsblocksfor = 0;    // block count the two above were sized for
 		cl::Kernel _kernelscancounts;
 		cl::Kernel _kernelscanblocksums;
 		cl::Kernel _kerneladdblocksums;

@@ -1216,3 +1216,53 @@ TEST(SpringNetworkOpenCL, AnInteractorsPullReachesTheDevice)
     EXPECT_NEAR(cpu.getParticle(1).getPosition().getX(), 50.0f, 1.0e-4f);
     EXPECT_NEAR(gpu.getParticle(1).getPosition().getX(), 50.0f, 1.0e-4f);
 }
+
+// The bounding box the cell grids are measured against, computed on the device
+// instead of by a host loop over the positions.
+//
+// That host loop is one of the three reasons the positions have to come down
+// at every step -- the others being the frame check and the list rebuild
+// criterion -- so it is the first brick of getting them to follow the sample
+// rate like everything else already does. It has to give the SAME box: a
+// reduction that disagrees by a hair sizes every grid differently, which
+// changes which pairs each walk finds, and nothing about that looks wrong from
+// outside.
+TEST(SpringNetworkOpenCL, TheDeviceMeasuresTheSameBoxAsTheHost)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration config;
+    // 2000 particles is eight blocks of 256 with a partial one at the end,
+    // which is where a tree reduction goes wrong if it goes wrong at all.
+    const unsigned N = 2000;
+    buildParticleCloud(gpu, config, N, /*extent=*/60.0f);
+
+    // The extremes are PLACED, and placed in the LAST block. A cloud alone
+    // leaves them wherever chance puts them: a first version of this test
+    // passed happily with the final block dropped from the reduction, because
+    // the six extremes happened to sit earlier. Pinning them here is what
+    // makes the test able to fail.
+    gpu.getParticle(N - 1).setPosition(Vector3f(-999.0f, -888.0f, -777.0f));
+    gpu.getParticle(N - 2).setPosition(Vector3f(555.0f, 666.0f, 777.0f));
+
+    // Measured on the structure as given, before any step moves it, so the
+    // expected answer is exactly the two corners above.
+    gpu.initRun();
+
+    float lo[3], hi[3];
+    ASSERT_TRUE(gpu._measureBoundsOnDevice(lo, hi)) << "the device reported a non-finite coordinate";
+
+    const float expectedlo[3] = {-999.0f, -888.0f, -777.0f};
+    const float expectedhi[3] = {555.0f, 666.0f, 777.0f};
+
+    // Exactly equal, not nearly: a minimum and a maximum are selections, not
+    // sums, so no reordering can change them and there is no tolerance to
+    // grant.
+    for (int d = 0; d < 3; ++d)
+    {
+        EXPECT_FLOAT_EQ(lo[d], expectedlo[d]) << "lower bound on axis " << d;
+        EXPECT_FLOAT_EQ(hi[d], expectedhi[d]) << "upper bound on axis " << d;
+    }
+}
