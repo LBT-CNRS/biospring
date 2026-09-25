@@ -1226,10 +1226,19 @@ void SpringNetworkOpenCL::idleRun()
 			}
 		}
 
+    // Two paths, matching the CPU's for the same reason: with the thermostat
+    // off the friction stays folded into the force by its own kernel, exactly
+    // as before, so every existing .msp keeps its trajectory. With it on, the
+    // friction moves into the integration kernel, between the kick and the
+    // drift, where a bath has to act -- and where the static particles have
+    // already been filtered out by the isdynamic guard.
     const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
-    _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
-                                  viscosity, _nbparticlesocl);
-	_pendingevents.emplace_back(_event, &dampingtime);
+    if (!isThermostatEnabled())
+        {
+        _event = _kernelfunctordamping(_inoutForceBuffer, _inoutVelocityBuffer,
+                                      viscosity, _nbparticlesocl);
+        _pendingevents.emplace_back(_event, &dampingtime);
+        }
 
 
 	// Nothing to add and nothing to send when no interactor pulled: this used to
@@ -1258,7 +1267,10 @@ void SpringNetworkOpenCL::idleRun()
 
     _event = _kernelfunctorintegration(_inoutPositionBuffer, _inoutVelocityBuffer,
                                       _inoutForceBuffer, _inMassBuffer, _inDynamicBuffer,
-                                      getTimeStep(), _nbparticlesocl);
+                                      getTimeStep(), isThermostatEnabled() ? viscosity : 0.0f,
+                                      getBoltzmannTemperature(),
+                                      ++_thermostatstep, THERMOSTAT_SEED,
+                                      _nbparticlesocl);
 	_pendingevents.emplace_back(_event, &integrationtime);
 
 	// Four transfers, ONE synchronisation. These were four BLOCKING calls with a

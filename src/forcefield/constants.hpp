@@ -103,6 +103,19 @@ const double GLOBAL_KINETIC_ENERGY_CONVERT = (ANGSTROM_TO_METER * SECOND_TO_FEMT
 const double GLOBAL_SPRING_FORCE_CONVERT =
     KJOULE_TO_JOULE / AVOGADRO_NUMBER * METER_TO_ANGSTROM * NEWTON_TO_DALTON_ANGSTROM_PER_FEMTOSECOND_2;
 
+// Boltzmann's constant in the INTEGRATOR's units, Da.A^2.fs-2 per kelvin,
+// rather than the molar kJ.mol-1.K-1 the reported energies use. Written as the
+// molar gas constant divided by the same factor that turns the integrator's
+// kinetic energy into a molar one, so the two can never disagree about what a
+// kelvin is worth.
+//
+// 8.314e-7 Da.A^2.fs-2.K-1, i.e. 2.494e-4 at 300 K -- which for a gamma of
+// 0.1 Da.fs-1 and a 2 fs step puts the thermostat's kick at about
+// 5e-3 Da.A.fs-2, the same order as a 650 kJ.mol-1.A-2 spring displaced by
+// a tenth of an angstrom. Thermal agitation, not a hammer blow.
+const double BOLTZMANN_INTEGRATOR_UNITS =
+    BOLTZMANJPERK * AVOGADRO_NUMBER * JOULE_TO_KJOULE / GLOBAL_KINETIC_ENERGY_CONVERT;
+
 // Same role as GLOBAL_SPRING_FORCE_CONVERT, for the IMPALA membrane
 // insertion force (raw expression built from ALIP/transfer energy, both in
 // kJ.mol-1).

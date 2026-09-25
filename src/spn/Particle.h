@@ -171,6 +171,15 @@ class Particle : public ParticleProperty
 
     void applyViscosity(float viscosity);
 
+    // Kick, thermostat, drift. The thermostat sits BETWEEN the two halves on
+    // purpose: it acts on the velocity, so it has to see the one the force has
+    // just changed, and the position has to move with the one the bath has
+    // just changed. Folding it into the force instead -- which is what
+    // applyViscosity does -- is a first-order approximation of the same thing
+    // and makes the stationary temperature drift with the timestep.
+    void IntegrateEulerLangevin(float timestep, float gamma, float boltzmanntemperature,
+                                unsigned step, unsigned index, unsigned seed);
+
     void computeStericNeighbors();
     void computeElectrostaticNeighbors();
     void computeHydrophobicNeighbors();

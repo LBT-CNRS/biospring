@@ -472,7 +472,15 @@ void SpringNetwork::computeParticleForces()
         if (isStericEnabled())
             p.addStericForce(_stericPairScratch[i]);
 
-        if (isViscosityEnabled())
+        // Two paths on purpose. With the thermostat OFF this is the one this
+        // code has always taken -- friction folded into the force, integrated
+        // with everything else -- so every existing .msp keeps the trajectory
+        // it had, to the bit. With the thermostat ON the friction moves to the
+        // velocity update, where a bath has to act, and the two are no longer
+        // the same arithmetic: the exact update damps the force it has just
+        // added, this one does not. Both are legitimate splittings; only one
+        // of them is what 45 validated example modes were measured against.
+        if (isViscosityEnabled() && !isThermostatEnabled())
             p.applyViscosity(getViscosity());
 
         if (isIMPEnabled())
@@ -564,6 +572,13 @@ void SpringNetwork::computeParticleForces()
 void SpringNetwork::updateParticlePositions()
 {
     float kinetic_energy_particle = 0.0;
+    // Read once rather than per particle: they are the same for everybody, and
+    // the noise is keyed on the particle's own index so two threads never draw
+    // the same number.
+    const bool thermostatting = isThermostatEnabled();
+    const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
+    const float boltzmanntemperature = getBoltzmannTemperature();
+    _thermostatstep++;
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel default(shared)
 #endif
@@ -578,6 +593,10 @@ void SpringNetwork::updateParticlePositions()
             Particle & p = getParticle(_dynamicparticules[static_cast<size_t>(i)]);
             if (p.isRigid())
                 rigidbody::RigidBody::integrateParticleVelocity(p, i, getTimeStep());
+            else if (thermostatting)
+                p.IntegrateEulerLangevin(getTimeStep(), viscosity, boltzmanntemperature,
+                                         _thermostatstep,
+                                         _dynamicparticules[static_cast<size_t>(i)], THERMOSTAT_SEED);
             else
                 p.IntegrateEuler(getTimeStep());
 
@@ -760,6 +779,8 @@ void SpringNetwork::_displayFrameData()
     logging::info("Step: %5d", _nbiter);
     logging::info("Framerate: %5.2f", _framerate);
     logging::info("Kinetic energy: %5.2f kJ.mol-1", _energies.kinetic);
+    logging::info("Temperature: %5.1f K over %zu integrated particles", getInstantaneousTemperature(),
+                  _dynamicparticules.size());
     if (isSpringEnabled())
     {
         logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
@@ -1213,6 +1234,21 @@ void SpringNetwork::_setupHydrophobic()
 
 void SpringNetwork::_setupHydrogenBond()
 {
+    // The thermostat's friction IS viscosity.value. Asking for one without the
+    // other is asking a solvent to kick without dragging, which holds no
+    // temperature at all -- the velocity decay would be 1, the kick would come
+    // out of sqrt(1 - 1) = 0, and the run would silently be the unthermostatted
+    // one. Better to say so than to let someone report a temperature they
+    // never had.
+    if (isThermostatEnabled() && !isViscosityEnabled())
+        logging::die("thermostat.enable needs viscosity.enable: the thermostat's friction is viscosity.value, "
+                     "and without it there is nothing for the random kicks to balance.");
+    if (isThermostatEnabled() && getTemperature() <= 0.0f)
+        logging::die("thermostat.temperature must be > 0 K when the thermostat is enabled "
+                     "(use thermostat.enable = 0 for a pure viscous brake).");
+    if (isThermostatEnabled())
+        logging::info("Langevin thermostat: %.1f K, friction %.4g Da.fs-1.", getTemperature(), getViscosity());
+
     if (isHydrogenBondEnabled())
     {
         if (getHydrogenBondCutoff() < 1e-6)

@@ -393,6 +393,48 @@ class SpringNetwork
     // A NEGATIVE value in the .msp -- the default -- means "let the backend
     // choose", because the right answer differs between them. Zero is a real
     // choice and is honoured: on the CPU it means no list at all.
+    // A fixed seed: two runs of the same input draw the same noise, which is
+    // what makes a thermostatted run reproducible and keeps the CPU and the
+    // device comparable to the digit. A per-run seed belongs in the .msp, not
+    // in a silent call to the clock.
+    static constexpr unsigned THERMOSTAT_SEED = 0x5eed1234U;
+
+    // Which step's noise to draw. Deliberately NOT _nbiter: the two backends
+    // increment that at opposite ends of their step -- the CPU before
+    // integrating, this backend after -- so keying the generator on it made
+    // them draw from two different places and their trajectories parted
+    // immediately. This one is incremented once per integration, by whoever
+    // integrates, so both sides agree on what step they are on.
+    unsigned _thermostatstep = 0;
+
+    bool isThermostatEnabled() const { return _config.thermostat.enable; }
+
+    // The temperature the run is ACTUALLY at, from equipartition over the
+    // integrated degrees of freedom: E_kin = (3/2) N kB T. Reported rather
+    // than assumed -- a thermostat that is asked for 300 K and delivers 260 is
+    // a thing you want to see, and before this there was no number at all to
+    // look at. Static particles are not integrated and do not count.
+    float getInstantaneousTemperature() const
+    {
+        const size_t n = _dynamicparticules.size();
+        if (n == 0)
+            return 0.0f;
+        return _energies.kinetic /
+               (1.5f * static_cast<float>(n) *
+                static_cast<float>(biospring::forcefield::BOLTZMANJPERK * biospring::forcefield::AVOGADRO_NUMBER *
+                                   biospring::forcefield::JOULE_TO_KJOULE));
+    }
+    float getTemperature() const { return static_cast<float>(_config.thermostat.temperature); }
+    // kB*T in the integrator's own units, which is what the thermostat wants.
+    // Zero when the thermostat is off, and that is what turns the velocity
+    // update back into the pure brake this code had before.
+    float getBoltzmannTemperature() const
+    {
+        return isThermostatEnabled()
+                   ? static_cast<float>(biospring::forcefield::BOLTZMANN_INTEGRATOR_UNITS * _config.thermostat.temperature)
+                   : 0.0f;
+    }
+
     float getNeighborSkin() const
     {
         const double asked = _config.sim.neighborskin;

@@ -274,6 +274,44 @@ class GridSetting : public SettingBase
     }
 };
 
+// The Langevin thermostat: a switch of its own, so it can be turned off
+// without touching the temperature and on without having to remember that a
+// temperature of zero means "off".
+//
+// Its FRICTION is viscosity.value -- not a second coefficient. Friction and
+// the random kicks are one physical effect, the solvent this model does not
+// simulate, and the fluctuation-dissipation relation fixes the size of one
+// from the other. Enabling the thermostat with the viscosity off would ask for
+// kicks from a solvent that does not drag, which is not a thermostat; setup()
+// refuses it rather than running a model nobody asked for.
+class ThermostatSetting : public SettingBase
+{
+  public:
+    bool enable;
+    double temperature;   // K
+
+    ThermostatSetting(const std::string & name) : SettingBase(name), enable(false), temperature(300.0)
+    {
+        _parameterNames = {"enable", "temperature"};
+    }
+
+    void setFromString(const std::string & param, const std::string & s) override
+    {
+        if (param == "enable")
+            _parse_bool(enable, s, param);
+        else if (param == "temperature")
+            utils::string::from_string<decltype(temperature)>(temperature, s);
+        else
+            logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
+    }
+
+    void print(std::ostream & os = std::cout) const override
+    {
+        _mspFormatter.print("enable", enable, os);
+        _mspFormatter.print("temperature", temperature, os);
+    }
+};
+
 class SimulationSetting : public SettingBase
 {
   public:

@@ -1,5 +1,7 @@
 
 #include "Particle.h"
+#include "forcefield/shared/random_shared.h"
+#include "forcefield/shared/langevin_shared.h"
 
 #include "Spring.h"
 #include "SpringNetwork.h"
@@ -110,6 +112,40 @@ void Particle::IntegrateVelocityVerlet(float timestep)
 void Particle::IntegrateEuler(float timestep)
 {
     _integrateForce(timestep);
+    _integrateVelocity(timestep);
+}
+
+// The same two halves, with the bath between them.
+//
+// gamma is viscosity.value, unchanged; what is new is that it now also decides
+// how hard the bath KICKS, because friction and noise are one effect and the
+// fluctuation-dissipation relation ties their sizes together. At
+// boltzmanntemperature == 0 the kick is zero and this is a pure brake -- the
+// behaviour this code had before, and still the default.
+//
+// The noise is drawn from a counter-based generator keyed on (step, particle,
+// component), so it needs no state, is safe to call from an OpenMP loop, and
+// is the SAME sequence the device draws. That last point is what keeps the two
+// backends comparable to the digit.
+void Particle::IntegrateEulerLangevin(float timestep, float gamma, float boltzmanntemperature,
+                                      unsigned step, unsigned index, unsigned seed)
+{
+    if (getMass() > 0.0f)
+        _velocity = _velocity + (_force / getMass()) * timestep;
+
+    const float decay = biospring_langevin_decay(gamma, getMass(), timestep);
+    const float kick = biospring_langevin_kick(decay, getMass(), boltzmanntemperature);
+    _velocity = _velocity * decay;
+    if (kick > 0.0f)
+        _velocity = _velocity + Vector3f(kick * biospring_random_normal(step, index, 0, seed),
+                                         kick * biospring_random_normal(step, index, 1, seed),
+                                         kick * biospring_random_normal(step, index, 2, seed));
+
+    // After the bath, not before: the reported kinetic energy has to be the
+    // one the positions are about to move with.
+    const float speed = _velocity.norm();
+    _kineticenergy = 0.5f * getMass() * (speed * speed) * biospring::forcefield::GLOBAL_KINETIC_ENERGY_CONVERT;
+
     _integrateVelocity(timestep);
 }
 

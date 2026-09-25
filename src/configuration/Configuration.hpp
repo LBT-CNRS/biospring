@@ -28,6 +28,7 @@ class Configuration
     ImpalaSetting imp;
     InsertionVectorSetting ivector;
     ViscositySetting viscosity;
+    ThermostatSetting thermostat;
     TrajectorySetting pdbtraj;
     TrajectorySetting xtctraj;
     TrajectorySetting csvsample;
@@ -73,7 +74,7 @@ class Configuration
 
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"), hbond("hbond"),
-          electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"),
+          electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"), thermostat("thermostat"),
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"),
           electrostaticgrid("electrostaticgrid"), densitygrid("densitygrid"), probe("probe"),
           rigidbody("rigidbody"), dihedralphi("dihedralphi"), dihedralpsi("dihedralpsi"),
@@ -90,6 +91,7 @@ class Configuration
         _register(imp);
         _register(ivector);
         _register(viscosity);
+        _register(thermostat);
         _register(pdbtraj);
         _register(xtctraj);
         _register(csvsample);
@@ -126,6 +128,7 @@ class Configuration
         ivector.print();
         os << "\n";
         viscosity.print();
+        thermostat.print();
         os << "\n";
         pdbtraj.print();
         os << "\n";
@@ -228,6 +231,8 @@ class Configuration
             ivector.setFromString(name, value);
         else if (group == viscosity.name)
             viscosity.setFromString(name, value);
+        else if (group == thermostat.name)
+            thermostat.setFromString(name, value);
         else if (group == pdbtraj.name)
             pdbtraj.setFromString(name, value);
         else if (group == xtctraj.name)
@@ -279,7 +284,9 @@ inline Configuration defaultConfiguration()
     config.sim.nbsteps = -1;
     config.sim.timestep = 0.01;
     config.sim.samplerate = 100;
-    config.sim.neighborskin = -1.0; // negative: the backend chooses, see getNeighborSkin
+    config.sim.neighborskin = -1.0;
+    config.thermostat.enable = false;   // see ThermostatSetting
+    config.thermostat.temperature = 300.0; // negative: the backend chooses, see getNeighborSkin
 
     config.steric.enable = false;
     config.steric.gridscale = 1.0;

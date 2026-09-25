@@ -60,6 +60,7 @@ endfunction()
 
 # List of modules to be tested.
 set(TEST_MODULES
+    thermostat
     logging
     measure
     nsearch

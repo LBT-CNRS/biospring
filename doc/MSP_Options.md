@@ -91,6 +91,39 @@ The CPU wants a skin too, and a narrower one, so the two defaults differ on purp
 0.5 A is the outright best on two of them and within 1.7 % on a third; 042's framerate print
 quantises at 4000 steps/s, so its three margins are indistinguishable. Note 034: on the CPU any
 margin at all is worth 57 to 61 %, which is what makes a list worth building there.
+---
+* **thermostat.enable = 0** *(boolean)* Turns the Langevin thermostat on. Off, the default,
+`viscosity.value` is a pure brake: energy only ever leaves the system, so a run is a viscous
+relaxation and not a dynamics at any temperature. Measured on 072.GK, the kinetic energy falls
+from 15.93 to 0.63 kJ.mol-1 over 4000 steps -- 300 K on that system is around 10500.
+
+  Its friction IS `viscosity.value`, not a second coefficient, so `viscosity.enable` must be on
+too and setup refuses the combination otherwise. Friction and the random kicks are one physical
+effect -- the solvent this model does not simulate -- and the fluctuation-dissipation relation
+fixes the size of one from the other. Raising the viscosity therefore no longer just calms a
+run: it couples it harder to the bath, in both directions, and the temperature it settles at is
+unchanged.
+
+* **thermostat.temperature = 300** *(K, float)* The bath temperature, used only when the
+thermostat is enabled.
+
+  The velocity update is the exact solution of the Langevin equation over one step,
+`v <- c.v + sigma.xi` with `c = exp(-gamma.dt/m)`, not a first-order approximation of it, so the
+temperature reached does not drift with the timestep. Measured on 042.FepA, asking for 300 K:
+
+  | timestep (fs) | 2.0 | 1.0 | 0.5 | 0.25 |
+  |---|---:|---:|---:|---:|
+  | kinetic energy (kJ.mol-1) | 834.9 | 815.4 | 824.1 | 809.6 |
+
+  The noise comes from a counter-based generator keyed on (step, particle, component), so a run
+is reproducible from its seed, an OpenMP loop needs no per-thread state, and the CPU and the
+device draw the SAME sequence -- which is what keeps the two backends comparable to the digit.
+
+  **A timestep that was stable without the thermostat may not be with it.** The damping was
+bleeding off the energy that makes a structure move; put it back and the integrator has to cope
+with it. 072.GK ships with 3.0 fs and diverges at 300 K around step 3000, while 1.5 fs holds at
+312 K indefinitely. The reported `Temperature:` line is there to be watched.
+---
 * **simulation.cellsize = 0** *(A, float)* Width of one neighbour-grid cell, for every term at
 once. `0`, the default, gives each term cells the size of its own search radius, so each walks
 the 27 cells around its own. Set it smaller to trade more cells walked for fewer candidates
