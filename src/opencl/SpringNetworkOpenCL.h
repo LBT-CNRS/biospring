@@ -204,6 +204,14 @@ class SpringNetworkOpenCL : public SpringNetwork
 		/// invisible to every walk without a word.
 		bool _frameStillHoldsOnDevice(const CellGrid & grid);
 
+		/// The same question _listsNeedRebuilding answers, asked of the device.
+		/// Public for the same reason as the two above: a criterion that
+		/// disagrees rebuilds too often, which only costs time, or too rarely,
+		/// which silently drops pairs.
+		bool _listsNeedRebuildingOnDevice();
+		/// Records the positions the lists have just been built from.
+		void _snapshotListReferenceOnDevice();
+
 		/// Pushes the Particle objects' positions back down, so a test can
 		/// move one and ask the device about it. Nothing in a run needs this:
 		/// positions travel the other way.
@@ -536,6 +544,11 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// The structure's bounding box, measured on the device. The host loop
 		// this replaces is one of the three reasons the positions had to come
 		// down every step; see _measureBoundsOnDevice.
+		cl::Kernel _kernelsnapshot;
+		cl::Kernel _kernelcheckdrift;
+		cl::Buffer _listreferencebuffer;  // N float4: where the lists were built from
+		cl::Buffer _driftflagbuffer;      // one int: 1 while the lists are still exact
+		unsigned _referencefor = 0;       // particle count the reference was sized for
 		cl::Kernel _kernelresetflag;
 		cl::Kernel _kernelcheckframe;
 		cl::Buffer _frameflagbuffer;      // one int: 1 while every particle is inside

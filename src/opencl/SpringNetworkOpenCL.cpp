@@ -484,6 +484,10 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel(baoabDriftBath)");
 	_kernelbaoabkick  = cl::Kernel(_program, "baoabFinalKick", &_err);
 	checkErr("Kernel(baoabFinalKick)");
+	_kernelsnapshot   = cl::Kernel(_program, "snapshotPositions", &_err);
+	checkErr("Kernel(snapshotPositions)");
+	_kernelcheckdrift = cl::Kernel(_program, "checkDrift", &_err);
+	checkErr("Kernel(checkDrift)");
 	_kernelresetflag  = cl::Kernel(_program, "resetFlag", &_err);
 	checkErr("Kernel(resetFlag)");
 	_kernelcheckframe = cl::Kernel(_program, "checkFrame", &_err);
@@ -1825,6 +1829,74 @@ void SpringNetworkOpenCL::uploadPositionsForTesting()
 	_err = _queue.enqueueWriteBuffer(_inoutPositionBuffer, CL_TRUE, 0,
 	                                 sizeof(float4) * _nbparticlesocl, _particlepositions);
 	checkErr("enqueueWriteBuffer(positions for testing)");
+	}
+
+
+// The reference the drift is measured against, kept on the device so it never
+// travels in either direction.
+void SpringNetworkOpenCL::_snapshotListReferenceOnDevice()
+	{
+	if (_nbparticlesocl == 0)
+		return;
+	if (_referencefor != _nbparticlesocl)
+		{
+		_listreferencebuffer = cl::Buffer(_context, CL_MEM_READ_WRITE,
+		                                  sizeof(float4) * _nbparticlesocl, NULL, &_err);
+		checkErr("Buffer(list reference)");
+		_referencefor = _nbparticlesocl;
+		}
+	const unsigned wg = WORK_GROUP_SIZE;
+	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+	_kernelsnapshot.setArg(0, _inoutPositionBuffer);
+	_kernelsnapshot.setArg(1, _listreferencebuffer);
+	_kernelsnapshot.setArg(2, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelsnapshot, cl::NullRange,
+	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(snapshotPositions)");
+	_pendingevents.emplace_back(_event, &celllisttime);
+	}
+
+
+// The drift criterion, on the device. Same answer as _listsNeedRebuilding.
+bool SpringNetworkOpenCL::_listsNeedRebuildingOnDevice()
+	{
+	if (_nbparticlesocl == 0 || _referencefor != _nbparticlesocl)
+		return true;   // nothing to compare against yet
+
+	if (_driftflagbuffer() == NULL)
+		{
+		_driftflagbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(int), NULL, &_err);
+		checkErr("Buffer(drift flag)");
+		}
+
+	const unsigned wg = WORK_GROUP_SIZE;
+	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
+	const float half = 0.5f * getNeighborSkin();
+	const int probeid = isProbeEnabled() ? static_cast<int>(SpringNetwork::getNumberOfParticles()) : -1;
+
+	_kernelresetflag.setArg(0, _driftflagbuffer);
+	_err = _queue.enqueueNDRangeKernel(_kernelresetflag, cl::NullRange,
+	                                   cl::NDRange(1), cl::NDRange(1), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(resetFlag)");
+	_pendingevents.emplace_back(_event, &celllisttime);
+
+	unsigned a = 0;
+	_kernelcheckdrift.setArg(a++, _inoutPositionBuffer);
+	_kernelcheckdrift.setArg(a++, _listreferencebuffer);
+	_kernelcheckdrift.setArg(a++, half * half);
+	_kernelcheckdrift.setArg(a++, probeid);
+	_kernelcheckdrift.setArg(a++, cl::__local(sizeof(int) * wg));
+	_kernelcheckdrift.setArg(a++, _driftflagbuffer);
+	_kernelcheckdrift.setArg(a++, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelcheckdrift, cl::NullRange,
+	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(checkDrift)");
+	_pendingevents.emplace_back(_event, &celllisttime);
+
+	int stillgood = 0;
+	_err = _queue.enqueueReadBuffer(_driftflagbuffer, CL_TRUE, 0, sizeof(int), &stillgood);
+	checkErr("enqueueReadBuffer(drift flag)");
+	return stillgood == 0;
 	}
 
 

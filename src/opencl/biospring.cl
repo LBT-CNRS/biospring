@@ -1498,6 +1498,68 @@ __kernel void checkFrame(const __global float4 * positions,
 	}
 
 // ======================================================================
+// LIST DRIFT
+//
+// Have the particles moved far enough that the stored neighbour lists are
+// stale? A list is built at cutoff + skin and stays exact until something has
+// moved half the skin from where it stood when the list was made -- two
+// particles each moving half the skin towards each other close exactly the
+// skin between them.
+//
+// The last of the three host passes over the positions, and the same shape as
+// the other two: a local reduction, one atomic per work group, only ever
+// clearing a bit.
+
+// The positions the current lists were built from. Copied on the device, so
+// the reference never travels either.
+__kernel void snapshotPositions(const __global float4 * positions, __global float4 * reference,
+                                const uint N)
+	{
+	uint gid = get_global_id(0);
+	if (gid >= N)
+		return;
+	reference[gid] = positions[gid];
+	}
+
+__kernel void checkDrift(const __global float4 * positions, const __global float4 * reference,
+                         const float halfskinsquared, const int probeid,
+                         __local int * scratch, __global int * flag, const uint N)
+	{
+	uint gid = get_global_id(0);
+	uint lid = get_local_id(0);
+	uint wg = get_local_size(0);
+
+	int stillgood = 1;
+	// The probe moves under someone's hand, by as much as they like, and it is
+	// not what the lists are about: its interactions are the probe kernel's,
+	// pair by pair against everything, with no list at all. Counting its drift
+	// would rebuild every list at every step of an interactive session for
+	// nothing. The host pass skips it and so does the CPU's own searcher.
+	if (gid < N && gid != (uint)probeid)
+		{
+		float3 d = positions[gid].xyz - reference[gid].xyz;
+		float moved = dot(d, d);
+		// Negated, as the host writes it: a NaN fails every comparison, so
+		// `moved <= limit` is false for one and the list is rebuilt. The naive
+		// `moved > limit` would call it unmoved.
+		if (!(moved <= halfskinsquared))
+			stillgood = 0;
+		}
+	scratch[lid] = stillgood;
+	barrier(CLK_LOCAL_MEM_FENCE);
+
+	for (uint stride = wg >> 1; stride > 0u; stride >>= 1)
+		{
+		if (lid < stride)
+			scratch[lid] = scratch[lid] & scratch[lid + stride];
+		barrier(CLK_LOCAL_MEM_FENCE);
+		}
+
+	if (lid == 0u && scratch[0] == 0)
+		atomic_and(flag, 0);
+	}
+
+// ======================================================================
 // EXCLUSIVE PREFIX SCAN
 //
 // The per-particle neighbour COUNTS become the OFFSETS where each particle's

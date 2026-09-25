@@ -1303,3 +1303,44 @@ TEST(SpringNetworkOpenCL, TheDeviceChecksTheFrameLikeTheHost)
             << "a particle a million angstroms away is not inside anything";
     }
 }
+
+// The drift criterion, asked of the device instead of walked on the host.
+//
+// This is the one whose two failure modes are asymmetric. Too eager, and the
+// lists are rebuilt for nothing, which only costs time. Too lazy, and a pair
+// that has come within the cutoff is missing from a list nobody rebuilt, which
+// costs correctness and says nothing.
+TEST(SpringNetworkOpenCL, TheDeviceKnowsWhenTheListsHaveDrifted)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 2000;
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration config;
+    buildParticleCloud(gpu, config, N, /*extent=*/60.0f);
+    gpu.run();
+
+    // With the reference taken from where the particles stand, nothing has
+    // drifted by definition.
+    gpu._snapshotListReferenceOnDevice();
+    EXPECT_FALSE(gpu._listsNeedRebuildingOnDevice())
+        << "a reference just taken cannot already be stale";
+
+    // Half the skin is the threshold. Just under it is not a drift...
+    const float half = 0.5f * gpu.getNeighborSkin();
+    ASSERT_GT(half, 0.0f) << "this test needs a skin to measure against";
+    Vector3f home = gpu.getParticle(N - 1).getPosition();
+    gpu.getParticle(N - 1).setPosition(home + Vector3f(0.9f * half, 0.0f, 0.0f));
+    gpu.uploadPositionsForTesting();
+    EXPECT_FALSE(gpu._listsNeedRebuildingOnDevice())
+        << "nine tenths of half a skin is still inside the margin";
+
+    // ... and just over it is. The particle is the last one, so it lands in
+    // the final block: a reduction that drops that block passes the case above
+    // and fails here, which is the point of moving this one rather than any.
+    gpu.getParticle(N - 1).setPosition(home + Vector3f(1.1f * half, 0.0f, 0.0f));
+    gpu.uploadPositionsForTesting();
+    EXPECT_TRUE(gpu._listsNeedRebuildingOnDevice())
+        << "past half a skin the stored lists can be missing a pair";
+}
