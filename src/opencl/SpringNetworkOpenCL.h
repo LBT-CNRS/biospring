@@ -138,6 +138,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 			unsigned buffersfor = 0;    // particle count the buffers were sized for
 			unsigned capacity = 0;      // what itemsbuffer currently holds
 			unsigned blocksumsfor = 0;  // block count the scan buffers were sized for
+			bool counted = false;       // counts enqueued, total not yet collected
 			float radius = 0.0f;
 			bool valid = false;
 			bool hastargets = false;
@@ -614,7 +615,14 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// The stored neighbours of every enabled pairwise term, rebuilt only
 		// when the positions have moved past half the skin.
 		void _updateNeighbourLists();
-		void _buildNeighbourList(NeighbourList & list, float cutoff,
+		/// The grid walk's arguments, shared by the counting and the filling
+		/// kernel because they walk the same neighbourhood.
+		unsigned _setWalkArgs(cl::Kernel & kernel, const NeighbourList & list, const CellGrid & grid);
+		/// First half of a list build: count, scan, and ask for the total
+		/// WITHOUT waiting. See _enqueueNeighbourCounts for why the wait is not
+		/// here.
+		void _enqueueNeighbourFill(NeighbourList & list, const CellGrid & grid);
+		void _enqueueNeighbourCounts(NeighbourList & list, float cutoff,
 		                         const std::vector<unsigned char> & targets,
 		                         const std::vector<unsigned char> & candidates,
 		                         const CellGrid & grid);
