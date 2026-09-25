@@ -2636,6 +2636,14 @@ void SpringNetworkOpenCL::setForce(unsigned i, float force[3])
 	{
 	if (_particleexternalforces == nullptr || i >= _nbparticlesocl)
 		return;
+	// A zero force is not a pull. biospring-cli registers an MDDriver
+	// interactor whether or not anyone ever connects, and it calls this once
+	// per particle per sync with whatever its force array holds -- zeros, until
+	// somebody grabs something. Raising the flag for those meant uploading the
+	// whole array and launching the kernel at every step of every run to add
+	// nothing: 12.2 us a step on 013.GLIC, whose whole step is 420 us.
+	if (force[0] == 0.0f && force[1] == 0.0f && force[2] == 0.0f)
+		return;
 	// Accumulated, like Particle::addForce, and cleared once the kernel has
 	// read it -- the CPU's forces are reset at the end of every step too, so a
 	// pull lasts exactly the step it was set for.
