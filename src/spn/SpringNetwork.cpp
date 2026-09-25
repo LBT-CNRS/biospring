@@ -641,8 +641,95 @@ void SpringNetwork::computeForces()
     computeParticleForces();
 }
 
+// BAOAB (Leimkuhler & Matthews), the splitting that samples configurations
+// correctly at a timestep where the naive one does not.
+//
+// Its shape is forced by the physics, not by taste: the closing half kick uses
+// the force at the position the step ENDS at, so the force evaluation sits in
+// the middle rather than at the top. It is still exactly ONE evaluation per
+// step -- the force computed here serves the closing kick of this step and the
+// opening kick of the next.
+//
+// idleRun() moves with it, which means an interactor and a written frame both
+// see the position this step reports rather than the one it started from.
+void SpringNetwork::computeStepBAOAB()
+{
+    _meanConstraintsDistances = 0.0;
+
+    // B A O A, on the force left standing by the previous step. initRun() has
+    // evaluated it for the first one.
+    _baoabKickDriftBathDrift();
+
+    idleRun();          // interactors, output, energies reset, step counter
+
+    computeForces();    // at the position the drift just reached
+
+    if (isConstraintEnabled())
+        applyConstraints();
+    if (isRigidBodyEnabled())
+        rigidbody::RigidBodiesManager::SolveRigidBodiesDynamic();
+
+    _baoabFinalKick();
+
+    if (isInsertionVectorEnabled())
+        _updateInsertionVector();
+}
+
+void SpringNetwork::_baoabKickDriftBathDrift()
+{
+    const float viscosity = isViscosityEnabled() ? getViscosity() : 0.0f;
+    const float boltzmanntemperature = getBoltzmannTemperature();
+    _thermostatstep++;
+
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (int i = 0; i < (int)_dynamicparticules.size(); i++)
+    {
+        Particle & p = getParticle(_dynamicparticules[static_cast<size_t>(i)]);
+        if (p.isRigid())
+            continue;   // the rigid-body solver owns these
+        p.baoabKickDriftBathDrift(getTimeStep(), viscosity, boltzmanntemperature, _thermostatstep,
+                                  _dynamicparticules[static_cast<size_t>(i)], THERMOSTAT_SEED);
+    }
+
+    // The grids have to follow the motion before the force is evaluated on it.
+    _markNeighborSearchesDirty();
+    _updateNeighborSearches();
+}
+
+void SpringNetwork::_baoabFinalKick()
+{
+    float kinetic_energy_particle = 0.0f;
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for reduction(+ : kinetic_energy_particle) schedule(static)
+#endif
+    for (int i = 0; i < (int)_dynamicparticules.size(); i++)
+    {
+        Particle & p = getParticle(_dynamicparticules[static_cast<size_t>(i)]);
+        if (p.isRigid())
+            continue;
+        p.baoabFinalKick(getTimeStep());
+
+        const float x = p.getPosition().getX();
+        const float y = p.getPosition().getY();
+        const float z = p.getPosition().getZ();
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+            logging::die("Found non-finite position for particle %d.", p.getId());
+
+        kinetic_energy_particle += p.getKineticEnergy();
+    }
+    _energies.kinetic += kinetic_energy_particle;
+}
+
 void SpringNetwork::computeStep()
 {
+    if (isThermostatEnabled())
+    {
+        computeStepBAOAB();
+        return;
+    }
+
     idleRun();
     _meanConstraintsDistances = 0.0;
 
@@ -728,6 +815,16 @@ void SpringNetwork::initRun()
         {
             interactor->startInteractionThread();
         }
+    }
+
+    // BAOAB opens each step with a half kick on the force left standing by the
+    // previous one. The first step has no previous one, so the force at the
+    // starting structure is evaluated here. Without it the first half step
+    // would kick on zero and the trajectory would start half a step behind.
+    if (isThermostatEnabled())
+    {
+        _updateNeighborSearches();
+        computeForces();
     }
 }
 

@@ -180,6 +180,15 @@ class Particle : public ParticleProperty
     void IntegrateEulerLangevin(float timestep, float gamma, float boltzmanntemperature,
                                 unsigned step, unsigned index, unsigned seed);
 
+    // BAOAB, in two halves because the force has to be re-evaluated between
+    // them. B A O A first, then the caller rebuilds the force at the new
+    // position, then the closing B. Splitting the step this way rather than
+    // kicking once at the start is what makes the sampled distribution right
+    // at a large timestep -- see Leimkuhler & Matthews.
+    void baoabKickDriftBathDrift(float timestep, float gamma, float boltzmanntemperature,
+                                 unsigned step, unsigned index, unsigned seed);
+    void baoabFinalKick(float timestep);
+
     void computeStericNeighbors();
     void computeElectrostaticNeighbors();
     void computeHydrophobicNeighbors();

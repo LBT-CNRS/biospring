@@ -407,6 +407,14 @@ class SpringNetwork
     // integrates, so both sides agree on what step they are on.
     unsigned _thermostatstep = 0;
 
+    // BAOAB, used only when the thermostat is on. It has to re-evaluate the
+    // force in the MIDDLE of the step, so it cannot reuse computeStep()'s
+    // "forces then integrate" shape and gets its own; every .msp that does not
+    // ask for a thermostat keeps the old path untouched.
+    void computeStepBAOAB();
+    void _baoabKickDriftBathDrift();
+    void _baoabFinalKick();
+
     bool isThermostatEnabled() const { return _config.thermostat.enable; }
 
     // The temperature the run is ACTUALLY at, from equipartition over the

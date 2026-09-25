@@ -96,6 +96,14 @@ TEST(Thermostat, WithoutItTheSystemCools)
 // uses does not. Getting this wrong is quiet: the same .msp settles at two
 // different temperatures at 2 fs and at 3 fs, and nothing says which one was
 // asked for.
+//
+// Note what this does and does not cover. These particles feel no force, so
+// the splitting is exact and what is tested is the BATH alone. With a force
+// present, BAOAB's kinetic temperature carries an O(dt^2) error -- measured on
+// 042.FepA it reads 268 K at 2 fs against 300 at 0.5 -- while its
+// CONFIGURATIONAL averages do not, which is the whole reason to use it. Judging
+// that integrator by its kinetic temperature measures the one thing it does not
+// set out to improve.
 TEST(Thermostat, TheTemperatureDoesNotDependOnTheTimestep)
 {
     float measured[3];
@@ -111,6 +119,39 @@ TEST(Thermostat, TheTemperatureDoesNotDependOnTheTimestep)
 
     for (int k = 0; k < 3; ++k)
         EXPECT_NEAR(measured[k], 300.0f, 15.0f) << "at timestep " << timesteps[k] << " fs";
+}
+
+// Every shipped example enables viscosity and none enables the thermostat, so
+// the switch being off has to mean EXACTLY what it meant before the thermostat
+// existed -- not "almost". Measured over the 46 CPU modes that use viscosity,
+// 199 reported energies are identical to the bit against a run predating the
+// feature; this pins the property so a later change cannot quietly break it.
+//
+// The trap it guards against is the obvious refactor: making the TEMPERATURE
+// alone decide, so that a .msp carrying a leftover thermostat.temperature
+// silently starts thermostatting. The switch decides, and nothing else.
+TEST(Thermostat, AnUnaskedTemperatureChangesNothing)
+{
+    Vector3f cold, warm;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        spn::SpringNetwork network;
+        configuration::Configuration config;
+        buildFreeGas(network, config, 200, 0.0, 1.0);
+        // buildFreeGas leaves the thermostat off at temperature 0; the second
+        // pass leaves it off with a temperature set, which must not matter.
+        config.thermostat.enable = false;
+        config.thermostat.temperature = (pass == 0) ? 0.0 : 300.0;
+        network.setup(config);
+        for (unsigned i = 0; i < network.getNumberOfParticles(); ++i)
+            network.getParticle(i).setVelocity(Vector3f(0.05f, -0.03f, 0.02f));
+        network.run();
+        (pass == 0 ? cold : warm) = network.getParticle(7).getPosition();
+    }
+
+    EXPECT_FLOAT_EQ(cold.getX(), warm.getX());
+    EXPECT_FLOAT_EQ(cold.getY(), warm.getY());
+    EXPECT_FLOAT_EQ(cold.getZ(), warm.getZ());
 }
 
 // The generator has no state on purpose: it is called from an OpenMP loop and

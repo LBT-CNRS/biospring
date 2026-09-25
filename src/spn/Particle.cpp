@@ -127,6 +127,45 @@ void Particle::IntegrateEuler(float timestep)
 // component), so it needs no state, is safe to call from an OpenMP loop, and
 // is the SAME sequence the device draws. That last point is what keeps the two
 // backends comparable to the digit.
+// B A O A: half kick with the force standing from the previous step, half
+// drift, the bath over the WHOLE step, half drift. The force is consumed here
+// and reset, because what the closing kick needs is the force at the position
+// this leaves behind, which nobody has computed yet.
+void Particle::baoabKickDriftBathDrift(float timestep, float gamma, float boltzmanntemperature,
+                                       unsigned step, unsigned index, unsigned seed)
+{
+    const float half = 0.5f * timestep;
+    if (getMass() > 0.0f)
+        _velocity = _velocity + (_force / getMass()) * half;   // B
+
+    _previousposition = _position;
+    _position = _position + _velocity * half;                  // A
+
+    const float decay = biospring_langevin_decay(gamma, getMass(), timestep);
+    const float kick = biospring_langevin_kick(decay, getMass(), boltzmanntemperature);
+    _velocity = _velocity * decay;                             // O, over the full step
+    if (kick > 0.0f)
+        _velocity = _velocity + Vector3f(kick * biospring_random_normal(step, index, 0, seed),
+                                         kick * biospring_random_normal(step, index, 1, seed),
+                                         kick * biospring_random_normal(step, index, 2, seed));
+
+    _position = _position + _velocity * half;                  // A
+
+    resetForce();
+}
+
+// The closing half kick, with the force at the position the half above left.
+// The reported velocity and kinetic energy are the ones after it, which is the
+// whole reason the step is not written as a single merged kick: the merged
+// form reports a velocity half a step out of date.
+void Particle::baoabFinalKick(float timestep)
+{
+    if (getMass() > 0.0f)
+        _velocity = _velocity + (_force / getMass()) * (0.5f * timestep);
+    const float speed = _velocity.norm();
+    _kineticenergy = 0.5f * getMass() * (speed * speed) * biospring::forcefield::GLOBAL_KINETIC_ENERGY_CONVERT;
+}
+
 void Particle::IntegrateEulerLangevin(float timestep, float gamma, float boltzmanntemperature,
                                       unsigned step, unsigned index, unsigned seed)
 {
