@@ -133,12 +133,14 @@ class SpringNetworkOpenCL : public SpringNetwork
 			cl::Buffer offsetsbuffer;   // N + 1 uints
 			cl::Buffer itemsbuffer;     // `total` uints
 			cl::Buffer countsbuffer;    // N uints, the first pass's answer
+			cl::Buffer blocksumsbuffer; // one uint per work group, for the scan
+			cl::Buffer totalbuffer;     // one uint: the grand total
 			cl::Buffer targetsbuffer;    // N uchars: who gets a list at all
 			cl::Buffer candidatesbuffer; // N uchars: who may appear in one
-			std::vector<unsigned> offsets;
-			std::vector<unsigned> counts;
 			unsigned total = 0;
+			unsigned buffersfor = 0;    // particle count the buffers were sized for
 			unsigned capacity = 0;      // what itemsbuffer currently holds
+			unsigned blocksumsfor = 0;  // block count the scan buffers were sized for
 			float radius = 0.0f;
 			bool valid = false;
 			bool hastargets = false;
@@ -525,6 +527,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelhbondrepulsion;
 		cl::Kernel _kernelbaoabdrift;
 		cl::Kernel _kernelbaoabkick;
+		cl::Kernel _kernelscancounts;
+		cl::Kernel _kernelscanblocksums;
+		cl::Kernel _kerneladdblocksums;
 		// BAOAB moves the positions BEFORE the forces are evaluated, so the
 		// grids and the neighbour lists have to be measured on the moved ones.
 		// The host only has last step's copy, hence this extra read -- the one

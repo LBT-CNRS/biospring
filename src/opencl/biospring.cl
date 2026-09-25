@@ -1335,6 +1335,81 @@ __kernel void external(__global float4 * forces,   const __global float4 * exter
 
 
 
+// ======================================================================
+// EXCLUSIVE PREFIX SCAN
+//
+// The per-particle neighbour COUNTS become the OFFSETS where each particle's
+// slice of the item array begins. The host used to do it: read the counts
+// down, add them up serially, send the offsets back.
+//
+// On a machine with unified memory that costs almost nothing in bytes -- the
+// two arrays never travel -- so this buys no speed HERE. It buys it on a
+// discrete card, where 100 kB each way is a real transfer, and that is the
+// machine most OpenCL deployments are.
+//
+// Hillis-Steele inside a block rather than Blelloch: more work in principle
+// (O(n log n) against O(n)) and half the code, with no bank conflict to reason
+// about, on blocks of 256.
+__kernel void scanCounts(const __global uint * counts, __global uint * offsets,
+                         __global uint * blocksums, __local uint * scratch, const uint N)
+	{
+	uint gid = get_global_id(0);
+	uint lid = get_local_id(0);
+	uint wg = get_local_size(0);
+
+	uint mine = (gid < N) ? counts[gid] : 0u;
+	scratch[lid] = mine;
+	barrier(CLK_LOCAL_MEM_FENCE);
+
+	for (uint stride = 1; stride < wg; stride <<= 1)
+		{
+		uint add = (lid >= stride) ? scratch[lid - stride] : 0u;
+		barrier(CLK_LOCAL_MEM_FENCE);
+		scratch[lid] += add;
+		barrier(CLK_LOCAL_MEM_FENCE);
+		}
+
+	uint inclusive = scratch[lid];
+	if (gid < N)
+		offsets[gid] = inclusive - mine;      // exclusive is inclusive shifted
+	if (lid == wg - 1u)
+		blocksums[get_group_id(0)] = inclusive;
+	}
+
+// The block totals, scanned in turn. One work item walking them: there are
+// N/256 -- 98 for the nucleosome, 146 for the capsid -- and a parallel scan of
+// a hundred entries costs more in launch than it saves.
+__kernel void scanBlockSums(__global uint * blocksums, __global uint * total, const uint nblocks)
+	{
+	if (get_global_id(0) != 0)
+		return;
+	uint running = 0;
+	for (uint b = 0; b < nblocks; b++)
+		{
+		uint v = blocksums[b];
+		blocksums[b] = running;
+		running += v;
+		}
+	total[0] = running;
+	}
+
+// Each block's offsets shifted by everything before it, and the grand total
+// parked at offsets[N] where the fill kernel looks for the last slice's end.
+//
+// blocksize is PASSED, not read from get_local_size(0): this kernel is
+// launched over N+1 items, so its groups need not line up with the ones
+// scanCounts used, and which block an offset belongs to was decided by THAT
+// launch.
+__kernel void addBlockSums(__global uint * offsets, const __global uint * blocksums,
+                           const __global uint * total, const uint blocksize, const uint N)
+	{
+	uint gid = get_global_id(0);
+	if (gid < N)
+		offsets[gid] += blocksums[gid / blocksize];
+	else if (gid == N)
+		offsets[N] = total[0];
+	}
+
 // BAOAB, first half: half kick on the force standing from the previous step,
 // half drift, the bath over the whole step, half drift. Mirrors
 // Particle::baoabKickDriftBathDrift line for line, including the order of the

@@ -547,6 +547,12 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel(baoabDriftBath)");
 	_kernelbaoabkick  = cl::Kernel(_program, "baoabFinalKick", &_err);
 	checkErr("Kernel(baoabFinalKick)");
+	_kernelscancounts    = cl::Kernel(_program, "scanCounts", &_err);
+	checkErr("Kernel(scanCounts)");
+	_kernelscanblocksums = cl::Kernel(_program, "scanBlockSums", &_err);
+	checkErr("Kernel(scanBlockSums)");
+	_kerneladdblocksums  = cl::Kernel(_program, "addBlockSums", &_err);
+	checkErr("Kernel(addBlockSums)");
 	_kernelhydrophobic = cl::Kernel(_program, "hydrophobic", &_err);
 	checkErr("Kernel::Kernel()");
 	_kernelelectrostaticfield = cl::Kernel(_program, "electrostaticfield", &_err);
@@ -1533,11 +1539,21 @@ void SpringNetworkOpenCL::_updateCellLists()
 std::vector<unsigned> SpringNetworkOpenCL::neighboursFromList(const NeighbourList & list, unsigned i)
 	{
 	std::vector<unsigned> neighbours;
-	if (!list.valid || i + 1 >= list.offsets.size())
+	if (!list.valid || i + 1 > _nbparticlesocl)
 		return neighbours;
 
-	const unsigned first = list.offsets[i];
-	const unsigned last = list.offsets[i + 1];
+	// The two bounds come from the device, because that is where the scan
+	// leaves them. list.offsets, the host mirror, stopped being filled when
+	// the prefix sum moved onto the card -- and nothing in the simulation
+	// loop reads it any more. This accessor exists for the parity tests and
+	// pays for its own data rather than making every step maintain a copy
+	// nobody else wants.
+	unsigned bounds[2] = {0u, 0u};
+	_err = _queue.enqueueReadBuffer(list.offsetsbuffer, CL_TRUE, sizeof(unsigned) * i,
+	                                sizeof(unsigned) * 2, bounds);
+	checkErr("enqueueReadBuffer(list bounds)");
+	const unsigned first = bounds[0];
+	const unsigned last = bounds[1];
 	if (last <= first)
 		return neighbours;
 
@@ -1661,13 +1677,19 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 		}
 	list.hascandidates = upload(candidates, list.candidatesbuffer);
 
-	if (list.counts.size() != _nbparticlesocl)
+	// Sized once per particle count. The two host mirrors that used to live
+	// beside these -- one N uints, one N+1 -- are gone with the prefix sum
+	// they existed for: 900 kB on the capsid, across three lists, that nothing
+	// read any more.
+	if (list.buffersfor != _nbparticlesocl)
 		{
-		list.counts.assign(_nbparticlesocl, 0u);
-		list.offsets.assign(_nbparticlesocl + 1, 0u);
+		list.buffersfor = _nbparticlesocl;
 		list.countsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned) * _nbparticlesocl, NULL, &_err);
 		checkErr("Buffer(counts)");
-		list.offsetsbuffer = cl::Buffer(_context, CL_MEM_READ_ONLY, sizeof(unsigned) * (_nbparticlesocl + 1), NULL, &_err);
+		// READ_WRITE, not READ_ONLY: the scan kernels write these. A kernel
+		// writing to a read-only buffer does not fail -- the write simply does
+		// not happen, and every neighbour list comes back empty.
+		list.offsetsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned) * (_nbparticlesocl + 1), NULL, &_err);
 		checkErr("Buffer(offsets)");
 		}
 
@@ -1703,18 +1725,53 @@ void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff
 	checkErr("enqueueNDRangeKernel(countneighbours)");
 	_pendingevents.emplace_back(_event, listbuildinto);
 
-	_err = _queue.enqueueReadBuffer(list.countsbuffer, CL_TRUE, 0,
-	                                sizeof(unsigned) * _nbparticlesocl, list.counts.data());
-	checkErr("enqueueReadBuffer(counts)");
+	// The counts become offsets on the device: three kernels instead of a read
+	// of the whole counts array, a serial pass over it, and a write back.
+	// Four bytes still cross -- the grand total, which decides whether the
+	// items buffer is big enough, and that is a host allocation.
+	const unsigned nblocks = global / wg;
+	if (list.blocksumsfor != nblocks)
+		{
+		list.blocksumsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned) * nblocks, NULL, &_err);
+		checkErr("Buffer(block sums)");
+		list.totalbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned), NULL, &_err);
+		checkErr("Buffer(scan total)");
+		list.blocksumsfor = nblocks;
+		}
 
-	list.offsets[0] = 0;
-	for (unsigned i = 0; i < _nbparticlesocl; ++i)
-		list.offsets[i + 1] = list.offsets[i] + list.counts[i];
-	list.total = list.offsets[_nbparticlesocl];
+	a = 0;
+	_kernelscancounts.setArg(a++, list.countsbuffer);
+	_kernelscancounts.setArg(a++, list.offsetsbuffer);
+	_kernelscancounts.setArg(a++, list.blocksumsbuffer);
+	_kernelscancounts.setArg(a++, cl::__local(sizeof(unsigned) * wg));
+	_kernelscancounts.setArg(a++, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kernelscancounts, cl::NullRange,
+	                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(scanCounts)");
+	_pendingevents.emplace_back(_event, listbuildinto);
 
-	_err = _queue.enqueueWriteBuffer(list.offsetsbuffer, CL_TRUE, 0,
-	                                 sizeof(unsigned) * (_nbparticlesocl + 1), list.offsets.data());
-	checkErr("enqueueWriteBuffer(offsets)");
+	a = 0;
+	_kernelscanblocksums.setArg(a++, list.blocksumsbuffer);
+	_kernelscanblocksums.setArg(a++, list.totalbuffer);
+	_kernelscanblocksums.setArg(a++, nblocks);
+	_err = _queue.enqueueNDRangeKernel(_kernelscanblocksums, cl::NullRange,
+	                                   cl::NDRange(1), cl::NDRange(1), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(scanBlockSums)");
+	_pendingevents.emplace_back(_event, listbuildinto);
+
+	a = 0;
+	_kerneladdblocksums.setArg(a++, list.offsetsbuffer);
+	_kerneladdblocksums.setArg(a++, list.blocksumsbuffer);
+	_kerneladdblocksums.setArg(a++, list.totalbuffer);
+	_kerneladdblocksums.setArg(a++, wg);
+	_kerneladdblocksums.setArg(a++, _nbparticlesocl);
+	_err = _queue.enqueueNDRangeKernel(_kerneladdblocksums, cl::NullRange,
+	                                   cl::NDRange(global + wg), cl::NDRange(wg), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(addBlockSums)");
+	_pendingevents.emplace_back(_event, listbuildinto);
+
+	_err = _queue.enqueueReadBuffer(list.totalbuffer, CL_TRUE, 0, sizeof(unsigned), &list.total);
+	checkErr("enqueueReadBuffer(scan total)");
 
 	// Grown, never shrunk: the size a structure needs swings from step to step
 	// and reallocating on every rebuild would cost more than the slack.
