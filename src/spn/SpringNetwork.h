@@ -32,7 +32,6 @@
 #include <memory>
 #include <utility>
 
-class SpringNetworkViewer;
 namespace biospring
 {
 namespace spn
@@ -130,7 +129,7 @@ class SpringNetwork
 
   public:
     SpringNetwork()
-        : _viewer(nullptr), _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
+        : _interactors(), _initparticles(), _particles(), _staticparticules(), _dynamicparticules(),
           _chargedparticules(), _hydrophobicparticules(), _probeparticule(), _springs(), _staticsprings(),
           _dynamicsprings(),
           _springForceScratch(), _stericPairScratch(), _electrostaticPairScratch(),
@@ -743,11 +742,6 @@ class SpringNetwork
 
     virtual void setForce(unsigned i, float force[3]);
 
-    // The opaque viewer pointer is always present so enabling the optional
-    // viewer never changes SpringNetwork's ABI or class layout.
-    ::SpringNetworkViewer * _viewer;
-    void setSpringNetworkViewer(::SpringNetworkViewer * viewer) { _viewer = viewer; }
-    ::SpringNetworkViewer * getSpringNetworkViewer() const { return _viewer; }
 
   protected:
     std::vector<Interactor*> _interactors;

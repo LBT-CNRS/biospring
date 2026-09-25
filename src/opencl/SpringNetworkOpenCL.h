@@ -5,9 +5,6 @@
 
 #include "SpringNetwork.h"
 #include "forcefield/shared/torsion_shared.h"
-#ifdef OPENGL_SUPPORT
-	#include "viewer/SpringNetworkViewer.h"
-#endif
 #define __CL_ENABLE_EXCEPTIONS
 
 // cl.hpp is a vendored, unmodified copy of the legacy Khronos OpenCL C++
@@ -226,15 +223,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 		cl::Context * getContext() ;
 		static const char* oclErrorString(cl_int error);
-#ifdef OPENGL_SUPPORT
-		static GLuint createVBO(const void* data, int dataSize, GLenum target, GLenum usage);
-#endif
 
-		/*int _particlevelocitiesvbo;
-		int _particleforcesvbo;
-		int _springsvbo;
-		int _particletospringindexesvbo;
-		int _particleexternalforcesvbo;*/
 		unsigned * _springparticlesindexes;
 		void getOpenCLRessources();
 
@@ -262,7 +251,6 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 
 		cl_int _err;
-		std::vector<cl::Memory> _allvbos;
 
 
 		vector< cl::Platform > _platforms;
@@ -276,12 +264,6 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 		cl::Buffer _inExternalForceBuffer;
 
-		// Whether this RUN shares its buffers with OpenGL. Compiling the
-		// viewer in is a build option; having one on screen is a property of
-		// the run, and only the second decides whether there is a share group,
-		// a VBO to wrap or anything to acquire and release. Without the
-		// distinction a build with the viewer could not run --opencl at all.
-		bool _sharingwithgl = false;
 		cl::Buffer _inMassBuffer;
 		cl::Buffer _inChargeBuffer;
 		cl::Buffer _inRadiusBuffer;

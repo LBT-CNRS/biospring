@@ -33,7 +33,6 @@ option(OPENCL_SUPPORT "Enable the OpenCL backend" OFF)
 # OFF leaves the previous behaviour exactly: find_package(OpenCL) picks the
 # platform's own, as it always did.
 option(OPENCL_ICD_LOADER "Dispatch through a Khronos ICD loader instead of the platform's OpenCL" OFF)
-option(OPENGL_SUPPORT "Enable the OpenGL viewer" OFF)
 option(OPENMP_SUPPORT "Enable OpenMP parallelism" OFF)
 
 # Keep the original, simple install-prefix behavior from the initial CMakeLists.
@@ -103,12 +102,6 @@ if(OPENCL_SUPPORT)
     find_package(OpenCL REQUIRED)
     # The bundled legacy OpenCL C++ header exposes OpenGL interop types.
     find_package(OpenGL REQUIRED)
-endif()
-
-if(OPENGL_SUPPORT)
-    find_package(OpenGL REQUIRED)
-    find_package(GLUT REQUIRED)
-    find_package(GLEW REQUIRED)
 endif()
 
 if(OPENMP_SUPPORT)
@@ -286,10 +279,6 @@ endif()
 
 if(OPENCL_SUPPORT)
     add_subdirectory(src/opencl)
-endif()
-
-if(OPENGL_SUPPORT)
-    add_subdirectory(src/viewer)
 endif()
 
 function(add_biospring_cli_tool tool)
