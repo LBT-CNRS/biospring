@@ -503,6 +503,8 @@ void SpringNetworkOpenCL::createBuffer()
 	checkErr("Kernel(snapshotPositions)");
 	_kernelresetflags = cl::Kernel(_program, "resetFlags", &_err);
 	checkErr("Kernel(resetFlags)");
+	_kernelmarklistusable = cl::Kernel(_program, "markListUsable", &_err);
+	checkErr("Kernel(markListUsable)");
 	_kernelcheckpositions = cl::Kernel(_program, "checkPositions", &_err);
 	checkErr("Kernel(checkPositions)");
 	_kernelboundsblocks = cl::Kernel(_program, "measureBoundsBlocks", &_err);
@@ -797,9 +799,11 @@ void SpringNetworkOpenCL::idleRun()
             {
             _kernelsteric.setArg(a++, _stericlist.offsetsbuffer);
             _kernelsteric.setArg(a++, _stericlist.itemsbuffer);
+            _kernelsteric.setArg(a++, _stericlist.guardbuffer);
             }
         else
             {
+            _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
             _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
             _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
             }
@@ -855,9 +859,11 @@ void SpringNetworkOpenCL::idleRun()
             {
             _kernelelectrostatic.setArg(a++, _electrostaticlist.offsetsbuffer);
             _kernelelectrostatic.setArg(a++, _electrostaticlist.itemsbuffer);
+            _kernelelectrostatic.setArg(a++, _electrostaticlist.guardbuffer);
             }
         else
             {
+            _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
             _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
             _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
             }
@@ -909,9 +915,11 @@ void SpringNetworkOpenCL::idleRun()
             {
             _kernelhydrophobic.setArg(a++, _hydrophobiclist.offsetsbuffer);
             _kernelhydrophobic.setArg(a++, _hydrophobiclist.itemsbuffer);
+            _kernelhydrophobic.setArg(a++, _hydrophobiclist.guardbuffer);
             }
         else
             {
+            _kernelhydrophobic.setArg(a++, sizeof(cl_mem), NULL);
             _kernelhydrophobic.setArg(a++, sizeof(cl_mem), NULL);
             _kernelhydrophobic.setArg(a++, sizeof(cl_mem), NULL);
             }
@@ -1119,6 +1127,7 @@ void SpringNetworkOpenCL::idleRun()
 			                                                           _hydrogenbondcells.width));
 			_kernelhbondrepulsion.setArg(a++, _hydrogenbondlist.offsetsbuffer);
 			_kernelhbondrepulsion.setArg(a++, _hydrogenbondlist.itemsbuffer);
+            _kernelhbondrepulsion.setArg(a++, _hydrogenbondlist.guardbuffer);
 			_kernelhbondrepulsion.setArg(a++, _inSpringBuffer);
 			_kernelhbondrepulsion.setArg(a++, _inSpringIndexesBuffer);
 			_kernelhbondrepulsion.setArg(a++, static_cast<int>(isSpringEnabled() && _nbspringsocl > 0));
@@ -1603,13 +1612,12 @@ unsigned SpringNetworkOpenCL::_setWalkArgs(cl::Kernel & kernel, const NeighbourL
 	}
 
 
-void SpringNetworkOpenCL::_enqueueNeighbourCounts(NeighbourList & list, float cutoff,
+void SpringNetworkOpenCL::_buildNeighbourList(NeighbourList & list, float cutoff,
                                               const std::vector<unsigned char> & targets,
                                               const std::vector<unsigned char> & candidates,
                                               const CellGrid & grid)
 	{
 	list.valid = false;
-	list.counted = false;
 	if (_nbparticlesocl == 0 || grid.ncellstotal == 0 || cutoff <= 0.0f)
 		return;
 
@@ -1646,7 +1654,11 @@ void SpringNetworkOpenCL::_enqueueNeighbourCounts(NeighbourList & list, float cu
 		// not happen, and every neighbour list comes back empty.
 		list.offsetsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned) * (_nbparticlesocl + 1), NULL, &_err);
 		checkErr("Buffer(offsets)");
+		list.guardbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned), NULL, &_err);
+		checkErr("Buffer(list guard)");
 		}
+
+
 
 	const unsigned wg = WORK_GROUP_SIZE;
 	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
@@ -1704,45 +1716,72 @@ void SpringNetworkOpenCL::_enqueueNeighbourCounts(NeighbourList & list, float cu
 	checkErr("enqueueNDRangeKernel(addBlockSums)");
 	_pendingevents.emplace_back(_event, listbuildinto);
 
-	// NOT blocking, and nothing waits for it here. Every enabled term enqueues
-	// its counts this way and ONE finish() in _updateNeighbourLists collects
-	// all of their totals -- four questions, one stop, instead of one stop per
-	// term. A blocking read costs ~0.15 ms whatever it carries, so three of
-	// them inside three chains cost 0.45 ms on a rebuild step, and they also
-	// serialised the chains against each other for good: nothing can overlap
-	// across a point where the host is waiting.
-	_err = _queue.enqueueReadBuffer(list.totalbuffer, CL_FALSE, 0, sizeof(unsigned), &list.total);
-	checkErr("enqueueReadBuffer(scan total)");
-	list.counted = true;
-	}
+	// The FIRST rebuild of a run has no previous total to size its array from,
+	// and a run of one step has only that rebuild -- so it would walk the cells
+	// and never build a list at all. It pays one blocking read, once, and every
+	// rebuild after it pays none.
+	if (list.capacity == 0)
+		{
+		_err = _queue.enqueueReadBuffer(list.totalbuffer, CL_TRUE, 0, sizeof(unsigned), &list.total);
+		checkErr("enqueueReadBuffer(first scan total)");
+		}
 
-
-// The second half: how big the items array has to be is now known, so it can be
-// grown and filled. Every list's counts are already on the device by the time
-// any of this runs.
-void SpringNetworkOpenCL::_enqueueNeighbourFill(NeighbourList & list, const CellGrid & grid)
-	{
-	if (!list.counted)
-		return;
-	list.counted = false;
-
-	const unsigned wg = WORK_GROUP_SIZE;
-	const unsigned global = (_nbparticlesocl / wg) * wg + wg;
-
-	// Grown, never shrunk: the size a structure needs swings from step to step
-	// and reallocating on every rebuild would cost more than the slack.
+	// Grown, never shrunk, and sized from the total the PREVIOUS rebuild
+	// reported -- which reached the host without a stop, riding home with that
+	// step's positions. The size a structure needs swings from step to step and
+	// reallocating on every rebuild would cost more than the slack. A rebuild
+	// that turns out to need MORE than this is not caught here at all: the
+	// device catches it, in markListUsable below, and the walk falls back to
+	// the cells for that one step.
+	//
+	// Seeded by the one-off read above and kept up to date, from then on, by a
+	// read that never stops the step.
 	if (list.total > list.capacity)
 		{
 		list.capacity = list.total + list.total / 8 + 1;
-		list.itemsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(unsigned) * list.capacity, NULL, &_err);
+		list.itemsbuffer = cl::Buffer(_context, CL_MEM_READ_WRITE,
+		                              sizeof(unsigned) * list.capacity, NULL, &_err);
 		checkErr("Buffer(items)");
 		}
 
-	if (list.total > 0)
+	// A test can ask for the array to be too small at every rebuild, which is
+	// the only way to hold the device on its fallback path long enough to
+	// compare a whole trajectory against the CPU.
+	if (_starvelists)
+		list.capacity = 1;
+	if (list.total > list.capacity)
+		_listoverflows++;
+
+	// Does what the host used to be woken up to decide. The items array was
+	// sized from the PREVIOUS rebuild's total; the device now compares this
+	// rebuild's total against that capacity and writes one word saying whether
+	// the list it is about to fill will be complete. Every kernel that would
+	// walk it reads that word, and falls back to the cells when it says no --
+	// exact, just slower for the one step it takes the host to grow the array.
+	//
+	// What this removes is a BLOCKING read per list per rebuild, ~0.15 ms each
+	// whatever the four bytes carry, in the middle of each chain. It also frees
+	// the chains: nothing can be scheduled across a point where the host waits.
+	_kernelmarklistusable.setArg(0, list.totalbuffer);
+	_kernelmarklistusable.setArg(1, list.capacity);
+	_kernelmarklistusable.setArg(2, list.guardbuffer);
+	_err = _queue.enqueueNDRangeKernel(_kernelmarklistusable, cl::NullRange,
+	                                   cl::NDRange(1), cl::NDRange(1), NULL, &_event);
+	checkErr("enqueueNDRangeKernel(markListUsable)");
+	_pendingevents.emplace_back(_event, listbuildinto);
+
+	// Not blocking and not waited on: it rides home in the step's own batch and
+	// is read at the NEXT rebuild, to size the array then.
+	_err = _queue.enqueueReadBuffer(list.totalbuffer, CL_FALSE, 0, sizeof(unsigned), &list.total);
+	checkErr("enqueueReadBuffer(scan total)");
+
+	if (list.capacity > 0)
 		{
 		unsigned a = _setWalkArgs(_kernelfillneighbours, list, grid);
 		_kernelfillneighbours.setArg(a++, list.offsetsbuffer);
 		_kernelfillneighbours.setArg(a++, list.itemsbuffer);
+		_kernelfillneighbours.setArg(a++, list.guardbuffer);
+		_kernelfillneighbours.setArg(a++, list.capacity);
 		_kernelfillneighbours.setArg(a++, _nbparticlesocl);
 		_err = _queue.enqueueNDRangeKernel(_kernelfillneighbours, cl::NullRange,
 		                                   cl::NDRange(global), cl::NDRange(wg), NULL, &_event);
@@ -1750,7 +1789,7 @@ void SpringNetworkOpenCL::_enqueueNeighbourFill(NeighbourList & list, const Cell
 		_pendingevents.emplace_back(_event, listbuildinto);
 		}
 
-	list.valid = true;
+	list.valid = list.capacity > 0;
 	}
 
 
@@ -1875,6 +1914,20 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 	// CANDIDATES: who may appear in a list. A static charged particle still
 	// pushes the dynamic ones, so it stays a candidate. For the steric term
 	// that is everybody, which is what an empty mask means.
+	// One pass over the terms. It used to be two, with a stop between them to
+	// collect every list's total, because the host sized the items array from
+	// it. That decision now belongs to the device -- see markListUsable -- so
+	// there is nothing to collect and nothing to wait for, and the four chains
+	// share no buffer at all: they are ready to go on separate queues.
+	//
+	// TARGETS: who gets a list. A static particle's force is never read -- the
+	// CPU only loops over _dynamicparticules -- so finding its neighbours is
+	// work thrown away, and several examples here are 89% to 100% static.
+	// Coulomb narrows it further to the charged ones.
+	//
+	// CANDIDATES: who may appear in a list. A static charged particle still
+	// pushes the dynamic ones, so it stays a candidate. For the steric term
+	// that is everybody, which is what an empty mask means.
 	// Two passes over the terms rather than one, and the reason is a
 	// synchronisation, not an algorithm.
 	//
@@ -1905,8 +1958,7 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 		{
 		// Everyone is a candidate, so the term's own grid already holds them all.
 		listbuildinto = &listbuildsterictime;
-		_enqueueNeighbourCounts(_stericlist, getStericCutoff(), _masks.dynamic, nocandidates, _cells);
-		pending[npending++] = {&_stericlist, &_cells, &listbuildsterictime};
+		_buildNeighbourList(_stericlist, getStericCutoff(), _masks.dynamic, nocandidates, _cells);
 		}
 	if (isElectrostaticCoulombEnabled())
 		{
@@ -1915,16 +1967,14 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 		// nothing else in there to reject, and dropping it takes a test out of
 		// the innermost loop.
 		listbuildinto = &listbuildcoulombtime;
-		_enqueueNeighbourCounts(_electrostaticlist, getElectrostaticCutoff(), _masks.dynamiccharged,
-		                        nocandidates, _chargedcells);
-		pending[npending++] = {&_electrostaticlist, &_chargedcells, &listbuildcoulombtime};
+		_buildNeighbourList(_electrostaticlist, getElectrostaticCutoff(), _masks.dynamiccharged,
+		                    nocandidates, _chargedcells);
 		}
 	listbuildinto = &listbuildtime;
 	if (isHydrophobicityEnabled())
 		{
-		_enqueueNeighbourCounts(_hydrophobiclist, getHydrophobicCutoff(), _masks.dynamichydrophobic,
-		                        nocandidates, _hydrophobiccells);
-		pending[npending++] = {&_hydrophobiclist, &_hydrophobiccells, &listbuildtime};
+		_buildNeighbourList(_hydrophobiclist, getHydrophobicCutoff(), _masks.dynamichydrophobic,
+		                    nocandidates, _hydrophobiccells);
 		}
 	// Targets are donors and acceptors alike, STATIC ONES INCLUDED: a static
 	// donor still holds a bond and still pulls the dynamic partner, and the
@@ -1932,21 +1982,9 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 	// would lose every bond a static side happens to donate.
 	if (isHydrogenBondEnabled())
 		{
-		_enqueueNeighbourCounts(_hydrogenbondlist, getHydrogenBondCutoff(), _masks.hydrogenbond,
-		                        nocandidates, _hydrogenbondcells);
-		pending[npending++] = {&_hydrogenbondlist, &_hydrogenbondcells, &listbuildtime};
+		_buildNeighbourList(_hydrogenbondlist, getHydrogenBondCutoff(), _masks.hydrogenbond,
+		                    nocandidates, _hydrogenbondcells);
 		}
-
-	// The one stop. Every total enqueued above is on the host after it.
-	if (npending > 0)
-		_queue.finish();
-
-	for (unsigned i = 0; i < npending; ++i)
-		{
-		listbuildinto = pending[i].timer;
-		_enqueueNeighbourFill(*pending[i].list, *pending[i].grid);
-		}
-	listbuildinto = &listbuildtime;
 
 	_listreference.assign(_particlepositions, _particlepositions + _nbparticlesocl);
 	_listsarebuilt = true;
@@ -2828,6 +2866,7 @@ void SpringNetworkOpenCL::_assignHydrogenBondPairsOnDevice()
 		_kernelhbondscore.setArg(a++, _hbond.chainbuffer);
 		_kernelhbondscore.setArg(a++, _hydrogenbondlist.offsetsbuffer);
 		_kernelhbondscore.setArg(a++, _hydrogenbondlist.itemsbuffer);
+            _kernelhbondscore.setArg(a++, _hydrogenbondlist.guardbuffer);
 		_kernelhbondscore.setArg(a++, _inSpringBuffer);
 		_kernelhbondscore.setArg(a++, _inSpringIndexesBuffer);
 		_kernelhbondscore.setArg(a++, static_cast<int>(isSpringEnabled() && _nbspringsocl > 0));

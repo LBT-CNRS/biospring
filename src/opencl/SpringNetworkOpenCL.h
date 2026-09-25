@@ -132,13 +132,16 @@ class SpringNetworkOpenCL : public SpringNetwork
 			cl::Buffer countsbuffer;    // N uints, the first pass's answer
 			cl::Buffer blocksumsbuffer; // one uint per work group, for the scan
 			cl::Buffer totalbuffer;     // one uint: the grand total
+			// One uint the DEVICE writes: whether the list it just built fits
+			// in the room the host had allocated. Every kernel that would walk
+			// the list reads it, so the question never comes back to the host.
+			cl::Buffer guardbuffer;
 			cl::Buffer targetsbuffer;    // N uchars: who gets a list at all
 			cl::Buffer candidatesbuffer; // N uchars: who may appear in one
 			unsigned total = 0;
 			unsigned buffersfor = 0;    // particle count the buffers were sized for
 			unsigned capacity = 0;      // what itemsbuffer currently holds
 			unsigned blocksumsfor = 0;  // block count the scan buffers were sized for
-			bool counted = false;       // counts enqueued, total not yet collected
 			float radius = 0.0f;
 			bool valid = false;
 			bool hastargets = false;
@@ -217,6 +220,12 @@ class SpringNetworkOpenCL : public SpringNetwork
 		/// move one and ask the device about it. Nothing in a run needs this:
 		/// positions travel the other way.
 		void uploadPositionsForTesting();
+		/// Leaves every list's items array far too small, so that the next
+		/// rebuild overflows it and the device has to fall back to the cells.
+		/// There is no other way to reach that path: it needs a structure whose
+		/// neighbour count jumps past the margin between two rebuilds.
+		void starveListsForTesting() { _starvelists = true; }
+		unsigned listOverflows() const { return _listoverflows; }
 		/// Enqueues the one pass over the positions and the read of its two
 		/// ints. Does NOT wait: the step's own finish() collects it.
 		void _enqueueDeviceFlags();
@@ -592,6 +601,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 		       BIOSPRING_BIT_FRAME = 4,   // grid k is this bit shifted by k
 		       BIOSPRING_MAX_FRAMES = 4 };
 		cl::Kernel _kernelresetflags;
+		bool _starvelists = false;      // tests only, see starveListsForTesting
+		unsigned _listoverflows = 0;    // rebuilds the device had to refuse
+		cl::Kernel _kernelmarklistusable;
 		cl::Kernel _kernelcheckpositions;
 		cl::Buffer _deviceflagsbuffer;
 		cl::Buffer _framesbuffer;        // float4 per grid, .w = cell width
@@ -633,11 +645,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 		/// The grid walk's arguments, shared by the counting and the filling
 		/// kernel because they walk the same neighbourhood.
 		unsigned _setWalkArgs(cl::Kernel & kernel, const NeighbourList & list, const CellGrid & grid);
-		/// First half of a list build: count, scan, and ask for the total
-		/// WITHOUT waiting. See _enqueueNeighbourCounts for why the wait is not
-		/// here.
-		void _enqueueNeighbourFill(NeighbourList & list, const CellGrid & grid);
-		void _enqueueNeighbourCounts(NeighbourList & list, float cutoff,
+		void _buildNeighbourList(NeighbourList & list, float cutoff,
 		                         const std::vector<unsigned char> & targets,
 		                         const std::vector<unsigned char> & candidates,
 		                         const CellGrid & grid);

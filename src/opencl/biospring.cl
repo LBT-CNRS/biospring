@@ -192,6 +192,18 @@ __kernel void countneighbours(const __global float4 * positions,
 	counts[tid] = n;
 	}
 
+/// Whether the list just built is complete: the total the scan produced against
+/// the room the host had allocated. One word, read by every kernel that would
+/// otherwise walk it, so the decision never leaves the device.
+__kernel void markListUsable(const __global uint * total, const uint capacity,
+                             __global uint * guard)
+	{
+	if (get_global_id(0) != 0u)
+		return;
+	guard[0] = (total[0] <= capacity && capacity > 0u) ? 1u : 0u;
+	}
+
+
 __kernel void fillneighbours(const __global float4 * positions,
                              const __global uint * cellhead,
                              const __global uint * nextincell,
@@ -202,15 +214,23 @@ __kernel void fillneighbours(const __global float4 * positions,
                              const float radius,
                              const __global uint * offsets,
                              __global uint * items,
+                             const __global uint * listguard,
+                             const uint capacity,
                              const uint N)
 	{
+	// Nothing to write if it would not fit; the walk falls back to the cells.
+	if (listguard[0] == 0u)
+		return;
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
 	if (targets != 0 && targets[tid] == 0) return;
 
 	const float4 here = positions[tid];
 	uint at = offsets[tid];
-	BIOSPRING_WALK_AT_RADIUS(items[at++] = p;)
+	// Clamped as well as gated: the guard above already turned this launch off
+	// when the total did not fit, and this makes a write past the end
+	// impossible even if it ever did not.
+	BIOSPRING_WALK_AT_RADIUS(if (at < capacity) items[at] = p; at++;)
 	}
 
 #undef BIOSPRING_WALK_AT_RADIUS
@@ -225,7 +245,7 @@ __kernel void fillneighbours(const __global float4 * positions,
 // have to agree about which pairs exist, and the surest way to keep them
 // agreeing is for the force to be the same text.
 #define BIOSPRING_FOR_EACH_CANDIDATE(BODY)                                                    \
-	if (listoffsets != 0)                                                                     \
+	if (listoffsets != 0 && listguard[0] != 0u)                                               \
 		{                                                                                     \
 		const uint last = listoffsets[tid + 1];                                               \
 		for (uint slot = listoffsets[tid]; slot < last; slot++)                               \
@@ -464,6 +484,7 @@ __kernel void electrostatic(const __global float4 * positions,
                             const int stencilradius,
                             const __global uint * listoffsets,
                             const __global uint * listitems,
+                            const __global uint * listguard,
                             const __global Springocl * springs,
                             const __global int * springoffsets,
                             const int springsenabled,
@@ -512,6 +533,7 @@ __kernel void steric(const __global float4 * positions,
                      const int stencilradius,
                      const __global uint * listoffsets,
                      const __global uint * listitems,
+                     const __global uint * listguard,
                      const __global Springocl * springs,
                      const __global int * springoffsets,
                      const int springsenabled,
@@ -566,6 +588,7 @@ __kernel void hydrophobic(const __global float4 * positions,
                           const int stencilradius,
                           const __global uint * listoffsets,
                           const __global uint * listitems,
+                          const __global uint * listguard,
                           const __global Springocl * springs,
                           const __global int * springoffsets,
                           const int springsenabled,
@@ -979,6 +1002,7 @@ __kernel void hbondScore(const __global float4 * positions,
                          const __global int2 * antecedents,
                          const __global int * resids, const __global int * chains,
                          const __global uint * listoffsets, const __global uint * listitems,
+                         const __global uint * listguard,
                          const __global Springocl * springs, const __global int * springoffsets,
                          const int springsenabled, const int probeid,
                          const float cutoff, const float welldepth, const float equilibrium,
@@ -1105,6 +1129,7 @@ __kernel void hbondCoreRepulsion(const __global float4 * positions, __global flo
                                  const float4 origin, const float cellwidth, const int4 ncells,
                                  const int stencilradius,
                                  const __global uint * listoffsets, const __global uint * listitems,
+                         const __global uint * listguard,
                                  const __global Springocl * springs, const __global int * springoffsets,
                                  const int springsenabled,
                                  const __global uint * donoroffsets, const __global int * donorslots,

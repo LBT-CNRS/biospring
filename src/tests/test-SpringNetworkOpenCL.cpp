@@ -750,6 +750,52 @@ TEST(SpringNetworkOpenCL, CoulombMatchesTheCPU)
 // this whole port has to reproduce -- separately for the CPU, whose list lives
 // in nsearch.hpp, and for the device, whose list is two kernels and a packing
 // pass, so that neither can be right by accident while the other is wrong.
+// A list too small for what it has to hold, and the forces still right.
+//
+// The host no longer learns how big the items array must be before the list is
+// filled -- that read cost a stop per list per rebuild. It sizes the array from
+// the PREVIOUS rebuild's total instead, so a structure that suddenly packs
+// tighter can need more room than it was given. The device is what notices, in
+// markListUsable, and every kernel that would walk the list reads its answer
+// and walks the cells instead.
+//
+// If that fallback did not work the failure would be silent: a truncated list
+// is not an error, it is a handful of pairs quietly missing from a force. So
+// the assertion is against the CPU, which walks its own cells and knows nothing
+// of any of this.
+TEST(SpringNetworkOpenCL, AnOverflowingListFallsBackToTheCells)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 300;
+    const float CREEP = 0.04f;
+
+    spn::SpringNetwork cpu;
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration c1, c2;
+    buildChargedCloud(cpu, c1, N, /*skin=*/4.0, CREEP);
+    buildChargedCloud(gpu, c2, N, /*skin=*/4.0, CREEP);
+
+    // Starved before the run, so every rebuild of it overflows.
+    gpu.starveListsForTesting();
+    cpu.run();
+    gpu.run();
+
+    ASSERT_GT(gpu.neighbourListRebuilds(), 0u) << "no list was ever built";
+    ASSERT_GT(gpu.listOverflows(), 0u)
+        << "precondition: no rebuild ever overflowed, so nothing was tested";
+
+    float worst = 0.0f;
+    for (unsigned i = 0; i < N; ++i)
+        worst = std::max(worst,
+            (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
+    EXPECT_LT(worst, 1.0e-2f)
+        << "the device kept computing from a list it could not fit: worst particle "
+        << worst << " A from where the CPU put it";
+}
+
+
 TEST(SpringNetworkOpenCL, ASkinChangesNothingOnEitherBackend)
 {
     if (!hasOpenCLDevice())
