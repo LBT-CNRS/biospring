@@ -137,14 +137,22 @@ void SpringNetworkOpenCL::checkErr(const char * name)
 void SpringNetworkOpenCL::createBuffer()
 	{
 	#ifdef OPENGL_SUPPORT
-		cout<<"viewer"<<_viewer<<endl;
-		cout<<"vbo"<<_viewer->getParticlesPositionVBO()<<endl;
-
-
+	if (_sharingwithgl)
+		{
 		_inoutPositionBuffer=cl::BufferGL(_context, CL_MEM_READ_WRITE,_viewer->getParticlesPositionVBO() , &_err);
 		_allvbos.push_back(_inoutPositionBuffer);
 		checkErr( "Buffer::Buffer() 1");
 		glFinish();
+		}
+	else
+		{
+		// No viewer: an ordinary buffer over our own array, exactly as a build
+		// without the viewer uses.
+		_inoutPositionBuffer=cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
+		                                sizeof(float4)*_nbparticlesocl, _particlepositions, &_err);
+		checkErr( "Buffer::Buffer() 1");
+		}
+	{
 
 		/*_particlevelocitiesvbo=createVBO(&_particlevelocities[0], _nbparticlesocl*sizeof(float4), GL_ARRAY_BUFFER, GL_DYNAMIC_DRAW);
 		_inoutVelocityBuffer= cl::BufferGL(_context, CL_MEM_READ_WRITE, _particlevelocitiesvbo,&_err);
@@ -173,10 +181,7 @@ void SpringNetworkOpenCL::createBuffer()
 		_allvbos.push_back(_inExternalForceBuffer);
 
 		checkErr( "Buffer::Buffer() 6");*/
-
-
-
-
+	}
 	#else
 		_inoutPositionBuffer=cl::Buffer(
 							   _context,
@@ -561,8 +566,44 @@ void SpringNetworkOpenCL::InitOcl()
 
 	#ifdef OPENGL_SUPPORT
 		#if defined (__APPLE__) || defined(MACOSX)
+			// Sharing with OpenGL needs an OpenGL context to share WITH, and a
+			// run without the viewer has none: CGLGetCurrentContext() returns
+			// null, CGLGetShareGroup(null) returns null, and the context is
+			// then asked for a share group of zero -- which is
+			// CL_INVALID_VALUE, followed by exit(1).
+			//
+			// That made a build with the viewer compiled in unable to run
+			// --opencl at all from the command line, and made all eleven
+			// OpenCL tests fail, on a binary whose kernels were perfectly
+			// fine. Whether the viewer is COMPILED IN is a build option;
+			// whether it is RUNNING is a property of this particular run, and
+			// only the second one decides whether there is anything to share.
 			CGLContextObj kCGLContext = CGLGetCurrentContext();
-			CGLShareGroupObj kCGLShareGroup = CGLGetShareGroup(kCGLContext);
+			CGLShareGroupObj kCGLShareGroup = kCGLContext ? CGLGetShareGroup(kCGLContext) : NULL;
+
+			if (kCGLShareGroup == NULL)
+				{
+				biospring::logging::info("OpenCL: no OpenGL context to share with, "
+				                         "using a plain device context");
+				_contextproperties = new cl_context_properties[3];
+				_contextproperties[0] = CL_CONTEXT_PLATFORM;
+				_contextproperties[1] = (cl_context_properties)(_platforms[0])();
+				_contextproperties[2] = 0;
+				// The same GPU-then-anything fallback as the no-viewer build,
+				// and for the same reason: an ICD loader may expose no GPU.
+				try
+					{
+					_context = cl::Context(CL_DEVICE_TYPE_GPU, _contextproperties, NULL, NULL, &_err);
+					}
+				catch (const cl::Error &)
+					{
+					_context = cl::Context(CL_DEVICE_TYPE_ALL, _contextproperties, NULL, NULL, &_err);
+					}
+				checkErr("Context::Context()");
+				}
+			else
+				{
+				_sharingwithgl = true;
 
 			_contextproperties=new cl_context_properties[3];
 			_contextproperties[0] =CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE;
@@ -584,6 +625,7 @@ void SpringNetworkOpenCL::InitOcl()
 				{
 			   	printf("ERROR: %s(%s)\n", er.what(), oclErrorString(er.err()));
 				exit(1);
+				}
 				}
 
 
@@ -749,12 +791,13 @@ void SpringNetworkOpenCL::idleRun()
 	_updateNeighbourLists();
 
 	#ifdef OPENGL_SUPPORT
-		glFinish();
-		// map OpenGL buffer object for writing from OpenCL
-		//this passes in the vector of VBO buffer objects (position and color)
-		_err = _queue.enqueueAcquireGLObjects(&_allvbos, NULL, &_event);
-		//printf("acquire: %s\n", oclErrorString(err));
-		_queue.finish();
+		if (_sharingwithgl)
+			{
+			glFinish();
+			// map OpenGL buffer object for writing from OpenCL
+			_err = _queue.enqueueAcquireGLObjects(&_allvbos, NULL, &_event);
+			_queue.finish();
+			}
 	#endif
 
     // Exactly what the CPU folds into a spring force: the force field's spring
@@ -1313,9 +1356,12 @@ void SpringNetworkOpenCL::idleRun()
 		_refreshSurfacesIfChanged();
 
 	#ifdef OPENGL_SUPPORT
-		//Release the VBOs so OpenGL can play with them
-		_err = _queue.enqueueReleaseGLObjects(&_allvbos, NULL, &_event);
-		_queue.finish();
+		if (_sharingwithgl)
+			{
+			//Release the VBOs so OpenGL can play with them
+			_err = _queue.enqueueReleaseGLObjects(&_allvbos, NULL, &_event);
+			_queue.finish();
+			}
 	#endif
 	}
 

@@ -273,6 +273,13 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inSpringIndexesBuffer;
 
 		cl::Buffer _inExternalForceBuffer;
+
+		// Whether this RUN shares its buffers with OpenGL. Compiling the
+		// viewer in is a build option; having one on screen is a property of
+		// the run, and only the second decides whether there is a share group,
+		// a VBO to wrap or anything to acquire and release. Without the
+		// distinction a build with the viewer could not run --opencl at all.
+		bool _sharingwithgl = false;
 		cl::Buffer _inMassBuffer;
 		cl::Buffer _inChargeBuffer;
 		cl::Buffer _inRadiusBuffer;
