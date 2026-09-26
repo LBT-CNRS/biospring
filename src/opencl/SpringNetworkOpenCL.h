@@ -301,6 +301,12 @@ class SpringNetworkOpenCL : public SpringNetwork
 		float * _particlehydrophobicities = nullptr;
 		int * _particledynamic;
 		int * _particletospringindexes;
+		// Per particle, the largest |id1 - id2| over its own springs. The
+		// non-bonded kernels use it to skip the exclusion scan for any candidate
+		// further away than that in INDEX, which cannot be sprung to it. See
+		// biospring_sprung_together in biospring.cl for why this is where the
+		// cost of those kernels was going.
+		unsigned * _particlespringspan;
 
 
 
@@ -333,6 +339,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 		cl::Buffer _inSpringBuffer;
 		cl::Buffer _inSpringIndexesBuffer;
+		cl::Buffer _inSpringSpanBuffer;
 
 		cl::Buffer _inExternalForceBuffer;
 

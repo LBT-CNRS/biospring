@@ -450,10 +450,29 @@ __kernel void spring(const __global float4 * positions,
 //
 // The spring CSR is already on the device for the spring kernel, so this costs
 // a walk over the four to ten springs a particle has.
+// Are these two joined by a spring? Sprung pairs are excluded from every
+// non-bonded term, so this runs once per CANDIDATE PAIR -- which is where its
+// cost comes from. On 072 a particle has 5.8 springs on average and 805
+// candidates inside the 16 A Coulomb cutoff, so a bare scan does 4700 global
+// reads per particle per step against ~1600 for the physics itself.
+//
+// `springspan[self]` is the largest |self - id2| over self's own springs, so a
+// candidate further than that in INDEX cannot possibly be sprung to it and the
+// scan is skipped outright. This is exact, not a heuristic. It pays because the
+// spring graph follows the topology: the per-particle span is 6 in the median
+// and 21-24 at the ninth decile across the examples, while the Coulomb walk
+// visits hundreds of candidates. A handful of long springs -- a disulfide, a
+// declared hydrogen bond -- push one particle's span to 2764 without costing
+// any of the others anything, which is why the bound is per particle and not
+// global.
 inline bool biospring_sprung_together(const __global Springocl * springs,
                                       const __global int * springoffsets,
+                                      const __global uint * springspan,
                                       const uint self, const uint other)
 	{
+	const uint gap = other > self ? other - self : self - other;
+	if (springspan != 0 && gap > springspan[self])
+		return false;
 	const int begin = springoffsets[self];
 	const int end = springoffsets[self + 1];
 	for (int i = begin; i < end; i++)
@@ -488,6 +507,7 @@ __kernel void electrostatic(const __global float4 * positions,
                             const __global uint * listguard,
                             const __global Springocl * springs,
                             const __global int * springoffsets,
+                            const __global uint * springspan,
                             const int springsenabled,
                             const float cutoff, const float dielectric, const float mindistance,
                             const float fourpi, const float convert,
@@ -517,7 +537,7 @@ __kernel void electrostatic(const __global float4 * positions,
 	float esum = 0.0f;
 
 	BIOSPRING_FOR_EACH_CANDIDATE(
-		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, springspan, tid, p))
 			continue;
 		const float dist = sqrt(distsq);
 		const float module = biospring_electrostatic_force_module(
@@ -555,6 +575,7 @@ __kernel void steric(const __global float4 * positions,
                      const __global uint * listguard,
                      const __global Springocl * springs,
                      const __global int * springoffsets,
+                     const __global uint * springspan,
                      const int springsenabled,
                      const int mode,
                      // How two radii combine, as one of BIOSPRING_RADIUS_* in
@@ -589,7 +610,7 @@ __kernel void steric(const __global float4 * positions,
 	float esum = 0.0f;
 
 	BIOSPRING_FOR_EACH_CANDIDATE(
-		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, springspan, tid, p))
 			continue;
 		/* Neighbour first, self second, as Particle::addStericForce calls it. Every */
 		/* combination rule is symmetric, so this is for the reader. */
@@ -631,6 +652,7 @@ __kernel void hydrophobic(const __global float4 * positions,
                           const __global uint * listguard,
                           const __global Springocl * springs,
                           const __global int * springoffsets,
+                          const __global uint * springspan,
                           const int springsenabled,
                           const float cutoff, const float convert, const float decaylength,
                           const float hydrophobicityscale,
@@ -657,7 +679,7 @@ __kernel void hydrophobic(const __global float4 * positions,
 	float esum = 0.0f;
 
 	BIOSPRING_FOR_EACH_CANDIDATE(
-		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, springspan, tid, p))
 			continue;
 		const float dist = sqrt(distsq);
 		const float module = biospring_hydrophobic_force_module(
@@ -1082,6 +1104,7 @@ __kernel void hbondScore(const __global float4 * positions,
                          const __global uint * listoffsets, const __global uint * listitems,
                          const __global uint * listguard,
                          const __global Springocl * springs, const __global int * springoffsets,
+                         const __global uint * springspan,
                          const int springsenabled, const int probeid,
                          const float cutoff, const float welldepth, const float equilibrium,
                          const float width, const float hbondscale,
@@ -1127,7 +1150,7 @@ __kernel void hbondScore(const __global float4 * positions,
 		// closest candidate and starves the real inter-residue one.
 		if (resids[tid] == resids[j] && chains[tid] == chains[j])
 			continue;
-		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, j))
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, springspan, tid, j))
 			continue;
 
 		float3 axis = positions[j].xyz - here;
@@ -1209,6 +1232,7 @@ __kernel void hbondCoreRepulsion(const __global float4 * positions, __global flo
                                  const __global uint * listoffsets, const __global uint * listitems,
                          const __global uint * listguard,
                                  const __global Springocl * springs, const __global int * springoffsets,
+                                 const __global uint * springspan,
                                  const int springsenabled,
                                  const __global uint * donoroffsets, const __global int * donorslots,
                                  const __global uint * acceptoroffsets, const __global int * acceptorslots,
@@ -1236,7 +1260,7 @@ __kernel void hbondCoreRepulsion(const __global float4 * positions, __global flo
 		// by hbondForce, so counting it here too would double it.
 		if (biospring_hb_already_bonded(donoroffsets, donorslots, acceptoroffsets, acceptorslots, tid, p))
 			continue;
-		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
+		if (springsenabled && biospring_sprung_together(springs, springoffsets, springspan, tid, p))
 			continue;
 		const float dist = sqrt(distsq);
 		if (dist >= equilibrium)

@@ -46,7 +46,7 @@ using biospring::spn::SpringNetwork;
 SpringNetworkOpenCL::SpringNetworkOpenCL()
     : SpringNetwork(), _springparticlesindexes(nullptr), _nbparticlesocl(0), _nbspringsocl(0),
       _particlepositions(nullptr), _particlevelocities(nullptr), _particleforces(nullptr),
-      _particleexternalforces(nullptr), _particlemasses(nullptr), _particledynamic(nullptr), _particletospringindexes(nullptr), _springsocl(nullptr),
+      _particleexternalforces(nullptr), _particlemasses(nullptr), _particledynamic(nullptr), _particletospringindexes(nullptr), _particlespringspan(nullptr), _springsocl(nullptr),
       _err(CL_SUCCESS), _contextproperties(nullptr)
     {
     getOpenCLRessources();
@@ -331,6 +331,14 @@ void SpringNetworkOpenCL::createBuffer()
 								 sizeof(int)*(_nbparticlesocl+1),
 								 _particletospringindexes,
 								 &_err);
+
+		_inSpringSpanBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(unsigned)*_nbparticlesocl,
+								 _particlespringspan,
+								 &_err);
+		checkErr( "Buffer::Buffer() spring span");
 
 
 
@@ -821,6 +829,7 @@ void SpringNetworkOpenCL::idleRun()
             }
         _kernelsteric.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
         _kernelsteric.setArg(a++, _inSpringIndexesBuffer);
+        _kernelsteric.setArg(a++, _inSpringSpanBuffer);
         _kernelsteric.setArg(a++, springsenabled);
         _kernelsteric.setArg(a++, _stericMode());
         _kernelsteric.setArg(a++, getForceField()->getRadiusRule());
@@ -892,6 +901,7 @@ void SpringNetworkOpenCL::idleRun()
         // to look: the exclusion is meaningless without springs anyway.
         _kernelelectrostatic.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
         _kernelelectrostatic.setArg(a++, _inSpringIndexesBuffer);
+        _kernelelectrostatic.setArg(a++, _inSpringSpanBuffer);
         _kernelelectrostatic.setArg(a++, springsenabled);
         _kernelelectrostatic.setArg(a++, getElectrostaticCutoff());
         _kernelelectrostatic.setArg(a++, getForceField()->getDielectric());
@@ -954,6 +964,7 @@ void SpringNetworkOpenCL::idleRun()
             }
         _kernelhydrophobic.setArg(a++, springsenabled ? _inSpringBuffer : _inMassBuffer);
         _kernelhydrophobic.setArg(a++, _inSpringIndexesBuffer);
+        _kernelhydrophobic.setArg(a++, _inSpringSpanBuffer);
         _kernelhydrophobic.setArg(a++, springsenabled);
         _kernelhydrophobic.setArg(a++, getHydrophobicCutoff());
         _kernelhydrophobic.setArg(a++, static_cast<float>(
@@ -1171,6 +1182,7 @@ void SpringNetworkOpenCL::idleRun()
             _kernelhbondrepulsion.setArg(a++, _hydrogenbondlist.guardbuffer);
 			_kernelhbondrepulsion.setArg(a++, _inSpringBuffer);
 			_kernelhbondrepulsion.setArg(a++, _inSpringIndexesBuffer);
+			_kernelhbondrepulsion.setArg(a++, _inSpringSpanBuffer);
 			_kernelhbondrepulsion.setArg(a++, static_cast<int>(isSpringEnabled() && _nbspringsocl > 0));
 			_kernelhbondrepulsion.setArg(a++, _hbond.donoroffsetbuffer);
 			_kernelhbondrepulsion.setArg(a++, _hbond.donorslotbuffer);
@@ -2973,6 +2985,7 @@ void SpringNetworkOpenCL::_assignHydrogenBondPairsOnDevice()
             _kernelhbondscore.setArg(a++, _hydrogenbondlist.guardbuffer);
 		_kernelhbondscore.setArg(a++, _inSpringBuffer);
 		_kernelhbondscore.setArg(a++, _inSpringIndexesBuffer);
+		_kernelhbondscore.setArg(a++, _inSpringSpanBuffer);
 		_kernelhbondscore.setArg(a++, static_cast<int>(isSpringEnabled() && _nbspringsocl > 0));
 		_kernelhbondscore.setArg(a++, probeid);
 		_kernelhbondscore.setArg(a++, cutoff);
@@ -3136,14 +3149,24 @@ void SpringNetworkOpenCL::computeParticleToSpringIndexes()
     // nothing, and the last particle fell back to the PARTICLE count used as
     // a SPRING index. Offsets remove both cases rather than guarding them.
     delete[] _particletospringindexes;
+    delete[] _particlespringspan;
     _particletospringindexes = new int[_nbparticlesocl + 1];
+    _particlespringspan = new unsigned[_nbparticlesocl];
 
     unsigned springIndex = 0;
     for (unsigned particleId = 0; particleId < _nbparticlesocl; ++particleId)
         {
         _particletospringindexes[particleId] = static_cast<int>(springIndex);
+        unsigned span = 0;
         while (springIndex < _nbspringsocl && _springsocl[springIndex].id1 == particleId)
+            {
+            const unsigned other = _springsocl[springIndex].id2;
+            const unsigned gap = other > particleId ? other - particleId : particleId - other;
+            if (gap > span)
+                span = gap;
             ++springIndex;
+            }
+        _particlespringspan[particleId] = span;
         }
     _particletospringindexes[_nbparticlesocl] = static_cast<int>(springIndex);
     }
