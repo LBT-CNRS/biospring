@@ -603,6 +603,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Kernel _kernelresetflags;
 		bool _starvelists = false;      // tests only, see starveListsForTesting
 		unsigned _listoverflows = 0;    // rebuilds the device had to refuse
+		cl::Buffer _torsionScaleBuffer;
+		float _uploadedtorsionscales[8] = {0};
+		void _uploadTorsionFamilyScales();
 		cl::Kernel _kernelmarklistusable;
 		cl::Kernel _kernelcheckpositions;
 		cl::Buffer _deviceflagsbuffer;

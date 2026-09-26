@@ -811,6 +811,11 @@ __kernel void torsion(const __global float4 * positions,
                       const __global int * torsionoffsets,
                       const __global uint * torsionentries,
                       const int familymask,
+                      // One weight per dihedral family, in the host's family
+                      // order. The torsion term has to be weighable against the
+                      // rest of the model on its own: spring.scale cannot do it,
+                      // because the rigid-body mesh reads the same number.
+                      const __global float * familyscale,
                       const float pi,
                       const float unit,
                       const uint N)
@@ -829,7 +834,8 @@ __kernel void torsion(const __global float4 * positions,
 		const uint ti = packed >> 2;
 		const uint slot = packed & 3u;
 
-		if (!(familymask & (1 << torsionfamily[ti])))
+		const uint fam = torsionfamily[ti];
+		if (!(familymask & (1 << fam)))
 			continue;
 
 		const uint4 q = torsionatoms[ti];
@@ -858,8 +864,9 @@ __kernel void torsion(const __global float4 * positions,
 		const uint base = torsiontable[ti] * (bins + 1);
 		// A quarter, because the CSR holds each torsion from each of its four
 		// atoms and this kernel runs once per atom.
-		esum += 0.25f * (tableenergy[base + b] + f * (tableenergy[base + b + 1] - tableenergy[base + b]));
-		const float torque = tabletorque[base + b] + f * (tabletorque[base + b + 1] - tabletorque[base + b]);
+		const float fs = familyscale[fam];
+		esum += 0.25f * fs * (tableenergy[base + b] + f * (tableenergy[base + b + 1] - tableenergy[base + b]));
+		const float torque = fs * (tabletorque[base + b] + f * (tabletorque[base + b + 1] - tabletorque[base + b]));
 		if (torque == 0.0f)
 			continue;
 

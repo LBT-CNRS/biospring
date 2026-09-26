@@ -752,6 +752,8 @@ void SpringNetworkOpenCL::idleRun()
         _kerneltorsion.setArg(a++, _inTorsionOffsetsBuffer);
         _kerneltorsion.setArg(a++, _inTorsionEntriesBuffer);
         _kerneltorsion.setArg(a++, _torsionFamilyMask());
+        _uploadTorsionFamilyScales();
+        _kerneltorsion.setArg(a++, _torsionScaleBuffer);
         _kerneltorsion.setArg(a++, static_cast<float>(M_PI));
         _kerneltorsion.setArg(a++, unit);
         _kerneltorsion.setArg(a++, _nbparticlesocl);
@@ -2074,6 +2076,25 @@ void SpringNetworkOpenCL::_snapshotListReferenceOnDevice()
 //
 // The answers describe the positions at the end of step N, which are exactly
 // the positions step N+1 starts from. No staleness is introduced.
+// The per-family torsion weights, sent only when they change -- which is when
+// the .msp is reloaded, so almost never.
+void SpringNetworkOpenCL::_uploadTorsionFamilyScales()
+	{
+	float wanted[8];
+	getDihedralFamilyScales(wanted);
+	if (_torsionScaleBuffer() != NULL && std::memcmp(wanted, _uploadedtorsionscales, sizeof(wanted)) == 0)
+		return;
+	std::memcpy(_uploadedtorsionscales, wanted, sizeof(wanted));
+	if (_torsionScaleBuffer() == NULL)
+		{
+		_torsionScaleBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY, sizeof(wanted), NULL, &_err);
+		checkErr("Buffer(torsion family scales)");
+		}
+	_err = _queue.enqueueWriteBuffer(_torsionScaleBuffer, CL_FALSE, 0, sizeof(wanted), _uploadedtorsionscales);
+	checkErr("enqueueWriteBuffer(torsion family scales)");
+	}
+
+
 void SpringNetworkOpenCL::_enqueueDeviceFlags()
 	{
 	_deviceflagsasked = 0;

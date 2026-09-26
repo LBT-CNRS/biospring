@@ -493,6 +493,26 @@ class SpringNetwork
     // decided, at build time, to apply. All eight default to enabled (see
     // defaultConfiguration()): an opt-OUT knob for isolating one family's
     // contribution, not an opt-in feature switch.
+    /// The per-family torsion weights, in family order. One number per family
+    /// rather than one for all of them, because the families are not the same
+    /// question: phi/psi decide a backbone's secondary structure, chi a side
+    /// chain's rotamer, and the planarity impropers hold a ring flat.
+    ///
+    /// This exists because `spring.scale` cannot weigh the torsion term: the
+    /// rigid-body mesh that holds every bond and angle reads the same number,
+    /// so turning the torsions down turns the bonds down with them.
+    void getDihedralFamilyScales(float out[8]) const
+    {
+        out[0] = static_cast<float>(_config.dihedralphi.scale);
+        out[1] = static_cast<float>(_config.dihedralpsi.scale);
+        out[2] = static_cast<float>(_config.dihedralomega.scale);
+        out[3] = static_cast<float>(_config.dihedralchi.scale);
+        out[4] = static_cast<float>(_config.dihedralplanarity.scale);
+        out[5] = static_cast<float>(_config.dihedralnucleicbackbone.scale);
+        out[6] = static_cast<float>(_config.dihedralnucleicchi.scale);
+        out[7] = static_cast<float>(_config.dihedralnucleicsugar.scale);
+    }
+
     bool isDihedralPhiEnabled() const { return _config.dihedralphi.enable; }
     bool isDihedralPsiEnabled() const { return _config.dihedralpsi.enable; }
     bool isDihedralOmegaEnabled() const { return _config.dihedralomega.enable; }

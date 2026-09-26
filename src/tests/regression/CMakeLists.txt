@@ -11,6 +11,7 @@ set(TEST_MODULES
     steric-energy
     hydrophobic-energy
     spring-energy
+    dihedral-scale
     offgrid-force
     impala-law
 )

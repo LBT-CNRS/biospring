@@ -1067,6 +1067,25 @@ float SpringNetwork::computeTorsionForces()
         isDihedralChiEnabled(),        isDihedralPlanarityEnabled(),     isDihedralNucleicBackboneEnabled(),
         isDihedralNucleicChiEnabled(), isDihedralNucleicSugarEnabled()};
 
+    // Per family, and this is the only way to weigh the torsion term against
+    // the rest of the model. `spring.scale` cannot do it: the torsion reads it,
+    // but so does every rigid-body spring, so turning the torsions down turns
+    // the mesh that holds bonds and angles down with them.
+    //
+    // The parameter already existed and was already accepted -- EnergySetting
+    // carries a scale and every dihedral family is one, so `dihedralphi.scale`
+    // parsed, printed in the configuration dump, and changed nothing at all.
+    //
+    // It is worth having because the two terms disagree about a helix. Measured
+    // on a 34-residue beta-alpha-beta motif at 50 K, backbone hydrogen bonds
+    // held out of 21: mesh alone 9, mesh + torsions 9, mesh + dynamic hbond 21,
+    // all three together 15. The torsion term pulls phi/psi towards AMBER's own
+    // minima, which are not the helical ones, and a hydrogen bond strong enough
+    // to win that argument has to be worth -38 kJ/mol, which no backbone
+    // hydrogen bond is.
+    float familyscale[DIHEDRAL_FAMILY_COUNT];
+    getDihedralFamilyScales(familyscale);
+
     const float PI = static_cast<float>(M_PI);
     const float unit = _ff->getSpringScale() * static_cast<float>(forcefield::GLOBAL_SPRING_FORCE_CONVERT);
     float energy = 0.0f;
@@ -1101,8 +1120,9 @@ float SpringNetwork::computeTorsionForces()
         const TorsionTable & tab = _torsiontables[t.table];
         const int b = biospring_torsion_bin(phi, PI, static_cast<int>(tab.bins));
         const float f = biospring_torsion_fraction(phi, PI, static_cast<int>(tab.bins));
-        energy += tab.energy[b] + f * (tab.energy[b + 1] - tab.energy[b]);
-        const float torque = tab.torque[b] + f * (tab.torque[b + 1] - tab.torque[b]);
+        const float fs = familyscale[t.family];
+        energy += fs * (tab.energy[b] + f * (tab.energy[b + 1] - tab.energy[b]));
+        const float torque = fs * (tab.torque[b] + f * (tab.torque[b + 1] - tab.torque[b]));
         if (torque == 0.0f)
             continue;
 
