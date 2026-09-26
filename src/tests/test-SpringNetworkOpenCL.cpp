@@ -796,6 +796,50 @@ TEST(SpringNetworkOpenCL, AnOverflowingListFallsBackToTheCells)
 }
 
 
+// The three pairwise energies, which the device did not report at all.
+//
+// Its kernels wrote no energy: only the spring, torsion and hydrogen bond
+// kernels did, so a --opencl run logged no steric, no Coulomb and no
+// hydrophobic line. Nothing said so -- the lines were simply absent, which is
+// the worst way for a number to be missing, because a reader sees a shorter
+// list and not a zero.
+//
+// One step on each backend from the same input, so the two compare energies at
+// the same positions rather than after trajectories that have had time to part.
+TEST(SpringNetworkOpenCL, ThePairwiseEnergiesMatchTheCPU)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 900;
+    spn::SpringNetwork cpu;
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration c1, c2;
+    buildParticleCloud(cpu, c1, N, /*extent=*/40.0f);
+    buildParticleCloud(gpu, c2, N, /*extent=*/40.0f);
+    cpu.run();
+    gpu.run();
+
+    struct Term { const char * name; float cpuvalue; float gpuvalue; };
+    const Term terms[] = {
+        {"steric", cpu.getStericEnergy(), gpu.getStericEnergy()},
+        {"electrostatic", cpu.getElectrostaticEnergy(), gpu.getElectrostaticEnergy()},
+        {"hydrophobic", cpu.getHydrophobicEnergy(), gpu.getHydrophobicEnergy()}};
+
+    for (const Term & t : terms)
+    {
+        // Not just equal: NON-ZERO. A device that reports nothing at all agrees
+        // with a CPU that reports nothing at all, and that is the state this
+        // test exists to rule out.
+        EXPECT_NE(t.cpuvalue, 0.0f) << t.name << " is zero on the CPU, so this proves nothing";
+        EXPECT_NE(t.gpuvalue, 0.0f) << t.name << " energy is still missing from the device";
+        const float scale = std::max(std::abs(t.cpuvalue), 1.0f);
+        EXPECT_NEAR(t.gpuvalue, t.cpuvalue, 0.02f * scale)
+            << t.name << ": CPU " << t.cpuvalue << ", device " << t.gpuvalue;
+    }
+}
+
+
 TEST(SpringNetworkOpenCL, ASkinChangesNothingOnEitherBackend)
 {
     if (!hasOpenCLDevice())

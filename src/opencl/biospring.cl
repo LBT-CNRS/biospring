@@ -489,7 +489,20 @@ __kernel void electrostatic(const __global float4 * positions,
                             const __global int * springoffsets,
                             const int springsenabled,
                             const float cutoff, const float dielectric, const float mindistance,
-                            const float fourpi, const float convert, const float coulombscale,
+                            const float fourpi, const float convert,
+                            // GLOBAL_ELECTROSTATIC_ENERGY_CONVERT, the 1389.35
+                            // that carries every unit of the energy at once.
+                            const float energyconvert, const float coulombscale,
+                                                        // The energy, which no pairwise kernel used to report, so the
+                            // GPU path had no steric, no Coulomb and no hydrophobic
+                            // energy at all. `targets` is what says how much of a pair
+                            // belongs to this end: half when the neighbour is a target
+                            // too and will credit its own half, ALL of it when the
+                            // neighbour is static and never runs a walk of its own.
+                            // That is the convention Particle::addStericForce uses, and
+                            // the totals have to agree to the digit.
+                            const __global uchar * targets,
+                            __global float * energy,
                             const uint N)
 	{
 	const uint tid = get_global_id(0);
@@ -500,6 +513,7 @@ __kernel void electrostatic(const __global float4 * positions,
 	const float cutoffsq = cutoff * cutoff;
 
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
+	float esum = 0.0f;
 
 	BIOSPRING_FOR_EACH_CANDIDATE(
 		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
@@ -508,8 +522,12 @@ __kernel void electrostatic(const __global float4 * positions,
 		const float module = biospring_electrostatic_force_module(
 		    charges[p], q, dist, dielectric, mindistance, fourpi, convert);
 		sum += (axis / dist) * (coulombscale * module);
+		const float pair = biospring_electrostatic_energy(charges[p], q, dist, dielectric, mindistance,
+		                                               energyconvert);
+		esum += (targets == 0 || targets[p] != 0) ? 0.5f * pair : pair;
 	)
 	forces[tid].xyz += sum;
+	energy[tid] = coulombscale * esum;
 	}
 
 
@@ -540,6 +558,16 @@ __kernel void steric(const __global float4 * positions,
                      const int mode,
                      const float cutoff, const float linearstiffness, const float mindistance,
                      const float convert, const float stericscale,
+                                          // The energy, which no pairwise kernel used to report, so the
+                     // GPU path had no steric, no Coulomb and no hydrophobic
+                     // energy at all. `targets` is what says how much of a pair
+                     // belongs to this end: half when the neighbour is a target
+                     // too and will credit its own half, ALL of it when the
+                     // neighbour is static and never runs a walk of its own.
+                     // That is the convention Particle::addStericForce uses, and
+                     // the totals have to agree to the digit.
+                     const __global uchar * targets,
+                     __global float * energy,
                      const uint N)
 	{
 	const uint tid = get_global_id(0);
@@ -551,6 +579,7 @@ __kernel void steric(const __global float4 * positions,
 	const float cutoffsq = cutoff * cutoff;
 
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
+	float esum = 0.0f;
 
 	BIOSPRING_FOR_EACH_CANDIDATE(
 		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
@@ -562,8 +591,12 @@ __kernel void steric(const __global float4 * positions,
 		    mode, radii[p], radius, epsilons[p], epsilon, dist,
 		    linearstiffness, mindistance, convert);
 		sum += (axis / dist) * (stericscale * module);
+		const float pair = biospring_steric_energy(mode, radii[p], radius, epsilons[p], epsilon, dist,
+		                                        linearstiffness, mindistance);
+		esum += (targets == 0 || targets[p] != 0) ? 0.5f * pair : pair;
 	)
 	forces[tid].xyz += sum;
+	energy[tid] = stericscale * esum;
 	}
 
 
@@ -594,6 +627,16 @@ __kernel void hydrophobic(const __global float4 * positions,
                           const int springsenabled,
                           const float cutoff, const float convert, const float decaylength,
                           const float hydrophobicityscale,
+                                                    // The energy, which no pairwise kernel used to report, so the
+                          // GPU path had no steric, no Coulomb and no hydrophobic
+                          // energy at all. `targets` is what says how much of a pair
+                          // belongs to this end: half when the neighbour is a target
+                          // too and will credit its own half, ALL of it when the
+                          // neighbour is static and never runs a walk of its own.
+                          // That is the convention Particle::addStericForce uses, and
+                          // the totals have to agree to the digit.
+                          const __global uchar * targets,
+                          __global float * energy,
                           const uint N)
 	{
 	const uint tid = get_global_id(0);
@@ -604,6 +647,7 @@ __kernel void hydrophobic(const __global float4 * positions,
 	const float cutoffsq = cutoff * cutoff;
 
 	float3 sum = (float3)(0.0f, 0.0f, 0.0f);
+	float esum = 0.0f;
 
 	BIOSPRING_FOR_EACH_CANDIDATE(
 		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
@@ -612,8 +656,11 @@ __kernel void hydrophobic(const __global float4 * positions,
 		const float module = biospring_hydrophobic_force_module(
 		    hydrophobicities[p], h, dist, decaylength, convert);
 		sum += (axis / dist) * (hydrophobicityscale * module);
+		const float pair = biospring_hydrophobic_energy(hydrophobicities[p], h, dist, decaylength);
+		esum += (targets == 0 || targets[p] != 0) ? 0.5f * pair : pair;
 	)
 	forces[tid].xyz += sum;
+	energy[tid] = hydrophobicityscale * esum;
 	}
 
 
@@ -645,10 +692,16 @@ __kernel void impala(const __global float4 * positions,
                      __global float4 * forces,
                      const float alip, const float alpha, const float z0,
                      const float convert, const float impscale,
+                     // The IMPALA energy, which the device did not report: its kernel wrote only a
+                     // force, so a --opencl run logged no IMP line at all.
+                     __global float * energy,
                      const uint N)
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
+	// Cleared BEFORE the early returns below, or a particle that leaves the term
+	// this step would keep the energy it had last step for ever.
+	energy[tid] = 0.0f;
 
 	const float surface = surfaces[tid];
 	if (surface == 0.0f) return;        // no surface, no term -- and most beads of a
@@ -657,6 +710,8 @@ __kernel void impala(const __global float4 * positions,
 	const float fz = biospring_imp_force_z(positions[tid].z, surface, transfers[tid],
 	                                       alip, alpha, z0, convert);
 	forces[tid].z += fz * impscale;
+	energy[tid] = impscale * biospring_imp_energy(positions[tid].z, surface, transfers[tid],
+	                                             alip, alpha, z0);
 	}
 
 // The precomputed electrostatic potential map (APBS/OpenDX), as a force on each
@@ -698,10 +753,17 @@ __kernel void electrostaticfield(const __global float4 * positions,
                                  const float4 boxmin,
                                  const float4 boxmax,
                                  const float gridscale,
+                                 // The field energy, missing for the same reason. The CPU adds it to the SAME
+                                 // total as the Coulomb term, so the host sums this buffer into
+                                 // _energies.electrostatic and not beside it.
+                                 __global float * energy,
+                                 // potential * charge -> kJ.mol-1, all units at once.
+                                 const float energyconvert,
                                  const uint N)
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
+	energy[tid] = 0.0f;   // before the bounds tests below, same reason as impala
 
 	const float4 p = positions[tid];
 
@@ -728,6 +790,8 @@ __kernel void electrostaticfield(const __global float4 * positions,
 	const float q = charges[tid] * gridscale;
 
 	forces[tid].xyz += cell.yzw * q;
+	// cell.x is the potential, in kT/e. The force uses its gradient, cell.yzw.
+	energy[tid] = energyconvert * cell.x * q;
 	}
 
 // The precomputed density map, as a force on each particle's burying factor.

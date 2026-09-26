@@ -130,6 +130,19 @@ const double GLOBAL_ELECTROSTATIC_FORCE_CONVERT = NEWTON_TO_DALTON_ANGSTROM_PER_
                                                   (ELECTRONCHARGE_TO_COULOMB * ELECTRONCHARGE_TO_COULOMB) /
                                                   (VACUUMPERMITIVITY * ANGSTROM_TO_METER * ANGSTROM_TO_METER);
 
+// Converts the raw Coulomb energy expression (q1*q2)/(4.pi.dielectric.d), with
+// q1/q2 in elementary charge (e) and d in Angstrom, into kJ.mol-1. This is the
+// familiar 1389.35 kJ.mol-1.A.e-2: Avogadro appears here and not in the force
+// convert above because an energy is reported per mole while the force is
+// integrated per particle.
+const double GLOBAL_ELECTROSTATIC_ENERGY_CONVERT = COULOMB_CONSTANT *
+                                                  (ELECTRONCHARGE_TO_COULOMB * ELECTRONCHARGE_TO_COULOMB) /
+                                                  ANGSTROM_TO_METER * AVOGADRO_NUMBER * 1.0E-3;
+
+// Converts potential * charge, with the potential in kT/e as an APBS map gives
+// it and the charge in e, into kJ.mol-1.
+const double GLOBAL_ELECTROSTATIC_FIELD_ENERGY_CONVERT = BOLTZMANJPERK * JOULE_TO_KJOULE * AVOGADRO_NUMBER;
+
 } // namespace forcefield
 } // namespace biospring
 

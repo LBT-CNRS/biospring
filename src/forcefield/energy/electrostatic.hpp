@@ -16,23 +16,9 @@ namespace forcefield
 ///     molar convention via AVOGADRO_NUMBER, see constants.hpp).
 inline float electrostatic_energy(float charge1, float charge2, float distance, float dielectric)
 {
-    if (distance < MINIMAL_DISTANCE_ELECTROSTATIC_CUTOFF)
-        return 0.0;
-
-    // Coulomb's contant.
-    double k = COULOMB_CONSTANT;
-
-    // Convert charges to Coulomb.
-    double q1 = charge1 * ELECTRONCHARGE_TO_COULOMB;
-    double q2 = charge2 * ELECTRONCHARGE_TO_COULOMB;
-
-    // Convert distance to meter.
-    distance *= ANGSTROM_TO_METER;
-
-    double energy = k * (q1 * q2) / (dielectric * distance);
-    energy = energy * AVOGADRO_NUMBER; // in J.mol-1
-    energy = energy * 1.0E-3;          // in kJ.mol-1
-    return static_cast<float>(energy);
+    return biospring_electrostatic_energy(charge1, charge2, distance, dielectric,
+                                         static_cast<float>(MINIMAL_DISTANCE_ELECTROSTATIC_CUTOFF),
+                                         static_cast<float>(GLOBAL_ELECTROSTATIC_ENERGY_CONVERT));
 }
 
 /// @return Coulomb force module, in Da.A.fs-2 (see

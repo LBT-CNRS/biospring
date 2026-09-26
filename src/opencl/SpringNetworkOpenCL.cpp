@@ -272,6 +272,16 @@ void SpringNetworkOpenCL::createBuffer()
 		_springEnergyBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
 		                                 sizeof(float) * _nbparticlesocl, _springenergyper, &_err);
 		checkErr("Buffer::Buffer() spring energy");
+
+		// No host mirror: nothing but _computeEnergiesFromDeviceState reads
+		// these, and it reads them into a local.
+		for (cl::Buffer * b : {&_stericEnergyBuffer, &_electrostaticEnergyBuffer,
+		                       &_hydrophobicEnergyBuffer, &_impEnergyBuffer,
+		                       &_fieldEnergyBuffer})
+			{
+			*b = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(float) * _nbparticlesocl, NULL, &_err);
+			checkErr("Buffer(pairwise energy)");
+			}
 		_torsionEnergyBuffer = cl::Buffer(_context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
 		                                  sizeof(float) * _nbparticlesocl, _torsionenergyper, &_err);
 		checkErr("Buffer::Buffer() torsion energy");
@@ -820,6 +830,13 @@ void SpringNetworkOpenCL::idleRun()
         _kernelsteric.setArg(a++, static_cast<float>(
             biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
         _kernelsteric.setArg(a++, getForceField()->getStericScale());
+        // Who else will credit their own half of a pair: a target does, a static
+        // particle never runs a walk at all. Same convention as the CPU.
+        if (_stericlist.hastargets)
+            _kernelsteric.setArg(a++, _stericlist.targetsbuffer);
+        else
+            _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
+        _kernelsteric.setArg(a++, _stericEnergyBuffer);
         _kernelsteric.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kernelsteric, cl::NullRange,
@@ -882,7 +899,16 @@ void SpringNetworkOpenCL::idleRun()
         _kernelelectrostatic.setArg(a++, static_cast<float>(4.0 * biospring::forcefield::PI));
         _kernelelectrostatic.setArg(a++, static_cast<float>(
             biospring::forcefield::GLOBAL_ELECTROSTATIC_FORCE_CONVERT));
+        _kernelelectrostatic.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_ELECTROSTATIC_ENERGY_CONVERT));
         _kernelelectrostatic.setArg(a++, getForceField()->getCoulombScale());
+        // Who else will credit their own half of a pair: a target does, a static
+        // particle never runs a walk at all. Same convention as the CPU.
+        if (_electrostaticlist.hastargets)
+            _kernelelectrostatic.setArg(a++, _electrostaticlist.targetsbuffer);
+        else
+            _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
+        _kernelelectrostatic.setArg(a++, _electrostaticEnergyBuffer);
         _kernelelectrostatic.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kernelelectrostatic, cl::NullRange,
@@ -933,6 +959,13 @@ void SpringNetworkOpenCL::idleRun()
             biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
         _kernelhydrophobic.setArg(a++, getForceField()->getHydrophobicityDecayLength());
         _kernelhydrophobic.setArg(a++, getForceField()->getHydrophobicityScale());
+        // Who else will credit their own half of a pair: a target does, a static
+        // particle never runs a walk at all. Same convention as the CPU.
+        if (_hydrophobiclist.hastargets)
+            _kernelhydrophobic.setArg(a++, _hydrophobiclist.targetsbuffer);
+        else
+            _kernelhydrophobic.setArg(a++, sizeof(cl_mem), NULL);
+        _kernelhydrophobic.setArg(a++, _hydrophobicEnergyBuffer);
         _kernelhydrophobic.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kernelhydrophobic, cl::NullRange,
@@ -965,6 +998,9 @@ void SpringNetworkOpenCL::idleRun()
         _kernelelectrostaticfield.setArg(a++, _electrostaticmap.boxmin);
         _kernelelectrostaticfield.setArg(a++, _electrostaticmap.boxmax);
         _kernelelectrostaticfield.setArg(a++, getForceField()->getForceFieldScale());
+        _kernelelectrostaticfield.setArg(a++, _fieldEnergyBuffer);
+        _kernelelectrostaticfield.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_ELECTROSTATIC_FIELD_ENERGY_CONVERT));
         _kernelelectrostaticfield.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kernelelectrostaticfield, cl::NullRange,
@@ -1017,6 +1053,7 @@ void SpringNetworkOpenCL::idleRun()
         _kernelimpala.setArg(a++, static_cast<float>(
             biospring::forcefield::GLOBAL_IMP_FORCE_CONVERT));
         _kernelimpala.setArg(a++, getForceField()->getIMPScale());
+        _kernelimpala.setArg(a++, _impEnergyBuffer);
         _kernelimpala.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kernelimpala, cl::NullRange,
@@ -2741,6 +2778,50 @@ void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 			_energies.hbond += _hbondenergyper[i];
 		}
 
+	// The three PAIRWISE terms. Their kernels now write a per-particle energy
+	// like the spring, torsion and hydrogen bond kernels always did, so they
+	// reach here the same way. Before this they reached here not at all: a GPU
+	// run reported no steric, no Coulomb and no hydrophobic energy, and nothing
+	// said so -- the lines were simply absent from the log.
+	//
+	// The device has already shared each pair out between its two ends the way
+	// Particle::addStericForce does, so this is a plain sum and not a half one.
+	{
+		std::vector<float> per(_nbparticlesocl);
+		const struct { bool on; const cl::Buffer * buffer; float * into; const char * what; } terms[] = {
+			{isStericEnabled(), &_stericEnergyBuffer, &_energies.steric, "steric energy"},
+			{isElectrostaticCoulombEnabled(), &_electrostaticEnergyBuffer, &_energies.electrostatic,
+			 "electrostatic energy"},
+			{isHydrophobicityEnabled(), &_hydrophobicEnergyBuffer, &_energies.hydrophobic,
+			 "hydrophobic energy"},
+			{isIMPEnabled(), &_impEnergyBuffer, &_energies.imp, "IMP energy"}};
+		for (const auto & t : terms)
+			{
+			if (!t.on || (*t.buffer)() == NULL)
+				continue;
+			_err = _queue.enqueueReadBuffer(*t.buffer, CL_TRUE, 0,
+			                                sizeof(float) * _nbparticlesocl, per.data());
+			checkErr(t.what);
+			float total = 0.0f;
+			for (unsigned i = 0; i < _nbparticlesocl; ++i)
+				total += per[i];
+			*t.into = total;
+			}
+
+		// The FIELD's energy goes into the same total as Coulomb's, because that
+		// is where the CPU puts it: Particle::addElectrostaticFieldForce credits
+		// it to the particle's electrostatic energy, and the two are reported as
+		// one number. Added, therefore, not assigned.
+		if (isElectrostaticFieldEnabled() && _fieldEnergyBuffer() != NULL)
+			{
+			_err = _queue.enqueueReadBuffer(_fieldEnergyBuffer, CL_TRUE, 0,
+			                                sizeof(float) * _nbparticlesocl, per.data());
+			checkErr("electrostatic field energy");
+			for (unsigned i = 0; i < _nbparticlesocl; ++i)
+				_energies.electrostatic += per[i];
+			}
+	}
+
 	float kinetic = 0.0f;
 	for (size_t i = 0; i < _dynamicparticules.size(); ++i)
 		{
@@ -2967,6 +3048,18 @@ void SpringNetworkOpenCL::_displayFrameData()
 		biospring::logging::info("Spring energy: %5.2f kJ.mol-1", _energies.spring);
 		biospring::logging::info("Dihedral energy: %5.2f kJ.mol-1", _energies.dihedral);
 		}
+	// The three pairwise terms. They were missing from this list, not because
+	// the display left them out on purpose but because nothing computed them:
+	// their kernels wrote no energy. Same guards and same order as
+	// SpringNetwork::_displayFrameData, so the two logs line up term by term.
+	if (isAnyElectrostaticEnabled())
+		biospring::logging::info("Electrostatic energy: %5.2f kJ.mol-1", _energies.electrostatic);
+	if (isStericEnabled())
+		biospring::logging::info("Steric energy: %5.2f kJ.mol-1", _energies.steric);
+	if (isIMPEnabled())
+		biospring::logging::info("IMP energy: %5.2f kJ.mol-1", _energies.imp);
+	if (isHydrophobicityEnabled())
+		biospring::logging::info("Hydrophobic energy: %5.2f kJ.mol-1", _energies.hydrophobic);
 	// Reported without the bond COUNT the CPU prints beside it: the count
 	// lives in the device's slot arrays, and bringing them back every logged
 	// step to print a number would cost a transfer the energy does not need.

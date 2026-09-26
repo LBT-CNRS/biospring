@@ -27,13 +27,7 @@ static const float STERIC_LINEAR_STIFFNESS = 1.0;
 /// @return Steric energy, in kJ.mol-1 (0 when particles do not overlap).
 inline float steric_energy_linear(float radius_i, float radius_j, float distance)
 {
-    float equilibrium = radius_i + radius_j;
-    float distancevar = (distance - equilibrium);
-
-    if (distancevar > 0)
-        return 0.0;
-
-    return 0.5 * STERIC_LINEAR_STIFFNESS * distancevar * distancevar;
+    return biospring_steric_energy_linear(radius_i, radius_j, distance, STERIC_LINEAR_STIFFNESS);
 }
 
 /// @return Steric force module, in Da.A.fs-2 (see GLOBAL_SPRING_FORCE_CONVERT).
@@ -56,16 +50,8 @@ inline float steric_force_module_linear(float radius_i, float radius_j, float di
 
 inline float steric_energy_amber(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)
 {
-    if (distance < MINIMAL_DISTANCE_VDW_CUTOFF)
-        return 0.0;
-
-    float epsilon_ij = combination_rules::lorentz_berthelot::epsilon(epsilon_i, epsilon_j);
-    float radius_ij = combination_rules::good_hope::radius(radius_i, radius_j);
-
-    float repulsive = epsilon_ij * pow(radius_ij / distance, 12.0f);
-    float attractive = -epsilon_ij * 2.0 * pow(radius_ij / distance, 6.0f);
-
-    return repulsive + attractive;
+    return biospring_steric_energy_amber(radius_i, radius_j, epsilon_i, epsilon_j, distance,
+                                        static_cast<float>(MINIMAL_DISTANCE_VDW_CUTOFF));
 }
 
 inline float steric_force_module_amber(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)
@@ -82,16 +68,8 @@ inline float steric_force_module_amber(float radius_i, float radius_j, float eps
 
 inline float steric_energy_lewitt(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)
 {
-    if (distance < MINIMAL_DISTANCE_VDW_CUTOFF)
-        return 0.0;
-
-    float epsilon_ij = combination_rules::lorentz_berthelot::epsilon(epsilon_i, epsilon_j);
-    float radius_ij = combination_rules::good_hope::radius(radius_i, radius_j);
-
-    float repulsive = epsilon_ij * 3.0 * pow(radius_ij / distance, 8.0f);
-    float attractive = -epsilon_ij * 4.0 * pow(radius_ij / distance, 6.0f);
-
-    return repulsive + attractive;
+    return biospring_steric_energy_lewitt(radius_i, radius_j, epsilon_i, epsilon_j, distance,
+                                         static_cast<float>(MINIMAL_DISTANCE_VDW_CUTOFF));
 }
 
 inline float steric_force_module_lewitt(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)
@@ -108,16 +86,8 @@ inline float steric_force_module_lewitt(float radius_i, float radius_j, float ep
 
 inline float steric_energy_zacharias(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)
 {
-    if (distance < MINIMAL_DISTANCE_VDW_CUTOFF)
-        return 0.0;
-
-    float epsilon_ij = combination_rules::zacharias::epsilon(epsilon_i, epsilon_j);
-    float radius_ij = combination_rules::zacharias::radius(radius_i, radius_j);
-
-    float repulsive = epsilon_ij * pow(radius_ij / distance, 8.0f);
-    float attractive = -epsilon_ij * pow(radius_ij / distance, 6.0f);
-
-    return repulsive + attractive;
+    return biospring_steric_energy_zacharias(radius_i, radius_j, epsilon_i, epsilon_j, distance,
+                                            static_cast<float>(MINIMAL_DISTANCE_VDW_CUTOFF));
 }
 
 inline float steric_force_module_zacharias(float radius_i, float radius_j, float epsilon_i, float epsilon_j, float distance)

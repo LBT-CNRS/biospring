@@ -734,6 +734,17 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// Read back only on the steps that report it -- that part is not free,
 		// being a transfer and a synchronisation.
 		cl::Buffer _springEnergyBuffer;
+		// Per-particle energy for the three PAIRWISE terms. They had none, so
+		// the device reported no steric, no Coulomb and no hydrophobic energy --
+		// only the terms whose kernels already wrote one (spring, torsion,
+		// hydrogen bond) reached _computeEnergiesFromDeviceState.
+		cl::Buffer _stericEnergyBuffer;
+		cl::Buffer _electrostaticEnergyBuffer;
+		cl::Buffer _hydrophobicEnergyBuffer;
+		cl::Buffer _impEnergyBuffer;
+		// The field's energy belongs to the SAME total as Coulomb's, as it does
+		// on the CPU, so this one is summed INTO _energies.electrostatic.
+		cl::Buffer _fieldEnergyBuffer;
 		cl::Buffer _torsionEnergyBuffer;
 		float * _springenergyper = nullptr;
 		float * _torsionenergyper = nullptr;
@@ -748,7 +759,17 @@ class SpringNetworkOpenCL : public SpringNetwork
 		bool _willLogAfterThisStep() const
 			{
 			const unsigned rate = static_cast<unsigned>(getSampleRate());
-			return rate == 0 || (static_cast<unsigned>(_nbiter) + 1u) % rate == 0u;
+			const unsigned next = static_cast<unsigned>(_nbiter) + 1u;
+			if (rate == 0 || next % rate == 0u)
+				return true;
+			// And the LAST step of a finite run, whatever the rate. The CPU
+			// computes its energies unconditionally, so after the same run()
+			// getStericEnergy() answered with a real number there and with zero
+			// here -- a caller reading the two could not tell a measurement it
+			// had not asked for from one the device had refused to make. One
+			// extra measured step in a whole run is not a cost worth that.
+			const unsigned last = static_cast<unsigned>(getMaxIteration());
+			return last > 0u && next >= last;
 			}
 
 		// Says once, at startup, which terms the .msp turns on that the device

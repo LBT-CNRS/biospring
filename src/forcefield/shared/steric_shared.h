@@ -133,4 +133,81 @@ inline float biospring_steric_force_module(int mode, float radius_i, float radiu
     return biospring_steric_force_module_linear(radius_i, radius_j, distance, linearstiffness, convert);
 }
 
+// ---------------------------------------------------------------------------
+// The ENERGIES of the four modes. They used to live only in
+// ../energy/steric.hpp, so the device -- which walks every pair anyway -- had no
+// way to report a steric energy, and the GPU path reported none.
+//
+// Each one is the integral of the force module above it, in kJ.mol-1, and they
+// are written here so that the two backends run the same text: a force and an
+// energy that are transcriptions of the same paper formula in two places drift,
+// and this term has drifted before.
+
+/// @return Overlap penalty, in kJ.mol-1. Zero when the two do not overlap.
+inline float biospring_steric_energy_linear(float radius_i, float radius_j, float distance,
+                                           float linearstiffness)
+{
+    float distancevar = distance - (radius_i + radius_j);
+    if (distancevar > 0.0f)
+        return 0.0f;
+    return 0.5f * linearstiffness * distancevar * distancevar;
+}
+
+/// AMBER's 12-6, the integral of biospring_steric_force_module_amber.
+inline float biospring_steric_energy_amber(float radius_i, float radius_j, float epsilon_i, float epsilon_j,
+                                          float distance, float mindistance)
+{
+    if (distance < mindistance)
+        return 0.0f;
+    float epsilon_ij = biospring_lorentz_berthelot_epsilon(epsilon_i, epsilon_j);
+    float radius_ij = biospring_good_hope_radius(radius_i, radius_j);
+    // Written as the two terms the CPU has always summed, rather than factored,
+    // so that sharing the text changes no digit of what it used to report.
+    float repulsive = epsilon_ij * pow(radius_ij / distance, 12.0f);
+    float attractive = -epsilon_ij * 2.0f * pow(radius_ij / distance, 6.0f);
+    return repulsive + attractive;
+}
+
+/// Levitt's 8-6.
+inline float biospring_steric_energy_lewitt(float radius_i, float radius_j, float epsilon_i, float epsilon_j,
+                                           float distance, float mindistance)
+{
+    if (distance < mindistance)
+        return 0.0f;
+    float epsilon_ij = biospring_lorentz_berthelot_epsilon(epsilon_i, epsilon_j);
+    float radius_ij = biospring_good_hope_radius(radius_i, radius_j);
+    float repulsive = epsilon_ij * 3.0f * pow(radius_ij / distance, 8.0f);
+    float attractive = -epsilon_ij * 4.0f * pow(radius_ij / distance, 6.0f);
+    return repulsive + attractive;
+}
+
+/// Zacharias' 8-6, with its own combining rules.
+inline float biospring_steric_energy_zacharias(float radius_i, float radius_j, float epsilon_i,
+                                              float epsilon_j, float distance, float mindistance)
+{
+    if (distance < mindistance)
+        return 0.0f;
+    float epsilon_ij = biospring_zacharias_epsilon(epsilon_i, epsilon_j);
+    float radius_ij = biospring_zacharias_radius(radius_i, radius_j);
+    float repulsive = epsilon_ij * pow(radius_ij / distance, 8.0f);
+    float attractive = -epsilon_ij * pow(radius_ij / distance, 6.0f);
+    return repulsive + attractive;
+}
+
+/// The mode switch, in the same order as biospring_steric_force_module so that
+/// a mode cannot pick one law's force and another's energy.
+inline float biospring_steric_energy(int mode, float radius_i, float radius_j, float epsilon_i,
+                                    float epsilon_j, float distance, float linearstiffness,
+                                    float mindistance)
+{
+    if (mode == BIOSPRING_STERIC_AMBER_12_6)
+        return biospring_steric_energy_amber(radius_i, radius_j, epsilon_i, epsilon_j, distance, mindistance);
+    if (mode == BIOSPRING_STERIC_LEWITT_8_6)
+        return biospring_steric_energy_lewitt(radius_i, radius_j, epsilon_i, epsilon_j, distance, mindistance);
+    if (mode == BIOSPRING_STERIC_ZACHARIAS_8_6)
+        return biospring_steric_energy_zacharias(radius_i, radius_j, epsilon_i, epsilon_j, distance,
+                                                 mindistance);
+    return biospring_steric_energy_linear(radius_i, radius_j, distance, linearstiffness);
+}
+
 #endif // __BIOSPRING_STERIC_SHARED_H__
