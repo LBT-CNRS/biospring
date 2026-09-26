@@ -1416,6 +1416,18 @@ void SpringNetwork::_setupForceField()
     else
         _ff = std::make_unique<forcefield::ForceFieldElectrostaticCoulombAndStericLinear>();
 
+    // "default" leaves the law's own rule, which each subclass sets in its
+    // constructor. Anything else overrides it, which is what a .ff paired with a
+    // law it did not come from needs -- the `radius` column does not hold the
+    // same quantity in every file. Zacharias' law does not read it.
+    const std::string radiusrule = _config.steric.radiusrule;
+    if (radiusrule == "sum")
+        _ff->setRadiusRule(BIOSPRING_RADIUS_SUM);
+    else if (radiusrule == "geometric-mean")
+        _ff->setRadiusRule(BIOSPRING_RADIUS_GEOMETRIC_MEAN);
+    else if (radiusrule == "arithmetic-mean")
+        _ff->setRadiusRule(BIOSPRING_RADIUS_ARITHMETIC_MEAN);
+
     _ff->setStericScale(_config.steric.gridscale);
     _ff->setCoulombScale(_config.electrostatic.scale);
     _ff->setDielectric(_config.electrostatic.dielectric);

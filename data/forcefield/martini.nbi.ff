@@ -12,6 +12,13 @@
 # force field shipped with BioSpring was in. The column is written out
 # explicitly rather than omitted, so that "no hydrophobicity" is something
 # the file says rather than something the reader infers.
+#
+#COMBINING RULE FOR THE RADIUS COLUMN: undefined, and it does not matter. These
+#are MARTINI sigmas (0.47/0.41 nm), but every epsilon below is 0.0, so any
+#Lennard-Jones law computes exactly nothing from this file. Before giving it a
+#real epsilon, decide the rule: a sigma needs the ARITHMETIC MEAN and then a
+#2^(1/6) factor to become an rmin, which no law here applies -- so the values
+#would have to be converted to rmin/2 and summed instead.
 ABB	0.00	4.7	0.000	72.0000	0.0137	0.0
 ASC1	0.00	4.1	0.000	54.0000	-0.0303	0.0
 RBB	0.00	4.7	0.000	72.0000	0.0137	0.0

@@ -365,12 +365,23 @@ class StericSetting : public SettingBase
     double gridscale;
     double cutoff;
     ChoiceType mode;
+    // How two radii combine. "default" means the law's own rule, which is the
+    // rule of the parameter set that law was published with -- see
+    // STERIC_RADIUS_RULE_* in forcefield/energy/steric.hpp. Set it explicitly
+    // only when pairing a .ff with a law it did not come from, because the
+    // `radius` column does not hold the same quantity in every file: amber*.ff
+    // holds R* = rmin/2 and its radii SUM, while CAonlyLewitt.ff holds a CA-CA
+    // contact distance and its radii must be MEANED. The full table is in
+    // forcefield/shared/steric_shared.h. Zacharias' law ignores this: its
+    // product on the radius is inseparable from its product on epsilon.
+    ChoiceType radiusrule;
 
     StericSetting(const std::string & name)
         : SettingBase(name), enable(false), gridscale(1.0), cutoff(0.0),
-          mode("linear", {"linear", "lennard-jones-8-6Lewitt", "lennard-jones-8-6Zacharias", "lennard-jones-12-6Amber"})
+          mode("linear", {"linear", "lennard-jones-8-6Lewitt", "lennard-jones-8-6Zacharias", "lennard-jones-12-6Amber"}),
+          radiusrule("default", {"default", "sum", "geometric-mean", "arithmetic-mean"})
     {
-        _parameterNames = {"enable", "gridscale", "cutoff", "mode"};
+        _parameterNames = {"enable", "gridscale", "cutoff", "mode", "radiusrule"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -383,6 +394,8 @@ class StericSetting : public SettingBase
             utils::string::from_string<decltype(cutoff)>(cutoff, s);
         else if (param == "mode")
             _parse_mode(s);
+        else if (param == "radiusrule")
+            radiusrule = s;
         else
             logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
     }
@@ -393,6 +406,7 @@ class StericSetting : public SettingBase
         _mspFormatter.print("gridscale", gridscale, os);
         _mspFormatter.print("cutoff", cutoff, os);
         _mspFormatter.print("mode", mode, os);
+        _mspFormatter.print("radiusrule", radiusrule, os);
     }
 
   protected:

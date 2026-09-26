@@ -5,6 +5,10 @@
 # explicitly rather than omitted, so that "no hydrophobicity" is something
 # the file says rather than something the reader infers.
 # epsilon = Ai * R * T /1000 ; T=300K ; Ai from Zaccharias Protein Science 2003 and Poulain et al. J. Comput. Chem. 2008
+#
+#COMBINING RULE FOR THE RADIUS COLUMN: PRODUCT, and it is not separable from the
+#law. lennard-jones-8-6Zacharias pairs a product on the radius with a product on
+#epsilon; steric.radiusrule does not reach it and cannot change it.
 ACA	0.00	2.00	2.49	1.00	1.00	0.0
 ACB	0.00	1.90	2.49	1.00	1.00	0.0
 RCA	0.00	2.00	2.49	1.00	1.00	0.0

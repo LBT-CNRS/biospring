@@ -313,7 +313,8 @@ __kernel void probe(const __global float4 * positions,
                     __global float4 * probeforces,
                     const uint probeid,
                     const int stericenabled, const int coulombenabled,
-                    const int mode, const float proberadius, const float probeepsilon,
+                    const int mode, const int radiusrule,
+                    const float proberadius, const float probeepsilon,
                     const float probecharge, const float dielectric,
                     const float linearstiffness, const float stericmindistance,
                     const float coulombmindistance, const float fourpi,
@@ -338,7 +339,7 @@ __kernel void probe(const __global float4 * positions,
 		{
 		const float module = biospring_steric_force_module(
 		    mode, proberadius, radii[tid], probeepsilon, epsilons[tid], dist,
-		    linearstiffness, stericmindistance, stericconvert);
+		    linearstiffness, stericmindistance, stericconvert, radiusrule);
 		f += (axis.xyz / dist) * (stericscale * module);
 		}
 
@@ -556,6 +557,12 @@ __kernel void steric(const __global float4 * positions,
                      const __global int * springoffsets,
                      const int springsenabled,
                      const int mode,
+                     // How two radii combine, as one of BIOSPRING_RADIUS_* in
+                     // steric_shared.h. A kernel argument rather than a compile
+                     // constant because it is a property of the force-field FILE,
+                     // not of the law: amber*.ff radii sum, CAonlyLewitt.ff radii
+                     // are meaned, and one kernel serves both.
+                     const int radiusrule,
                      const float cutoff, const float linearstiffness, const float mindistance,
                      const float convert, const float stericscale,
                                           // The energy, which no pairwise kernel used to report, so the
@@ -584,15 +591,15 @@ __kernel void steric(const __global float4 * positions,
 	BIOSPRING_FOR_EACH_CANDIDATE(
 		if (springsenabled && biospring_sprung_together(springs, springoffsets, tid, p))
 			continue;
-		/* Neighbour first, self second, as Particle::addStericForce calls it. Both */
-		/* combination rules are symmetric, so this is for the reader. */
+		/* Neighbour first, self second, as Particle::addStericForce calls it. Every */
+		/* combination rule is symmetric, so this is for the reader. */
 		const float dist = sqrt(distsq);
 		const float module = biospring_steric_force_module(
 		    mode, radii[p], radius, epsilons[p], epsilon, dist,
-		    linearstiffness, mindistance, convert);
+		    linearstiffness, mindistance, convert, radiusrule);
 		sum += (axis / dist) * (stericscale * module);
 		const float pair = biospring_steric_energy(mode, radii[p], radius, epsilons[p], epsilon, dist,
-		                                        linearstiffness, mindistance);
+		                                        linearstiffness, mindistance, radiusrule);
 		esum += (targets == 0 || targets[p] != 0) ? 0.5f * pair : pair;
 	)
 	forces[tid].xyz += sum;

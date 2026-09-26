@@ -292,6 +292,7 @@ inline Configuration defaultConfiguration()
     config.steric.gridscale = 1.0;
     config.steric.cutoff = 1.0;
     config.steric.mode = "linear";
+    config.steric.radiusrule = "default";
 
     config.spring.enable = false;
     config.spring.cutoff = 15.0;

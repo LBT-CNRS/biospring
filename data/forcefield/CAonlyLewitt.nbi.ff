@@ -16,6 +16,13 @@
 # every residue as hydrophobic") and not a scale: the pairwise law is a
 # product, so every pair gets the same amplitude and the term cannot tell
 # leucine from lysine. Use it to switch the term on, not to model anything.
+#
+#COMBINING RULE FOR THE RADIUS COLUMN: GEOMETRIC MEAN. Unlike the other files
+#here, these values (5.0-7.4 A) are CONTACT DISTANCES, not radii -- Levitt's
+#united-residue model tabulates the CA-CA separation of a residue pair directly.
+#Two of them are therefore MEANED, giving 5.1-6.5 A, which is what the
+#lennard-jones-8-6Lewitt law does by default. Summing them would put the minimum
+#at 10-13 A and push every pair in the structure apart.
 ACA	0.00	5.2	0.87864	89.00	3.0	1.00
 RCA	1.00	7.35	2.34304	174.00	3.0	1.00
 NCA	0.00	6.4	1.63176	132.00	3.0	1.00

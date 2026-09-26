@@ -13,6 +13,13 @@
 #parameterisation exists for either, and a made-up number would be
 #worse than a declared absence.
 #
+#
+#COMBINING RULE FOR THE RADIUS COLUMN: SUM. The values below are AMBER's
+#R* = rmin/2, a half-distance, so the minimum of an i-j pair is R*_i + R*_j.
+#That is what the lennard-jones-12-6Amber law does by default; do NOT pair this
+#file with a law whose default is a mean (see steric.radiusrule in the .msp).
+#Meaning them instead puts two carbons at 1.91 A rather than 3.82 A, and a stack
+#of nucleobases 3.4 A apart then has no energy minimum at all.
 rP	1.1662	2.1000	0.836800	30.970	0.0	0.0
 rOP1	-0.7760	1.6612	0.878640	16.000	0.0	0.0
 rOP2	-0.7760	1.6612	0.878640	16.000	0.0	0.0

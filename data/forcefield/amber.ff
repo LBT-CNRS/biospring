@@ -83,6 +83,13 @@
 # energy is summed on the device (steric and electrostatic are missing too).
 # The forces are on both backends; the number is only on the CPU.
 #
+#
+#COMBINING RULE FOR THE RADIUS COLUMN: SUM. The values below are AMBER's
+#R* = rmin/2, a half-distance, so the minimum of an i-j pair is R*_i + R*_j.
+#That is what the lennard-jones-12-6Amber law does by default; do NOT pair this
+#file with a law whose default is a mean (see steric.radiusrule in the .msp).
+#Meaning them instead puts two carbons at 1.91 A rather than 3.82 A, and a stack
+#of nucleobases 3.4 A apart then has no energy minimum at all.
 AC	0.5973	1.908	0.359824	12.01	-0.056066	0.0
 ACA	0.0337	1.908	0.457730	12.01	-0.439320	0.0
 ACB	-0.1825	1.908	0.457730	12.01	-0.439320	0.420652

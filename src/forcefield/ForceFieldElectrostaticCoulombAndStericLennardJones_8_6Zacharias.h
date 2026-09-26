@@ -12,7 +12,15 @@ namespace forcefield
 class ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias : public ForceField
 {
   public:
-    ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias() : ForceField() {}
+    // This law's radius rule is not separable from the law: it pairs a product
+    // on the radius with a product on epsilon, and any other combination makes
+    // the potential incoherent. _radiusrule is set so that getRadiusRule()
+    // reports the truth, but the law does not read it and steric.radiusrule
+    // cannot change it.
+    ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias() : ForceField()
+    {
+        _radiusrule = STERIC_RADIUS_RULE_ZACHARIAS;
+    }
     virtual ~ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias() {}
 
     // Assignement operator.

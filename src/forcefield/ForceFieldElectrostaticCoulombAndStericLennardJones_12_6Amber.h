@@ -19,7 +19,7 @@ namespace forcefield
 class ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber : public ForceField
 {
   public:
-    ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber() : ForceField() {}
+    ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber() : ForceField() { _radiusrule = STERIC_RADIUS_RULE_AMBER; }
     virtual ~ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber() {}
 
     // Assignement operator.
@@ -28,13 +28,13 @@ class ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber : public For
     virtual float computeStericEnergy(float radius_i, float radius_j, float epsilon_i, float epsilon_j,
                                       float distance) const override
     {
-        return _stericscale * steric_energy_amber(radius_i, radius_j, epsilon_i, epsilon_j, distance);
+        return _stericscale * steric_energy_amber(radius_i, radius_j, epsilon_i, epsilon_j, distance, _radiusrule);
     }
 
     virtual float computeStericForceModule(float radius_i, float radius_j, float epsilon_i, float epsilon_j,
                                            float distance) const override
     {
-        return _stericscale * steric_force_module_amber(radius_i, radius_j, epsilon_i, epsilon_j, distance);
+        return _stericscale * steric_force_module_amber(radius_i, radius_j, epsilon_i, epsilon_j, distance, _radiusrule);
     }
 };
 

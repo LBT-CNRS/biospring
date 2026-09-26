@@ -823,6 +823,7 @@ void SpringNetworkOpenCL::idleRun()
         _kernelsteric.setArg(a++, _inSpringIndexesBuffer);
         _kernelsteric.setArg(a++, springsenabled);
         _kernelsteric.setArg(a++, _stericMode());
+        _kernelsteric.setArg(a++, getForceField()->getRadiusRule());
         _kernelsteric.setArg(a++, getStericCutoff());
         _kernelsteric.setArg(a++, biospring::forcefield::STERIC_LINEAR_STIFFNESS);
         _kernelsteric.setArg(a++, static_cast<float>(
@@ -1085,6 +1086,7 @@ void SpringNetworkOpenCL::idleRun()
         _kernelprobe.setArg(a++, isProbeStericEnabled() ? 1 : 0);
         _kernelprobe.setArg(a++, isProbeElectrostaticEnabled() ? 1 : 0);
         _kernelprobe.setArg(a++, _stericMode());
+        _kernelprobe.setArg(a++, getForceField()->getRadiusRule());
         _kernelprobe.setArg(a++, _probeparticule.getRadius());
         _kernelprobe.setArg(a++, _probeparticule.getEpsilon());
         _kernelprobe.setArg(a++, _probeparticule.getCharge());

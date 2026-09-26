@@ -12,6 +12,13 @@
 # force field shipped with BioSpring was in. The column is written out
 # explicitly rather than omitted, so that "no hydrophobicity" is something
 # the file says rather than something the reader infers.
+#
+#COMBINING RULE FOR THE RADIUS COLUMN: SUM. These are BEAD RADII (2.6-3.9 A),
+#so two beads are at their minimum when they touch: rmin_ij = r_i + r_j, giving
+#5.2-7.7 A for a CA-CA pair. The linear law, which this file is normally used
+#with, sums them. Under a Lennard-Jones law pass steric.radiusrule = sum
+#(lennard-jones-8-6Lewitt would otherwise MEAN them, giving a 2.6-3.9 A minimum
+#where the closest non-bonded CA pair in a real protein is 3.7 A).
 ACA	0.00	2.88	1.00000	89.00	1.00	0.0
 RCA	1.00	3.47	1.00000 174.00	1.00	0.0
 NCA	0.00	3.13	1.00000 132.00	1.00	0.0

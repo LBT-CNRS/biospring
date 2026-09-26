@@ -933,15 +933,36 @@ TEST(SpringNetworkOpenCL, ASkinChangesNothingOnEitherBackend)
 // serves all four. Testing only the default would leave three untested, and one
 // of those is what the rigid-body examples actually use.
 //
-// The particles sit on a LATTICE at 2.6 A, just outside the 2 A minimum the
-// Good-Hope rule gives two 2 A radii, with a small jitter so the arrangement is
-// not symmetric. That spacing is the whole difficulty of testing this term.
-// The first version dropped 250 particles into a 14 A box, which is a mean
-// spacing of 2.2 A -- inside the repulsive wall, where r^-13 is astronomical.
-// The CPU alone reached 9.7e7 A in a hundred steps, and comparing two backends
-// on an explosion measures which one rounded first. The linear law, the only
-// bounded one, agreed to 4.8e-07 A throughout, which is what said the setup was
-// at fault rather than the code.
+// The particles sit on a LATTICE, with a small jitter so the arrangement is not
+// symmetric, and its spacing is 0.75 times the PAIR MINIMUM OF THE LAW UNDER
+// TEST -- that is, every law starts equally compressed, so every law pushes.
+// One fixed spacing cannot serve all four: their minima for two 2 A radii are
+//
+//   law                        radii combine by   pair minimum   spacing
+//   linear                     sum                   4.00 A       3.00 A
+//   lennard-jones-12-6Amber    sum                   4.00 A       3.00 A
+//   lennard-jones-8-6Lewitt    geometric mean        2.00 A       1.50 A
+//   lennard-jones-8-6Zacharias product, min at
+//                              (8/6)^(1/2) r          4.62 A       3.46 A
+//
+// and that spread is the point of steric.radiusrule: the rule belongs to the
+// force-field file, not to the law, so the same two radii mean different
+// distances under different laws. The spacing was a flat 2.6 A while every
+// Lennard-Jones law took the geometric mean and all three minima were 2 A.
+//
+// What each law then does over the 400 steps, and how far apart the two backends
+// end up:
+//
+//   law                          lattice moves   CPU vs GPU
+//   linear                            0.060 A     6.0e-08 A
+//   lennard-jones-12-6Amber           8.450 A     1.1e-05 A
+//   lennard-jones-8-6Lewitt           2.800 A     1.8e-06 A
+//   lennard-jones-8-6Zacharias        0.636 A     4.8e-07 A
+//
+// The linear law is the tight one: its stiffness is 1.0 kJ.mol-1.A-2, so a 1 A
+// overlap moves the lattice a twentieth of an Angstrom, and at 0.8 of its
+// minimum instead of 0.75 it moves 0.049 A. That is why the guard below is at
+// 0.05 and why this compression is not free to drift.
 //
 // Neutral particles, so nothing but the steric law moves the cloud.
 namespace
@@ -950,12 +971,20 @@ void buildLattice(spn::SpringNetwork & network, configuration::Configuration & c
                   const std::string & mode)
 {
     const int SIDE = 6;             // 216 particles
-    const float SPACING = 2.6f;
+
+    // 0.75 of this law's own minimum for two 2 A radii; see the header above.
+    float minimum = 4.0f;                                   // sum of the radii
+    if (mode == "lennard-jones-8-6Lewitt")
+        minimum = 2.0f;                                     // their geometric mean
+    else if (mode == "lennard-jones-8-6Zacharias")
+        minimum = sqrt(8.0f / 6.0f) * 4.0f;                 // product, shifted out
+    const float SPACING = 0.75f * minimum;
 
     unsigned state = 4242u;
-    const auto jitter = [&state]() {
+    const auto jitter = [&state, SPACING]() {
         state = state * 1103515245u + 12345u;
-        return (static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff) - 0.5f) * 1.2f;
+        return (static_cast<float>((state >> 16) & 0x7fffu) / static_cast<float>(0x7fff) - 0.5f)
+               * 0.4f * SPACING;
     };
 
     for (int x = 0; x < SIDE; ++x)
@@ -1048,8 +1077,8 @@ TEST(SpringNetworkOpenCL, StericMatchesTheCPUInEveryMode)
         // measures which one rounded first, not whether they agree on the law.
         EXPECT_LT(moved, 20.0f) << mode << ": the lattice blew up (" << moved
                                 << " A); this is no longer a comparison of force laws";
-        // 1e-3 A is 450 times the worst difference measured across the four
-        // laws, which is 2.2e-06 A -- the two backends run the same text here,
+        // 1e-3 A is 93 times the worst difference measured across the four
+        // laws, which is 1.1e-05 A -- the two backends run the same text here,
         // so what is left is the order of a summation. Tight enough that a
         // wrong combination rule or a missing exclusion cannot hide in it.
         EXPECT_LT(worst, 1.0e-3f) << mode << ": the GPU ended up " << worst << " A from the CPU";

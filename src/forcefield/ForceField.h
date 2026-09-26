@@ -12,6 +12,7 @@
 #include "energy/electrostatic.hpp"
 #include "energy/hydrophobic.hpp"
 #include "energy/hydrogenbond.hpp"
+#include "energy/steric.hpp"
 
 namespace biospring
 {
@@ -29,7 +30,7 @@ class ForceField
           _forcefieldscale(1.0), _coulombscale(1.0), _hydrophobicityscale(1.0),
           _hydrophobicitydecaylength(10.0), _dielectric(1.0), _distancedependentdielectric(false),
           _hydrogenbondscale(1.0), _hydrogenbondwelldepth(16.7), _hydrogenbondequilibrium(2.9),
-          _hydrogenbondwidth(1.34)
+          _hydrogenbondwidth(1.34), _radiusrule(BIOSPRING_RADIUS_SUM)
     {
     }
     virtual ~ForceField() {}
@@ -38,6 +39,7 @@ class ForceField
     ForceField & operator=(const ForceField & other)
     {
         _stericscale = other._stericscale;
+        _radiusrule = other._radiusrule;
         _springscale = other._springscale;
         _impscale = other._impscale;
         _forcefieldscale = other._forcefieldscale;
@@ -171,6 +173,15 @@ class ForceField
     float getStericScale() const { return _stericscale; }
     void setStericScale(float stericscale) { _stericscale = stericscale; }
 
+    // How two radii combine, as one of BIOSPRING_RADIUS_* in
+    // shared/steric_shared.h. Each subclass sets the default of its own
+    // canonical parameter set in its constructor; this setter exists so that
+    // steric.radiusrule in the .msp can override it when a force-field file is
+    // paired with a law it did not come from. The .ff files disagree about what
+    // their `radius` column holds, so nothing else can get this right.
+    int getRadiusRule() const { return _radiusrule; }
+    void setRadiusRule(int rule) { _radiusrule = rule; }
+
     float getSpringScale() const { return _springscale; }
     void setSpringScale(float springscale) { _springscale = springscale; }
 
@@ -233,6 +244,7 @@ class ForceField
 
   protected:
     float _stericscale;
+    int _radiusrule;
     float _springscale;
     float _impscale;
     float _impuppermebraneoffset;
