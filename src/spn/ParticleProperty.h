@@ -27,7 +27,7 @@ class ParticleProperty
     ParticleProperty()
         : _mass(1.0), _charge(0.0), _electroncharge(0), _radius(1.0), _epsilon(0.0), _tempfactor(0.0), _occupancy(0.0),
           _hydrophobicity(0.0), _solventaccessibilitysurface(0.0), _transferenergybyaccessiblesurface(0.0),
-          _ischarged(false), _ishydrophobic(false), _burying(1.0), _donorcapacity(0), _acceptorcapacity(0), _antecedentindex(-1), _antecedentindex2(-1)
+          _ischarged(false), _ishydrophobic(false), _burying(1.0), _donorcapacity(0), _acceptorcapacity(0), _antecedentindex(-1), _antecedentindex2(-1), _hblobes(false)
     {
     }
 
@@ -112,6 +112,32 @@ class ParticleProperty
     int antecedentIndex2() const { return _antecedentindex2; }
     void setAntecedentIndex2(int index) { _antecedentindex2 = index; }
 
+    // Does the second antecedent define the PLANE rather than a second bond?
+    //
+    // The bisector above is exact for a site with TWO heavy neighbours and ONE
+    // hydrogen or lone pair. A site with ONE heavy neighbour and TWO of them is
+    // the other common case, and there the bisector is the worst possible
+    // answer: an exocyclic amine (guanine N2, adenine N6, cytosine N4) or a
+    // carbonyl oxygen (guanine O6, cytosine O2, thymine O4) is planar sp2, so
+    // its two hydrogens -- or its two lone pairs -- sit in the base plane at
+    // +/- 62 degrees of the C->self axis, and "away from the antecedent" aims
+    // exactly BETWEEN them. Measured over 56 amine hydrogens of a B-DNA duplex
+    // the angle is 62.0, 62.1 and 62.9 degrees for DG, DA and DC, so the best
+    // weight such a site can reach is cos^2(62) = 0.22, and 0.05 is what the
+    // running duplex reports.
+    //
+    // Three of the five Watson-Crick bond types have such a site at BOTH ends,
+    // so every base pair kept one bond and lost the rest: 13 of 24 complementary
+    // pairs had two bonds at the right distance, 0 of 24 had two at a usable
+    // angle. With the two lobes the three broken types go from 0.06-0.08 to
+    // 0.89-0.94, which is what the two working types already had.
+    //
+    // When this is set, antecedentIndex2 is not a bonded neighbour: it is any
+    // other atom of the same planar group, and it serves only to fix which
+    // plane the lobes lie in. The .hbond table marks it with a '~' prefix.
+    bool hasLobes() const { return _hblobes; }
+    void setHasLobes(bool lobes) { _hblobes = lobes; }
+
   protected:
   private:
     float _mass;
@@ -131,6 +157,7 @@ class ParticleProperty
     unsigned _acceptorcapacity;
     int _antecedentindex;
     int _antecedentindex2;
+    bool _hblobes;
 };
 
 } // namespace spn

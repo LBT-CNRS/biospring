@@ -31,9 +31,23 @@ void DonorAcceptorRuleReader::_parse_line(const std::string & line, size_t line_
     if (tokens.size() >= 5)
         entry.antecedent = tokens[4];
     // A second antecedent turns the direction into the bisector's opposite,
-    // which is exact for a planar sp2 donor -- see DonorAcceptorRole.
+    // which is exact for a planar sp2 site with two heavy neighbours -- see
+    // DonorAcceptorRole. A '~' prefix says the atom is a PLANE reference
+    // instead, for a site with one heavy neighbour and two hydrogens or two
+    // lone pairs, whose directions are the two lobes at +/- 62 degrees.
     if (tokens.size() == 6)
-        entry.antecedent2 = tokens[5];
+    {
+        if (tokens[5][0] == '~')
+        {
+            entry.lobes = true;
+            entry.antecedent2 = tokens[5].substr(1);
+            if (entry.antecedent2.empty())
+                logging::die("DonorAcceptorRuleReader: line %d: '~' names no plane atom",
+                             static_cast<int>(line_id));
+        }
+        else
+            entry.antecedent2 = tokens[5];
+    }
 
     _roles[{resname, atomname}] = entry;
 }
@@ -62,6 +76,7 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
     unsigned nb_directed = 0;
     unsigned nb_missing_antecedent = 0;
     unsigned nb_bisector = 0;
+    unsigned nb_lobes = 0;
 
     // (chain, residue id, atom name) -> particle index, so a rule's
     // antecedent column can be resolved inside its own residue. Built once:
@@ -132,13 +147,18 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
         if (anc2 >= 0)
         {
             p.setAntecedentIndex2(anc2);
-            ++nb_bisector;
+            p.setHasLobes(it->second.lobes);
+            if (it->second.lobes)
+                ++nb_lobes;
+            else
+                ++nb_bisector;
         }
     }
 
     logging::info("Hydrogen bond tagging: %d donor(s), %d acceptor(s) among %d particles, %d with a resolved "
-                  "antecedent (directional), %d of them with two (planar sp2, exact direction).",
-                  nb_donors, nb_acceptors, spn.getNumberOfParticles(), nb_directed, nb_bisector);
+                  "antecedent (directional), %d of them with a bisector (two heavy neighbours, one direction), "
+                  "%d with two lobes (one heavy neighbour, two directions).",
+                  nb_donors, nb_acceptors, spn.getNumberOfParticles(), nb_directed, nb_bisector, nb_lobes);
     if (nb_missing_antecedent > 0)
         logging::warning("DonorAcceptorRuleReader: %d particle(s) name an antecedent absent from their residue -- "
                          "left undirected (distance-only), not an error.",

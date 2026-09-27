@@ -192,6 +192,175 @@ TEST(Topology, to_spring_network)
 // its gradient is easy to transcribe with a sign flipped -- which is exactly
 // what happened once and what nothing but this check caught (the energy is
 // unaffected by it, and so is every pairing count).
+// The LOBE form of a site's direction, against finite differences.
+//
+// A planar sp2 site with one heavy neighbour and two hydrogens -- an exocyclic
+// amine, a carbonyl oxygen -- has TWO directions, at +/- 62 degrees of its axis
+// and in its plane, and the bond takes whichever fits. The plane comes from a
+// third atom of the same group, marked '~' in the .hbond table, and that atom
+// enters the gradient like an antecedent does. Four bodies carry force here, not
+// three, and the derivation goes through a Gram-Schmidt projection, so it is
+// exactly the kind of expression a sign error hides in.
+// Two geometries, chosen so the acceptor sits on the OTHER side of the axis in
+// the second: sigma comes out +1 in one and -1 in the other. One sign convention
+// has to satisfy both, which is what stops this being fitted to a single case.
+class HydrogenBondLobeForces : public ::testing::TestWithParam<std::array<std::array<double, 3>, 4>>
+{
+};
+
+INSTANTIATE_TEST_SUITE_P(BothLobes, HydrogenBondLobeForces,
+                         ::testing::Values(
+                             // 0 the heavy neighbour, 1 the plane atom, 2 the donor,
+                             // 3 the acceptor, off-axis to ONE side: sigma = +1.
+                             std::array<std::array<double, 3>, 4>{{{0.0, 0.0, 0.0},
+                                                                   {-0.7, 1.2, 0.05},
+                                                                   {1.35, 0.22, -0.11},
+                                                                   {2.6, 2.3, 0.4}}},
+                             // The acceptor on the OTHER side of the axis, 30 degrees
+                             // off that lobe: sigma = -1 and the weight is 0.750, so
+                             // the angular derivative is neither zero nor saturated.
+                             std::array<std::array<double, 3>, 4>{{{0.0, 0.0, 0.0},
+                                                                   {-0.7, 1.2, 0.05},
+                                                                   {1.35, 0.22, -0.11},
+                                                                   {3.09, -1.91, 1.32}}}));
+
+TEST_P(HydrogenBondLobeForces, match_energy_gradient_by_finite_differences)
+{
+    topology::Topology top;
+    const std::array<std::array<double, 3>, 4> pos = GetParam();
+    for (size_t i = 0; i < pos.size(); ++i)
+    {
+        topology::ParticleProperties p;
+        p.set_position(Vector3f(static_cast<float>(pos[i][0]), static_cast<float>(pos[i][1]),
+                                static_cast<float>(pos[i][2])));
+        p.set_mass(12.0f);
+        p.set_residue_id(static_cast<int>(i) + 1);
+        top.add_particle(topology::Particle(p));
+    }
+
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+    spn.getParticle(2).setDonorCapacity(2);
+    spn.getParticle(2).setAntecedentIndex(0);
+    spn.getParticle(2).setAntecedentIndex2(1);
+    spn.getParticle(2).setHasLobes(true);
+    spn.getParticle(3).setAcceptorCapacity(1);
+
+    configuration::Configuration conf = configuration::defaultConfiguration();
+    conf.hbond.enable = true;
+    conf.hbond.cutoff = 7.0;
+    spn.setup(conf);
+
+    auto energy = [&]() {
+        for (size_t i = 0; i < spn.getNumberOfParticles(); ++i)
+            spn.getParticle(i).resetForce();
+        spn.computeForces();
+        return spn.getHydrogenBondEnergy();
+    };
+
+    const float e0 = energy();
+    std::array<Vector3f, 4> analytic;
+    for (size_t i = 0; i < 4; ++i)
+        analytic[i] = spn.getParticle(i).getForce();
+
+    ASSERT_LT(e0, -1.0f) << "no bond formed, so this measures nothing";
+    // Both the heavy neighbour AND the plane atom must carry force: if either is
+    // inert the lobe direction is not being differentiated through.
+    ASSERT_GT(analytic[0].norm(), 1e-6f) << "the heavy neighbour carries no force";
+    ASSERT_GT(analytic[1].norm(), 1e-6f) << "the PLANE atom carries no force: the lobe is not differentiated";
+
+    // And the weight must be strictly inside (0, 1), otherwise the angular
+    // derivative is zero or saturated and the test passes on a radial force.
+    {
+        const Vector3f v = spn.getParticle(3).getPosition() - spn.getParticle(2).getPosition();
+        const Vector3f hd = spn.donorDirection(spn.getParticle(2), v / v.norm());
+        const float w = biospring::forcefield::hydrogen_bond_angular_factor(hd.dot(v / v.norm()));
+        ASSERT_GT(w, 0.1f) << "angular weight " << w << " is too close to zero";
+        ASSERT_LT(w, 0.95f) << "angular weight " << w << " is saturated";
+        // And the direction must BE a lobe, not the axis: cos(62) apart from it.
+        const Vector3f axis = (spn.getParticle(2).getPosition() - spn.getParticle(0).getPosition());
+        EXPECT_NEAR(hd.dot(axis / axis.norm()), std::cos(62.0f * static_cast<float>(M_PI) / 180.0f), 1e-3f);
+    }
+
+    const float h = 1e-2f;
+    for (size_t i = 0; i < 4; ++i)
+    {
+        for (int dim = 0; dim < 3; ++dim)
+        {
+            const Vector3f saved = spn.getParticle(i).getPosition();
+            Vector3f displaced = saved;
+            auto set_dim = [&](Vector3f & v, float value) {
+                if (dim == 0) v.setX(value);
+                else if (dim == 1) v.setY(value);
+                else v.setZ(value);
+            };
+            auto get_dim = [&](const Vector3f & v) { return dim == 0 ? v.getX() : (dim == 1 ? v.getY() : v.getZ()); };
+
+            set_dim(displaced, get_dim(saved) + h);
+            spn.getParticle(i).setPosition(displaced);
+            const float e_plus = energy();
+
+            set_dim(displaced, get_dim(saved) - h);
+            spn.getParticle(i).setPosition(displaced);
+            const float e_minus = energy();
+
+            spn.getParticle(i).setPosition(saved);
+
+            const float fd = -(e_plus - e_minus) / (2.0f * h);
+            const float an = get_dim(analytic[i]) /
+                             static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+            EXPECT_NEAR(fd, an, 3e-2f * std::max(1.0f, std::abs(an)))
+                << "particle " << i << " dim " << dim;
+        }
+    }
+}
+
+// With sin(62) taken out of the lobe form it collapses to the single-antecedent
+// direction, so the two forms must agree in that limit. This checks the SITE
+// rather than the force: a lobe site whose acceptor sits exactly on the axis is
+// weaker than a plain axis site by cos^2(62), and by nothing else.
+TEST(Topology, a_lobe_site_reduces_to_the_axis_when_the_partner_is_on_it)
+{
+    topology::Topology top;
+    const std::array<std::array<double, 3>, 4> pos = {{{0.0, 0.0, 0.0},
+                                                       {-0.7, 1.2, 0.05},
+                                                       {1.35, 0.0, 0.0},
+                                                       {4.25, 0.0, 0.0}}};
+    for (size_t i = 0; i < pos.size(); ++i)
+    {
+        topology::ParticleProperties p;
+        p.set_position(Vector3f(static_cast<float>(pos[i][0]), static_cast<float>(pos[i][1]),
+                                static_cast<float>(pos[i][2])));
+        p.set_mass(12.0f);
+        p.set_residue_id(static_cast<int>(i) + 1);
+        top.add_particle(topology::Particle(p));
+    }
+    spn::SpringNetwork spn;
+    top.to_spring_network(spn);
+    spn.getParticle(2).setDonorCapacity(2);
+    spn.getParticle(2).setAntecedentIndex(0);
+    spn.getParticle(2).setAntecedentIndex2(1);
+    spn.getParticle(3).setAcceptorCapacity(1);
+    configuration::Configuration conf = configuration::defaultConfiguration();
+    conf.hbond.enable = true;
+    conf.hbond.cutoff = 7.0;
+    spn.setup(conf);
+
+    const Vector3f towards(1.0f, 0.0f, 0.0f);
+    // The axis form: antecedent 0 only, so the direction is +x exactly.
+    spn.getParticle(2).setHasLobes(false);
+    spn.getParticle(2).setAntecedentIndex2(-1);
+    const Vector3f axis = spn.donorDirection(spn.getParticle(2), towards);
+    EXPECT_NEAR(axis.dot(towards), 1.0f, 1e-5f);
+
+    // The lobe form: the same axis, tilted by 62 degrees either way.
+    spn.getParticle(2).setAntecedentIndex2(1);
+    spn.getParticle(2).setHasLobes(true);
+    const Vector3f lobe = spn.donorDirection(spn.getParticle(2), towards);
+    EXPECT_NEAR(lobe.dot(towards), std::cos(62.0f * static_cast<float>(M_PI) / 180.0f), 1e-4f);
+    EXPECT_NEAR(lobe.norm(), 1.0f, 1e-5f);
+}
+
 TEST(Topology, hydrogen_bond_forces_match_energy_gradient_by_finite_differences)
 {
     topology::Topology top;

@@ -32,10 +32,19 @@ struct DonorAcceptorRole
     // recovers the true N-H direction to under a degree. Same for a guanine
     // N1 or a thymine N3 between two ring carbons.
     std::string antecedent2;
+
+    // Is antecedent2 a PLANE reference rather than a second bond? Written with
+    // a '~' prefix in the file. A site with one heavy neighbour and two
+    // hydrogens or two lone pairs -- an exocyclic amine, a carbonyl oxygen --
+    // is planar sp2 and has TWO directions at +/- 62 degrees of its axis, in
+    // the plane. The bisector cannot express either of them, so such a line
+    // names any other atom of the same planar group as '~atom' and the two
+    // lobes are built from it. See ParticleProperties::hasLobes.
+    bool lobes = false;
 };
 
 // Parses a .hbond file: lines of
-// "<resname> <atomname> <donor> <acceptor> [<antecedent> [<antecedent2>]]", donor/acceptor
+// "<resname> <atomname> <donor> <acceptor> [<antecedent> [[~]<antecedent2>]]", donor/acceptor
 // being CAPACITIES (0, 1, 2...) rather than flags -- 0/1 keeps its old
 // meaning exactly, so a table written before capacities existed still reads
 // the same. The fifth column is optional and names the heavy atom that gives

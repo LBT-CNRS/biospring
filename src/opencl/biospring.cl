@@ -1034,34 +1034,125 @@ inline bool biospring_hb_already_bonded(const __global uint * donoroffsets, cons
 	return false;
 	}
 
-// "Where the hydrogen points", or the lone pair: away from the antecedent, or
-// along the bisector when there are two (planar sp2, exact). Returns false
-// when the particle has no antecedent at all, in which case the side imposes
-// no direction and its weight is 1.
-inline bool biospring_hb_direction(const __global float4 * positions, const __global int2 * antecedents,
-                                   uint i, float3 * outdir)
+// Where a planar sp2 site's two hydrogens, or its two lone pairs, sit relative
+// to its single heavy bond. Same values as HBOND_LOBE_* in SpringNetwork.cpp; see
+// there for what they were measured on.
+#define BIOSPRING_HB_LOBE_COS 0.469472f
+#define BIOSPRING_HB_LOBE_SIN 0.882948f
+
+// One end of a hydrogen bond, and everything its angular gradient needs. Mirrors
+// SpringNetwork::HydrogenBondSite -- the two backends run two transcriptions of
+// the same geometry here, which is why a CPU comparison test guards it.
+typedef struct
 	{
+	int valid;
+	float3 hhat;       // the direction chosen, unit
+	float3 e1, e2;     // away-directions from antecedent 1 and 2, unit
+	float l1, l2;      // their lengths
+	float hlen;        // |e1 + e2|, bisector form; exactly 1 in the lobe form
+	int lobes;
+	float3 shat;       // in-plane unit perpendicular to e1, lobe form
+	float3 r;          // antecedent2 - antecedent1, lobe form
+	float m;           // the length shat was normalised by
+	float sigma;       // +1 or -1: which lobe won
+	} BiospringHBSite;
+
+// `towards` is the unit vector from this site to its partner; it only matters
+// for a lobe site, where it decides which of the two lobes the bond uses.
+inline BiospringHBSite biospring_hb_site(const __global float4 * positions,
+                                         const __global int4 * antecedents, uint i, float3 towards)
+	{
+	BiospringHBSite st;
+	st.valid = 0; st.lobes = 0;
+	st.hhat = (float3)(0.0f); st.e1 = (float3)(0.0f); st.e2 = (float3)(0.0f);
+	st.shat = (float3)(0.0f); st.r = (float3)(0.0f);
+	st.l1 = 0.0f; st.l2 = 0.0f; st.hlen = 0.0f; st.m = 0.0f; st.sigma = 0.0f;
+
 	int a1 = antecedents[i].x;
 	if (a1 < 0)
-		return false;
+		return st;
 	float3 here = positions[i].xyz;
 	float3 u1 = here - positions[a1].xyz;
-	float l1 = length(u1);
-	if (l1 <= 1e-6f)
-		return false;
-	float3 h = u1 / l1;
+	st.l1 = length(u1);
+	if (st.l1 <= 1e-6f)
+		return st;
+	st.e1 = u1 / st.l1;
 	int a2 = antecedents[i].y;
+
+	if (antecedents[i].z != 0 && a2 >= 0)
+		{
+		st.r = positions[a2].xyz - positions[a1].xyz;
+		float3 q = st.r - st.e1 * dot(st.e1, st.r);
+		st.m = length(q);
+		if (st.m <= 1e-6f)
+			{
+			// Collinear: no plane, so fall back to the axis.
+			st.hhat = st.e1; st.hlen = 1.0f; st.valid = 1;
+			return st;
+			}
+		st.shat = q / st.m;
+		st.lobes = 1;
+		float3 plus = st.e1 * BIOSPRING_HB_LOBE_COS + st.shat * BIOSPRING_HB_LOBE_SIN;
+		float3 minus = st.e1 * BIOSPRING_HB_LOBE_COS - st.shat * BIOSPRING_HB_LOBE_SIN;
+		st.sigma = dot(plus, towards) >= dot(minus, towards) ? 1.0f : -1.0f;
+		st.hhat = st.e1 * BIOSPRING_HB_LOBE_COS + st.shat * (st.sigma * BIOSPRING_HB_LOBE_SIN);
+		st.hlen = 1.0f;
+		st.valid = 1;
+		return st;
+		}
+
+	float3 h = st.e1;
 	if (a2 >= 0)
 		{
 		float3 u2 = here - positions[a2].xyz;
-		float l2 = length(u2);
-		if (l2 > 1e-6f)
-			h += u2 / l2;
+		st.l2 = length(u2);
+		if (st.l2 > 1e-6f) { st.e2 = u2 / st.l2; h += st.e2; }
 		}
-	float hlen = length(h);
-	if (hlen <= 1e-6f)
+	st.hlen = length(h);
+	if (st.hlen <= 1e-6f)
+		return st;
+	st.hhat = h / st.hlen;
+	st.valid = 1;
+	return st;
+	}
+
+// The forces one side's angular factor puts on the two atoms its direction is
+// built from. Mirrors the `angular` lambda in SpringNetwork::computeHydrogenBond-
+// Forces, including the lobe derivation; the comment there carries the algebra.
+inline void biospring_hb_angular(BiospringHBSite st, float3 towards, float c, float k,
+                                 float3 * f1, float3 * f2)
+	{
+	*f1 = (float3)(0.0f);
+	*f2 = (float3)(0.0f);
+	if (!st.lobes)
+		{
+		float3 t = towards - st.hhat * c;
+		float g = k / st.hlen;
+		*f1 = (t - st.e1 * dot(st.e1, t)) * (g / st.l1);
+		if (st.l2 > 1e-6f)
+			*f2 = (t - st.e2 * dot(st.e2, t)) * (g / st.l2);
+		return;
+		}
+	float3 ta = (towards - st.e1 * dot(st.e1, towards)) / st.l1;
+	float3 ts = (towards - st.shat * dot(st.shat, towards)) / st.m;
+	float3 z = -(ts * dot(st.e1, st.r) + st.r * dot(ts, st.e1));
+	float ss = st.sigma * BIOSPRING_HB_LOBE_SIN;
+	float3 pz = z - st.e1 * dot(st.e1, z);
+	float3 pts = ts - st.e1 * dot(st.e1, ts);
+	float3 A = ta * BIOSPRING_HB_LOBE_COS + pz * (ss / st.l1);
+	float3 B = pts * ss;
+	*f1 = (A + B) * k;
+	*f2 = B * (-k);
+	}
+
+// Kept as a thin wrapper: the scoring kernel only wants the direction.
+inline bool biospring_hb_direction(const __global float4 * positions, const __global int4 * antecedents,
+                                   uint i, float3 towards, float3 * outdir)
+	{
+	BiospringHBSite st = biospring_hb_site(positions, antecedents, i, towards);
+	if (!st.valid)
 		return false;
-	*outdir = h / hlen;
+	*outdir = st.hhat;
 	return true;
 	}
 
@@ -1123,8 +1214,10 @@ __kernel void hbondScore(const __global float4 * positions,
 	if (!i_donor && !i_acceptor) return;
 
 	float3 here = positions[tid].xyz;
-	float3 dirhere;
-	bool hashere = biospring_hb_direction(positions, antecedents, tid, &dirhere);
+	// On a LOBE site the direction depends on which candidate is being scored --
+	// the bond takes whichever of the two lobes fits it -- so it is recomputed
+	// inside the loop rather than hoisted out of it.
+	bool hashere = antecedents[tid].x >= 0;
 
 	int best = -1;
 	float beststrength = 0.0f;
@@ -1160,10 +1253,10 @@ __kernel void hbondScore(const __global float4 * positions,
 		float3 vhat = axis / dist;
 
 		float weight = 1.0f;
-		if (hashere)
+		float3 dirhere, dirthere;
+		if (hashere && biospring_hb_direction(positions, antecedents, tid, vhat, &dirhere))
 			weight *= biospring_hbond_angular_factor(dot(dirhere, vhat));
-		float3 dirthere;
-		if (biospring_hb_direction(positions, antecedents, j, &dirthere))
+		if (biospring_hb_direction(positions, antecedents, j, -vhat, &dirthere))
 			weight *= biospring_hbond_angular_factor(dot(dirthere, -vhat));
 
 		float s = hbondscale * biospring_hbond_energy(dist, welldepth, equilibrium, width) * weight;
@@ -1344,50 +1437,14 @@ __kernel void hbondForce(const __global float4 * positions, volatile __global fl
 		float morse  = hbondscale * biospring_hbond_energy(dist, welldepth, equilibrium, width);
 		float dmorse = hbondscale * biospring_hbond_force_module(dist, welldepth, equilibrium, width, convert);
 
-		// Each side's direction, and the lengths the gradient needs.
+		// Each side's direction, from the shared builder, so the scoring kernel
+		// and the force cannot disagree about it.
 		int d1i = antecedents[tid].x, d2i = antecedents[tid].y;
 		int a1i = antecedents[acceptor].x, a2i = antecedents[acceptor].y;
-		float3 dhat = (float3)(0.0f), ahat = (float3)(0.0f);
-		float3 d1 = (float3)(0.0f), d2 = (float3)(0.0f), a1 = (float3)(0.0f), a2 = (float3)(0.0f);
-		float dl1 = 0.0f, dl2 = 0.0f, dhlen = 0.0f, al1 = 0.0f, al2 = 0.0f, ahlen = 0.0f;
-		bool hasD = false, hasA = false;
-
-		if (d1i >= 0)
-			{
-			float3 u1 = pd - positions[d1i].xyz;
-			dl1 = length(u1);
-			if (dl1 > 1e-6f)
-				{
-				d1 = u1 / dl1;
-				float3 h = d1;
-				if (d2i >= 0)
-					{
-					float3 u2 = pd - positions[d2i].xyz;
-					dl2 = length(u2);
-					if (dl2 > 1e-6f) { d2 = u2 / dl2; h += d2; }
-					}
-				dhlen = length(h);
-				if (dhlen > 1e-6f) { dhat = h / dhlen; hasD = true; }
-				}
-			}
-		if (a1i >= 0)
-			{
-			float3 u1 = pa - positions[a1i].xyz;
-			al1 = length(u1);
-			if (al1 > 1e-6f)
-				{
-				a1 = u1 / al1;
-				float3 h = a1;
-				if (a2i >= 0)
-					{
-					float3 u2 = pa - positions[a2i].xyz;
-					al2 = length(u2);
-					if (al2 > 1e-6f) { a2 = u2 / al2; h += a2; }
-					}
-				ahlen = length(h);
-				if (ahlen > 1e-6f) { ahat = h / ahlen; hasA = true; }
-				}
-			}
+		BiospringHBSite sd = biospring_hb_site(positions, antecedents, tid, vhat);
+		BiospringHBSite sa = biospring_hb_site(positions, antecedents, (uint)acceptor, -vhat);
+		bool hasD = sd.valid != 0, hasA = sa.valid != 0;
+		float3 dhat = sd.hhat, ahat = sa.hhat;
 
 		float cd = hasD ? dot(dhat, vhat) : 1.0f;
 		float ca = hasA ? dot(ahat, -vhat) : 1.0f;
@@ -1410,11 +1467,7 @@ __kernel void hbondForce(const __global float4 * positions, volatile __global fl
 		// axis dependence on the acceptor, the donor balancing the three.
 		if (hasD && dwd != 0.0f)
 			{
-			float3 t = vhat - dhat * cd;
-			float g = morse * wa * dwd * convert / dhlen;
-			f_d1 = (t - d1 * dot(d1, t)) * (g / dl1);
-			if (d2i >= 0 && dl2 > 1e-6f)
-				f_d2 = (t - d2 * dot(d2, t)) * (g / dl2);
+			biospring_hb_angular(sd, vhat, cd, morse * wa * dwd * convert, &f_d1, &f_d2);
 			float3 on_acceptor = (dhat - vhat * cd) * (-morse * wa * dwd * convert / dist);
 			f_acceptor += on_acceptor;
 			f_donor -= (f_d1 + f_d2 + on_acceptor);
@@ -1424,11 +1477,7 @@ __kernel void hbondForce(const __global float4 * positions, volatile __global fl
 		// direction is -vhat and its axis dependence lands on the DONOR.
 		if (hasA && dwa != 0.0f)
 			{
-			float3 t = -vhat - ahat * ca;
-			float g = morse * wd * dwa * convert / ahlen;
-			f_a1 = (t - a1 * dot(a1, t)) * (g / al1);
-			if (a2i >= 0 && al2 > 1e-6f)
-				f_a2 = (t - a2 * dot(a2, t)) * (g / al2);
+			biospring_hb_angular(sa, -vhat, ca, morse * wd * dwa * convert, &f_a1, &f_a2);
 			float3 on_donor = (ahat + vhat * ca) * (-morse * wd * dwa * convert / dist);
 			f_donor += on_donor;
 			f_acceptor -= (f_a1 + f_a2 + on_donor);

@@ -46,7 +46,7 @@ A    rO4    0 2 rC4   1C1
 RA   rO4    0 2 rC4   1C1
 A    aN7    0 1 aC5   aC8
 RA   aN7    0 1 aC5   aC8
-A    aN6    2 0 aC6
+A    aN6    2 0 aC6   ~aN1
 RA   aN6    2 0 aC6
 A    aN1    0 1 aC2   aC6
 RA   aN1    0 1 aC2   aC6
@@ -64,11 +64,11 @@ C    rO5    0 2 rC5   rP
 RC   rO5    0 2 rC5   rP
 C    rO4    0 2 rC4   2C1
 RC   rO4    0 2 rC4   2C1
-C    cN4    2 0 cC4
+C    cN4    2 0 cC4   ~cN3
 RC   cN4    2 0 cC4
 C    cN3    0 1 cC2   cC4
 RC   cN3    0 1 cC2   cC4
-C    cO2    0 2 cC2
+C    cO2    0 2 cC2   ~cN3
 RC   cO2    0 2 cC2
 C    rO2    1 2 rC2
 RC   rO2    1 2 rC2
@@ -84,11 +84,11 @@ G    rO4    0 2 rC4   3C1
 RG   rO4    0 2 rC4   3C1
 G    gN7    0 1 gC5   gC8
 RG   gN7    0 1 gC5   gC8
-G    gO6    0 2 gC6
+G    gO6    0 2 gC6   ~gN1
 RG   gO6    0 2 gC6
 G    gN1    1 0 gC2   gC6
 RG   gN1    1 0 gC2   gC6
-G    gN2    2 0 gC2
+G    gN2    2 0 gC2   ~gN1
 RG   gN2    2 0 gC2
 G    gN3    0 1 gC2   gC4
 RG   gN3    0 1 gC2   gC4
@@ -104,7 +104,7 @@ U    rO5    0 2 rC5   rP
 RU   rO5    0 2 rC5   rP
 U    rO4    0 2 rC4   4C1
 RU   rO4    0 2 rC4   4C1
-U    uO4    0 2 uC4
+U    uO4    0 2 uC4   ~uN3
 RU   uO4    0 2 uC4
 U    uN3    1 0 uC2   uC4
 RU   uN3    1 0 uC2   uC4

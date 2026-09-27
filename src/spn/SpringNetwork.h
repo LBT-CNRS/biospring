@@ -589,11 +589,51 @@ class SpringNetwork
     virtual void computeDihedralForces();
     virtual void computeHydrogenBondForces();
 
-    // Where a donor's hydrogen points, as a unit vector (zero if the donor
-    // names no antecedent). Shared by the candidate ranking and the log; the
-    // force computes the same direction inline because its gradient needs the
-    // two individual bond directions as well, not only their sum.
-    Vector3f donorDirection(const Particle & p) const;
+    // The geometry of ONE END of a hydrogen bond: the direction its hydrogen or
+    // its lone pair points, and everything the angular gradient needs to reach
+    // the atoms that direction is built from. Two forms, chosen by the .hbond
+    // table (see ParticleProperties::hasLobes):
+    //
+    //   BISECTOR  two heavy neighbours, one hydrogen or lone pair. The direction
+    //             is -(u1 + u2) normalised, exact for a planar sp2 centre. The
+    //             protein backbone amide, guanine N1, thymine N3.
+    //   LOBES     one heavy neighbour, TWO hydrogens or lone pairs. They sit in
+    //             the group's plane at +/- 62 degrees of the axis, so there are
+    //             two directions and the bond takes whichever fits it. An
+    //             exocyclic amine (guanine N2, adenine N6, cytosine N4) or a
+    //             carbonyl oxygen (guanine O6, cytosine O2, thymine O4).
+    //
+    // In the lobe form the plane is fixed by a THIRD atom of the same group,
+    // which is what antecedentIndex2 holds there -- not a bonded neighbour. The
+    // in-plane perpendicular comes from it by Gram-Schmidt against the axis, so
+    // no cross product appears and the gradient keeps the same shape the
+    // bisector form already had.
+    struct HydrogenBondSite
+    {
+        bool valid = false;
+        Vector3f hhat;     // the direction chosen, unit
+        Vector3f e1, e2;   // the away-directions from antecedent 1 and 2, unit
+        float l1 = 0.0f;   // |self - antecedent1|
+        float l2 = 0.0f;   // |self - antecedent2|, bisector form only
+        float hlen = 0.0f; // |e1 + e2|, bisector form only
+        bool lobes = false;
+        Vector3f shat;     // in-plane unit perpendicular to e1, lobe form only
+        Vector3f r;        // antecedent2 - antecedent1, lobe form only
+        float m = 0.0f;    // |r - e1 (e1.r)|, the length shat was normalised by
+        float sigma = 0.0f;// +1 or -1: which lobe won
+    };
+
+    // Builds one end's geometry. `towards` is the unit vector from this site to
+    // its partner, and it only matters for a lobe site, where it decides which
+    // of the two lobes the bond uses. Shared by the candidate ranking, the log
+    // and the force, because a direction computed in three places got fixed in
+    // one and kept reporting the old answer in the other two.
+    HydrogenBondSite hydrogenBondSite(const Particle & self, int a1, int a2, bool lobes,
+                                      const Vector3f & towards) const;
+
+    // Where a donor's hydrogen or an acceptor's lone pair points, as a unit
+    // vector, or zero when it names no antecedent. `towards` selects the lobe.
+    Vector3f donorDirection(const Particle & p, const Vector3f & towards) const;
     virtual void computeParticleForces();
     virtual void updateParticlePositions();
 

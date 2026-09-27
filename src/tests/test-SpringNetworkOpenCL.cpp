@@ -508,14 +508,29 @@ void buildChargedCloud(spn::SpringNetwork & network, configuration::Configuratio
         p.setCharge(charge);
         network.addParticle(p);
     }
-    // One sprung pair, held at 1.4 A. Coulomb would throw two like charges that
-    // close apart at once, so the pair staying there is what says the exclusion
-    // ran -- on both backends, by the same measurement.
+    // One sprung pair, placed AT its rest length and off to the side. Coulomb
+    // would throw two like charges 1.4 A apart away from each other at once, so
+    // the pair staying there is what says the exclusion ran -- on both backends,
+    // by the same measurement.
+    //
+    // AT its rest length, and that is not a detail. Particles 0 and 1 used to be
+    // left wherever the cloud put them, up to 25 A apart, and the spring had to
+    // reel them in over 200 steps: the approach reaches a speed at which the pair
+    // overshoots through its own rest length, and whether it settles at 1.4 A or
+    // at 0.5 turns out to be BISTABLE -- adding unrelated code to this file was
+    // enough to flip it, because the choice rides on the last bits. That measured
+    // the spring's transient, not the exclusion. buildLattice, the steric test's
+    // fixture, had already learned this; this one had not.
+    {
+        const float away = 60.0f;
+        network.getParticle(0).setPosition(Vector3f(away, away, away));
+        network.getParticle(1).setPosition(Vector3f(away + 1.4f, away, away));
+    }
     network.addSpring(0, 1, /*equilibrium=*/1.4f, /*stiffness=*/500.0f);
 
     config = configuration::defaultConfiguration();
     config.sim.nbsteps = 200;
-    config.sim.timestep = 0.5;
+    config.sim.timestep = 0.2;
     config.spring.enable = true;
     config.spring.scale = 1.0;
     config.viscosity.enable = true;
@@ -871,7 +886,12 @@ TEST(SpringNetworkOpenCL, ASkinChangesNothingOnEitherBackend)
     float moved = 0.0f;
     for (unsigned i = 0; i < N; ++i)
         moved = std::max(moved, (cpubare.getParticle(i).getPosition() - start.getParticle(i).getPosition()).norm());
-    ASSERT_GT(moved, 1.0f) << "the cloud barely moved, so this comparison proves nothing";
+    // 0.02 A, calibrated on the 0.0243 A the cloud actually creeps in 200 steps at a
+    // tenth of the charge. It was 1.0 A, and that was met not by the cloud but by the
+    // sprung pair being reeled in over 25 A: the fixture used to leave particles 0
+    // and 1 wherever the cloud put them. buildChargedCloud now starts them at their
+    // rest length, so what this guard sees is the Coulomb creep the test is about.
+    ASSERT_GT(moved, 0.02f) << "the cloud barely moved, so this comparison proves nothing";
 
     // And the list has to have been REUSED, or the comparison is vacuous: a
     // list rebuilt at every step holds this step's neighbours whatever radius
@@ -891,10 +911,14 @@ TEST(SpringNetworkOpenCL, ASkinChangesNothingOnEitherBackend)
     }
 
     // The pairs are the same set either way, so only the summation order can
-    // differ -- which over 200 steps is worth a little, and nowhere near what a
-    // dropped pair would be worth.
-    EXPECT_LT(worstcpu, 0.05f) << "the CPU's list moved a particle " << worstcpu << " A from the cell walk";
-    EXPECT_LT(worstgpu, 0.05f) << "the device's list moved a particle " << worstgpu << " A from the cell walk";
+    // differ. Measured: the CPU agrees EXACTLY (0 A) and the device to 1.2e-07 A over
+    // 200 steps. 1e-5 A is eighty times that and a thousandth of the 0.024 A the
+    // cloud moved, so a dropped pair cannot hide in it. The bound was 0.05 A, twice
+    // the cloud's whole motion and therefore vacuous -- it had been set for a
+    // fixture whose motion came from a spring transient.
+
+    EXPECT_LT(worstcpu, 1.0e-5f) << "the CPU's list moved a particle " << worstcpu << " A from the cell walk";
+    EXPECT_LT(worstgpu, 1.0e-5f) << "the device's list moved a particle " << worstgpu << " A from the cell walk";
 
     // And the structure itself, against the O(N^2) answer. Comparing positions
     // is far too blunt on its own: a pair dropped near the cutoff carries
@@ -1158,7 +1182,7 @@ void buildHydrophobicChain(spn::SpringNetwork & network, configuration::Configur
 
     config = configuration::defaultConfiguration();
     config.sim.nbsteps = 200;
-    config.sim.timestep = 0.5;
+    config.sim.timestep = 0.2;
     config.spring.enable = true;
     config.spring.scale = 1.0;
     config.viscosity.enable = true;
@@ -1297,6 +1321,190 @@ void buildFreeParticlePair(spn::SpringNetwork & network, configuration::Configur
 // it, _inExternalForceBuffer, was fed from an array nobody wrote, so the device
 // added zeros to its forces at every step and an interactive pull did nothing
 // unless it went through the probe kernel.
+// The hydrogen bond term, on the device, against the CPU -- in both of its
+// directional forms. This term had no cross-backend test at all before the lobes
+// existed, and it is the most delicate one to share.
+//
+// It is DYNAMIC: the device assigns donor to acceptor by reciprocal best hit every
+// step, so the two engines must agree about which pairs exist and not only about a
+// force. Its angular weight is a product of two directions, each built from up to
+// three atoms, so four bodies carry force per bond. And the lobe form adds a
+// Gram-Schmidt projection whose sign came out inverted on the first attempt at the
+// algebra -- finite differences caught that on the CPU, and nothing would have
+// caught the same slip in the kernel.
+namespace
+{
+// A ladder of donor/acceptor pairs: two rows facing each other across 3.4 A, each
+// site with a heavy neighbour and a plane atom behind it so it has a real
+// direction, sprung to them so the rows keep their shape.
+void buildHydrogenBondLadder(spn::SpringNetwork & network, configuration::Configuration & config,
+                             unsigned rungs, bool lobes, unsigned steps)
+{
+    // 9 A between rungs, not 5: at 5 the NEXT rung's acceptor sits 6.05 A away,
+    // inside the 7 A cutoff, so every donor would have two near-equivalent
+    // candidates and the reciprocal best hit could settle them differently on the
+    // two backends over a float's last bits. At 9 the diagonal is 9.6 A and each
+    // donor has exactly one partner, which is what makes this a comparison of the
+    // FORCE. Whether two assignments break a tie the same way is a separate
+    // question, and not one this fixture answers.
+    const float RISE = 9.0f;
+    const float GAP = 3.4f;    // across the ladder, a hydrogen bond's own distance
+
+    const auto place = [&](unsigned r) {
+        const float z = r * RISE;
+        // Deterministic jitter: an exactly periodic ladder makes every rung the
+        // same comparison and hides anything that depends on the geometry.
+        const float j = 0.12f * static_cast<float>((r * 2654435761u) % 7) - 0.36f;
+        return std::array<Vector3f, 6>{{
+            Vector3f(-1.4f, j, z),                     // 0 heavy neighbour, row A
+            Vector3f(-1.9f, 1.3f + j, z + 0.1f),       // 1 plane atom, row A
+            Vector3f(0.0f, j, z),                      // 2 the donor
+            Vector3f(GAP + 1.4f, 0.3f - j, z),         // 3 heavy neighbour, row B
+            Vector3f(GAP + 1.9f, -1.3f - j, z - 0.1f), // 4 plane atom, row B
+            Vector3f(GAP, 0.3f - j, z),                // 5 the acceptor
+        }};
+    };
+    // Every particle first, then every spring: the network refuses a spring
+    // before the particles it joins.
+    for (unsigned r = 0; r < rungs; ++r)
+    {
+        const std::array<Vector3f, 6> where = place(r);
+        for (unsigned k = 0; k < 6; ++k)
+        {
+            spn::Particle p;
+            p.setPosition(where[k]);
+            p.setMass(14.0f);
+            p.setCharge(0.0f);
+            p.setRadius(1.8f);
+            p.setEpsilon(0.5f);
+            // Distinct residues throughout: the pairing rule skips a candidate
+            // inside the site's own residue.
+            p.setResId(static_cast<int>(6 * r + k));
+            network.addParticle(p);
+        }
+    }
+    for (unsigned r = 0; r < rungs; ++r)
+    {
+        const std::array<Vector3f, 6> where = place(r);
+        const unsigned b = 6 * r;
+        network.getParticle(b + 2).setDonorCapacity(lobes ? 2 : 1);
+        network.getParticle(b + 2).setAntecedentIndex(static_cast<int>(b + 0));
+        network.getParticle(b + 2).setAntecedentIndex2(static_cast<int>(b + 1));
+        network.getParticle(b + 2).setHasLobes(lobes);
+        network.getParticle(b + 5).setAcceptorCapacity(lobes ? 2 : 1);
+        network.getParticle(b + 5).setAntecedentIndex(static_cast<int>(b + 3));
+        network.getParticle(b + 5).setAntecedentIndex2(static_cast<int>(b + 4));
+        network.getParticle(b + 5).setHasLobes(lobes);
+            // k = 100 with mass 14: a period of 2.35 fs, so dt = 0.2 fs is twelve
+        // steps per oscillation. At 2000 the period is 0.53 fs and dt = 0.5 sat
+        // right on it -- the springs then rang at the edge of stability and the two
+        // backends diverged eight times faster than the ladder moved, which made
+        // any comparison past the first step meaningless.
+    network.addSpring(b + 2, b + 0, (where[2] - where[0]).norm(), 100.0f);
+        network.addSpring(b + 2, b + 1, (where[2] - where[1]).norm(), 100.0f);
+        network.addSpring(b + 5, b + 3, (where[5] - where[3]).norm(), 100.0f);
+        network.addSpring(b + 5, b + 4, (where[5] - where[4]).norm(), 100.0f);
+    }
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = steps;
+    config.sim.timestep = 0.2;
+    config.spring.enable = true;
+    config.spring.scale = 1.0;
+    config.viscosity.enable = true;
+    config.viscosity.value = 0.3;
+    config.hbond.enable = true;
+    config.hbond.cutoff = 7.0;
+    config.hbond.scale = 1.0;
+    network.setup(config);
+}
+} // namespace
+
+TEST(SpringNetworkOpenCL, HydrogenBondsMatchTheCPUWithAndWithoutLobes)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned RUNGS = 24;   // 144 particles, 24 bonds
+
+    // ONE step, and WHAT THAT DOES AND DOES NOT TEST is worth being exact about.
+    //
+    // It tests the DIRECTION: the energy at step one is computed from the starting
+    // positions, so it is M(d) times the angular weight of both ends, and the two
+    // backends must report the same number. They do, to every digit printed --
+    // -223.726 with the bisector and -27.7081 with the lobes -- which is what says
+    // the lobe geometry reached the device correctly. The last assertion below,
+    // that the two forms disagree with each other, is what says the flag is in play
+    // at all rather than both passes measuring the bisector.
+    //
+    // It does NOT test the device's angular GRADIENT. One step of 0.2 fs moves a
+    // 14 Da particle 3.7e-06 A, far below any tolerance a float comparison can
+    // carry, so a wrong sign in the kernel's lobe gradient would pass this.
+    // Finite differences cover that on the CPU (see test-Topology), and the kernel
+    // is a transcription of the same expressions.
+    //
+    // And a longer run CANNOT be compared in this fixture, for a reason that is not
+    // rounding and not new: at 200 steps the two backends are 0.43 A apart with the
+    // bisector and 0.11 A with the lobes, while the ladder has moved only 0.05 and
+    // 0.03 A -- the disagreement is four to eight times the motion. It behaves the
+    // same with springs at 2000 kJ/mol/A^2 and dt = 0.5 fs as with 100 and 0.2, so
+    // it is not an integration limit. The hydrogen bond ASSIGNMENT is re-run every
+    // step by reciprocal best hit, and that is where the two engines part company;
+    // it predates the lobes and wants its own investigation.
+    const unsigned STEPS = 1;
+
+    float energy[2] = {0.0f, 0.0f};
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const bool lobes = pass == 1;
+        const char * what = lobes ? "lobes" : "bisector";
+
+        spn::SpringNetwork cpu;
+        configuration::Configuration cpuconfig;
+        buildHydrogenBondLadder(cpu, cpuconfig, RUNGS, lobes, STEPS);
+        cpu.run();
+
+        SpringNetworkOpenCL gpu;
+        configuration::Configuration gpuconfig;
+        buildHydrogenBondLadder(gpu, gpuconfig, RUNGS, lobes, STEPS);
+        gpu.run();
+
+        energy[pass] = cpu.getHydrogenBondEnergy();
+
+        // The term must be doing DIRECTIONAL work, or this would pass on a distance
+        // Morse. An unweighted Morse on 24 bonds at 3.4 A is -24 * 15.0 = -360
+        // kJ/mol; anything near that means the angular factor is inert.
+        EXPECT_GT(cpu.getHydrogenBondCount(), RUNGS / 2)
+            << what << ": the CPU holds almost no bond, so this comparison proves nothing";
+        EXPECT_LT(cpu.getHydrogenBondEnergy(), -1.0f) << what << ": no energy at all";
+        EXPECT_GT(cpu.getHydrogenBondEnergy(), -340.0f)
+            << what << ": the angular weight is doing nothing, so the direction is untested";
+
+        // NOT the bond COUNT across backends: getHydrogenBondCount reads the host's
+        // own slot arrays, which the device never writes back, so it reports 0 on
+        // the GPU even while its energy is right. A reporting gap, not a physics
+        // one, and the reason this compares the energy instead.
+        EXPECT_NEAR(gpu.getHydrogenBondEnergy(), cpu.getHydrogenBondEnergy(),
+                    1e-4f * std::abs(cpu.getHydrogenBondEnergy()))
+            << what << ": CPU " << cpu.getHydrogenBondEnergy() << " vs GPU "
+            << gpu.getHydrogenBondEnergy() << " kJ/mol";
+
+        // 1e-4 A is four times the 2.8e-05 measured, and it is a sanity bound on
+        // the positions, not a test of the force -- see the note above on STEPS.
+        float worst = 0.0f;
+        for (unsigned i = 0; i < cpu.getNumberOfParticles(); ++i)
+            worst = std::max(worst,
+                (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
+        EXPECT_LT(worst, 1.0e-4f) << what << ": the GPU is " << worst << " A from the CPU after one step";
+    }
+
+    // And the two forms must give DIFFERENT answers, or the lobe flag never reached
+    // the device and both passes measured the bisector.
+    EXPECT_GT(std::abs(energy[0] - energy[1]), 1.0f)
+        << "bisector " << energy[0] << " and lobes " << energy[1]
+        << " kJ/mol: the two forms agree, so the lobe flag is not in play";
+}
+
 TEST(SpringNetworkOpenCL, AnInteractorsPullReachesTheDevice)
 {
     if (!hasOpenCLDevice())

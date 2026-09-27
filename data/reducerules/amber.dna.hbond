@@ -41,7 +41,7 @@ DA   dOP2   0 2 dP
 DA   dO5    0 2 dC5   dP
 DA   dO4    0 2 dC4   1C1
 DA   aN7    0 1 aC5   aC8
-DA   aN6    2 0 aC6
+DA   aN6    2 0 aC6   ~aN1
 DA   aN1    0 1 aC2   aC6
 DA   aN3    0 1 aC2   aC4
 DA   dO3    0 2 dC3   +P
@@ -49,25 +49,25 @@ DC   dOP1   0 2 dP
 DC   dOP2   0 2 dP
 DC   dO5    0 2 dC5   dP
 DC   dO4    0 2 dC4   2C1
-DC   cN4    2 0 cC4
+DC   cN4    2 0 cC4   ~cN3
 DC   cN3    0 1 cC2   cC4
-DC   cO2    0 2 cC2
+DC   cO2    0 2 cC2   ~cN3
 DC   dO3    0 2 dC3   +P
 DG   dOP1   0 2 dP
 DG   dOP2   0 2 dP
 DG   dO5    0 2 dC5   dP
 DG   dO4    0 2 dC4   3C1
 DG   gN7    0 1 gC5   gC8
-DG   gO6    0 2 gC6
+DG   gO6    0 2 gC6   ~gN1
 DG   gN1    1 0 gC2   gC6
-DG   gN2    2 0 gC2
+DG   gN2    2 0 gC2   ~gN1
 DG   gN3    0 1 gC2   gC4
 DG   dO3    0 2 dC3   +P
 DT   dOP1   0 2 dP
 DT   dOP2   0 2 dP
 DT   dO5    0 2 dC5   dP
 DT   dO4    0 2 dC4   4C1
-DT   tO4    0 2 tC4
+DT   tO4    0 2 tC4   ~tN3
 DT   tN3    1 0 tC2   tC4
 DT   tO2    0 2 tC2
 DT   dO3    0 2 dC3   +P
