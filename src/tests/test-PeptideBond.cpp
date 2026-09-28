@@ -256,6 +256,43 @@ TEST(PeptideBond, CostsNoEnergyAtTheInstantItForms)
                 0.2f);
 }
 
+// A hydrogen bond held on the pair must be RELEASED when the pair becomes
+// covalent, or the two terms fight over the same two atoms.
+//
+// The assignment refuses to propose a sprung pair, which was enough while
+// nothing changed the springs during a run. It does not re-examine a bond it
+// is already holding, so one made before the topology changed survives it --
+// and at the peptide C-N length of 1.33 A the Morse well is deep into its
+// repulsive wall. Measured on two alanines over MDDriver before the fix: a
+// "hydrogen bond energy" of +4.31 kJ/mol, pushing apart exactly the pair the
+// new springs hold together.
+TEST(PeptideBond, ReleasesTheHydrogenBondItHasJustMadeCovalent)
+{
+    RulesFile rules;
+    spn::SpringNetwork network;
+    configuration::Configuration config;
+    const Pair idx = build(network, config, rules.path(), 2.9f, false, 1, 20, 200);
+
+    // The same two atoms the bond will be made between, as a donor/acceptor
+    // couple: at 2.9 A with both sites aimed at each other this is exactly what
+    // the term is for, and it holds the pair from the first step.
+    network.getParticle(idx.n).setDonorCapacity(1);
+    network.getParticle(idx.c).setAcceptorCapacity(1);
+    config.hbond.enable = true;
+    config.hbond.cutoff = 7.0;
+    config.hbond.scale = 1.0;
+    network.setup(config);
+
+    network.run();
+
+    ASSERT_EQ(network.getPeptideBonds().getNumberOfBonds(), 1u);
+    EXPECT_TRUE(network.getParticle(idx.c).isInSpringNeighbors(idx.n));
+    EXPECT_FALSE(network.areHydrogenBonded(idx.c, idx.n))
+        << "the pair is covalently bonded and still holds a hydrogen bond slot on each other";
+    EXPECT_GE(network.getHydrogenBondEnergy(), -1e-6f)
+        << "a hydrogen bond is still being evaluated on a pair that is now a peptide bond";
+}
+
 // What makes the product a peptide rather than two residues held at arm's
 // length: the rest lengths are drawn to an ideal trans peptide plane.
 TEST(PeptideBond, TheRampPullsTheBondToItsIdealLength)

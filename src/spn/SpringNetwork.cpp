@@ -1684,16 +1684,26 @@ void SpringNetwork::_assignHydrogenBondPairs()
     if (_hbDonorOffset.size() != n + 1)
         return;
 
-    // Step 1: free any slot whose bond has drifted beyond the cutoff. Only
-    // the donor side is walked -- the acceptor side is cleared with it, so
-    // the two never disagree.
+    // Step 1: free any slot whose bond has drifted beyond the cutoff, or whose
+    // two ends have become SPRUNG. Only the donor side is walked -- the
+    // acceptor side is cleared with it, so the two never disagree.
+    //
+    // The sprung test is not symmetry with the proposal step for its own sake.
+    // Nothing used to change the springs during a run, so a pair could only be
+    // sprung before it was ever proposed, and refusing it there was enough.
+    // PeptideBondFormation does change them, and a bond held from before the
+    // change stays held: at the peptide C-N length of 1.33 A the Morse well is
+    // deep into its repulsive wall, so the hydrogen bond term ends up pushing
+    // apart exactly the pair the new springs are holding together -- measured
+    // at +4.31 kJ/mol on two alanines, a positive "hydrogen bond energy".
     for (size_t i = 0; i < n; ++i)
         for (size_t sd = _hbDonorOffset[i]; sd < _hbDonorOffset[i + 1]; ++sd)
         {
             const int j = _hbDonorSlot[sd];
             if (j < 0)
                 continue;
-            if (Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j))) <= cutoff)
+            if (Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j))) <= cutoff &&
+                !getParticle(i).isInSpringNeighbors(static_cast<unsigned>(j)))
                 continue;
             _hbDonorSlot[sd] = -1;
             for (size_t sa = _hbAcceptorOffset[j]; sa < _hbAcceptorOffset[j + 1]; ++sa)

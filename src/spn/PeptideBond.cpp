@@ -132,6 +132,21 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
         logging::warning("Peptide bond formation: one of the two candidate sets is empty, so no bond can ever form. "
                       "Check peptidebond.bond against the atom names this network actually carries.");
 
+    // Without a site the angular factor is 1 and the only condition left is the
+    // distance -- which would bond a nucleophile arriving edge-on, through the
+    // sp2 plane, where it cannot reach the pi* at all. Said out loud because a
+    // run configured that way does not fail: it bonds MORE readily.
+    unsigned sited = 0;
+    for (unsigned i : _electrophiles)
+        if (network.getParticle(i).antecedentIndex() >= 0 && network.getParticle(i).hasLobes())
+            ++sited;
+    if (sited < _electrophiles.size())
+        logging::warning("Peptide bond formation: %zu of %zu %s atoms carry no out-of-plane lobe site, so for those "
+                         "the Burgi-Dunitz condition cannot be evaluated and peptidebond.weight is inert. Declare "
+                         "them in the .hbond table as '<res> %s 0 1 O ^CA:75'.",
+                         _electrophiles.size() - sited, _electrophiles.size(), _electrophilename.c_str(),
+                         _electrophilename.c_str());
+
     _enabled = true;
 }
 
@@ -189,7 +204,7 @@ unsigned PeptideBondFormation::update(SpringNetwork & network, unsigned iteratio
             const float distance = axis.norm();
             if (_closest < 0.0f || distance < _closest)
                 _closest = distance;
-            if (distance > _settings.distance || distance < 1e-6f)
+            if (distance < 1e-6f)
             {
                 _dwell.erase(pairKey(e, n));
                 continue;
@@ -201,6 +216,13 @@ unsigned PeptideBondFormation::update(SpringNetwork & network, unsigned iteratio
             // therefore means exactly "the term that brought them here likes
             // this pair", rather than a second opinion that could disagree with
             // the first.
+            //
+            // Computed BEFORE the distance is judged, and for every pair, so
+            // that the two reported numbers answer different questions. Gated
+            // on the distance first, they both collapsed together: an approach
+            // still six A out reported an angular weight of 0, which reads as
+            // "the angle is wrong" when it means "no pair was close enough for
+            // anyone to have looked at its angle".
             const SpringNetwork::HydrogenBondSite se =
                 network.hydrogenBondSite(pe, pe.antecedentIndex(), pe.antecedentIndex2(), pe.lobeMode(), pe.lobeCos(),
                                          pe.lobeSin(), vhat);
@@ -214,7 +236,7 @@ unsigned PeptideBondFormation::update(SpringNetwork & network, unsigned iteratio
                 weight *= forcefield::hydrogen_bond_angular_factor(sn.hhat.dot(-vhat));
             _bestweight = std::max(_bestweight, weight);
 
-            if (weight < _settings.weight)
+            if (distance > _settings.distance || weight < _settings.weight)
             {
                 _dwell.erase(pairKey(e, n));
                 continue;
