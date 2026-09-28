@@ -1,5 +1,8 @@
 
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 
 #include "Particle.h"
@@ -145,19 +148,26 @@ TEST_F(TestStericEnergyAmber, amber)
         float actual = spn.getStericEnergy();
         float expected = steric_energy_amber(lhs, rhs);
 
-        // A certain degree of incertainty is to be expected.
-        if (actual < 1e4)
-            EXPECT_LE(abs(actual - expected), 1e-3);
-
-        else if (actual < 1e5)
-            EXPECT_LE(abs(actual - expected), 1e-2);
-
-        // Very large energies are expected to be less precise.
-        else if (actual < 1e8)
-            EXPECT_LE(abs(actual - expected), 1e1);
-
-        else if (actual < 1e15)
-            EXPECT_LE(abs(actual - expected), 1e7);
+        // RELATIVE, and that is not a weakening of this test but the only bound
+        // it can carry. `expected` above is computed in double through pow();
+        // the network computes in float. Over 0.01 to 5 A a 12-6 potential
+        // spans fourteen orders of magnitude, so the difference between the two
+        // is a float ULP, which is a FRACTION of the value and not a number of
+        // kJ/mol.
+        //
+        // The ladder of absolute bounds this replaces -- 1e-3 below 1e4 kJ/mol,
+        // then 1e-2, 1e1, 1e7 -- was one ULP at the top of its range: at
+        // x = 0.21 A the energy is 1.11e+14 kJ/mol, where a float's ULP is
+        // 8.4e+06, against a tolerance of 1e+07. It therefore passed or failed
+        // on which way the last bit of pow() happened to round, and it did
+        // round differently on Linux and on macOS: green here and red in CI for
+        // three branches, on a change that moved no steric physics at all.
+        //
+        // 1e-6 is about ten times the worst relative gap measured over the
+        // whole sweep (1.0e-7, at x = 1.22 A) and still far inside float's own
+        // seven digits. The absolute floor keeps it meaningful where the
+        // potential has decayed to nothing and a relative bound would not be.
+        EXPECT_NEAR(actual, expected, std::max(1.0e-6f * std::abs(expected), 1.0e-6f));
     }
 }
 
