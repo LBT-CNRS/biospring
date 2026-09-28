@@ -725,14 +725,21 @@ class PeptideBondSetting : public SettingBase
     // the length an ideal trans peptide plane gives them. 0 leaves them where
     // they were born, which is a 2.9 A "peptide bond".
     unsigned ramp;
+    // The atoms of the electrophile's residue that LEAVE when the bond forms,
+    // space-separated (e.g. "OXT"), and empty by default. A real carboxyl loses
+    // its hydroxyl; a tRNA-esterified carbon loses the ester oxygen, which
+    // belongs to the tRNA and is named there. Leaving means: every spring
+    // between that atom and its own residue is broken, so it stops being held
+    // AND starts feeling the steric and Coulomb terms it was excluded from.
+    std::string leaving;
     std::string log;
 
     PeptideBondSetting(const std::string & name)
         : SettingBase(name), enable(false), path(), group("PSI"), bond("C:N"), stiffness(650.0), distance(3.2),
-          weight(0.5), dwell(200), ramp(2000), log()
+          weight(0.5), dwell(200), ramp(2000), leaving(), log()
     {
-        _parameterNames = {"enable", "path",   "group", "bond", "stiffness",
-                           "distance", "weight", "dwell", "ramp", "log"};
+        _parameterNames = {"enable",   "path",   "group", "bond", "stiffness", "distance",
+                           "weight",   "dwell",  "ramp",  "leaving", "log"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -755,6 +762,8 @@ class PeptideBondSetting : public SettingBase
             utils::string::from_string<decltype(dwell)>(dwell, s);
         else if (param == "ramp")
             utils::string::from_string<decltype(ramp)>(ramp, s);
+        else if (param == "leaving")
+            leaving = s;
         else if (param == "log")
             log = s;
         else
@@ -772,6 +781,7 @@ class PeptideBondSetting : public SettingBase
         _mspFormatter.print("weight", weight, os);
         _mspFormatter.print("dwell", dwell, os);
         _mspFormatter.print("ramp", ramp, os);
+        _mspFormatter.print("leaving", leaving, os);
         _mspFormatter.print("log", log, os);
     }
 };

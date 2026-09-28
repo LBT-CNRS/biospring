@@ -279,6 +279,11 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
                          _electrophiles.size() - sited, _electrophiles.size(), _electrophilename.c_str(),
                          _electrophilename.c_str());
 
+    _leaving.clear();
+    for (const std::string & name : utils::string::split(settings.leaving, " "))
+        if (!name.empty())
+            _leaving.push_back(name);
+
     _learnTorsionPattern(network);
 
     _enabled = true;
@@ -584,9 +589,47 @@ void PeptideBondFormation::_form(SpringNetwork & network, unsigned electrophile,
                          chosen.getName().c_str());
 
     _addTorsions(network, electrophile, nucleophile);
+    const unsigned broken = _releaseLeavingGroup(network, electrophile);
+    if (broken > 0)
+        logging::info("Peptide bond formation: %u spring(s) broken to let the leaving group go.", broken);
 
     _bonded.insert(pairKey(electrophile, nucleophile));
     _bonds.push_back(bond);
+}
+
+// A real carboxyl does not simply gain a fourth partner: it loses its hydroxyl,
+// and a tRNA-esterified carbon loses the ester oxygen. Modelled as the only
+// thing that distinguishes a bonded atom from a free one here -- its springs.
+// Every spring between the leaving atom and its OWN residue is broken, which
+// both stops it being held and stops it being excluded from the non-bonded
+// terms, so what pushes it away afterwards is ordinary sterics.
+//
+// It does not become water: that would need a hydrogen this model has no
+// mechanism to add. It leaves as the atom it was, with its own mass and radius.
+unsigned PeptideBondFormation::_releaseLeavingGroup(SpringNetwork & network, unsigned electrophile)
+{
+    if (_leaving.empty())
+        return 0;
+    const unsigned residue = _residueof[electrophile];
+    unsigned broken = 0;
+    for (const std::string & name : _leaving)
+    {
+        const int atom = _atomInResidue(network, residue, name);
+        if (atom < 0)
+            continue;
+        // Collected before anything is broken: releaseSpring rewrites the very
+        // map this walks.
+        std::vector<unsigned> ids;
+        for (const auto & entry : network.getParticle(static_cast<unsigned>(atom)).getSpringNeighbors())
+            if (entry.second != nullptr)
+                ids.push_back(entry.second->getId());
+        for (unsigned id : ids)
+        {
+            network.releaseSpring(id);
+            ++broken;
+        }
+    }
+    return broken;
 }
 
 void PeptideBondFormation::_advanceRamps(SpringNetwork & network, unsigned iteration)

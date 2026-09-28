@@ -63,7 +63,7 @@ unsigned place(spn::SpringNetwork & network, const std::string & name, unsigned 
 // distance, where the angular factor must kill it however close it gets.
 struct Pair
 {
-    unsigned ca1, c, o, n, h, ca2;
+    unsigned ca1, c, o, oxt, n, h, ca2;
 };
 
 Pair build(spn::SpringNetwork & network, configuration::Configuration & config, const std::string & rules,
@@ -76,6 +76,10 @@ Pair build(spn::SpringNetwork & network, configuration::Configuration & config, 
     idx.ca1 = place(network, "CA", 1, {-0.6725f, 1.3687f, 0.0f});
     idx.c = place(network, "C", 1, {0.0f, 0.0f, 0.0f});
     idx.o = place(network, "O", 1, {-0.6705f, -1.0324f, 0.0f});
+    // The leaving group: a carboxyl's second oxygen, bound to the same carbon.
+    // Not named by the _PSI rule, so it takes no part in the peptide plane --
+    // it is there to be let go of.
+    idx.oxt = place(network, "OXT", 1, {-1.2800f, 0.7400f, 0.9000f});
 
     // Residue 2: the amine, on the carbonyl's normal (or in its plane). Its own
     // two atoms are placed RELATIVE to the approach axis, not in fixed
@@ -106,6 +110,8 @@ Pair build(spn::SpringNetwork & network, configuration::Configuration & config, 
     // has to create.
     const auto tie = [&](unsigned a, unsigned b)
     { network.addSpring(a, b, (network.getParticle(a).getPosition() - network.getParticle(b).getPosition()).norm(), 650.0f); };
+    tie(idx.c, idx.oxt);
+    tie(idx.ca1, idx.oxt);
     tie(idx.ca1, idx.c);
     tie(idx.c, idx.o);
     tie(idx.ca1, idx.o);
@@ -254,6 +260,58 @@ TEST(PeptideBond, CostsNoEnergyAtTheInstantItForms)
     // And the new C-N spring is the attack distance, not a peptide bond yet.
     EXPECT_NEAR((network.getParticle(idx.c).getPosition() - network.getParticle(idx.n).getPosition()).norm(), 2.9f,
                 0.2f);
+}
+
+// A real carboxyl does not gain a fourth partner: it loses its hydroxyl. What
+// distinguishes a bonded atom from a free one here is its springs, so leaving
+// means those springs break -- and break BOTH ways, because a spring is also
+// what keeps a pair out of the steric and Coulomb terms. A leaving group still
+// excluded from them would sit on top of the carbon for ever.
+TEST(PeptideBond, LetsTheLeavingGroupGo)
+{
+    RulesFile rules;
+    spn::SpringNetwork network;
+    configuration::Configuration config;
+    const Pair idx = build(network, config, rules.path(), 2.9f, false, 1, 0, 2);
+    config.peptidebond.leaving = "OXT";
+    network.setup(config);
+
+    ASSERT_TRUE(network.getParticle(idx.oxt).isInSpringNeighbors(idx.c))
+        << "the fixture did not bind the leaving group in the first place";
+    const unsigned springs = network.getNumberOfSprings();
+
+    network.run();
+
+    ASSERT_EQ(network.getPeptideBonds().getNumberOfBonds(), 1u);
+    EXPECT_FALSE(network.getParticle(idx.oxt).isInSpringNeighbors(idx.c))
+        << "the leaving group is still bound to the carbon it left";
+    EXPECT_FALSE(network.getParticle(idx.oxt).isInSpringNeighbors(idx.ca1))
+        << "the leaving group is still bound to the alpha carbon";
+    // Broken, not erased: the slot stays so that nothing else has to be
+    // renumbered, and it is the stiffness that says the bond is gone.
+    EXPECT_GE(network.getNumberOfSprings(), springs);
+    for (unsigned id = 0; id < network.getNumberOfSprings(); ++id)
+    {
+        const spn::Spring & s = network.getSpring(id);
+        const unsigned a = s.getParticle1().getId(), b = s.getParticle2().getId();
+        if (a == idx.oxt || b == idx.oxt)
+            EXPECT_FLOAT_EQ(s.getStiffness(), 0.0f)
+                << "spring " << id << " still pulls on the leaving group";
+    }
+}
+
+// And nothing leaves unless it was named: the default is a carbon that simply
+// gains a partner, which is what a tRNA-esterified one does.
+TEST(PeptideBond, KeepsEverythingWhenNoLeavingGroupIsNamed)
+{
+    RulesFile rules;
+    spn::SpringNetwork network;
+    configuration::Configuration config;
+    const Pair idx = build(network, config, rules.path(), 2.9f, false, 1, 0, 2);
+    network.run();
+
+    ASSERT_EQ(network.getPeptideBonds().getNumberOfBonds(), 1u);
+    EXPECT_TRUE(network.getParticle(idx.oxt).isInSpringNeighbors(idx.c));
 }
 
 // A hydrogen bond held on the pair must be RELEASED when the pair becomes

@@ -311,6 +311,19 @@ class SpringNetwork
     // Adds a spring to the network.
     void addSpring(unsigned id1, unsigned id2, float equilibrium, float stiffness);
 
+    /// Breaks a spring: it stops pulling AND stops excluding its pair from the
+    /// non-bonded terms, which is what makes a leaving group actually leave --
+    /// released from the carbon it was bound to, it must then be pushed away by
+    /// the same steric and Coulomb terms every other unbonded pair feels.
+    ///
+    /// The spring keeps its slot in _springs. Erasing it would renumber every
+    /// later one, and spring indices are held in _dynamicsprings, in the
+    /// per-particle neighbour pointers, in the device buffers and in
+    /// PeptideBondFormation's own record; a zero-stiffness entry that nothing
+    /// looks up costs one multiply-by-zero per step and no bookkeeping at all.
+    void releaseSpring(unsigned id);
+    bool isSpringReleased(unsigned id) const { return _releasedsprings.count(id) != 0; }
+
     void updateSpringState(unsigned id, bool isStatic);
     void addStaticSpring(unsigned id) { _staticsprings.push_back(id); }
     void addDynamicSpring(unsigned id) { _dynamicsprings.push_back(id); }
@@ -784,6 +797,12 @@ class SpringNetwork
     void _markNeighborSearchesDirty();
     void _syncProbeParticle();
     void _rebuildSpringNeighbors();
+    /// Springs that releaseSpring has broken. Kept because
+    /// _rebuildSpringNeighbors runs whenever the spring vector reallocates and
+    /// would otherwise restore, from _springs, exactly the neighbour entries a
+    /// release had removed -- so a bond broken before another one formed came
+    /// silently back.
+    std::set<unsigned> _releasedsprings;
 
     // Resizes the nonbonded pair scratch buffers to the current number of
     // dynamic particles and clears their contents, reusing prior capacity.

@@ -1122,6 +1122,41 @@ void SpringNetwork::addSpring(unsigned id1, unsigned id2, float equilibrium, flo
     }
 }
 
+void SpringNetwork::releaseSpring(unsigned id)
+{
+    if (id >= _springs.size() || _releasedsprings.count(id))
+        return;
+    Spring & spring = _springs[id];
+    spring.setStiffness(0.0f);
+    const unsigned i = static_cast<unsigned>(spring.getParticle1().getId());
+    const unsigned j = static_cast<unsigned>(spring.getParticle2().getId());
+    // Only when no OTHER spring holds the same pair: two rigid-body groups
+    // legitimately overlap on a pair (the _PHI/_PSI overlap is the documented
+    // case), and dropping the exclusion because one of them broke would let a
+    // pair that is still bonded start repelling itself.
+    bool held = false;
+    for (unsigned k = 0; k < _springs.size(); ++k)
+    {
+        if (k == id || _releasedsprings.count(k))
+            continue;
+        const unsigned a = static_cast<unsigned>(_springs[k].getParticle1().getId());
+        const unsigned b = static_cast<unsigned>(_springs[k].getParticle2().getId());
+        if ((a == i && b == j) || (a == j && b == i))
+        {
+            held = true;
+            break;
+        }
+    }
+    if (!held)
+    {
+        _particles[i].removeSpringNeighbor(j);
+        _particles[j].removeSpringNeighbor(i);
+    }
+    _releasedsprings.insert(id);
+    removeDynamicSpring(id);
+    removeStaticSpring(id);
+}
+
 void SpringNetwork::updateSpringState(unsigned id, bool isStatic) {
     if (isStatic) {
         removeDynamicSpring(id);
@@ -1950,8 +1985,11 @@ void SpringNetwork::_rebuildSpringNeighbors()
     for (Particle & particle : _particles)
         particle.clearSpringNeighbors();
 
-    for (Spring & spring : _springs)
+    for (unsigned id = 0; id < _springs.size(); ++id)
     {
+        if (_releasedsprings.count(id))
+            continue; // broken: it holds nothing and excludes nothing
+        Spring & spring = _springs[id];
         Particle & p1 = spring.getParticle1();
         Particle & p2 = spring.getParticle2();
         p1.addToSpringNeighbors(static_cast<unsigned>(p2.getId()), &spring);

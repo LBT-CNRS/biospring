@@ -98,6 +98,9 @@ class PeptideBondFormation
     };
     void _learnTorsionPattern(const SpringNetwork & network);
     void _addTorsions(SpringNetwork & network, unsigned electrophile, unsigned nucleophile);
+    // Breaks the leaving group off the electrophile's residue. Returns how many
+    // springs it broke.
+    unsigned _releaseLeavingGroup(SpringNetwork & network, unsigned electrophile);
 
     void _form(SpringNetwork & network, unsigned electrophile, unsigned nucleophile, unsigned iteration);
     void _advanceRamps(SpringNetwork & network, unsigned iteration);
@@ -129,6 +132,7 @@ class PeptideBondFormation
     std::set<unsigned long long> _bonded;
 
     std::vector<TorsionPattern> _torsionpattern;
+    std::vector<std::string> _leaving;
 
     std::vector<Bond> _bonds;
     float _closest = 0.0f;
