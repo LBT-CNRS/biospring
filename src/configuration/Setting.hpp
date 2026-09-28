@@ -732,14 +732,20 @@ class PeptideBondSetting : public SettingBase
     // between that atom and its own residue is broken, so it stops being held
     // AND starts feeling the steric and Coulomb terms it was excluded from.
     std::string leaving;
+    // The .grp the network was REDUCED with, when it was. amber.grp renames
+    // every atom per residue -- C becomes AC for alanine, RC for arginine --
+    // so on a reduced network the names in `bond` and in the .rbody rules find
+    // nothing without it. Same table, same purpose, as pdb2spn --rigidbody's
+    // own naming translation.
+    std::string naming;
     std::string log;
 
     PeptideBondSetting(const std::string & name)
         : SettingBase(name), enable(false), path(), group("PSI"), bond("C:N"), stiffness(650.0), distance(3.2),
-          weight(0.5), dwell(200), ramp(2000), leaving(), log()
+          weight(0.5), dwell(200), ramp(2000), leaving(), naming(), log()
     {
-        _parameterNames = {"enable",   "path",   "group", "bond", "stiffness", "distance",
-                           "weight",   "dwell",  "ramp",  "leaving", "log"};
+        _parameterNames = {"enable", "path",    "group",  "bond",   "stiffness", "distance",
+                           "weight", "dwell",   "ramp",   "leaving", "naming",   "log"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -764,6 +770,8 @@ class PeptideBondSetting : public SettingBase
             utils::string::from_string<decltype(ramp)>(ramp, s);
         else if (param == "leaving")
             leaving = s;
+        else if (param == "naming")
+            naming = s;
         else if (param == "log")
             log = s;
         else
@@ -782,6 +790,7 @@ class PeptideBondSetting : public SettingBase
         _mspFormatter.print("dwell", dwell, os);
         _mspFormatter.print("ramp", ramp, os);
         _mspFormatter.print("leaving", leaving, os);
+        _mspFormatter.print("naming", naming, os);
         _mspFormatter.print("log", log, os);
     }
 };

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "IO/ReduceRuleReader.h"
 #include "IO/RigidBodyRuleReader.h"
 #include "forcefield/energy/hydrogenbond.hpp"
 #include "logging.h"
@@ -222,6 +223,15 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
     _nucleophilename = fields[1];
     _suffix = "_" + settings.group;
 
+    _hastranslation = false;
+    if (!settings.naming.empty())
+    {
+        reduce::ReduceRuleReader naming(settings.naming);
+        naming.read();
+        _translation = naming.rules();
+        _hastranslation = true;
+    }
+
     rigidbodygroup::RigidBodyRuleReader reader(settings.path);
     reader.read();
     _rules = reader.rules();
@@ -250,10 +260,9 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
     _nucleophiles.clear();
     for (unsigned i = 0; i < network.getNumberOfParticles(); ++i)
     {
-        const Particle & p = network.getParticle(i);
-        if (p.getName() == _electrophilename && _isFree(network, i, _nucleophilename))
+        if (_isNamed(network, i, _electrophilename) && _isFree(network, i, _nucleophilename))
             _electrophiles.push_back(i);
-        if (p.getName() == _nucleophilename && _isFree(network, i, _electrophilename))
+        if (_isNamed(network, i, _nucleophilename) && _isFree(network, i, _electrophilename))
             _nucleophiles.push_back(i);
     }
 
@@ -312,15 +321,17 @@ void PeptideBondFormation::_learnTorsionPattern(const SpringNetwork & network)
         // The bond is the middle pair, by the .bi.ff's own convention
         // (X - C - +N - Y). Only a torsion straddling a real electrophile /
         // nucleophile couple describes the bond being made.
-        const Particle & mid1 = network.getParticle(t.atoms[1]);
-        const Particle & mid2 = network.getParticle(t.atoms[2]);
-        if (mid1.getName() != _electrophilename || mid2.getName() != _nucleophilename)
+        if (!_isNamed(network, t.atoms[1], _electrophilename) ||
+            !_isNamed(network, t.atoms[2], _nucleophilename))
             continue;
         if (_residueof[t.atoms[1]] == _residueof[t.atoms[2]])
             continue;
         TorsionPattern p;
-        p.before = network.getParticle(t.atoms[0]).getName();
-        p.after = network.getParticle(t.atoms[3]).getName();
+        // Stored as the reduction renamed them is wrong: the next bond may be
+        // between two other residue types, whose names differ. Recovered to the
+        // ORIGINAL name, which _isNamed then translates again per residue.
+        p.before = _original(network, t.atoms[0]);
+        p.after = _original(network, t.atoms[3]);
         p.family = t.family;
         p.table = t.table;
         const bool known = std::any_of(_torsionpattern.begin(), _torsionpattern.end(),
@@ -357,13 +368,43 @@ void PeptideBondFormation::_addTorsions(SpringNetwork & network, unsigned electr
     }
 }
 
+std::string PeptideBondFormation::_translate(const std::string & resname, const std::string & name) const
+{
+    if (!_hastranslation)
+        return "";
+    for (const auto & rule : _translation.get_rules_for_residue(resname))
+        if (rule.hasAtomNamed(name))
+            return rule.getName();
+    return "";
+}
+
+std::string PeptideBondFormation::_original(const SpringNetwork & network, unsigned particle) const
+{
+    const Particle & p = network.getParticle(particle);
+    if (!_hastranslation)
+        return p.getName();
+    for (const auto & rule : _translation.get_rules_for_residue(p.getResName()))
+        if (rule.getName() == p.getName() && rule.getNumberOfAtoms() == 1)
+            return *rule.getAtomNames().begin();
+    return p.getName();
+}
+
+bool PeptideBondFormation::_isNamed(const SpringNetwork & network, unsigned particle, const std::string & name) const
+{
+    const Particle & p = network.getParticle(particle);
+    if (p.getName() == name)
+        return true;
+    const std::string renamed = _translate(p.getResName(), name);
+    return !renamed.empty() && p.getName() == renamed;
+}
+
 bool PeptideBondFormation::_isFree(const SpringNetwork & network, unsigned particle, const std::string & other) const
 {
     const Particle & p = network.getParticle(particle);
     for (const auto & entry : p.getSpringNeighbors())
     {
         const Particle & q = network.getParticle(entry.first);
-        if (q.getName() != other)
+        if (!_isNamed(network, entry.first, other))
             continue;
         if (q.getResId() == p.getResId() && q.getChainName() == p.getChainName())
             continue;
@@ -376,7 +417,7 @@ int PeptideBondFormation::_atomInResidue(const SpringNetwork & network, unsigned
                                          const std::string & name) const
 {
     for (unsigned i : _residues[residue])
-        if (network.getParticle(i).getName() == name)
+        if (_isNamed(network, i, name))
             return static_cast<int>(i);
     return -1;
 }

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "configuration/Configuration.hpp"
+#include "reduce/ReduceRuleContainer.hpp"
 #include "rigidbodygroup/RigidBodyRuleContainer.hpp"
 
 namespace biospring
@@ -92,6 +93,16 @@ class PeptideBondFormation
     float getBestWeight() const { return _bestweight; }
 
   protected:
+    /// Whether `particle` is the atom originally called `name` -- directly, or
+    /// through the reduction's renaming. A reduced network calls alanine's
+    /// carbonyl carbon AC, and nothing here would ever find a "C".
+    bool _isNamed(const SpringNetwork & network, unsigned particle, const std::string & name) const;
+    /// `name` as the reduction renamed it inside `resname`, or empty.
+    std::string _translate(const std::string & resname, const std::string & name) const;
+    /// The name this particle had BEFORE the reduction renamed it, or the name
+    /// it carries when nothing renamed it.
+    std::string _original(const SpringNetwork & network, unsigned particle) const;
+
     // The particle of `residue` named `name`, or -1.
     int _atomInResidue(const SpringNetwork & network, unsigned residue, const std::string & name) const;
 
@@ -146,6 +157,8 @@ class PeptideBondFormation
 
     std::vector<TorsionPattern> _torsionpattern;
     std::vector<std::string> _leaving;
+    reduce::ReduceRuleContainer _translation;
+    bool _hastranslation = false;
 
     std::vector<Bond> _bonds;
     float _closest = 0.0f;
