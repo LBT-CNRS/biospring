@@ -68,6 +68,19 @@ class PeptideBondFormation
     // many bonds were made on this step.
     unsigned update(SpringNetwork & network, unsigned iteration);
 
+    // Whether a ramp is still moving rest lengths on this step. The CPU reads
+    // the Spring objects directly and needs no warning; a backend holding its
+    // own COPY of them does, or the bond forms and then never contracts.
+    bool isRamping(unsigned iteration) const
+    {
+        if (_settings.ramp == 0)
+            return false;
+        for (const Bond & bond : _bonds)
+            if (iteration > bond.step && iteration <= bond.step + _settings.ramp)
+                return true;
+        return false;
+    }
+
     unsigned getNumberOfBonds() const { return static_cast<unsigned>(_bonds.size()); }
     const std::vector<Bond> & getBonds() const { return _bonds; }
 

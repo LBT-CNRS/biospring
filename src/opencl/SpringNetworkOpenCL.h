@@ -712,6 +712,19 @@ class SpringNetworkOpenCL : public SpringNetwork
 		bool _membraneIsFlat() const;
 		void computeOpenCLTorsions();
 
+		// Sends the springs and the torsions down again, after something on the
+		// host has changed them mid-run. Only PeptideBondFormation does, and
+		// only on the step a bond forms, so this is not per-step work.
+		//
+		// The buffers are RECREATED rather than written into: they alias the
+		// host arrays through CL_MEM_USE_HOST_PTR, and those arrays are
+		// reallocated at a new size and a new address. Every kernel argument is
+		// set per step, so the next step picks the new buffers up on its own.
+		void _reuploadTopology();
+		// Just the springs, for a ramp: their REST LENGTHS change every step
+		// while a new bond contracts, and the device holds a copy.
+		void _reuploadSprings();
+
 		// Which families the .msp turns on, as the bitmask the kernel takes.
 		int _torsionFamilyMask() const;
 

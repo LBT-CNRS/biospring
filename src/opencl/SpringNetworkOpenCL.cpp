@@ -1362,6 +1362,16 @@ void SpringNetworkOpenCL::idleRun()
 
 	_syncParticlesFromDevice();
 
+	// The same point of the step the CPU uses: on the moved positions, which
+	// _syncParticlesFromDevice has just put into the Particle objects. This
+	// backend already reads them back every step, so the detection costs
+	// nothing extra -- what it can cost is the re-upload below, on the one step
+	// a bond actually forms.
+	if (_peptidebond.update(*this, static_cast<unsigned>(_nbiter)) > 0)
+		_reuploadTopology();
+	else if (_peptidebond.isRamping(static_cast<unsigned>(_nbiter)))
+		_reuploadSprings(); // the rest lengths moved; the device holds a copy
+
 	// The insertion vector is a MEASUREMENT, not a force: it reads two
 	// particles and reports how deep and at what angle the structure sits in
 	// the membrane. The CPU updates it at the end of SpringNetwork::
@@ -2861,6 +2871,53 @@ void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 // bounding box are all host loops over _particlepositions, so they have to see
 // the drifted ones or they would be a full step behind what the force kernels
 // read.
+void SpringNetworkOpenCL::_reuploadTopology()
+	{
+	_reuploadSprings();
+	computeOpenCLTorsions();
+	if (_nbtorsionsocl > 0)
+		{
+		const unsigned samples = _torsionbins + 1;
+		const unsigned ntables =
+		    _torsiontableenergy == nullptr ? 0 : static_cast<unsigned>(getTorsionTables().size());
+		_inTorsionAtomsBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+		                                   sizeof(cl_uint4) * _nbtorsionsocl, _torsionatoms, &_err);
+		_inTorsionTableBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+		                                   sizeof(unsigned) * _nbtorsionsocl, _torsiontable, &_err);
+		_inTorsionFamilyBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+		                                    sizeof(unsigned) * _nbtorsionsocl, _torsionfamily, &_err);
+		_inTorsionEnergyBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+		                                    sizeof(float) * ntables * samples, _torsiontableenergy, &_err);
+		_inTorsionTorqueBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+		                                    sizeof(float) * ntables * samples, _torsiontabletorque, &_err);
+		_inTorsionOffsetsBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+		                                     sizeof(int) * (_nbparticlesocl + 1), _torsionoffsets, &_err);
+		_inTorsionEntriesBuffer =
+		    cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+		               sizeof(unsigned) * (_nbtorsionentries == 0 ? 1 : _nbtorsionentries), _torsionentries, &_err);
+		checkErr("Buffer(torsions, reuploaded)");
+		}
+	}
+
+void SpringNetworkOpenCL::_reuploadSprings()
+	{
+	computeOpenCLSprings();
+	computeParticleToSpringIndexes();
+
+	if (_nbspringsocl > 0)
+		{
+		_inSpringBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+		                             sizeof(Springocl) * _nbspringsocl, _springsocl, &_err);
+		checkErr("Buffer(springs, reuploaded)");
+		}
+	_inSpringIndexesBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+	                                    sizeof(int) * (_nbparticlesocl + 1), _particletospringindexes, &_err);
+	checkErr("Buffer(spring indexes, reuploaded)");
+	_inSpringSpanBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
+	                                 sizeof(unsigned) * _nbparticlesocl, _particlespringspan, &_err);
+	checkErr("Buffer(spring span, reuploaded)");
+	}
+
 void SpringNetworkOpenCL::_readPositionsBack()
 	{
 	_err = _queue.enqueueReadBuffer(_inoutPositionBuffer, CL_TRUE, 0,
@@ -3042,12 +3099,6 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 		add("impala (the membrane is curved or doubled: a different model)");
 	if (isInsertionVectorEnabled()) add("insertionvector");
 	if (isRigidBodyEnabled())       add("rigidbody");
-	// The device's spring buffers are sized and uploaded once, at initRun, so a
-	// term that ADDS springs during the run cannot reach them: the new springs
-	// would exist on the host and be invisible to every kernel. Listed rather
-	// than half-implemented, because the failure is silent -- the bond forms,
-	// the log says so, and the device goes on integrating the old topology.
-	if (isPeptideBondEnabled())     add("peptidebond (it changes the topology, which this backend uploads once)");
 	// biospring.cl has no hydrogen bond code at all: not the Morse well, not
 	// the two-sided angular weight, not the per-step re-pairing. A .msp with
 	// hbond.enable = 1 run through --opencl is therefore a DIFFERENT model,
@@ -3209,6 +3260,12 @@ void SpringNetworkOpenCL::computeOpenCLSprings()
 
     for (unsigned i = 0; i < springCount; ++i)
         {
+        // A released spring is not a bond: it pulls with zero stiffness and,
+        // more importantly, must stop excluding its pair from the non-bonded
+        // terms. Leaving it in the device's adjacency would keep a leaving
+        // group invisible to the steric term and it would never go anywhere.
+        if (SpringNetwork::isSpringReleased(i))
+            continue;
         const Spring & spring = SpringNetwork::getSpring(i);
         const unsigned id1 = static_cast<unsigned>(spring.getParticle1().getId());
         const unsigned id2 = static_cast<unsigned>(spring.getParticle2().getId());
@@ -3227,7 +3284,10 @@ void SpringNetworkOpenCL::computeOpenCLSprings()
         adjacentList[id2].push_back(reverse);
         }
 
-    _nbspringsocl = springCount * 2;
+    unsigned kept = 0;
+    for (const auto & particleSprings : adjacentList)
+        kept += static_cast<unsigned>(particleSprings.size());
+    _nbspringsocl = kept;
     delete[] _springsocl;
     _springsocl = _nbspringsocl == 0 ? nullptr : new Springocl[_nbspringsocl];
 
