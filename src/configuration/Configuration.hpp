@@ -24,6 +24,10 @@ class Configuration
     EnergySetting spring;
     HydrophobicitySetting hydrophobicity;
     HydrogenBondSetting hbond;
+    // Not an energy term: the irreversible topology rewrite that makes a bond
+    // real once the hbond term above has held its two ends in the attack
+    // conformation. See PeptideBondSetting.
+    PeptideBondSetting peptidebond;
     ElectrostaticSetting electrostatic;
     ImpalaSetting imp;
     InsertionVectorSetting ivector;
@@ -74,7 +78,7 @@ class Configuration
 
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"), hbond("hbond"),
-          electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"), thermostat("thermostat"),
+          peptidebond("peptidebond"), electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"), thermostat("thermostat"),
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"),
           electrostaticgrid("electrostaticgrid"), densitygrid("densitygrid"), probe("probe"),
           rigidbody("rigidbody"), dihedralphi("dihedralphi"), dihedralpsi("dihedralpsi"),
@@ -87,6 +91,7 @@ class Configuration
         _register(spring);
         _register(hydrophobicity);
         _register(hbond);
+        _register(peptidebond);
         _register(electrostatic);
         _register(imp);
         _register(ivector);
@@ -120,6 +125,8 @@ class Configuration
         hydrophobicity.print();
         os << "\n";
         hbond.print();
+        os << "\n";
+        peptidebond.print();
         os << "\n";
         electrostatic.print();
         os << "\n";
@@ -223,6 +230,8 @@ class Configuration
             hydrophobicity.setFromString(name, value);
         else if (group == hbond.name)
             hbond.setFromString(name, value);
+        else if (group == peptidebond.name)
+            peptidebond.setFromString(name, value);
         else if (group == electrostatic.name)
             electrostatic.setFromString(name, value);
         else if (group == imp.name)
@@ -311,6 +320,11 @@ inline Configuration defaultConfiguration()
     config.hbond.scale = 1.0;
     config.hbond.path = "";
     config.hbond.log = "";
+
+    // Off, and with no rules path: forming a covalent bond is never something
+    // an .msp should start doing because it was upgraded.
+    config.peptidebond.enable = false;
+    config.peptidebond.path = "";
 
     config.electrostatic.enable = false;
     config.electrostatic.cutoff = 16.0;

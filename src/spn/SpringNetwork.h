@@ -3,6 +3,7 @@
 
 #include <array>
 #include "configuration/Configuration.hpp"
+#include "spn/PeptideBond.h"
 
 #include "forcefield/ForceField.h"
 
@@ -636,6 +637,11 @@ class SpringNetwork
     HydrogenBondSite hydrogenBondSite(const Particle & self, int a1, int a2, int lobes, float lcos,
                                       float lsin, const Vector3f & towards) const;
 
+    // The run-time bond formation, for a caller that wants to know what it did.
+    // Empty and disabled unless peptidebond.enable is on.
+    const PeptideBondFormation & getPeptideBonds() const { return _peptidebond; }
+    bool isPeptideBondEnabled() const { return _peptidebond.isEnabled(); }
+
     // Where a donor's hydrogen or an acceptor's lone pair points, as a unit
     // vector, or zero when it names no antecedent. `towards` selects the lobe.
     Vector3f donorDirection(const Particle & p, const Vector3f & towards) const;
@@ -821,6 +827,8 @@ class SpringNetwork
     Particle _probeparticule;
 
     std::vector<Spring> _springs;
+    // Stage two of making a covalent bond: see spn/PeptideBond.h.
+    PeptideBondFormation _peptidebond;
     std::vector<unsigned> _staticsprings;
     std::vector<unsigned> _dynamicsprings;
 

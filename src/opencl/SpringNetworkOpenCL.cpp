@@ -3042,6 +3042,12 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 		add("impala (the membrane is curved or doubled: a different model)");
 	if (isInsertionVectorEnabled()) add("insertionvector");
 	if (isRigidBodyEnabled())       add("rigidbody");
+	// The device's spring buffers are sized and uploaded once, at initRun, so a
+	// term that ADDS springs during the run cannot reach them: the new springs
+	// would exist on the host and be invisible to every kernel. Listed rather
+	// than half-implemented, because the failure is silent -- the bond forms,
+	// the log says so, and the device goes on integrating the old topology.
+	if (isPeptideBondEnabled())     add("peptidebond (it changes the topology, which this backend uploads once)");
 	// biospring.cl has no hydrogen bond code at all: not the Morse well, not
 	// the two-sided angular weight, not the per-step re-pairing. A .msp with
 	// hbond.enable = 1 run through --opencl is therefore a DIFFERENT model,

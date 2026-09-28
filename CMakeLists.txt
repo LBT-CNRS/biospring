@@ -209,6 +209,7 @@ set(BIOSPRING_CORE_SOURCES
     src/spn/Particle.cpp
     src/spn/ParticleProperty.cpp
     src/spn/Spring.cpp
+    src/spn/PeptideBond.cpp
     src/spn/SpringNetwork.cpp
     src/topology/Particle.cpp
     src/topology/ParticleCollection.cpp

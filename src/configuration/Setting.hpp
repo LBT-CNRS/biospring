@@ -691,6 +691,91 @@ class HydrogenBondSetting : public EnergySetting
     }
 };
 
+// The SECOND stage of making a covalent bond at run time: once two residues
+// have been held in the attack conformation long enough, the spring topology is
+// REWRITTEN so the new bond exists and cannot come undone.
+//
+// The first stage -- bringing the nucleophile onto the electrophile at the
+// Burgi-Dunitz angle -- is the hydrogen bond term with an out-of-plane lobe
+// site (see spn/ParticleProperty.h), and nothing here duplicates it. What this
+// adds is the irreversible part, which no potential well can express: a bond
+// that has formed is a different molecule, not a deeper minimum of the same one.
+class PeptideBondSetting : public SettingBase
+{
+  public:
+    bool enable;
+    // The .rbody the network was built from. The new springs are created by the
+    // SAME rule that would have created them had the bond been there from the
+    // start, so the product is the model's own peptide and not a special case.
+    std::string path;
+    // Which rule describes the new bond: the suffix after the residue code, so
+    // "PSI" picks up A_PSI, R_PSI, ... -- {CA, C, O, +N, +H, +CA}, the peptide
+    // plane ahead of a residue.
+    std::string group;
+    // Which PAIR inside that group is the bond being made, as
+    // "<electrophile>:<nucleophile>". The rule itself cannot say: it is six
+    // atoms sprung pairwise, with no distinguished pair among the fifteen.
+    std::string bond;
+    double stiffness; // kJ.mol-1.A-2, what the new springs get
+    double distance;  // A, below which the nucleophile counts as attacking
+    double weight;    // 0..1, the angular factor both ends must reach together
+    unsigned dwell;   // consecutive steps the two conditions must hold
+    // Over how many steps the new springs are drawn from the length they were
+    // BORN at -- the attack distance, so no energy appears out of nothing -- to
+    // the length an ideal trans peptide plane gives them. 0 leaves them where
+    // they were born, which is a 2.9 A "peptide bond".
+    unsigned ramp;
+    std::string log;
+
+    PeptideBondSetting(const std::string & name)
+        : SettingBase(name), enable(false), path(), group("PSI"), bond("C:N"), stiffness(650.0), distance(3.2),
+          weight(0.5), dwell(200), ramp(2000), log()
+    {
+        _parameterNames = {"enable", "path",   "group", "bond", "stiffness",
+                           "distance", "weight", "dwell", "ramp", "log"};
+    }
+
+    void setFromString(const std::string & param, const std::string & s) override
+    {
+        if (param == "enable")
+            _parse_bool(enable, s, param);
+        else if (param == "path")
+            path = s;
+        else if (param == "group")
+            group = s;
+        else if (param == "bond")
+            bond = s;
+        else if (param == "stiffness")
+            utils::string::from_string<decltype(stiffness)>(stiffness, s);
+        else if (param == "distance")
+            utils::string::from_string<decltype(distance)>(distance, s);
+        else if (param == "weight")
+            utils::string::from_string<decltype(weight)>(weight, s);
+        else if (param == "dwell")
+            utils::string::from_string<decltype(dwell)>(dwell, s);
+        else if (param == "ramp")
+            utils::string::from_string<decltype(ramp)>(ramp, s);
+        else if (param == "log")
+            log = s;
+        else
+            logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
+    }
+
+    void print(std::ostream & os = std::cout) const override
+    {
+        _mspFormatter.print("enable", enable, os);
+        _mspFormatter.print("path", path, os);
+        _mspFormatter.print("group", group, os);
+        _mspFormatter.print("bond", bond, os);
+        _mspFormatter.print("stiffness", stiffness, os);
+        _mspFormatter.print("distance", distance, os);
+        _mspFormatter.print("weight", weight, os);
+        _mspFormatter.print("dwell", dwell, os);
+        _mspFormatter.print("ramp", ramp, os);
+        _mspFormatter.print("log", log, os);
+    }
+};
+
 } // namespace configuration
 } // namespace biospring
 

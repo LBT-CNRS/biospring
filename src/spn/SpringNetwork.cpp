@@ -842,6 +842,11 @@ void SpringNetwork::computeStep()
 
     updateParticlePositions();
 
+    // On the MOVED positions, and after the forces: a spring created here is
+    // born at the length it already has, so it applies no force until the next
+    // step evaluates it.
+    _peptidebond.update(*this, static_cast<unsigned>(_nbiter));
+
     if (isInsertionVectorEnabled())
         _updateInsertionVector();
 }
@@ -998,6 +1003,16 @@ void SpringNetwork::_displayFrameData()
                       _energies.hbond, getHydrogenBondCount(), census[0], census[1], census[2], census[3]);
         if (!_config.hbond.log.empty())
             dumpHydrogenBonds(_config.hbond.log, _nbiter);
+    }
+    if (isPeptideBondEnabled())
+    {
+        // The two thresholds, beside what the structure is actually offering:
+        // a run that forms nothing has to be able to say WHICH of the two it is
+        // failing, and a bond count of zero says neither.
+        logging::info("Peptide bonds formed: %u; closest candidate %5.2f A (forms below %5.2f), best angular "
+                      "weight %5.3f (needs %5.3f)",
+                      _peptidebond.getNumberOfBonds(), _peptidebond.getClosestApproach(), _config.peptidebond.distance,
+                      _peptidebond.getBestWeight(), _config.peptidebond.weight);
     }
     if (isInsertionVectorEnabled())
     {
@@ -1386,6 +1401,9 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupElectrostatic();
     _setupHydrophobic();
     _setupHydrogenBond();
+    // After the hydrogen bond term, whose out-of-plane lobe sites are what
+    // brings a nucleophile into the attack conformation this then acts on.
+    _peptidebond.setup(*this, conf.peptidebond);
     _setupDensityGrid();
     _setupInsertionVector();
     _setupTrajectories();
