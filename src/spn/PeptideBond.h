@@ -56,6 +56,13 @@ class PeptideBondFormation
         std::vector<unsigned> springs;
         std::vector<float> born;   // A
         std::vector<float> target; // A
+        // The leaving group's own springs, drawn OUTWARD over the same ramp and
+        // then broken. They are separate because they end differently: the
+        // fifteen above are kept, these are let go of.
+        std::vector<unsigned> leaving;
+        std::vector<float> leavingborn;
+        std::vector<float> leavingtarget;
+        bool released = false;
     };
 
     // Reads the rules and resolves the two atom names. Does nothing, and stays
@@ -122,9 +129,9 @@ class PeptideBondFormation
     };
     void _learnTorsionPattern(const SpringNetwork & network);
     void _addTorsions(SpringNetwork & network, unsigned electrophile, unsigned nucleophile);
-    // Breaks the leaving group off the electrophile's residue. Returns how many
-    // springs it broke.
-    unsigned _releaseLeavingGroup(SpringNetwork & network, unsigned electrophile);
+    // Finds the leaving group's springs and gives each one a target far enough
+    // out that breaking it costs nothing. Returns how many it found.
+    unsigned _markLeavingGroup(SpringNetwork & network, unsigned electrophile, Bond & bond);
 
     void _form(SpringNetwork & network, unsigned electrophile, unsigned nucleophile, unsigned iteration);
     void _advanceRamps(SpringNetwork & network, unsigned iteration);

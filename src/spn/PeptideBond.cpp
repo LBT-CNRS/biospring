@@ -630,9 +630,10 @@ void PeptideBondFormation::_form(SpringNetwork & network, unsigned electrophile,
                          chosen.getName().c_str());
 
     _addTorsions(network, electrophile, nucleophile);
-    const unsigned broken = _releaseLeavingGroup(network, electrophile);
-    if (broken > 0)
-        logging::info("Peptide bond formation: %u spring(s) broken to let the leaving group go.", broken);
+    const unsigned going = _markLeavingGroup(network, electrophile, bond);
+    if (going > 0)
+        logging::info("Peptide bond formation: %u spring(s) of the leaving group will be drawn out and broken.",
+                      going);
 
     _bonded.insert(pairKey(electrophile, nucleophile));
     _bonds.push_back(bond);
@@ -647,43 +648,74 @@ void PeptideBondFormation::_form(SpringNetwork & network, unsigned electrophile,
 //
 // It does not become water: that would need a hydrogen this model has no
 // mechanism to add. It leaves as the atom it was, with its own mass and radius.
-unsigned PeptideBondFormation::_releaseLeavingGroup(SpringNetwork & network, unsigned electrophile)
+unsigned PeptideBondFormation::_markLeavingGroup(SpringNetwork & network, unsigned electrophile, Bond & bond)
 {
     if (_leaving.empty())
         return 0;
     const unsigned residue = _residueof[electrophile];
-    unsigned broken = 0;
     for (const std::string & name : _leaving)
     {
         const int atom = _atomInResidue(network, residue, name);
         if (atom < 0)
             continue;
-        // Collected before anything is broken: releaseSpring rewrites the very
-        // map this walks.
-        std::vector<unsigned> ids;
         for (const auto & entry : network.getParticle(static_cast<unsigned>(atom)).getSpringNeighbors())
-            if (entry.second != nullptr)
-                ids.push_back(entry.second->getId());
-        for (unsigned id : ids)
         {
-            network.releaseSpring(id);
-            ++broken;
+            if (entry.second == nullptr)
+                continue;
+            const unsigned id = entry.second->getId();
+            const Particle & a = network.getParticle(static_cast<unsigned>(atom));
+            const Particle & b = network.getParticle(entry.first);
+            const float now = (a.getPosition() - b.getPosition()).norm();
+            // Far enough out that the pair is no longer in each other's way:
+            // the steric contact distance, which for AMBER is the sum of the
+            // two R*. Breaking a spring already at that length costs nothing.
+            const float apart = a.getRadius() + b.getRadius();
+            bond.leaving.push_back(id);
+            bond.leavingborn.push_back(now);
+            bond.leavingtarget.push_back(std::max(apart, now * 1.1f));
         }
     }
-    return broken;
+    return static_cast<unsigned>(bond.leaving.size());
 }
 
+// A LEAVING GROUP CANNOT TELEPORT, and that is what broke the first version.
+// Released the instant the bond formed, it sat 1.23 A from the carbon it had
+// just left with nothing holding it -- and a broken spring is also a dropped
+// exclusion, so it met the full steric wall of its own carbon in one step. On a
+// concentrated soup the temperature went from 325 K to 3.8e+18 K on the step a
+// bond formed.
+//
+// So it is drawn OUT over the same ramp that draws the new bond in, to the
+// steric contact distance where the two no longer overlap, and only then let
+// go. Bond made and bond broken take the same 2000 steps, which is what makes
+// either of them integrable.
 void PeptideBondFormation::_advanceRamps(SpringNetwork & network, unsigned iteration)
 {
-    if (_settings.ramp == 0)
-        return;
-    for (const Bond & bond : _bonds)
+    for (Bond & bond : _bonds)
     {
-        if (iteration <= bond.step || iteration > bond.step + _settings.ramp)
+        if (iteration <= bond.step)
+            continue;
+        if (iteration > bond.step + _settings.ramp)
+        {
+            if (!bond.released)
+            {
+                for (unsigned id : bond.leaving)
+                    network.releaseSpring(id);
+                bond.released = true;
+                if (!bond.leaving.empty())
+                    logging::info("Peptide bond formation: leaving group let go at step %u, %zu spring(s) broken.",
+                                  iteration, bond.leaving.size());
+            }
+            continue;
+        }
+        if (_settings.ramp == 0)
             continue;
         const float t = static_cast<float>(iteration - bond.step) / static_cast<float>(_settings.ramp);
         for (size_t k = 0; k < bond.springs.size(); ++k)
             network.getSpring(bond.springs[k]).setEquilibrium(bond.born[k] + t * (bond.target[k] - bond.born[k]));
+        for (size_t k = 0; k < bond.leaving.size(); ++k)
+            network.getSpring(bond.leaving[k])
+                .setEquilibrium(bond.leavingborn[k] + t * (bond.leavingtarget[k] - bond.leavingborn[k]));
     }
 }
 

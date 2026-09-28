@@ -295,7 +295,8 @@ TEST(PeptideBond, LetsTheLeavingGroupGo)
     RulesFile rules;
     spn::SpringNetwork network;
     configuration::Configuration config;
-    const Pair idx = build(network, config, rules.path(), 2.9f, false, 1, 0, 2);
+    const unsigned RAMP = 40;
+    const Pair idx = build(network, config, rules.path(), 2.9f, false, 1, RAMP, RAMP + 10);
     config.peptidebond.leaving = "OXT";
     network.setup(config);
 
@@ -308,6 +309,11 @@ TEST(PeptideBond, LetsTheLeavingGroupGo)
     ASSERT_EQ(network.getPeptideBonds().getNumberOfBonds(), 1u);
     EXPECT_FALSE(network.getParticle(idx.oxt).isInSpringNeighbors(idx.c))
         << "the leaving group is still bound to the carbon it left";
+    // And it left from FAR ENOUGH OUT. Released in place it would sit 1.2 A
+    // from the carbon with the exclusion gone and the full steric wall on: on a
+    // concentrated soup that took the temperature to 3.8e+18 K in one step.
+    EXPECT_GT((network.getParticle(idx.oxt).getPosition() - network.getParticle(idx.c).getPosition()).norm(), 2.5f)
+        << "the leaving group was let go while still on top of its carbon";
     EXPECT_FALSE(network.getParticle(idx.oxt).isInSpringNeighbors(idx.ca1))
         << "the leaving group is still bound to the alpha carbon";
     // Broken, not erased: the slot stays so that nothing else has to be
