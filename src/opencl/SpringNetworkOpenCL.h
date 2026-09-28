@@ -565,7 +565,12 @@ class SpringNetworkOpenCL : public SpringNetwork
 			cl::Buffer donorslotbuffer;       // one int per donatable hydrogen, -1 = free
 			cl::Buffer acceptoroffsetbuffer;  // N + 1 uints, CSR
 			cl::Buffer acceptorslotbuffer;    // one int per lone pair
-			cl::Buffer antecedentbuffer;      // N int2, -1 where there is none
+			// N int4: x and y the two antecedents (-1 where there is none), z the
+			// lobe mode, w the lobe angle in millidegrees. Every kernel that takes
+			// it must declare int4 -- an int2 parameter compiles, reads the array
+			// at half the stride, and silently answers with another particle's
+			// antecedents.
+			cl::Buffer antecedentbuffer;
 			cl::Buffer residbuffer;           // N ints
 			cl::Buffer chainbuffer;           // N ints: chain NAMES, mapped to indices here
 			cl::Buffer nearestbuffer;         // N ints, one round's proposal

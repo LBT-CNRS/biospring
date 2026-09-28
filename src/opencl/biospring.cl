@@ -1045,6 +1045,12 @@ inline bool biospring_hb_already_bonded(const __global uint * donoroffsets, cons
 typedef struct
 	{
 	int valid;
+	// The two antecedents this site was built from, as particle indices. Carried
+	// here rather than re-read by the caller: they are HALF the site -- the atoms
+	// its direction depends on, hence the atoms its angular gradient acts on --
+	// and reading them a second time is what let the force kernel index the same
+	// buffer at a different stride than the builder did.
+	int ant1, ant2;
 	float3 hhat;       // the direction chosen, unit
 	float3 e1, e2;     // away-directions from antecedent 1 and 2, unit
 	float l1, l2;      // their lengths
@@ -1070,6 +1076,8 @@ inline BiospringHBSite biospring_hb_site(const __global float4 * positions,
 	st.lcos = 1.0f; st.lsin = 0.0f;
 
 	int a1 = antecedents[i].x;
+	st.ant1 = a1;
+	st.ant2 = antecedents[i].y;
 	if (a1 < 0)
 		return st;
 	float3 here = positions[i].xyz;
@@ -1210,7 +1218,7 @@ __kernel void hbondBreak(const __global float4 * positions,
 __kernel void hbondScore(const __global float4 * positions,
                          const __global uint * donoroffsets, const __global int * donorslots,
                          const __global uint * acceptoroffsets, const __global int * acceptorslots,
-                         const __global int2 * antecedents,
+                         const __global int4 * antecedents,
                          const __global int * resids, const __global int * chains,
                          const __global uint * listoffsets, const __global uint * listitems,
                          const __global uint * listguard,
@@ -1429,7 +1437,7 @@ inline void biospring_atomic_add_float3(volatile __global float4 * forces, uint 
 // the wrong atom with the wrong sign.
 __kernel void hbondForce(const __global float4 * positions, volatile __global float4 * forces,
                          const __global uint * donoroffsets, const __global int * donorslots,
-                         const __global int2 * antecedents,
+                         const __global int4 * antecedents,
                          const float welldepth, const float equilibrium, const float width,
                          const float hbondscale, const float convert,
                          __global float * energyper, const uint N)
@@ -1459,10 +1467,12 @@ __kernel void hbondForce(const __global float4 * positions, volatile __global fl
 
 		// Each side's direction, from the shared builder, so the scoring kernel
 		// and the force cannot disagree about it.
-		int d1i = antecedents[tid].x, d2i = antecedents[tid].y;
-		int a1i = antecedents[acceptor].x, a2i = antecedents[acceptor].y;
 		BiospringHBSite sd = biospring_hb_site(positions, antecedents, tid, vhat);
 		BiospringHBSite sa = biospring_hb_site(positions, antecedents, (uint)acceptor, -vhat);
+		// Which atoms the two angular gradients land on -- out of the SAME builder
+		// as the geometry, never read here a second time. See BiospringHBSite.
+		int d1i = sd.ant1, d2i = sd.ant2;
+		int a1i = sa.ant1, a2i = sa.ant2;
 		bool hasD = sd.valid != 0, hasA = sa.valid != 0;
 		float3 dhat = sd.hhat, ahat = sa.hhat;
 

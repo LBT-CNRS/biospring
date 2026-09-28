@@ -1441,31 +1441,27 @@ TEST(SpringNetworkOpenCL, HydrogenBondsMatchTheCPUInEveryDirectionalForm)
 
     const unsigned RUNGS = 24;   // 144 particles, 24 bonds
 
-    // ONE step, and WHAT THAT DOES AND DOES NOT TEST is worth being exact about.
+    // 200 steps rather than one, which is what makes this a test of the FORCE and
+    // of the per-step re-ASSIGNMENT rather than of the energy alone.
     //
-    // It tests the DIRECTION: the energy at step one is computed from the starting
-    // positions, so it is M(d) times the angular weight of both ends, and the two
-    // backends must report the same number. They do, to every digit printed --
-    // -223.726 with the bisector and -27.7081 with the lobes -- which is what says
-    // the lobe geometry reached the device correctly. The last assertion below,
-    // that the two forms disagree with each other, is what says the flag is in play
-    // at all rather than both passes measuring the bisector.
+    // A single step only ever tested the DIRECTION: the energy is then computed
+    // from the starting positions, so it is M(d) times both angular weights, and
+    // the two backends agreeing on it says the lobe geometry reached the device --
+    // nothing about how the gradient is shared out among the six atoms a bond
+    // touches. Two hundred steps let that share accumulate into the positions.
     //
-    // It does NOT test the device's angular GRADIENT. One step of 0.2 fs moves a
-    // 14 Da particle 3.7e-06 A, far below any tolerance a float comparison can
-    // carry, so a wrong sign in the kernel's lobe gradient would pass this.
-    // Finite differences cover that on the CPU (see test-Topology), and the kernel
-    // is a transcription of the same expressions.
-    //
-    // And a longer run CANNOT be compared in this fixture, for a reason that is not
-    // rounding and not new: at 200 steps the two backends are 0.43 A apart with the
-    // bisector and 0.11 A with the lobes, while the ladder has moved only 0.05 and
-    // 0.03 A -- the disagreement is four to eight times the motion. It behaves the
-    // same with springs at 2000 kJ/mol/A^2 and dt = 0.5 fs as with 100 and 0.2, so
-    // it is not an integration limit. The hydrogen bond ASSIGNMENT is re-run every
-    // step by reciprocal best hit, and that is where the two engines part company;
-    // it predates the lobes and wants its own investigation.
-    const unsigned STEPS = 1;
+    // This fixture used to be pinned at one step because a longer run put the two
+    // backends 0.43 A apart with the bisector and 0.11 A with the lobes, four to
+    // eight times the ladder's own motion, and the assignment was the suspect. It
+    // was not the assignment: hbondForce and hbondScore declared their antecedent
+    // parameter `int2` while the host uploads `int4`, so the indices deciding WHICH
+    // atoms the two angular gradients land on were read at half the stride and
+    // named the wrong particles -- while biospring_hb_site, taking the same pointer
+    // as `int4`, read the geometry correctly. That is exactly why the energies
+    // always matched to six digits: the energy never touches those indices. The
+    // site now carries them (BiospringHBSite::ant1/ant2) so they cannot be read
+    // twice at two strides again.
+    const unsigned STEPS = 200;
 
     // Three directional forms, so the device is compared on every code path the
     // .hbond table can ask for. The out-of-plane angle is 30 degrees rather than the
@@ -1485,6 +1481,9 @@ TEST(SpringNetworkOpenCL, HydrogenBondsMatchTheCPUInEveryDirectionalForm)
         spn::SpringNetwork cpu;
         configuration::Configuration cpuconfig;
         buildHydrogenBondLadder(cpu, cpuconfig, RUNGS, form.mode, form.angle, STEPS);
+        std::vector<Vector3f> before(cpu.getNumberOfParticles());
+        for (unsigned i = 0; i < cpu.getNumberOfParticles(); ++i)
+            before[i] = cpu.getParticle(i).getPosition();
         cpu.run();
 
         SpringNetworkOpenCL gpu;
@@ -1494,14 +1493,18 @@ TEST(SpringNetworkOpenCL, HydrogenBondsMatchTheCPUInEveryDirectionalForm)
 
         energy[pass] = cpu.getHydrogenBondEnergy();
 
-        // The term must be doing DIRECTIONAL work, or this would pass on a distance
-        // Morse. An unweighted Morse on 24 bonds at 3.4 A is -24 * 15.0 = -360
-        // kJ/mol; anything near that means the angular factor is inert.
         EXPECT_GT(cpu.getHydrogenBondCount(), RUNGS / 2)
             << what << ": the CPU holds almost no bond, so this comparison proves nothing";
         EXPECT_LT(cpu.getHydrogenBondEnergy(), -1.0f) << what << ": no energy at all";
-        EXPECT_GT(cpu.getHydrogenBondEnergy(), -340.0f)
-            << what << ": the angular weight is doing nothing, so the direction is untested";
+        // That the term is doing DIRECTIONAL work, and not a distance-only Morse, is
+        // asserted at the END of this test by the three forms disagreeing with each
+        // other -- which a distance Morse could not do. It used to be asserted here
+        // instead, as "the total must stay above -340 kJ/mol", and that argument only
+        // held for a SINGLE step: it compared against an unweighted Morse at the
+        // STARTING distance of 3.4 A. Over 200 steps the ladder relaxes into its
+        // wells, so every weight legitimately approaches 1 and the bisector form
+        // lands at -400.7 kJ/mol -- 24 bonds times the full well depth. The bound
+        // would now fail on correct code, which is the one thing a guard must not do.
 
         // NOT the bond COUNT across backends: getHydrogenBondCount reads the host's
         // own slot arrays, which the device never writes back, so it reports 0 on
@@ -1512,33 +1515,31 @@ TEST(SpringNetworkOpenCL, HydrogenBondsMatchTheCPUInEveryDirectionalForm)
             << what << ": CPU " << cpu.getHydrogenBondEnergy() << " vs GPU "
             << gpu.getHydrogenBondEnergy() << " kJ/mol";
 
-        // AND HERE IS A KNOWN DEFECT, deliberately bounded rather than hidden.
+        // The positions, which at 1 Da and 2 fs answer the FORCE and not just the
+        // energy. Measured against the ladder's own motion, because a parity bound
+        // met by a structure that did not move is met by any code at all -- hence
+        // the EXPECT_GT below, which the 0.05 A guard would fail if the term ever
+        // went inert.
         //
-        // At 1 Da and 2 fs one step moves a particle about 2.2e-03 A, so this
-        // position comparison now answers the FORCE. It says the two backends do not
-        // agree about it: 0.027 A apart with the bisector, 0.010 with in-plane lobes,
-        // 0.028 with out-of-plane ones -- more than ten times the motion itself. The
-        // ENERGY above matches to every digit, so the DIRECTION agrees and what
-        // differs is how the angular gradient is shared among the atoms.
-        //
-        // It predates the lobes: the bisector figure is the largest, and that path is
-        // older than this test. Both backends are deterministic here (GPU against GPU
-        // 4.5e-08 A, CPU against CPU exactly 0), so it is not rounding. Switching the
-        // sub-terms off one at a time on both sides puts most of it in the ACCEPTOR's
-        // angular term: without it the disagreement falls to 0.0011 A, while without
-        // the donor's it stays at 0.026. The line itself has not been found.
-        //
-        // The bound below is therefore a REGRESSION guard at the measured level, not
-        // a claim of agreement. Tighten it to 1e-4 when the defect is fixed; it will
-        // then be a real comparison. See the memory note
-        // project-hbond-cpu-gpu-force-split.
-        float worst = 0.0f;
+        // 1e-3 A is 65 times the worst of the three forms (6.7e-07 bisector,
+        // 1.5e-05 both lobe forms) and about 0.2% of the motion. What is left is
+        // float summation order: hbondForce reaches the six atoms of a bond through
+        // a compare-and-swap add, so two runs on the SAME device already differ in
+        // the last bits, and 200 steps compound that.
+        float moved = 0.0f, worst = 0.0f;
         for (unsigned i = 0; i < cpu.getNumberOfParticles(); ++i)
+        {
+            moved = std::max(moved, (cpu.getParticle(i).getPosition() - before[i]).norm());
             worst = std::max(worst,
                 (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
-        EXPECT_LT(worst, 5.0e-2f) << what << ": the GPU is " << worst
-                                 << " A from the CPU after one step, worse than the 0.028 A this"
-                                    " known defect is bounded at";
+        }
+        EXPECT_GT(moved, 0.05f)
+            << what << ": the ladder barely moved, so this comparison proves nothing";
+        // And it must RELAX, not fly apart: a ladder that has blown up also agrees
+        // with itself across backends for a while, and its rungs are 3.4 A long.
+        EXPECT_LT(moved, 3.0f) << what << ": the ladder came apart (" << moved << " A)";
+        EXPECT_LT(worst, 1.0e-3f) << what << ": the GPU is " << worst << " A from the CPU after "
+                                 << STEPS << " steps, while the ladder moved " << moved << " A";
     }
 
     // And the three forms must give DIFFERENT answers, or the mode and the angle
