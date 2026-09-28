@@ -770,6 +770,13 @@ void SpringNetwork::computeStepBAOAB()
 
     _baoabFinalKick();
 
+    // Same place in the step as the ordinary path's, and it has to be repeated
+    // here: computeStep() hands over to this function and RETURNS, so a call
+    // added only there never runs under a thermostat. Which is the one case
+    // that matters -- a bond forms because something is warm enough to bring
+    // its two ends together, and a thermostat is how that is asked for.
+    _peptidebond.update(*this, static_cast<unsigned>(_nbiter));
+
     if (isInsertionVectorEnabled())
         _updateInsertionVector();
 }

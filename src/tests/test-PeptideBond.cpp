@@ -262,6 +262,29 @@ TEST(PeptideBond, CostsNoEnergyAtTheInstantItForms)
                 0.2f);
 }
 
+// The thermostatted path is a DIFFERENT function: computeStep() hands over to
+// computeStepBAOAB() and returns, so anything called only at the end of the
+// first never runs under a thermostat. It went unnoticed because every other
+// test here runs without one -- and a thermostat is exactly how one asks for
+// the case this whole term is about, two molecules warm enough to meet.
+TEST(PeptideBond, FormsUnderAThermostatToo)
+{
+    RulesFile rules;
+    spn::SpringNetwork network;
+    configuration::Configuration config;
+    build(network, config, rules.path(), 2.9f, false, 1, 0, 50);
+    config.thermostat.enable = true;
+    config.thermostat.temperature = 50.0;   // warm enough to move, cold enough
+    network.setup(config);                  // to leave the attack geometry alone
+
+    network.run();
+
+    EXPECT_EQ(network.getPeptideBonds().getNumberOfBonds(), 1u)
+        << "no bond under a thermostat, where the same fixture makes one without; "
+        << "closest " << network.getPeptideBonds().getClosestApproach() << " A, weight "
+        << network.getPeptideBonds().getBestWeight();
+}
+
 // A real carboxyl does not gain a fourth partner: it loses its hydroxyl. What
 // distinguishes a bonded atom from a free one here is its springs, so leaving
 // means those springs break -- and break BOTH ways, because a spring is also
