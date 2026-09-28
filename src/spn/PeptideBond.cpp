@@ -17,50 +17,182 @@ namespace spn
 namespace
 {
 
-// An ideal TRANS peptide plane, as the six atoms of an X_PSI group, in A. The
-// two ends of a bond that has just formed sit ~2.9 A apart -- an attack
-// distance, not a bond -- so every spring the rule creates is born far from
-// where it belongs, and something has to say where that is.
-//
-// Placed from Engh & Huber's (1991) internal coordinates: C-N 1.329, C=O 1.231,
-// N-H 1.010, CA-C 1.525, N-CA 1.458 A; CA-C-N 116.2, O-C-N 123.0, C-N-CA 121.7,
-// C-N-H 119.2 deg; omega 180, all six coplanar. C is at the origin and N on +x;
-// the two CA are on opposite sides of that axis, which is what trans means.
-// The fifteen distances are computed from these rather than tabulated, so the
-// geometry can be checked against its source in one place.
-struct IdealAtom
-{
-    const char * name;
-    float x, y;
-};
-const IdealAtom IDEAL_PEPTIDE_PLANE[] = {
-    {"CA", -0.67250f, 1.36872f},  // the carbonyl side's alpha carbon
-    {"C", 0.0f, 0.0f},            // the carbonyl carbon: the electrophile
-    {"O", -0.67045f, -1.03240f},  //
-    {"+N", 1.32900f, 0.0f},       // the amine nitrogen: the nucleophile
-    {"+H", 1.82122f, 0.88193f},   //
-    {"+CA", 2.09442f, -1.24093f}, // the amine side's alpha carbon
-};
+// The peptide bond's OWN internal coordinates, Engh & Huber (1991). Only the
+// three that describe the BOND: everything else about the two residues is
+// already in the structure, and taking it from a table instead is exactly what
+// made the product strained -- see referenceGeometry below.
+const float PEPTIDE_CN = 1.329f;         // A
+const float PEPTIDE_CA_C_N = 116.2f;     // deg, at the carbonyl carbon
+const float PEPTIDE_C_N_CA = 121.7f;     // deg, at the amine nitrogen
+// omega (CA-C-N-CA) is 180 by construction below, and the unit is trans.
 
-// The ideal distance between two of the six, or -1 when either name is not one
-// of them -- which is how a group that is not a peptide plane opts out of the
-// ramp instead of being drawn towards a geometry that means nothing for it.
-float idealDistance(const std::string & a, const std::string & b)
+// Where the fifteen springs of a new peptide plane should END UP, as POSITIONS
+// for the group's atoms.
+//
+// WHY NOT A TABLE OF FIFTEEN DISTANCES. Six points in space have fifteen
+// pairwise distances, which is exactly enough to fix them up to a reflection --
+// so a table determines omega completely, and the first version of this used
+// one, taken from a fully idealised trans plane. It came out 17.3 degrees from
+// trans, with the six atoms 0.195 A off coplanar.
+//
+// The reason is that six of those fifteen pairs are INTERNAL to one residue or
+// the other, are already sprung by the _CA group, and therefore keep the rest
+// length the structure gave them -- they are never ramped. The idealised table
+// set the other nine from a geometry those six do not have. Measured on two
+// alanines: the residue's own amide hydrogen sits at 108.6 degrees of N-CA
+// where the table assumed 119.1, so H...CA was 2.023 A against a table that had
+// built its cross terms around 2.104. The fifteen distances were then not
+// realisable by any arrangement of six points, and the mesh settled in the
+// least-bad strained one, which is what twisted omega. Making that ONE distance
+// consistent took omega from 162.7 to -174.2 degrees and the out-of-plane error
+// from 0.195 to 0.049 A.
+//
+// So the reference is BUILT, from what is actually there: each residue keeps
+// its own geometry exactly, and only their relative placement comes from the
+// table. The fifteen distances are then realisable by construction.
+//
+// Returns false when the group does not name the four atoms the construction
+// needs, which is how a rule that is not a peptide plane opts out of the ramp
+// rather than being drawn towards a geometry that means nothing for it.
+// normalize() is in place and returns void, so this keeps each direction one
+// expression instead of three statements.
+Vector3f unitOf(const Vector3f & v)
 {
-    const IdealAtom * pa = nullptr;
-    const IdealAtom * pb = nullptr;
-    for (const IdealAtom & atom : IDEAL_PEPTIDE_PLANE)
+    Vector3f u = v;
+    u.normalize();
+    return u;
+}
+
+bool referenceGeometry(const std::vector<Vector3f> & position, const std::vector<std::string> & refname,
+                       const std::string & electrophile, const std::string & nucleophile,
+                       std::vector<Vector3f> & reference)
+{
+    const auto find = [&](const std::string & want) {
+        for (size_t k = 0; k < refname.size(); ++k)
+            if (refname[k] == want)
+                return static_cast<int>(k);
+        return -1;
+    };
+    const int iCA1 = find("CA"), iC = find(electrophile), iO = find("O");
+    const int iN = find("+" + nucleophile), iCA2 = find("+CA");
+    if (iCA1 < 0 || iC < 0 || iN < 0 || iCA2 < 0)
+        return false;
+
+    const Vector3f C = position[iC];
+    const Vector3f uCA = unitOf(position[iCA1] - C);
+    // The carbonyl's own sp2 plane, which the new bond lies in. Without an
+    // oxygen in the group there is no plane to inherit, so any perpendicular
+    // will do: the result is still planar, just not tied to the carbonyl.
+    Vector3f normal = iO >= 0 ? (uCA ^ (position[iO] - C)) : Vector3f(0.0f, 0.0f, 0.0f);
+    if (normal.norm() < 1e-4f)
     {
-        if (a == atom.name)
-            pa = &atom;
-        if (b == atom.name)
-            pb = &atom;
+        const Vector3f trial = std::abs(uCA.getX()) < 0.9f ? Vector3f(1.0f, 0.0f, 0.0f) : Vector3f(0.0f, 1.0f, 0.0f);
+        normal = uCA ^ trial;
     }
-    if (pa == nullptr || pb == nullptr)
-        return -1.0f;
-    const float dx = pa->x - pb->x;
-    const float dy = pa->y - pb->y;
-    return std::sqrt(dx * dx + dy * dy);
+    normal = unitOf(normal);
+    const Vector3f inplane = unitOf(normal ^ uCA);
+
+    const float a1 = PEPTIDE_CA_C_N * static_cast<float>(M_PI) / 180.0f;
+    // Two directions make that angle with C->CA; the nitrogen takes the one
+    // AWAY from the oxygen, which is the only thing that distinguishes them.
+    Vector3f dirN = uCA * std::cos(a1) + inplane * std::sin(a1);
+    if (iO >= 0 && dirN.dot(unitOf(position[iO] - C)) > 0.0f)
+        dirN = uCA * std::cos(a1) - inplane * std::sin(a1);
+    const Vector3f N = C + dirN * PEPTIDE_CN;
+
+    // The second alpha carbon, at the residue's OWN N-CA length, trans across
+    // the new bond: of the two in-plane choices, the one that puts it on the
+    // far side from the first alpha carbon.
+    const Vector3f uNC = unitOf(C - N);
+    const Vector3f inplane2 = unitOf(normal ^ uNC);
+    const float a2 = PEPTIDE_C_N_CA * static_cast<float>(M_PI) / 180.0f;
+    const float lNCA = (position[iCA2] - position[iN]).norm();
+    const Vector3f plus = N + (uNC * std::cos(a2) + inplane2 * std::sin(a2)) * lNCA;
+    const Vector3f minus = N + (uNC * std::cos(a2) - inplane2 * std::sin(a2)) * lNCA;
+    const Vector3f CA2 = (plus - position[iCA1]).norm() > (minus - position[iCA1]).norm() ? plus : minus;
+
+    // Everything else on the amine side rides along: that residue is a rigid
+    // body here, so its remaining atoms are placed by the same rotation that
+    // takes its own (N, CA) onto the two positions just built. The spin about
+    // that axis is fixed by putting the amide hydrogen IN the peptide plane,
+    // on the side away from the second alpha carbon -- which is the trans amide.
+    const Vector3f e1 = unitOf(position[iCA2] - position[iN]);
+    const Vector3f E1 = unitOf(CA2 - N);
+    Vector3f e2, E2;
+    int spin = -1;
+    for (size_t k = 0; k < refname.size(); ++k)
+        if (refname[k].size() > 1 && refname[k][0] == '+' && static_cast<int>(k) != iN &&
+            static_cast<int>(k) != iCA2)
+        {
+            spin = static_cast<int>(k);
+            break;
+        }
+    if (spin >= 0)
+    {
+        const Vector3f v = position[spin] - position[iN];
+        e2 = v - e1 * e1.dot(v);
+        if (e2.norm() < 1e-4f)
+            spin = -1;
+        else
+            e2 = unitOf(e2);
+    }
+    if (spin < 0)
+    {
+        // Nothing to orient by: any perpendicular keeps the construction valid.
+        const Vector3f trial = std::abs(e1.getX()) < 0.9f ? Vector3f(1.0f, 0.0f, 0.0f) : Vector3f(0.0f, 1.0f, 0.0f);
+        e2 = unitOf(e1 ^ trial);
+        E2 = unitOf(E1 ^ trial);
+    }
+    else
+    {
+        // Which of the two in-plane perpendiculars, and the answer is NOT
+        // "the one pointing at the first alpha carbon". E2 is perpendicular to
+        // N->CA, while the side an amide hydrogen sits on is a rotation about
+        // C->N -- a different axis. Testing against the wrong one put the
+        // hydrogen trans to the first alpha carbon instead of cis, i.e. on top
+        // of the second one, and the mesh then had to compromise between that
+        // and omega: it settled 15 degrees off trans.
+        //
+        // So both signs are built and the one that makes the spin atom CIS to
+        // the first alpha carbon across the new bond wins -- omega(CA, C, N, H)
+        // near 0, which is what a trans amide is.
+        const Vector3f perp = unitOf(normal ^ E1);
+        float best = 0.0f;
+        for (int sign = 0; sign < 2; ++sign)
+        {
+            const Vector3f candidate = sign == 0 ? perp : perp * -1.0f;
+            const Vector3f third = E1 ^ candidate;
+            const Vector3f v = position[spin] - position[iN];
+            const Vector3f placed =
+                N + E1 * v.dot(e1) + candidate * v.dot(e2) + third * v.dot(e1 ^ e2);
+            // cos of the CA-C-N-spin dihedral, which is all the sign needs.
+            const Vector3f axis = unitOf(N - C);
+            const Vector3f a = position[iCA1] - C;
+            const Vector3f b = placed - N;
+            const Vector3f pa = a - axis * a.dot(axis);
+            const Vector3f pb = b - axis * b.dot(axis);
+            const float cosine = pa.norm() > 1e-6f && pb.norm() > 1e-6f ? pa.dot(pb) / (pa.norm() * pb.norm()) : 0.0f;
+            if (sign == 0 || cosine > best)
+            {
+                best = cosine;
+                E2 = candidate;
+            }
+        }
+    }
+    const Vector3f e3 = e1 ^ e2;
+    const Vector3f E3 = E1 ^ E2;
+
+    reference.assign(position.begin(), position.end());
+    reference[iN] = N;
+    reference[iCA2] = CA2;
+    for (size_t k = 0; k < refname.size(); ++k)
+    {
+        if (refname[k].empty() || refname[k][0] != '+' || static_cast<int>(k) == iN || static_cast<int>(k) == iCA2)
+            continue;
+        const Vector3f v = position[k] - position[iN];
+        reference[k] = N + E1 * v.dot(e1) + E2 * v.dot(e2) + E3 * v.dot(e3);
+    }
+    return true;
 }
 
 unsigned long long pairKey(unsigned a, unsigned b)
@@ -147,7 +279,77 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
                          _electrophiles.size() - sited, _electrophiles.size(), _electrophilename.c_str(),
                          _electrophilename.c_str());
 
+    _learnTorsionPattern(network);
+
     _enabled = true;
+}
+
+// WHY OMEGA NEEDS ITS OWN TERM AT ALL, since the fifteen springs already fix
+// the plane: they do not fix omega, and the arithmetic says so rather than the
+// measurement. Rotating the amine side about the new bond changes the fifteen
+// distances only at SECOND order -- CA...CA, the most sensitive of them, moves
+// 0.016 A over fifteen degrees -- so the whole mesh resists a fifteen-degree
+// twist with 0.237 kJ/mol, while one residue deforming by the 0.015 A measured
+// under an interactive pull costs 0.073 kJ/mol on its own. Omega is free, and
+// the product settled 14 degrees off trans however good the rest lengths were.
+// Same evenness as a ring's out-of-plane coordinate; see the ring planarity
+// note. A torsion is the only term with any stiffness there.
+//
+// AMBER puts FOUR torsions on a peptide bond, not one -- {CA, O} x {+CA, +H} --
+// with two different tables, and the table INDEX is this network's own. So the
+// pattern is LEARNED from a peptide bond the structure already has rather than
+// written down here: whatever pdb2spn built, this builds the same.
+void PeptideBondFormation::_learnTorsionPattern(const SpringNetwork & network)
+{
+    _torsionpattern.clear();
+    for (const SpringNetwork::Torsion & t : network.getTorsions())
+    {
+        // The bond is the middle pair, by the .bi.ff's own convention
+        // (X - C - +N - Y). Only a torsion straddling a real electrophile /
+        // nucleophile couple describes the bond being made.
+        const Particle & mid1 = network.getParticle(t.atoms[1]);
+        const Particle & mid2 = network.getParticle(t.atoms[2]);
+        if (mid1.getName() != _electrophilename || mid2.getName() != _nucleophilename)
+            continue;
+        if (_residueof[t.atoms[1]] == _residueof[t.atoms[2]])
+            continue;
+        TorsionPattern p;
+        p.before = network.getParticle(t.atoms[0]).getName();
+        p.after = network.getParticle(t.atoms[3]).getName();
+        p.family = t.family;
+        p.table = t.table;
+        const bool known = std::any_of(_torsionpattern.begin(), _torsionpattern.end(),
+                                       [&](const TorsionPattern & q) {
+                                           return q.before == p.before && q.after == p.after && q.table == p.table;
+                                       });
+        if (!known)
+            _torsionpattern.push_back(p);
+    }
+    if (_torsionpattern.empty())
+        logging::warning("Peptide bond formation: this network carries no torsion across an existing %s-%s bond, so "
+                         "there is no pattern to copy and a new bond's omega will be FREE -- the fifteen springs "
+                         "resist a 15 degree twist with 0.24 kJ/mol. Build the network with -bondedinteraction and "
+                         "-dihedralbackbone, on a structure that already contains one such bond.",
+                         _electrophilename.c_str(), _nucleophilename.c_str());
+    else
+        logging::info("Peptide bond formation: %zu torsion(s) will be created per bond, copied from this network's "
+                      "own %s-%s torsions.",
+                      _torsionpattern.size(), _electrophilename.c_str(), _nucleophilename.c_str());
+}
+
+void PeptideBondFormation::_addTorsions(SpringNetwork & network, unsigned electrophile, unsigned nucleophile)
+{
+    const unsigned own = _residueof[electrophile];
+    const unsigned next = _residueof[nucleophile];
+    for (const TorsionPattern & p : _torsionpattern)
+    {
+        const int a = _atomInResidue(network, own, p.before);
+        const int d = _atomInResidue(network, next, p.after);
+        if (a < 0 || d < 0)
+            continue;
+        network.addTorsion(p.family, static_cast<unsigned>(a), electrophile, nucleophile,
+                           static_cast<unsigned>(d), p.table);
+    }
 }
 
 bool PeptideBondFormation::_isFree(const SpringNetwork & network, unsigned particle, const std::string & other) const
@@ -329,6 +531,20 @@ void PeptideBondFormation::_form(SpringNetwork & network, unsigned electrophile,
     bond.nucleophile = nucleophile;
     bond.step = iteration;
 
+    // Where the group should END UP, built from these very residues rather
+    // than read off an idealised plane -- see referenceGeometry for why that
+    // distinction is the difference between a trans peptide and a strained one.
+    std::vector<Vector3f> here;
+    here.reserve(resolved.size());
+    for (unsigned index : resolved)
+        here.push_back(network.getParticle(index).getPosition());
+    std::vector<Vector3f> reference;
+    const bool ramped = referenceGeometry(here, refname, _electrophilename, _nucleophilename, reference);
+    if (!ramped)
+        logging::warning("Peptide bond formation: rule '%s' does not name the atoms a peptide plane is built from "
+                         "(CA, %s, +%s, +CA), so its springs keep the length they were born at.",
+                         chosen.getName().c_str(), _electrophilename.c_str(), _nucleophilename.c_str());
+
     for (size_t i = 0; i < resolved.size(); ++i)
     {
         for (size_t j = i + 1; j < resolved.size(); ++j)
@@ -349,8 +565,7 @@ void PeptideBondFormation::_form(SpringNetwork & network, unsigned electrophile,
                 continue; // addSpring declined it
             bond.springs.push_back(network.getNumberOfSprings() - 1);
             bond.born.push_back(length);
-            const float ideal = idealDistance(refname[i], refname[j]);
-            bond.target.push_back(ideal > 0.0f ? ideal : length);
+            bond.target.push_back(ramped ? (reference[i] - reference[j]).norm() : length);
         }
     }
 
@@ -367,6 +582,8 @@ void PeptideBondFormation::_form(SpringNetwork & network, unsigned electrophile,
                          "was already sprung, or none of them was found. The bond is recorded and will not be "
                          "attempted again, but nothing holds it.",
                          chosen.getName().c_str());
+
+    _addTorsions(network, electrophile, nucleophile);
 
     _bonded.insert(pairKey(electrophile, nucleophile));
     _bonds.push_back(bond);

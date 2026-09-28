@@ -87,6 +87,18 @@ class PeptideBondFormation
     // means, and what makes the formation irreversible without a flag to keep.
     bool _isFree(const SpringNetwork & network, unsigned particle, const std::string & other) const;
 
+    // The torsions AMBER puts on a peptide bond, learned from one the network
+    // already has rather than written down here -- see _learnTorsionPattern.
+    struct TorsionPattern
+    {
+        std::string before; // the atom name on the carbonyl side
+        std::string after;  // the atom name on the amine side
+        unsigned family = 0;
+        unsigned table = 0;
+    };
+    void _learnTorsionPattern(const SpringNetwork & network);
+    void _addTorsions(SpringNetwork & network, unsigned electrophile, unsigned nucleophile);
+
     void _form(SpringNetwork & network, unsigned electrophile, unsigned nucleophile, unsigned iteration);
     void _advanceRamps(SpringNetwork & network, unsigned iteration);
 
@@ -115,6 +127,8 @@ class PeptideBondFormation
     // pruned by _isFree, which reads the springs -- so a formation that created
     // none would be retried for ever. Irreversibility is recorded, not inferred.
     std::set<unsigned long long> _bonded;
+
+    std::vector<TorsionPattern> _torsionpattern;
 
     std::vector<Bond> _bonds;
     float _closest = 0.0f;
