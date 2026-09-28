@@ -2878,10 +2878,10 @@ void SpringNetworkOpenCL::_uploadHydrogenBondTopology()
 
 	std::vector<unsigned> donoroffset(_nbparticlesocl + 1, 0);
 	std::vector<unsigned> acceptoroffset(_nbparticlesocl + 1, 0);
-	// int4 rather than int2: x and y are the two antecedents, z says whether y is
-	// a PLANE reference for a two-lobe site instead of a second bond (see
-	// ParticleProperties::hasLobes). w is padding -- an OpenCL int3 occupies four
-	// words anyway, so the third field costs nothing.
+	// int4 rather than int2: x and y are the two antecedents, z is the lobe mode
+	// (ParticleProperties::HBOND_LOBES_*) saying whether y is a PLANE reference and
+	// which way the lobes go, and w is the lobe angle in MILLIDEGREES. An OpenCL
+	// int3 occupies four words anyway, so both extra fields are free.
 	std::vector<cl_int4> antecedent(_nbparticlesocl);
 	std::vector<int> resid(_nbparticlesocl, -1);
 	std::vector<int> chain(_nbparticlesocl, -1);
@@ -2904,7 +2904,9 @@ void SpringNetworkOpenCL::_uploadHydrogenBondTopology()
 		acceptoroffset[i + 1] = acceptoroffset[i] + static_cast<unsigned>(p.acceptorCapacity());
 		antecedent[i].s[0] = p.antecedentIndex();
 		antecedent[i].s[1] = p.antecedentIndex2();
-		antecedent[i].s[2] = p.hasLobes() ? 1 : 0;
+		antecedent[i].s[2] = p.lobeMode();
+		antecedent[i].s[3] = static_cast<int>(std::lround(
+		    std::atan2(p.lobeSin(), p.lobeCos()) * 180.0 / M_PI * 1000.0));
 		resid[i] = static_cast<int>(p.getResId());
 		const auto inserted = chainindex.emplace(p.getChainName(), static_cast<int>(chainindex.size()));
 		chain[i] = inserted.first->second;

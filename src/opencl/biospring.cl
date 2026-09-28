@@ -1034,11 +1034,10 @@ inline bool biospring_hb_already_bonded(const __global uint * donoroffsets, cons
 	return false;
 	}
 
-// Where a planar sp2 site's two hydrogens, or its two lone pairs, sit relative
-// to its single heavy bond. Same values as HBOND_LOBE_* in SpringNetwork.cpp; see
-// there for what they were measured on.
-#define BIOSPRING_HB_LOBE_COS 0.469472f
-#define BIOSPRING_HB_LOBE_SIN 0.882948f
+// The two lobe geometries, mirroring ParticleProperties::HBOND_LOBES_*.
+#define BIOSPRING_HB_LOBES_NONE          0
+#define BIOSPRING_HB_LOBES_IN_PLANE      1
+#define BIOSPRING_HB_LOBES_OUT_OF_PLANE  2
 
 // One end of a hydrogen bond, and everything its angular gradient needs. Mirrors
 // SpringNetwork::HydrogenBondSite -- the two backends run two transcriptions of
@@ -1050,8 +1049,9 @@ typedef struct
 	float3 e1, e2;     // away-directions from antecedent 1 and 2, unit
 	float l1, l2;      // their lengths
 	float hlen;        // |e1 + e2|, bisector form; exactly 1 in the lobe form
-	int lobes;
-	float3 shat;       // in-plane unit perpendicular to e1, lobe form
+	int lobes;         // BIOSPRING_HB_LOBES_*
+	float lcos, lsin;  // cosine and sine of the lobe angle
+	float3 shat;       // unit, orthogonal to e1: in the plane or its normal
 	float3 r;          // antecedent2 - antecedent1, lobe form
 	float m;           // the length shat was normalised by
 	float sigma;       // +1 or -1: which lobe won
@@ -1063,10 +1063,11 @@ inline BiospringHBSite biospring_hb_site(const __global float4 * positions,
                                          const __global int4 * antecedents, uint i, float3 towards)
 	{
 	BiospringHBSite st;
-	st.valid = 0; st.lobes = 0;
+	st.valid = 0; st.lobes = BIOSPRING_HB_LOBES_NONE;
 	st.hhat = (float3)(0.0f); st.e1 = (float3)(0.0f); st.e2 = (float3)(0.0f);
 	st.shat = (float3)(0.0f); st.r = (float3)(0.0f);
 	st.l1 = 0.0f; st.l2 = 0.0f; st.hlen = 0.0f; st.m = 0.0f; st.sigma = 0.0f;
+	st.lcos = 1.0f; st.lsin = 0.0f;
 
 	int a1 = antecedents[i].x;
 	if (a1 < 0)
@@ -1079,10 +1080,21 @@ inline BiospringHBSite biospring_hb_site(const __global float4 * positions,
 	st.e1 = u1 / st.l1;
 	int a2 = antecedents[i].y;
 
-	if (antecedents[i].z != 0 && a2 >= 0)
+	int mode = antecedents[i].z;
+	if (mode != BIOSPRING_HB_LOBES_NONE && a2 >= 0)
 		{
+		// The angle rides in .w as an integer number of MILLIDEGREES, so the int4
+		// carries the whole site description and no second buffer is needed. The
+		// two transcendentals are paid per candidate, and the hydrogen bond list is
+		// the smallest of the four -- 11 452 entries on 072 against 2.26 million for
+		// Coulomb -- so they do not show.
+		float a = ((float)antecedents[i].w) * 1.0e-3f * 0.01745329252f;
+		st.lcos = cos(a);
+		st.lsin = sin(a);
 		st.r = positions[a2].xyz - positions[a1].xyz;
-		float3 q = st.r - st.e1 * dot(st.e1, st.r);
+		float3 q = mode == BIOSPRING_HB_LOBES_OUT_OF_PLANE
+		               ? cross(st.e1, st.r)
+		               : st.r - st.e1 * dot(st.e1, st.r);
 		st.m = length(q);
 		if (st.m <= 1e-6f)
 			{
@@ -1091,11 +1103,11 @@ inline BiospringHBSite biospring_hb_site(const __global float4 * positions,
 			return st;
 			}
 		st.shat = q / st.m;
-		st.lobes = 1;
-		float3 plus = st.e1 * BIOSPRING_HB_LOBE_COS + st.shat * BIOSPRING_HB_LOBE_SIN;
-		float3 minus = st.e1 * BIOSPRING_HB_LOBE_COS - st.shat * BIOSPRING_HB_LOBE_SIN;
+		st.lobes = mode;
+		float3 plus = st.e1 * st.lcos + st.shat * st.lsin;
+		float3 minus = st.e1 * st.lcos - st.shat * st.lsin;
 		st.sigma = dot(plus, towards) >= dot(minus, towards) ? 1.0f : -1.0f;
-		st.hhat = st.e1 * BIOSPRING_HB_LOBE_COS + st.shat * (st.sigma * BIOSPRING_HB_LOBE_SIN);
+		st.hhat = st.e1 * st.lcos + st.shat * (st.sigma * st.lsin);
 		st.hlen = 1.0f;
 		st.valid = 1;
 		return st;
@@ -1135,12 +1147,20 @@ inline void biospring_hb_angular(BiospringHBSite st, float3 towards, float c, fl
 		}
 	float3 ta = (towards - st.e1 * dot(st.e1, towards)) / st.l1;
 	float3 ts = (towards - st.shat * dot(st.shat, towards)) / st.m;
-	float3 z = -(ts * dot(st.e1, st.r) + st.r * dot(ts, st.e1));
-	float ss = st.sigma * BIOSPRING_HB_LOBE_SIN;
-	float3 pz = z - st.e1 * dot(st.e1, z);
-	float3 pts = ts - st.e1 * dot(st.e1, ts);
-	float3 A = ta * BIOSPRING_HB_LOBE_COS + pz * (ss / st.l1);
-	float3 B = pts * ss;
+	float ss = st.sigma * st.lsin;
+	float3 A, B;
+	if (st.lobes == BIOSPRING_HB_LOBES_OUT_OF_PLANE)
+		{
+		float3 c1 = cross(st.r, ts);
+		A = ta * st.lcos + (c1 - st.e1 * dot(st.e1, c1)) * (ss / st.l1);
+		B = cross(ts, st.e1) * ss;
+		}
+	else
+		{
+		float3 z = -(ts * dot(st.e1, st.r) + st.r * dot(ts, st.e1));
+		A = ta * st.lcos + (z - st.e1 * dot(st.e1, z)) * (ss / st.l1);
+		B = (ts - st.e1 * dot(st.e1, ts)) * ss;
+		}
 	*f1 = (A + B) * k;
 	*f2 = B * (-k);
 	}

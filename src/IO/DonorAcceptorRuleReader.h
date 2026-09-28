@@ -33,18 +33,26 @@ struct DonorAcceptorRole
     // N1 or a thymine N3 between two ring carbons.
     std::string antecedent2;
 
-    // Is antecedent2 a PLANE reference rather than a second bond? Written with
-    // a '~' prefix in the file. A site with one heavy neighbour and two
-    // hydrogens or two lone pairs -- an exocyclic amine, a carbonyl oxygen --
-    // is planar sp2 and has TWO directions at +/- 62 degrees of its axis, in
-    // the plane. The bisector cannot express either of them, so such a line
-    // names any other atom of the same planar group as '~atom' and the two
-    // lobes are built from it. See ParticleProperties::hasLobes.
-    bool lobes = false;
+    // Is antecedent2 a PLANE reference rather than a second bond, and if so which
+    // way do the lobes go?
+    //
+    //   ~atom        IN the plane of the three atoms, at 62 degrees by default.
+    //                Where an sp2 centre's two hydrogens or two lone pairs sit: an
+    //                exocyclic amine, a carbonyl oxygen.
+    //   ^atom        OUT of that plane, along its normal. The Burgi-Dunitz approach
+    //                to a carbonyl CARBON: a nucleophile attacks one of its two
+    //                faces, at 105 degrees of the C=O axis. There is no sensible
+    //                default angle for this, so it must be written.
+    //   ~atom:ANGLE  either form with the angle in degrees.
+    //
+    // A bare '~' keeps 62 degrees so every table written before the angle existed
+    // reads the same. See ParticleProperties::setLobes.
+    int lobeMode = 0;        // ParticleProperties::HBOND_LOBES_*
+    float lobeAngle = 62.0f; // degrees
 };
 
 // Parses a .hbond file: lines of
-// "<resname> <atomname> <donor> <acceptor> [<antecedent> [[~]<antecedent2>]]", donor/acceptor
+// "<resname> <atomname> <donor> <acceptor> [<antecedent> [[~|^]<antecedent2>[:angle]]]", donor/acceptor
 // being CAPACITIES (0, 1, 2...) rather than flags -- 0/1 keeps its old
 // meaning exactly, so a table written before capacities existed still reads
 // the same. The fifth column is optional and names the heavy atom that gives

@@ -37,16 +37,36 @@ void DonorAcceptorRuleReader::_parse_line(const std::string & line, size_t line_
     // lone pairs, whose directions are the two lobes at +/- 62 degrees.
     if (tokens.size() == 6)
     {
-        if (tokens[5][0] == '~')
+        std::string a2 = tokens[5];
+        const char marker = a2[0];
+        if (marker == '~' || marker == '^')
         {
-            entry.lobes = true;
-            entry.antecedent2 = tokens[5].substr(1);
-            if (entry.antecedent2.empty())
-                logging::die("DonorAcceptorRuleReader: line %d: '~' names no plane atom",
-                             static_cast<int>(line_id));
+            entry.lobeMode = marker == '~' ? spn::Particle::HBOND_LOBES_IN_PLANE
+                                           : spn::Particle::HBOND_LOBES_OUT_OF_PLANE;
+            a2 = a2.substr(1);
+            // An angle after a colon overrides the default, which is 62 degrees for
+            // the in-plane form and nothing for the out-of-plane one -- a face
+            // approach has no canonical angle, so the file has to say.
+            const size_t colon = a2.find(':');
+            if (colon != std::string::npos)
+            {
+                if (!utils::string::from_string(entry.lobeAngle, a2.substr(colon + 1)))
+                    logging::die("DonorAcceptorRuleReader: line %d: invalid lobe angle '%s'",
+                                 static_cast<int>(line_id), a2.substr(colon + 1).c_str());
+                a2 = a2.substr(0, colon);
+            }
+            else if (marker == '^')
+                logging::die("DonorAcceptorRuleReader: line %d: '^%s' needs an explicit angle, "
+                             "as '^%s:105' -- an out-of-plane approach has no default",
+                             static_cast<int>(line_id), a2.c_str(), a2.c_str());
+            if (a2.empty())
+                logging::die("DonorAcceptorRuleReader: line %d: '%c' names no plane atom",
+                             static_cast<int>(line_id), marker);
+            if (entry.lobeAngle <= 0.0f || entry.lobeAngle >= 180.0f)
+                logging::die("DonorAcceptorRuleReader: line %d: lobe angle %g is outside (0, 180)",
+                             static_cast<int>(line_id), static_cast<double>(entry.lobeAngle));
         }
-        else
-            entry.antecedent2 = tokens[5];
+        entry.antecedent2 = a2;
     }
 
     _roles[{resname, atomname}] = entry;
@@ -147,8 +167,8 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
         if (anc2 >= 0)
         {
             p.setAntecedentIndex2(anc2);
-            p.setHasLobes(it->second.lobes);
-            if (it->second.lobes)
+            p.setLobes(it->second.lobeMode, it->second.lobeAngle);
+            if (it->second.lobeMode != spn::Particle::HBOND_LOBES_NONE)
                 ++nb_lobes;
             else
                 ++nb_bisector;

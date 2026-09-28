@@ -597,17 +597,20 @@ class SpringNetwork
     //   BISECTOR  two heavy neighbours, one hydrogen or lone pair. The direction
     //             is -(u1 + u2) normalised, exact for a planar sp2 centre. The
     //             protein backbone amide, guanine N1, thymine N3.
-    //   LOBES     one heavy neighbour, TWO hydrogens or lone pairs. They sit in
-    //             the group's plane at +/- 62 degrees of the axis, so there are
-    //             two directions and the bond takes whichever fits it. An
+    //   LOBES     one heavy neighbour, TWO hydrogens or lone pairs, so TWO
+    //             directions and the bond takes whichever fits it. Two flavours:
+    //             IN PLANE at 62 degrees is where an sp2 centre's pair sits -- an
     //             exocyclic amine (guanine N2, adenine N6, cytosine N4) or a
-    //             carbonyl oxygen (guanine O6, cytosine O2, thymine O4).
+    //             carbonyl oxygen (guanine O6, cytosine O2, thymine O4); OUT OF
+    //             PLANE is the Burgi-Dunitz approach to a carbonyl CARBON, at 105
+    //             degrees of the C=O axis and perpendicular to the sp2 plane,
+    //             because a nucleophile attacks one of the carbon's two FACES.
     //
-    // In the lobe form the plane is fixed by a THIRD atom of the same group,
+    // In either lobe form the plane is fixed by a THIRD atom of the same group,
     // which is what antecedentIndex2 holds there -- not a bonded neighbour. The
-    // in-plane perpendicular comes from it by Gram-Schmidt against the axis, so
-    // no cross product appears and the gradient keeps the same shape the
-    // bisector form already had.
+    // in-plane perpendicular comes from it by Gram-Schmidt against the axis and the
+    // out-of-plane one by a cross product; both are unit and orthogonal to the axis,
+    // so h = cos a * e1 +/- sin a * shat is unit in both.
     struct HydrogenBondSite
     {
         bool valid = false;
@@ -616,10 +619,12 @@ class SpringNetwork
         float l1 = 0.0f;   // |self - antecedent1|
         float l2 = 0.0f;   // |self - antecedent2|, bisector form only
         float hlen = 0.0f; // |e1 + e2|, bisector form only
-        bool lobes = false;
-        Vector3f shat;     // in-plane unit perpendicular to e1, lobe form only
+        int lobes = 0;     // ParticleProperties::HBOND_LOBES_*
+        float lcos = 1.0f; // cos and sin of the lobe angle
+        float lsin = 0.0f;
+        Vector3f shat;     // unit, orthogonal to e1: in the plane or its normal
         Vector3f r;        // antecedent2 - antecedent1, lobe form only
-        float m = 0.0f;    // |r - e1 (e1.r)|, the length shat was normalised by
+        float m = 0.0f;    // the length shat was normalised by
         float sigma = 0.0f;// +1 or -1: which lobe won
     };
 
@@ -628,8 +633,8 @@ class SpringNetwork
     // of the two lobes the bond uses. Shared by the candidate ranking, the log
     // and the force, because a direction computed in three places got fixed in
     // one and kept reporting the old answer in the other two.
-    HydrogenBondSite hydrogenBondSite(const Particle & self, int a1, int a2, bool lobes,
-                                      const Vector3f & towards) const;
+    HydrogenBondSite hydrogenBondSite(const Particle & self, int a1, int a2, int lobes, float lcos,
+                                      float lsin, const Vector3f & towards) const;
 
     // Where a donor's hydrogen or an acceptor's lone pair points, as a unit
     // vector, or zero when it names no antecedent. `towards` selects the lobe.

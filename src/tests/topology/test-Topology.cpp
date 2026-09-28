@@ -201,33 +201,57 @@ TEST(Topology, to_spring_network)
 // enters the gradient like an antecedent does. Four bodies carry force here, not
 // three, and the derivation goes through a Gram-Schmidt projection, so it is
 // exactly the kind of expression a sign error hides in.
-// Two geometries, chosen so the acceptor sits on the OTHER side of the axis in
-// the second: sigma comes out +1 in one and -1 in the other. One sign convention
-// has to satisfy both, which is what stops this being fitted to a single case.
-class HydrogenBondLobeForces : public ::testing::TestWithParam<std::array<std::array<double, 3>, 4>>
+// FOUR cases: both lobe geometries, each with the partner on either side of the
+// axis so sigma comes out +1 in one and -1 in the other. One sign convention has to
+// satisfy all four, which is what stops this being fitted to a single case -- the
+// algebra's B term came out inverted on the first attempt, and only a case of the
+// opposite sigma distinguishes that from a correct one.
+//
+// The angle is measured from e1 = self - antecedent1. For a carbonyl carbon whose
+// antecedent is its own oxygen, e1 points AWAY from the oxygen, so Burgi-Dunitz's
+// 105 degrees of the C=O axis is written as 75 here: a lobe at 75 degrees of e1 puts
+// the partner at exactly 105.0 of C->O, which is checked below.
+struct LobeCase
+{
+    std::array<std::array<double, 3>, 4> pos; // antecedent1, plane atom, site, partner
+    int mode;
+    float angle;
+};
+
+class HydrogenBondLobeForces : public ::testing::TestWithParam<LobeCase>
 {
 };
 
-INSTANTIATE_TEST_SUITE_P(BothLobes, HydrogenBondLobeForces,
-                         ::testing::Values(
-                             // 0 the heavy neighbour, 1 the plane atom, 2 the donor,
-                             // 3 the acceptor, off-axis to ONE side: sigma = +1.
-                             std::array<std::array<double, 3>, 4>{{{0.0, 0.0, 0.0},
-                                                                   {-0.7, 1.2, 0.05},
-                                                                   {1.35, 0.22, -0.11},
-                                                                   {2.6, 2.3, 0.4}}},
-                             // The acceptor on the OTHER side of the axis, 30 degrees
-                             // off that lobe: sigma = -1 and the weight is 0.750, so
-                             // the angular derivative is neither zero nor saturated.
-                             std::array<std::array<double, 3>, 4>{{{0.0, 0.0, 0.0},
-                                                                   {-0.7, 1.2, 0.05},
-                                                                   {1.35, 0.22, -0.11},
-                                                                   {3.09, -1.91, 1.32}}}));
+INSTANTIATE_TEST_SUITE_P(
+    BothGeometriesBothLobes, HydrogenBondLobeForces,
+    ::testing::Values(
+        // IN PLANE, 62 degrees: an exocyclic amine's two hydrogens. The partner is
+        // off-axis to one side, then to the other.
+        LobeCase{{{{0.0, 0.0, 0.0}, {-0.7, 1.2, 0.05}, {1.35, 0.22, -0.11}, {2.6, 2.3, 0.4}}},
+                 spn::Particle::HBOND_LOBES_IN_PLANE, 62.0f},
+        LobeCase{{{{0.0, 0.0, 0.0}, {-0.7, 1.2, 0.05}, {1.35, 0.22, -0.11}, {3.09, -1.91, 1.32}}},
+                 spn::Particle::HBOND_LOBES_IN_PLANE, 62.0f},
+        // OUT OF PLANE, 75 degrees: the Burgi-Dunitz approach to a carbonyl carbon.
+        // Antecedent1 is the oxygen at the origin, the site is the carbon 1.23 A
+        // along x, and the plane atom puts the sp2 plane at z = 0 -- so the lobes run
+        // along +/- z and the Burgi-Dunitz angle comes out at 103.4 degrees of C->O.
+        //
+        // The partner is tilted off the lobe TOWARD THE IN-PLANE PERPENDICULAR, not
+        // within the (axis, normal) plane, and that is not cosmetic: tilt it inside
+        // that plane and everything lies in one plane, ts comes out parallel to the
+        // axis, B is EXACTLY zero and the plane atom carries no force at all. The
+        // test would then pass while never exercising the term it exists for. Here
+        // the weight is 0.800 and |B| is 0.332.
+        LobeCase{{{{0.0, 0.0, 0.0}, {1.93, 1.30, 0.0}, {1.23, 0.0, 0.0}, {1.924, 1.342, 2.592}}},
+                 spn::Particle::HBOND_LOBES_OUT_OF_PLANE, 75.0f},
+        LobeCase{{{{0.0, 0.0, 0.0}, {1.93, 1.30, 0.0}, {1.23, 0.0, 0.0}, {1.924, 1.342, -2.592}}},
+                 spn::Particle::HBOND_LOBES_OUT_OF_PLANE, 75.0f}));
 
 TEST_P(HydrogenBondLobeForces, match_energy_gradient_by_finite_differences)
 {
     topology::Topology top;
-    const std::array<std::array<double, 3>, 4> pos = GetParam();
+    const LobeCase param = GetParam();
+    const std::array<std::array<double, 3>, 4> pos = param.pos;
     for (size_t i = 0; i < pos.size(); ++i)
     {
         topology::ParticleProperties p;
@@ -243,7 +267,7 @@ TEST_P(HydrogenBondLobeForces, match_energy_gradient_by_finite_differences)
     spn.getParticle(2).setDonorCapacity(2);
     spn.getParticle(2).setAntecedentIndex(0);
     spn.getParticle(2).setAntecedentIndex2(1);
-    spn.getParticle(2).setHasLobes(true);
+    spn.getParticle(2).setLobes(param.mode, param.angle);
     spn.getParticle(3).setAcceptorCapacity(1);
 
     configuration::Configuration conf = configuration::defaultConfiguration();
@@ -277,9 +301,20 @@ TEST_P(HydrogenBondLobeForces, match_energy_gradient_by_finite_differences)
         const float w = biospring::forcefield::hydrogen_bond_angular_factor(hd.dot(v / v.norm()));
         ASSERT_GT(w, 0.1f) << "angular weight " << w << " is too close to zero";
         ASSERT_LT(w, 0.95f) << "angular weight " << w << " is saturated";
-        // And the direction must BE a lobe, not the axis: cos(62) apart from it.
+        // And the direction must BE a lobe, not the axis: the site's own angle apart
+        // from it, whichever geometry this case uses.
         const Vector3f axis = (spn.getParticle(2).getPosition() - spn.getParticle(0).getPosition());
-        EXPECT_NEAR(hd.dot(axis / axis.norm()), std::cos(62.0f * static_cast<float>(M_PI) / 180.0f), 1e-3f);
+        EXPECT_NEAR(hd.dot(axis / axis.norm()),
+                    std::cos(param.angle * static_cast<float>(M_PI) / 180.0f), 1e-3f);
+        // An out-of-plane lobe must actually leave the plane; an in-plane one must
+        // stay in it. Otherwise the two modes could be silently the same code path.
+        const Vector3f pl = spn.getParticle(1).getPosition() - spn.getParticle(0).getPosition();
+        const Vector3f nrm = (axis ^ pl);
+        const float outofplane = std::abs(hd.dot(nrm / nrm.norm()));
+        if (param.mode == spn::Particle::HBOND_LOBES_OUT_OF_PLANE)
+            EXPECT_GT(outofplane, 0.9f) << "an out-of-plane lobe is lying in the plane";
+        else
+            EXPECT_LT(outofplane, 1e-3f) << "an in-plane lobe is leaving the plane";
     }
 
     const float h = 1e-2f;
@@ -348,17 +383,26 @@ TEST(Topology, a_lobe_site_reduces_to_the_axis_when_the_partner_is_on_it)
 
     const Vector3f towards(1.0f, 0.0f, 0.0f);
     // The axis form: antecedent 0 only, so the direction is +x exactly.
-    spn.getParticle(2).setHasLobes(false);
+    spn.getParticle(2).setLobes(spn::Particle::HBOND_LOBES_NONE, 62.0f);
     spn.getParticle(2).setAntecedentIndex2(-1);
     const Vector3f axis = spn.donorDirection(spn.getParticle(2), towards);
     EXPECT_NEAR(axis.dot(towards), 1.0f, 1e-5f);
 
-    // The lobe form: the same axis, tilted by 62 degrees either way.
+    // Either lobe form: the same axis, tilted by the site's own angle. Both must be
+    // unit and both must sit exactly that angle off the axis -- what separates them
+    // is the PLANE they tilt into, which the finite-difference cases above check.
     spn.getParticle(2).setAntecedentIndex2(1);
-    spn.getParticle(2).setHasLobes(true);
-    const Vector3f lobe = spn.donorDirection(spn.getParticle(2), towards);
-    EXPECT_NEAR(lobe.dot(towards), std::cos(62.0f * static_cast<float>(M_PI) / 180.0f), 1e-4f);
-    EXPECT_NEAR(lobe.norm(), 1.0f, 1e-5f);
+    for (int mode : {spn::Particle::HBOND_LOBES_IN_PLANE, spn::Particle::HBOND_LOBES_OUT_OF_PLANE})
+    {
+        for (float angle : {62.0f, 75.0f, 105.0f})
+        {
+            spn.getParticle(2).setLobes(mode, angle);
+            const Vector3f lobe = spn.donorDirection(spn.getParticle(2), towards);
+            EXPECT_NEAR(lobe.dot(towards), std::cos(angle * static_cast<float>(M_PI) / 180.0f), 1e-4f)
+                << "mode " << mode << " angle " << angle;
+            EXPECT_NEAR(lobe.norm(), 1.0f, 1e-5f) << "mode " << mode << " angle " << angle;
+        }
+    }
 }
 
 TEST(Topology, hydrogen_bond_forces_match_energy_gradient_by_finite_differences)

@@ -1,6 +1,8 @@
 #ifndef __PARTICLEPROPERTY_H__
 #define __PARTICLEPROPERTY_H__
 
+#include <cmath>
+
 namespace biospring
 {
 namespace spn
@@ -27,7 +29,7 @@ class ParticleProperty
     ParticleProperty()
         : _mass(1.0), _charge(0.0), _electroncharge(0), _radius(1.0), _epsilon(0.0), _tempfactor(0.0), _occupancy(0.0),
           _hydrophobicity(0.0), _solventaccessibilitysurface(0.0), _transferenergybyaccessiblesurface(0.0),
-          _ischarged(false), _ishydrophobic(false), _burying(1.0), _donorcapacity(0), _acceptorcapacity(0), _antecedentindex(-1), _antecedentindex2(-1), _hblobes(false)
+          _ischarged(false), _ishydrophobic(false), _burying(1.0), _donorcapacity(0), _acceptorcapacity(0), _antecedentindex(-1), _antecedentindex2(-1), _hblobemode(0), _hblobecos(1.0f), _hblobesin(0.0f)
     {
     }
 
@@ -135,8 +137,37 @@ class ParticleProperty
     // When this is set, antecedentIndex2 is not a bonded neighbour: it is any
     // other atom of the same planar group, and it serves only to fix which
     // plane the lobes lie in. The .hbond table marks it with a '~' prefix.
-    bool hasLobes() const { return _hblobes; }
-    void setHasLobes(bool lobes) { _hblobes = lobes; }
+    // How the second antecedent is read, and at what angle the lobes sit.
+    //
+    //   0  NONE       antecedent2 is a second bond; the direction is the bisector
+    //   1  IN PLANE   the two lobes lie in the plane of the three atoms, which is
+    //                 where an sp2 centre's two hydrogens or two lone pairs are:
+    //                 an exocyclic amine (62 deg), a carbonyl oxygen
+    //   2  OUT OF PLANE  the lobes leave that plane, along its normal. This is the
+    //                 Burgi-Dunitz approach to a carbonyl CARBON, at 105 deg of the
+    //                 C=O axis and perpendicular to the sp2 plane -- a nucleophile
+    //                 attacks a carbonyl from one of its two FACES, and there are
+    //                 exactly two such trajectories, so it is the same two-lobe
+    //                 problem with a different angle and a different plane.
+    //
+    // The cosine and sine are stored rather than the angle, because the direction is
+    // rebuilt once per candidate pair and a transcendental there would be paid
+    // millions of times a step.
+    static const int HBOND_LOBES_NONE = 0;
+    static const int HBOND_LOBES_IN_PLANE = 1;
+    static const int HBOND_LOBES_OUT_OF_PLANE = 2;
+
+    int lobeMode() const { return _hblobemode; }
+    float lobeCos() const { return _hblobecos; }
+    float lobeSin() const { return _hblobesin; }
+    bool hasLobes() const { return _hblobemode != HBOND_LOBES_NONE; }
+    void setLobes(int mode, float degrees)
+    {
+        _hblobemode = mode;
+        const float r = degrees * 3.14159265358979323846f / 180.0f;
+        _hblobecos = std::cos(r);
+        _hblobesin = std::sin(r);
+    }
 
   protected:
   private:
@@ -157,7 +188,9 @@ class ParticleProperty
     unsigned _acceptorcapacity;
     int _antecedentindex;
     int _antecedentindex2;
-    bool _hblobes;
+    int _hblobemode;
+    float _hblobecos;
+    float _hblobesin;
 };
 
 } // namespace spn

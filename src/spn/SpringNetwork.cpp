@@ -230,19 +230,22 @@ bool SpringNetwork::areHydrogenBonded(size_t a, size_t b) const
 // by this. A particle can now appear in several bonds at once, so the
 // apply pass stays serial -- it is a genuine write conflict now, not just
 // summation order.
-// The cosine of 62 degrees and its sine: where a planar sp2 site's two
-// hydrogens, or its two lone pairs, sit relative to its single heavy bond.
-// Measured over 56 amine hydrogens of a B-DNA duplex the angle is 62.0 degrees
-// on guanine N2, 62.1 on adenine N6 and 62.9 on cytosine N4, and over the
-// carbonyls the acceptor side comes out at 52.7 to 57.6 from the axis. One value
-// serves both: reconstructing the lobes at 62 degrees puts every one of the five
-// Watson-Crick bond types within 8.2 to 15.3 degrees of its real partner, where
-// naming the real hydrogen gives 8.5 to 14.0. The reconstruction is as good as
-// knowing where the hydrogen is.
-static const float HBOND_LOBE_COS = 0.469472f; // cos(62 deg)
-static const float HBOND_LOBE_SIN = 0.882948f; // sin(62 deg)
+// 62 degrees is the DEFAULT lobe angle, and it is where a planar sp2 site's two
+// hydrogens or its two lone pairs sit relative to its single heavy bond. Measured
+// over 56 amine hydrogens of a B-DNA duplex the angle is 62.0 degrees on guanine N2,
+// 62.1 on adenine N6 and 62.9 on cytosine N4, and over the carbonyls the acceptor
+// side comes out at 52.7 to 57.6 from the axis. One value serves both: reconstructing
+// the lobes at 62 degrees puts every one of the five Watson-Crick bond types within
+// 8.2 to 15.3 degrees of its real partner, where naming the real hydrogen gives 8.5
+// to 14.0. The reconstruction is as good as knowing where the hydrogen is.
+//
+// The angle is per site now, because the OTHER two-lobe geometry in this chemistry
+// wants 105: the Burgi-Dunitz approach of a nucleophile to a carbonyl carbon, which
+// leaves the sp2 plane instead of lying in it. The .hbond table carries both.
+static const float HBOND_LOBE_DEFAULT_DEGREES = 62.0f;
 
-SpringNetwork::HydrogenBondSite SpringNetwork::hydrogenBondSite(const Particle & self, int a1, int a2, bool lobes,
+SpringNetwork::HydrogenBondSite SpringNetwork::hydrogenBondSite(const Particle & self, int a1, int a2, int lobes,
+                                                               float lcos, float lsin,
                                                                const Vector3f & towards) const
 {
     HydrogenBondSite site;
@@ -254,14 +257,17 @@ SpringNetwork::HydrogenBondSite SpringNetwork::hydrogenBondSite(const Particle &
         return site;
     site.e1 = u1 / site.l1;
 
-    if (lobes && a2 >= 0)
+    if (lobes != Particle::HBOND_LOBES_NONE && a2 >= 0)
     {
         // The plane atom, taken from the SAME atom the bisector form would have
-        // used, but read as a plane reference: r runs antecedent1 -> antecedent2,
-        // so the three atoms span the group's plane and Gram-Schmidt against the
-        // axis gives the in-plane perpendicular.
+        // used, but read as a plane reference: r runs antecedent1 -> antecedent2, so
+        // the three atoms span the group's plane. IN PLANE takes the Gram-Schmidt of
+        // r against the axis; OUT OF PLANE takes the plane's normal. Either way shat
+        // is unit and orthogonal to e1.
         site.r = _particles[static_cast<size_t>(a2)].getPosition() - _particles[static_cast<size_t>(a1)].getPosition();
-        const Vector3f q = site.r - site.e1 * site.e1.dot(site.r);
+        const Vector3f q = lobes == Particle::HBOND_LOBES_OUT_OF_PLANE
+                               ? (site.e1 ^ site.r)
+                               : site.r - site.e1 * site.e1.dot(site.r);
         site.m = q.norm();
         if (site.m <= 1e-6f)
         {
@@ -273,16 +279,18 @@ SpringNetwork::HydrogenBondSite SpringNetwork::hydrogenBondSite(const Particle &
             return site;
         }
         site.shat = q / site.m;
-        site.lobes = true;
+        site.lobes = lobes;
+        site.lcos = lcos;
+        site.lsin = lsin;
         // Both lobes, and the bond takes the one it fits. Not the slot index:
         // the slot assignment does not know about lobes, so binding them to
         // slots could seat an acceptor against the lobe pointing away from it.
         // The maximum is continuous, and the two are equal only on the axis,
         // where a lobe pair is at its weakest and the force smallest.
-        const Vector3f plus = site.e1 * HBOND_LOBE_COS + site.shat * HBOND_LOBE_SIN;
-        const Vector3f minus = site.e1 * HBOND_LOBE_COS - site.shat * HBOND_LOBE_SIN;
+        const Vector3f plus = site.e1 * lcos + site.shat * lsin;
+        const Vector3f minus = site.e1 * lcos - site.shat * lsin;
         site.sigma = plus.dot(towards) >= minus.dot(towards) ? 1.0f : -1.0f;
-        site.hhat = site.e1 * HBOND_LOBE_COS + site.shat * (site.sigma * HBOND_LOBE_SIN);
+        site.hhat = site.e1 * lcos + site.shat * (site.sigma * lsin);
         site.hlen = 1.0f; // exactly, since e1 and shat are orthonormal
         site.valid = true;
         return site;
@@ -316,8 +324,8 @@ SpringNetwork::HydrogenBondSite SpringNetwork::hydrogenBondSite(const Particle &
 // other two reporting the old answer, which read as "the fix does nothing".
 Vector3f SpringNetwork::donorDirection(const Particle & p, const Vector3f & towards) const
 {
-    const HydrogenBondSite s =
-        hydrogenBondSite(p, p.antecedentIndex(), p.antecedentIndex2(), p.hasLobes(), towards);
+    const HydrogenBondSite s = hydrogenBondSite(p, p.antecedentIndex(), p.antecedentIndex2(), p.lobeMode(),
+                                                p.lobeCos(), p.lobeSin(), towards);
     return s.valid ? s.hhat : Vector3f();
 }
 
@@ -335,7 +343,7 @@ void SpringNetwork::computeHydrogenBondForces()
         int acceptorAntecedent, acceptorAntecedent2;
         // Whether each side's second antecedent is a plane reference rather
         // than a second bond: see ParticleProperties::hasLobes.
-        bool donorLobes, acceptorLobes;
+        int donorLobes, acceptorLobes;
     };
     std::vector<Bond> bonds;
     bonds.reserve(_hbDonorSlot.size());
@@ -346,8 +354,8 @@ void SpringNetwork::computeHydrogenBondForces()
                                  getParticle(i).antecedentIndex2(),
                                  getParticle(static_cast<size_t>(_hbDonorSlot[s])).antecedentIndex(),
                                  getParticle(static_cast<size_t>(_hbDonorSlot[s])).antecedentIndex2(),
-                                 getParticle(i).hasLobes(),
-                                 getParticle(static_cast<size_t>(_hbDonorSlot[s])).hasLobes()});
+                                 getParticle(i).lobeMode(),
+                                 getParticle(static_cast<size_t>(_hbDonorSlot[s])).lobeMode()});
 
     // Six slots per bond: two antecedents on each side, the donor, the
     // acceptor. The angular weight is now a product of two factors, one per
@@ -388,9 +396,10 @@ void SpringNetwork::computeHydrogenBondForces()
         // Each side's direction comes from hydrogenBondSite, so the force, the
         // candidate ranking and the log cannot disagree about it.
         const HydrogenBondSite sd = hydrogenBondSite(pd, bonds[k].antecedent, bonds[k].antecedent2,
-                                                     bonds[k].donorLobes, vhat);
+                                                     bonds[k].donorLobes, pd.lobeCos(), pd.lobeSin(), vhat);
         const HydrogenBondSite sa = hydrogenBondSite(pa, bonds[k].acceptorAntecedent,
-                                                     bonds[k].acceptorAntecedent2, bonds[k].acceptorLobes, -vhat);
+                                                     bonds[k].acceptorAntecedent2, bonds[k].acceptorLobes,
+                                                     pa.lobeCos(), pa.lobeSin(), -vhat);
         const bool hasD = sd.valid, hasA = sa.valid;
         const Vector3f dhat = sd.hhat, ahat = sa.hhat;
 
@@ -426,8 +435,9 @@ void SpringNetwork::computeHydrogenBondForces()
         // perpendicular to ei, scaled by k/(|e1+e2| li). e1.t is zero when there
         // is only one antecedent, which is why the same expression serves both.
         //
-        // LOBE FORM. hhat = cos62 e1 + sigma sin62 shat, with shat the
-        // Gram-Schmidt of r = a2 - a1 against e1. Writing
+        // LOBE FORM. hhat = cos a e1 + sigma sin a shat, with shat either the
+        // Gram-Schmidt of r = a2 - a1 against e1 (in plane) or e1 x r (out of
+        // plane). For the in-plane form, writing
         //     ta = (towards - e1 (e1.towards)) / l1
         //     ts = (towards - shat (shat.towards)) / m
         //     z  = -[ (e1.r) ts + (ts.e1) r ]
@@ -455,11 +465,23 @@ void SpringNetwork::computeHydrogenBondForces()
             }
             const Vector3f ta = (towards - st.e1 * st.e1.dot(towards)) / st.l1;
             const Vector3f ts = (towards - st.shat * st.shat.dot(towards)) / st.m;
-            const Vector3f z = -(ts * st.e1.dot(st.r) + st.r * ts.dot(st.e1));
             const auto perp = [&](const Vector3f & x) { return x - st.e1 * st.e1.dot(x); };
-            const float ss = st.sigma * HBOND_LOBE_SIN;
-            const Vector3f A = ta * HBOND_LOBE_COS + perp(z) * (ss / st.l1);
-            const Vector3f B = perp(ts) * ss;
+            const float ss = st.sigma * st.lsin;
+            Vector3f A, B;
+            if (st.lobes == Particle::HBOND_LOBES_OUT_OF_PLANE)
+            {
+                // shat = normalise(e1 x r). d(e1 x r) = de1 x r + e1 x dr, and
+                // ts.(de1 x r) = de1.(r x ts) while ts.(e1 x dr) = dr.(ts x e1).
+                A = ta * st.lcos + perp(st.r ^ ts) * (ss / st.l1);
+                B = (ts ^ st.e1) * ss;
+            }
+            else
+            {
+                // shat = normalise(r - e1 (e1.r)), the Gram-Schmidt.
+                const Vector3f z = -(ts * st.e1.dot(st.r) + st.r * ts.dot(st.e1));
+                A = ta * st.lcos + perp(z) * (ss / st.l1);
+                B = perp(ts) * ss;
+            }
             f1 = (A + B) * k;
             f2 = B * (-k);
         };
