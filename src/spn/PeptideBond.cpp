@@ -652,28 +652,62 @@ unsigned PeptideBondFormation::_markLeavingGroup(SpringNetwork & network, unsign
 {
     if (_leaving.empty())
         return 0;
-    const unsigned residue = _residueof[electrophile];
+
+    // THE LEAVING GROUP IS DEFINED CHEMICALLY, not by where it lives: it is the
+    // atom BONDED to the electrophile whose name is listed. Searching the
+    // electrophile's own residue instead -- which is what this did -- can only
+    // ever express a free acid losing its hydroxyl, and makes an ester
+    // impossible: an aminoacyl-tRNA's leaving group is the 3' oxygen of the
+    // tRNA, which belongs to the tRNA and not to the amino acid at all.
+    // In the ORDER the names were listed, and within a name by lowest index.
+    // Both matter: the list is how a caller says "the hydroxyl if there is one,
+    // otherwise the ester oxygen", and the index breaks a genuine tie the same
+    // way every run -- the neighbours live in an unordered_map, so "the first
+    // one found" is not the same thing twice.
+    int going = -1;
+    unsigned matches = 0;
     for (const std::string & name : _leaving)
     {
-        const int atom = _atomInResidue(network, residue, name);
-        if (atom < 0)
+        for (const auto & entry : network.getParticle(electrophile).getSpringNeighbors())
+            if (_isNamed(network, entry.first, name))
+            {
+                ++matches;
+                if (going < 0 || static_cast<int>(entry.first) < going)
+                    going = static_cast<int>(entry.first);
+            }
+        if (going >= 0)
+            break;
+    }
+    if (going < 0)
+        return 0;
+    if (matches > 1)
+        logging::warning("Peptide bond formation: %u atoms bonded to this %s carry the same leaving-group name. "
+                         "Taking the lowest index; name the leaving group more narrowly.",
+                         matches, _electrophilename.c_str());
+
+    // AND WHAT BREAKS IS EVERY SPRING BETWEEN IT AND THE ELECTROPHILE'S
+    // RESIDUE. One rule, and the two cases fall out of where the atom lives:
+    //
+    //   a free acid's OXT is IN that residue, so all of its springs go and it
+    //   departs whole -- it is the water that leaves;
+    //
+    //   an ester's O3' is in the tRNA, so only the C-O bond goes and the oxygen
+    //   stays on its own ribose, which is exactly what peptidyl transfer does.
+    const unsigned residue = _residueof[electrophile];
+    for (const auto & entry : network.getParticle(static_cast<unsigned>(going)).getSpringNeighbors())
+    {
+        if (entry.second == nullptr || _residueof[entry.first] != residue)
             continue;
-        for (const auto & entry : network.getParticle(static_cast<unsigned>(atom)).getSpringNeighbors())
-        {
-            if (entry.second == nullptr)
-                continue;
-            const unsigned id = entry.second->getId();
-            const Particle & a = network.getParticle(static_cast<unsigned>(atom));
-            const Particle & b = network.getParticle(entry.first);
-            const float now = (a.getPosition() - b.getPosition()).norm();
-            // Far enough out that the pair is no longer in each other's way:
-            // the steric contact distance, which for AMBER is the sum of the
-            // two R*. Breaking a spring already at that length costs nothing.
-            const float apart = a.getRadius() + b.getRadius();
-            bond.leaving.push_back(id);
-            bond.leavingborn.push_back(now);
-            bond.leavingtarget.push_back(std::max(apart, now * 1.1f));
-        }
+        const Particle & a = network.getParticle(static_cast<unsigned>(going));
+        const Particle & b = network.getParticle(entry.first);
+        const float now = (a.getPosition() - b.getPosition()).norm();
+        // Far enough out that the pair is no longer in each other's way: the
+        // steric contact distance, which for AMBER is the sum of the two R*.
+        // Breaking a spring already at that length costs nothing.
+        const float apart = a.getRadius() + b.getRadius();
+        bond.leaving.push_back(entry.second->getId());
+        bond.leavingborn.push_back(now);
+        bond.leavingtarget.push_back(std::max(apart, now * 1.1f));
     }
     return static_cast<unsigned>(bond.leaving.size());
 }

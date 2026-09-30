@@ -38,11 +38,12 @@ class RulesFile
     std::string _path;
 };
 
-unsigned place(spn::SpringNetwork & network, const std::string & name, unsigned resid, const Vector3f & position)
+unsigned place(spn::SpringNetwork & network, const std::string & name, unsigned resid, const Vector3f & position,
+               const std::string & resname = "ALA")
 {
     spn::Particle p;
     p.setName(name);
-    p.setResName("ALA");
+    p.setResName(resname);
     p.setChainName("A");
     p.setResId(resid);
     p.setPosition(position);
@@ -64,10 +65,13 @@ unsigned place(spn::SpringNetwork & network, const std::string & name, unsigned 
 struct Pair
 {
     unsigned ca1, c, o, oxt, n, h, ca2;
+    // The tRNA stand-in, when `ester` is asked for: the 3' oxygen esterified to
+    // the carbonyl carbon, and the ribose carbon it stays on.
+    unsigned o3 = 0, c3 = 0;
 };
 
 Pair build(spn::SpringNetwork & network, configuration::Configuration & config, const std::string & rules,
-           float attack, bool inPlane, unsigned dwell, unsigned ramp, unsigned steps)
+           float attack, bool inPlane, unsigned dwell, unsigned ramp, unsigned steps, bool ester = false)
 {
     Pair idx;
     // Residue 1: the carbonyl, in the xy plane. C at the origin, O along -x-ish
@@ -79,7 +83,18 @@ Pair build(spn::SpringNetwork & network, configuration::Configuration & config, 
     // The leaving group: a carboxyl's second oxygen, bound to the same carbon.
     // Not named by the _PSI rule, so it takes no part in the peptide plane --
     // it is there to be let go of.
-    idx.oxt = place(network, "OXT", 1, {-1.2800f, 0.7400f, 0.9000f});
+    // An ESTERIFIED carboxyl has no free OXT: its second oxygen IS the ester
+    // oxygen, and it belongs to the ribose. Giving the fixture both would be a
+    // molecule that cannot exist, and would only be testing which of two
+    // impossible candidates the rule happens to pick.
+    idx.oxt = ester ? 0u : place(network, "OXT", 1, {-1.2800f, 0.7400f, 0.9000f});
+    if (ester)
+    {
+        // Every particle has to exist before any spring does, so the tRNA
+        // stand-in is placed here rather than bolted on afterwards.
+        idx.o3 = place(network, "O3'", 90, {0.3000f, -1.2000f, 0.3500f}, "RIB");
+        idx.c3 = place(network, "C3'", 90, {-0.8000f, -1.8000f, 0.9500f}, "RIB");
+    }
 
     // Residue 2: the amine, on the carbonyl's normal (or in its plane). Its own
     // two atoms are placed RELATIVE to the approach axis, not in fixed
@@ -110,8 +125,16 @@ Pair build(spn::SpringNetwork & network, configuration::Configuration & config, 
     // has to create.
     const auto tie = [&](unsigned a, unsigned b)
     { network.addSpring(a, b, (network.getParticle(a).getPosition() - network.getParticle(b).getPosition()).norm(), 650.0f); };
-    tie(idx.c, idx.oxt);
-    tie(idx.ca1, idx.oxt);
+    if (ester)
+    {
+        tie(idx.o3, idx.c3);   // the ribose's own bond, which must SURVIVE
+        tie(idx.o3, idx.c);    // the ester, which must BREAK
+    }
+    else
+    {
+        tie(idx.c, idx.oxt);
+        tie(idx.ca1, idx.oxt);
+    }
     tie(idx.ca1, idx.c);
     tie(idx.c, idx.o);
     tie(idx.ca1, idx.o);
@@ -283,6 +306,98 @@ TEST(PeptideBond, FormsUnderAThermostatToo)
         << "no bond under a thermostat, where the same fixture makes one without; "
         << "closest " << network.getPeptideBonds().getClosestApproach() << " A, weight "
         << network.getPeptideBonds().getBestWeight();
+}
+
+// PEPTIDYL TRANSFER. The leaving group of an aminoacyl-tRNA is not part of the
+// amino acid at all: it is the 3' OXYGEN OF THE tRNA, and what breaks is the
+// single ester bond between them. The oxygen stays on its own ribose -- the
+// peptide transfers to the other tRNA and this one is left deacylated.
+//
+// So the rule cannot be "an atom of the electrophile's residue departs". It is
+// "the atom BONDED to the electrophile leaves, and what breaks is its springs
+// to the electrophile's residue" -- which for a free acid's OXT is all of them
+// and for an ester's O3' is exactly one. Both cases below, from one rule.
+TEST(PeptideBond, BreaksTheEsterAndLeavesTheOxygenOnItsRibose)
+{
+    RulesFile rules;
+    spn::SpringNetwork network;
+    configuration::Configuration config;
+    const unsigned RAMP = 40;
+    const Pair idx = build(network, config, rules.path(), 2.9f, false, 1, RAMP, RAMP + 10, true);
+    config.peptidebond.leaving = "OXT O3'";
+    network.setup(config);
+
+    ASSERT_TRUE(network.getParticle(idx.o3).isInSpringNeighbors(idx.c));
+    ASSERT_TRUE(network.getParticle(idx.o3).isInSpringNeighbors(idx.c3));
+
+    network.run();
+
+    ASSERT_EQ(network.getPeptideBonds().getNumberOfBonds(), 1u);
+    EXPECT_FALSE(network.getParticle(idx.o3).isInSpringNeighbors(idx.c))
+        << "the ester did not break, so the peptide is still held by the tRNA that gave it";
+    EXPECT_TRUE(network.getParticle(idx.o3).isInSpringNeighbors(idx.c3))
+        << "the 3' oxygen left its own ribose: an ester was broken as if it were a hydroxyl";
+    EXPECT_TRUE(network.getParticle(idx.c).isInSpringNeighbors(idx.o))
+        << "the amino acid was dismembered instead of being detached";
+    // And the ribose was not dragged along: only ONE spring broke.
+    EXPECT_TRUE(network.getParticle(idx.ca1).isInSpringNeighbors(idx.c))
+        << "the amino acid's own backbone was broken";
+}
+
+// THE MODEL'S FREE ENERGY OF FORMATION IS ZERO, and that is a property of its
+// construction rather than a number anyone chose. Worth a test, because it is
+// the single most important thing to know before reading any result about how
+// often a bond forms or whether one would come undone.
+//
+// Why it cannot be anything else: the fifteen springs are BORN at the length
+// their atoms already have, so they start at zero; the ramp then moves their
+// rest lengths and the atoms relax INTO them; and a harmonic spring at its rest
+// length holds no energy. Whatever the geometry, the final state has every
+// spring at its rest length, so the potential comes back to where it started.
+//
+// Measured over a 2000-step ramp, with and without an ester to break:
+//
+//   step      0    500   1000   1500   2000   3000   5000
+//   spring  0.00   0.85   1.40   0.75   0.14  0.003  0.0004   kJ/mol
+//
+// The 1.40 kJ/mol is the ramp's own transient -- the work it does pulling the
+// bond in -- and it is returned in full. That is also why the ramp is
+// integrable at all.
+//
+// Making it non-zero would take a term that is NOT harmonic at its minimum: a
+// Morse well on the new bond, whose depth stays in the energy once the atoms
+// have relaxed. See the memory note peptide-bond-has-no-free-energy.
+TEST(PeptideBond, FormingABondCostsAndReturnsTheSameEnergy)
+{
+    RulesFile rules;
+    const unsigned RAMP = 2000;
+    for (int ester = 0; ester < 2; ++ester)
+    {
+        spn::SpringNetwork network;
+        configuration::Configuration config;
+        build(network, config, rules.path(), 2.9f, false, 1, RAMP, 1, ester == 1);
+        if (ester)
+            config.peptidebond.leaving = "O3'";
+        config.sim.nbsteps = 1;
+        network.setup(config);
+
+        float before = 0.0f, peak = 0.0f;
+        for (unsigned step = 0; step <= RAMP + 3000; ++step)
+        {
+            network.computeStep();
+            if (step == 0)
+                before = network.getSpringEnergy();
+            peak = std::max(peak, network.getSpringEnergy());
+        }
+        ASSERT_EQ(network.getPeptideBonds().getNumberOfBonds(), 1u);
+        EXPECT_NEAR(network.getSpringEnergy(), before, 1.0e-2f)
+            << (ester ? "with an ester" : "without a leaving group")
+            << ": the potential did not come back, so something now carries a formation energy -- "
+               "which would be a change of model, not a bug, but it must be deliberate";
+        // And the transient must stay small, or the ramp is not integrable.
+        EXPECT_LT(peak, 5.0f) << (ester ? "with an ester" : "without a leaving group")
+                              << ": the ramp put " << peak << " kJ/mol into the springs on its way";
+    }
 }
 
 // A real carboxyl does not gain a fourth partner: it loses its hydroxyl. What

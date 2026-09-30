@@ -725,12 +725,20 @@ class PeptideBondSetting : public SettingBase
     // the length an ideal trans peptide plane gives them. 0 leaves them where
     // they were born, which is a 2.9 A "peptide bond".
     unsigned ramp;
-    // The atoms of the electrophile's residue that LEAVE when the bond forms,
-    // space-separated (e.g. "OXT"), and empty by default. A real carboxyl loses
-    // its hydroxyl; a tRNA-esterified carbon loses the ester oxygen, which
-    // belongs to the tRNA and is named there. Leaving means: every spring
-    // between that atom and its own residue is broken, so it stops being held
-    // AND starts feeling the steric and Coulomb terms it was excluded from.
+    // The names an atom may have to be the LEAVING GROUP, space-separated (e.g.
+    // "OXT O3'"), and empty by default. It is looked for among the atoms BONDED
+    // to the electrophile, wherever they live, and what breaks is every spring
+    // between it and the electrophile's residue.
+    //
+    // That one rule covers both chemistries. A free acid's OXT is inside that
+    // residue, so all its springs go and it departs whole -- the water that
+    // leaves. An aminoacyl-tRNA's O3' belongs to the tRNA, so only the ester
+    // C-O goes and the oxygen stays on its ribose: the peptide transfers to the
+    // other tRNA and this one is left deacylated, which is peptidyl transfer.
+    //
+    // Breaking is both ways: a spring is also what keeps a pair out of the
+    // steric and Coulomb terms, so what pushes the group away afterwards is
+    // ordinary sterics.
     std::string leaving;
     // The .grp the network was REDUCED with, when it was. amber.grp renames
     // every atom per residue -- C becomes AC for alanine, RC for arginine --
