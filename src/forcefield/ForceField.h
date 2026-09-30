@@ -153,6 +153,19 @@ class ForceField
                                           _hydrogenbondwidth);
     }
 
+    // The same two, on parameters the CALLER supplies. A pair whose two ends
+    // name the same group does not use the force field's well: a peptide bond's
+    // is two orders of magnitude deeper and sits at 1.33 A rather than 2.90.
+    // See io::HydrogenBondGroup and SpringNetwork::hydrogenBondParameters.
+    float computeHydrogenBondEnergy(float distance, float welldepth, float equilibrium, float width) const
+    {
+        return _hydrogenbondscale * hydrogen_bond_energy(distance, welldepth, equilibrium, width);
+    }
+    float computeHydrogenBondForceModule(float distance, float welldepth, float equilibrium, float width) const
+    {
+        return _hydrogenbondscale * hydrogen_bond_force_module(distance, welldepth, equilibrium, width);
+    }
+
     // ================================================================================
     // Getters and setters
     //

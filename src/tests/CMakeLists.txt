@@ -76,6 +76,7 @@ set(TEST_MODULES
     RigidBody
     RigidBodiesManager
     ReduceRuleReader
+    HydrogenBondGroups
     PeptideBond
     StaticBondBuilder
     Vector3f

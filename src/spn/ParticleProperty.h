@@ -157,6 +157,12 @@ class ParticleProperty
     static const int HBOND_LOBES_IN_PLANE = 1;
     static const int HBOND_LOBES_OUT_OF_PLANE = 2;
 
+    // Which named set of Morse parameters this site belongs to, 1-based; 0 is
+    // the force field's own. A PAIR uses the group's parameters only when both
+    // ends are in the SAME one -- see io::HydrogenBondGroup.
+    int hydrogenBondGroup() const { return _hbgroup; }
+    void setHydrogenBondGroup(int group) { _hbgroup = group; }
+
     int lobeMode() const { return _hblobemode; }
     float lobeCos() const { return _hblobecos; }
     float lobeSin() const { return _hblobesin; }
@@ -188,6 +194,7 @@ class ParticleProperty
     unsigned _acceptorcapacity;
     int _antecedentindex;
     int _antecedentindex2;
+    int _hbgroup = 0;
     int _hblobemode;
     float _hblobecos;
     float _hblobesin;

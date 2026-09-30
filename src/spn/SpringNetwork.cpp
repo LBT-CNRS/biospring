@@ -197,6 +197,14 @@ void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
         }
 }
 
+SpringNetwork::HydrogenBondParameters SpringNetwork::hydrogenBondParameters(size_t i, size_t j) const
+{
+    const int gi = _particles[i].hydrogenBondGroup();
+    if (gi > 0 && gi == _particles[j].hydrogenBondGroup() && static_cast<size_t>(gi) <= _hbgroups.size())
+        return _hbgroups[static_cast<size_t>(gi) - 1];
+    return {_ff->getHydrogenBondWellDepth(), _ff->getHydrogenBondEquilibrium(), _ff->getHydrogenBondWidth()};
+}
+
 bool SpringNetwork::areHydrogenBonded(size_t a, size_t b) const
 {
     if (a + 1 < _hbDonorOffset.size())
@@ -382,8 +390,12 @@ void SpringNetwork::computeHydrogenBondForces()
         }
         const Vector3f vhat = v / distance;
 
-        const float morse = _ff->computeHydrogenBondEnergy(distance);
-        const float dmorse = _ff->computeHydrogenBondForceModule(distance);
+        // Per PAIR, not per force field: a couple whose two ends name the same
+        // group carries that group's well. See hydrogenBondParameters.
+        const HydrogenBondParameters mp = hydrogenBondParameters(bonds[k].donor, bonds[k].acceptor);
+        const float morse = _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width);
+        const float dmorse =
+            _ff->computeHydrogenBondForceModule(distance, mp.welldepth, mp.equilibrium, mp.width);
 
         // A hydrogen bond is directional at BOTH ends. The donor's hydrogen
         // points somewhere, and so do the acceptor's lone pairs: measured on
@@ -1854,7 +1866,13 @@ void SpringNetwork::_assignHydrogenBondPairs()
                     if (ha.norm() > 1e-6f)
                         weight *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
                 }
-                const float strength = _ff->computeHydrogenBondEnergy(distance) * weight;
+                // Ranked on the well this COUPLE would use, not the force
+                // field's: a pair that carries a group is worth what its own
+                // group says, and ranking it as an ordinary hydrogen bond
+                // would let a shallower neighbour take the slot.
+                const HydrogenBondParameters mp = hydrogenBondParameters(i, j);
+                const float strength =
+                    _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width) * weight;
                 if (strength < nearest_distance[i])
                 {
                     nearest_distance[i] = strength;

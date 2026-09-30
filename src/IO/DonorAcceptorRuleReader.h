@@ -2,6 +2,7 @@
 #define __IO_DONORACCEPTORRULEREADER_H__
 
 #include <map>
+#include <vector>
 #include <string>
 #include <utility>
 
@@ -49,6 +50,29 @@ struct DonorAcceptorRole
     // reads the same. See ParticleProperties::setLobes.
     int lobeMode = 0;        // ParticleProperties::HBOND_LOBES_*
     float lobeAngle = 62.0f; // degrees
+
+    // The named Morse parameters this site belongs to, written '@name' anywhere
+    // after the capacities. Empty means the force field's own -- which is what
+    // a hydrogen bond is. See HydrogenBondGroup.
+    std::string group;
+};
+
+// A named set of Morse parameters, declared in the table as
+//
+//     GROUP <name> <welldepth kJ.mol-1> <equilibrium A> <width A-1>
+//
+// and used by a PAIR only when BOTH its ends name the SAME group. That
+// condition is the whole point and not a convenience: a peptide bond's well is
+// two orders of magnitude deeper than a hydrogen bond's and sits at 1.33 A
+// rather than 2.90, so a carbonyl carbon carrying it alone would drag every
+// amine and every hydroxyl in reach down to a covalent distance. It is the
+// COUPLE that reacts, so it is the couple that carries the parameters.
+struct HydrogenBondGroup
+{
+    std::string name;
+    float welldepth = 0.0f;   // kJ.mol-1
+    float equilibrium = 0.0f; // A
+    float width = 0.0f;       // A-1
 };
 
 // Parses a .hbond file: lines of
@@ -83,8 +107,11 @@ class DonorAcceptorRuleReader : public ReaderBase
     // degraded but valid state, not a failure.
     void tagParticles(spn::SpringNetwork & spn) const;
 
+    const std::vector<HydrogenBondGroup> & groups() const { return _groups; }
+
   protected:
     std::map<std::pair<std::string, std::string>, DonorAcceptorRole> _roles;
+    std::vector<HydrogenBondGroup> _groups;
 
     void _parse_line(const std::string & line, size_t line_id);
 };

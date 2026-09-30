@@ -10,7 +10,50 @@ namespace io
 
 void DonorAcceptorRuleReader::_parse_line(const std::string & line, size_t line_id)
 {
-    const auto tokens = utils::string::split(line);
+    auto tokens = utils::string::split(line);
+
+    // GROUP <name> <welldepth> <equilibrium> <width>: a named set of Morse
+    // parameters. See HydrogenBondGroup for why a PAIR has to opt into it at
+    // both ends.
+    if (!tokens.empty() && tokens[0] == "GROUP")
+    {
+        if (tokens.size() != 5)
+            logging::die("DonorAcceptorRuleReader: line %d: GROUP takes a name and three numbers "
+                         "(welldepth kJ.mol-1, equilibrium A, width A-1), found %d tokens",
+                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
+        HydrogenBondGroup group;
+        group.name = tokens[1];
+        if (!utils::string::from_string(group.welldepth, tokens[2]) ||
+            !utils::string::from_string(group.equilibrium, tokens[3]) ||
+            !utils::string::from_string(group.width, tokens[4]))
+            logging::die("DonorAcceptorRuleReader: line %d: GROUP '%s' has a parameter that is not a number",
+                         static_cast<int>(line_id), group.name.c_str());
+        if (group.welldepth <= 0.0f || group.equilibrium <= 0.0f || group.width <= 0.0f)
+            logging::die("DonorAcceptorRuleReader: line %d: GROUP '%s' needs all three parameters > 0",
+                         static_cast<int>(line_id), group.name.c_str());
+        for (const auto & known : _groups)
+            if (known.name == group.name)
+                logging::die("DonorAcceptorRuleReader: line %d: GROUP '%s' is declared twice",
+                             static_cast<int>(line_id), group.name.c_str());
+        _groups.push_back(group);
+        return;
+    }
+
+    // A '@name' token says which GROUP this site belongs to. Taken out before
+    // anything else, so the columns that follow keep their positions and a
+    // table written before groups existed reads exactly the same.
+    std::string group;
+    for (size_t k = tokens.size(); k-- > 0;)
+        if (!tokens[k].empty() && tokens[k][0] == '@')
+        {
+            if (!group.empty())
+                logging::die("DonorAcceptorRuleReader: line %d: a site may name only one group",
+                             static_cast<int>(line_id));
+            group = tokens[k].substr(1);
+            if (group.empty())
+                logging::die("DonorAcceptorRuleReader: line %d: '@' names no group", static_cast<int>(line_id));
+            tokens.erase(tokens.begin() + static_cast<long>(k));
+        }
 
     if (tokens.size() < 4 || tokens.size() > 6)
     {
@@ -69,6 +112,7 @@ void DonorAcceptorRuleReader::_parse_line(const std::string & line, size_t line_
         entry.antecedent2 = a2;
     }
 
+    entry.group = group;
     _roles[{resname, atomname}] = entry;
 }
 
@@ -91,6 +135,13 @@ void DonorAcceptorRuleReader::read()
 
 void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
 {
+    // The named Morse parameters, in the order they were declared: a site's
+    // group index is 1-based into this, and 0 means the force field's own.
+    std::vector<spn::SpringNetwork::HydrogenBondParameters> groups;
+    for (const HydrogenBondGroup & g : _groups)
+        groups.push_back({g.welldepth, g.equilibrium, g.width});
+    spn.setHydrogenBondGroups(groups);
+
     unsigned nb_donors = 0;
     unsigned nb_acceptors = 0;
     unsigned nb_directed = 0;
@@ -144,6 +195,17 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
 
         p.setDonorCapacity(it->second.donorCapacity);
         p.setAcceptorCapacity(it->second.acceptorCapacity);
+        if (!it->second.group.empty())
+        {
+            int index = 0;
+            for (size_t g = 0; g < _groups.size(); ++g)
+                if (_groups[g].name == it->second.group)
+                    index = static_cast<int>(g) + 1;
+            if (index == 0)
+                logging::die("DonorAcceptorRuleReader: %s:%s names group '%s', which no GROUP line declares",
+                             it->first.first.c_str(), it->first.second.c_str(), it->second.group.c_str());
+            p.setHydrogenBondGroup(index);
+        }
         if (it->second.donorCapacity > 0)
             ++nb_donors;
         if (it->second.acceptorCapacity > 0)

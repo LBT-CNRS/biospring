@@ -3098,6 +3098,13 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 	if (isIMPEnabled() && !_membraneIsFlat())
 		add("impala (the membrane is curved or doubled: a different model)");
 	if (isInsertionVectorEnabled()) add("insertionvector");
+	// The kernels take the Morse's three parameters as scalar arguments, one set
+	// for the whole network, so a table that declares GROUPs is read on the host
+	// and ignored here: the device would give a peptide couple a hydrogen bond's
+	// well. Said out loud because the run does not fail, it computes a different
+	// chemistry.
+	if (isHydrogenBondEnabled() && !getHydrogenBondGroups().empty())
+		add("the hydrogen bond table's GROUPs (its Morse parameters are one set per network here)");
 	if (isRigidBodyEnabled())       add("rigidbody");
 	// biospring.cl has no hydrogen bond code at all: not the Morse well, not
 	// the two-sided angular weight, not the per-step re-pairing. A .msp with

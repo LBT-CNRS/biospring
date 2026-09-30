@@ -386,6 +386,26 @@ class SpringNetwork
 
     float getStericCutoff() const { return _config.steric.cutoff; }
     float getHydrogenBondCutoff() const { return _config.hbond.cutoff; }
+
+    /// The Morse parameters a PAIR uses: the force field's own, unless both
+    /// ends name the SAME group, in which case that group's.
+    ///
+    /// Both ends, and that is the whole design. A peptide bond's well is two
+    /// orders of magnitude deeper than a hydrogen bond's and sits at 1.33 A
+    /// rather than 2.90; a carbonyl carbon carrying it alone would drag every
+    /// amine and every hydroxyl in reach down to a covalent distance. It is the
+    /// COUPLE that reacts, so it is the couple that has to opt in.
+    struct HydrogenBondParameters
+    {
+        float welldepth;   // kJ.mol-1
+        float equilibrium; // A
+        float width;       // A-1
+    };
+    HydrogenBondParameters hydrogenBondParameters(size_t i, size_t j) const;
+    /// Installs the groups a donor/acceptor table declared. 1-based: index 0 is
+    /// "no group", which is what an untagged particle carries.
+    void setHydrogenBondGroups(const std::vector<HydrogenBondParameters> & groups) { _hbgroups = groups; }
+    const std::vector<HydrogenBondParameters> & getHydrogenBondGroups() const { return _hbgroups; }
     // -1 if particle `index` currently holds no hydrogen bond at all,
     // otherwise the index of one of its partners. Used by the core-repulsion
     // term, which only needs to know whether two particles are already bound
@@ -845,6 +865,7 @@ class SpringNetwork
 
     Particle _probeparticule;
 
+    std::vector<HydrogenBondParameters> _hbgroups;
     std::vector<Spring> _springs;
     // Stage two of making a covalent bond: see spn/PeptideBond.h.
     PeptideBondFormation _peptidebond;

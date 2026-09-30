@@ -414,7 +414,6 @@ void Particle::addHydrogenBondCoreRepulsion(std::vector<DeferredNonbondedContrib
     if (_springnetwork->isHydrogenBondEnabled() && _springnetwork->getNeighborSearch().hbond)
     {
         const biospring::forcefield::ForceField * ff = _springnetwork->getForceField();
-        const float equilibrium = ff->getHydrogenBondEquilibrium();
         const bool self_is_donor = isDonor();
         const bool self_is_acceptor = isAcceptor();
 
@@ -457,11 +456,18 @@ void Particle::addHydrogenBondCoreRepulsion(std::vector<DeferredNonbondedContrib
                 // introduces no discontinuity, and leaves the attractive
                 // range (distance > equilibrium) exclusively to whichever
                 // pair is actually engaged via _assignHydrogenBondPairs.
-                if (distance < equilibrium && distance != 0.0)
+                // The floor is the PAIR's own equilibrium, not the force
+                // field's. A couple carrying a group has its well at that
+                // group's distance -- for a peptide bond 1.33 A instead of
+                // 2.90 -- and holding it off at 2.90 would make the bond it
+                // is supposed to form unreachable.
+                const auto mp = _springnetwork->hydrogenBondParameters(static_cast<size_t>(getId()), neighbor_index);
+                if (distance < mp.equilibrium && distance != 0.0)
                 {
-                    const float pair_energy = ff->computeHydrogenBondEnergy(distance);
+                    const float pair_energy =
+                        ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width);
                     f.normalize();
-                    f = f * ff->computeHydrogenBondForceModule(distance);
+                    f = f * ff->computeHydrogenBondForceModule(distance, mp.welldepth, mp.equilibrium, mp.width);
                     addForce(f);
 
                     if (p.isDynamic())
