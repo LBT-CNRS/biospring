@@ -129,6 +129,11 @@ Pair build(spn::SpringNetwork & network, configuration::Configuration & config, 
     {
         tie(idx.o3, idx.c3);   // the ribose's own bond, which must SURVIVE
         tie(idx.o3, idx.c);    // the ester, which must BREAK
+        // And one more across, which does NOT involve the leaving atom: holding
+        // an aminoacyl in place takes more than one spring, the ester alone
+        // leaves it free to swivel. It must break too -- a peptide that
+        // transfers takes leave of the whole tRNA, not of one oxygen.
+        tie(idx.ca1, idx.c3);
     }
     else
     {
@@ -337,6 +342,9 @@ TEST(PeptideBond, BreaksTheEsterAndLeavesTheOxygenOnItsRibose)
         << "the ester did not break, so the peptide is still held by the tRNA that gave it";
     EXPECT_TRUE(network.getParticle(idx.o3).isInSpringNeighbors(idx.c3))
         << "the 3' oxygen left its own ribose: an ester was broken as if it were a hydroxyl";
+    EXPECT_FALSE(network.getParticle(idx.ca1).isInSpringNeighbors(idx.c3))
+        << "a spring across to the carrier survived because it did not touch the leaving atom, so the "
+           "peptide is still held by the tRNA that gave it";
     EXPECT_TRUE(network.getParticle(idx.c).isInSpringNeighbors(idx.o))
         << "the amino acid was dismembered instead of being detached";
     // And the ribose was not dragged along: only ONE spring broke.

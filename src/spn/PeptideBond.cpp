@@ -685,29 +685,43 @@ unsigned PeptideBondFormation::_markLeavingGroup(SpringNetwork & network, unsign
                          "Taking the lowest index; name the leaving group more narrowly.",
                          matches, _electrophilename.c_str());
 
-    // AND WHAT BREAKS IS EVERY SPRING BETWEEN IT AND THE ELECTROPHILE'S
-    // RESIDUE. One rule, and the two cases fall out of where the atom lives:
+    // AND WHAT BREAKS depends on WHERE the leaving atom lives, which is the
+    // only thing that distinguishes the two chemistries:
     //
-    //   a free acid's OXT is IN that residue, so all of its springs go and it
-    //   departs whole -- it is the water that leaves;
+    //   a free acid's OXT is IN the electrophile's residue, so every spring IT
+    //   has goes and it departs alone -- it is the water that leaves;
     //
-    //   an ester's O3' is in the tRNA, so only the C-O bond goes and the oxygen
-    //   stays on its own ribose, which is exactly what peptidyl transfer does.
+    //   an ester's O3' belongs to the carrier, so the two RESIDUES separate:
+    //   every spring between them goes. Not only the C-O bond, because holding
+    //   an aminoacyl in place takes more than one spring -- the ester alone
+    //   leaves it free to swivel -- and a peptide that transfers has to take
+    //   leave of the whole tRNA, not of one oxygen.
     const unsigned residue = _residueof[electrophile];
-    for (const auto & entry : network.getParticle(static_cast<unsigned>(going)).getSpringNeighbors())
-    {
-        if (entry.second == nullptr || _residueof[entry.first] != residue)
-            continue;
-        const Particle & a = network.getParticle(static_cast<unsigned>(going));
-        const Particle & b = network.getParticle(entry.first);
+    const unsigned carrier = _residueof[static_cast<unsigned>(going)];
+    const auto mark = [&](unsigned id, unsigned i, unsigned j) {
+        const Particle & a = network.getParticle(i);
+        const Particle & b = network.getParticle(j);
         const float now = (a.getPosition() - b.getPosition()).norm();
         // Far enough out that the pair is no longer in each other's way: the
         // steric contact distance, which for AMBER is the sum of the two R*.
         // Breaking a spring already at that length costs nothing.
         const float apart = a.getRadius() + b.getRadius();
-        bond.leaving.push_back(entry.second->getId());
+        bond.leaving.push_back(id);
         bond.leavingborn.push_back(now);
         bond.leavingtarget.push_back(std::max(apart, now * 1.1f));
+    };
+    if (carrier == residue)
+    {
+        for (const auto & entry : network.getParticle(static_cast<unsigned>(going)).getSpringNeighbors())
+            if (entry.second != nullptr && _residueof[entry.first] == residue)
+                mark(entry.second->getId(), static_cast<unsigned>(going), entry.first);
+    }
+    else
+    {
+        for (unsigned i : _residues[residue])
+            for (const auto & entry : network.getParticle(i).getSpringNeighbors())
+                if (entry.second != nullptr && _residueof[entry.first] == carrier)
+                    mark(entry.second->getId(), i, entry.first);
     }
     return static_cast<unsigned>(bond.leaving.size());
 }
