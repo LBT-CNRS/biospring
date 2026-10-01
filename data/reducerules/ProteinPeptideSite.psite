@@ -1,0 +1,89 @@
+#Where a peptide bond may be attacked: the reactive sites of the twenty amino
+#acids' carbonyl carbons, read by peptidebond.sites.
+#
+#Format: <resname> <atomname> <antecedent> [[~|^]<plane>[:angle]]
+#
+#  C   the electrophile, the carbonyl carbon itself.
+#  O   its antecedent, so the base direction is OPPOSITE C=O.
+#  ^CA the plane reference, with '^' meaning the two directions LEAVE the
+#      (C, O, CA) plane along its normal, one on each face.
+#  :75 tilted 75 degrees off the base direction, which puts them 105 degrees
+#      from the C=O axis.
+#
+#WHY 105 DEGREES. That is where the carbonyl's pi* lobe is, and a nucleophile
+#that arrives anywhere else does not reach it -- Burgi & Dunitz (1974). The
+#ribosome's own pre-attack state, 1VY4, measures 100.6 degrees between the
+#A-site amine, the P-site carbonyl carbon and its oxygen, at 3.204 A.
+#
+#WITHOUT THIS FILE THE CONDITION IS NOT STRICTER, IT IS ABSENT. The angular
+#factor is applied only when a site is valid (PeptideBond.cpp), so an
+#electrophile with no entry here bonds on distance alone -- including to a
+#nitrogen arriving edge-on, through the sp2 plane, where there is nothing to
+#react with. A missing line makes the model bond MORE readily, not less.
+#
+#ATOM NAMES ARE PLAIN PDB ONES and need no renamed twin: the peptide bond term
+#already carries peptidebond.naming for its own 'bond = C:N', and resolves
+#these through it. One file serves a reduced topology and an unreduced one.
+#
+#BOTH ENDS OF THE REACTION ARE DECLARED HERE, and they have to be. This file,
+#when given, is the ONLY table the peptide bond term reads -- it does not fall
+#back to the .hbond for the half it is missing. An electrophile with no entry
+#bonds on distance alone; a NUCLEOPHILE with no entry does the same, since the
+#factor is applied per end. Declaring one end only would have made the model
+#bond more readily than before, not less.
+#
+#  N   the nucleophile, the attacking nitrogen.
+#  CA  its only heavy neighbour, so its lone pair points away from CA -- which
+#      is the direction it attacks along.
+#
+#There is no plane column for the nitrogen, and no '-C' either: a nitrogen that
+#can attack is a free terminus by construction (PeptideBondFormation::_isFree
+#refuses one already bonded to another residue's carbonyl), so CA is all it has.
+#A mid-chain amide nitrogen does need its previous residue's C to point its
+#hydrogen, but that is the hydrogen bond's business and lives in the .hbond.
+#
+#Residue names are the standard three-letter codes. Add a non-standard residue
+#by giving it the same columns; anything not named here simply has no site,
+#which the run reports.
+
+ALA  C  O  ^CA:75
+ARG  C  O  ^CA:75
+ASN  C  O  ^CA:75
+ASP  C  O  ^CA:75
+CYS  C  O  ^CA:75
+GLN  C  O  ^CA:75
+GLU  C  O  ^CA:75
+GLY  C  O  ^CA:75
+HIS  C  O  ^CA:75
+ILE  C  O  ^CA:75
+LEU  C  O  ^CA:75
+LYS  C  O  ^CA:75
+MET  C  O  ^CA:75
+PHE  C  O  ^CA:75
+PRO  C  O  ^CA:75
+SER  C  O  ^CA:75
+THR  C  O  ^CA:75
+TRP  C  O  ^CA:75
+TYR  C  O  ^CA:75
+VAL  C  O  ^CA:75
+
+ALA  N  CA
+ARG  N  CA
+ASN  N  CA
+ASP  N  CA
+CYS  N  CA
+GLN  N  CA
+GLU  N  CA
+GLY  N  CA
+HIS  N  CA
+ILE  N  CA
+LEU  N  CA
+LYS  N  CA
+MET  N  CA
+PHE  N  CA
+PRO  N  CA
+SER  N  CA
+THR  N  CA
+TRP  N  CA
+TYR  N  CA
+VAL  N  CA

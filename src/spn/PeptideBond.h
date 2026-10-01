@@ -136,6 +136,43 @@ class PeptideBondFormation
     void _form(SpringNetwork & network, unsigned electrophile, unsigned nucleophile, unsigned iteration);
     void _advanceRamps(SpringNetwork & network, unsigned iteration);
 
+    // The reactive sites this term reads for itself, from peptidebond.sites.
+    //
+    // NOT the particle's hydrogen-bond fields, which is where they used to come
+    // from. Those fields are filled only by DonorAcceptorRuleReader, so an
+    // attack site had to be written into the .hbond table -- a peptide-bond
+    // parameter filed under the hydrogen bond's name, and worse, either file
+    // could silently overwrite the other's direction on an atom both named. One
+    // term, one file, one storage.
+    //
+    // Indexed by particle and empty when no .psite was given, in which case the
+    // particle's own fields are used after all: every configuration written
+    // before this setting existed depends on that.
+    struct Site
+    {
+        int antecedent = -1;
+        int antecedent2 = -1;
+        int mode = 0;       // ParticleProperties::HBOND_LOBES_*
+        float cosangle = 1.0f;
+        float sinangle = 0.0f;
+    };
+    std::vector<Site> _sites;
+    bool _hassites = false;
+
+    // Which numbers one end's site is built from: this term's own table when it
+    // has one, the particle's own fields otherwise. The single place that choice
+    // is made. Returns the INPUTS rather than the built site, so SpringNetwork
+    // stays forward-declared in this header -- naming its nested
+    // HydrogenBondSite here would force the whole definition in.
+    Site _siteInputs(const SpringNetwork & network, unsigned index) const;
+
+    // Resolves peptidebond.sites against the network. Residue names are matched
+    // as they are; ATOM names go through the same _isNamed as everything else,
+    // so one file in plain PDB names serves a reduced network and an unreduced
+    // one alike -- unlike the .hbond table, which needs one file per naming
+    // convention because its reader has no translation.
+    void _resolveSites(const SpringNetwork & network, const std::string & path);
+
     bool _enabled = false;
     configuration::PeptideBondSetting _settings{"peptidebond"};
     rigidbodygroup::RigidBodyRuleContainer _rules;

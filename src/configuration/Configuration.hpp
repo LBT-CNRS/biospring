@@ -325,6 +325,7 @@ inline Configuration defaultConfiguration()
     // an .msp should start doing because it was upgraded.
     config.peptidebond.enable = false;
     config.peptidebond.path = "";
+    config.peptidebond.sites = "";
 
     config.electrostatic.enable = false;
     config.electrostatic.cutoff = 16.0;

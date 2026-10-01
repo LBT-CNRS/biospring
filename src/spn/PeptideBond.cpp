@@ -1,5 +1,9 @@
 #include "spn/PeptideBond.h"
 
+#include "IO/PeptideSiteRuleReader.h"
+
+#include <map>
+
 #include <algorithm>
 #include <cmath>
 
@@ -254,6 +258,14 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
         _residueof[i] = static_cast<unsigned>(_residues.size() - 1);
     }
 
+    // After the residues and before anything that asks about a site: the
+    // resolution needs _residueof, and the candidate report below needs the
+    // result.
+    _sites.clear();
+    _hassites = false;
+    if (!settings.sites.empty())
+        _resolveSites(network, settings.sites);
+
     // The candidates: an atom of the right name, in a residue the rules cover,
     // whose terminus is not already used.
     _electrophiles.clear();
@@ -277,16 +289,33 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
     // distance -- which would bond a nucleophile arriving edge-on, through the
     // sp2 plane, where it cannot reach the pi* at all. Said out loud because a
     // run configured that way does not fail: it bonds MORE readily.
-    unsigned sited = 0;
+    // BOTH ends are reported, because the factor is applied per end and a
+    // missing site on either one removes it. The electrophile additionally
+    // needs its two FACES -- a nucleophile arriving edge-on, through the sp2
+    // plane, cannot reach the pi* at all -- so only that end requires lobes.
+    unsigned sited = 0, pointed = 0;
     for (unsigned i : _electrophiles)
-        if (network.getParticle(i).antecedentIndex() >= 0 && network.getParticle(i).hasLobes())
+    {
+        const Site s = _siteInputs(network, i);
+        if (s.antecedent >= 0 && s.mode != Particle::HBOND_LOBES_NONE)
             ++sited;
+    }
+    for (unsigned i : _nucleophiles)
+        if (_siteInputs(network, i).antecedent >= 0)
+            ++pointed;
+    const char * where = _hassites ? "in peptidebond.sites" : "in a .psite file named by peptidebond.sites";
     if (sited < _electrophiles.size())
         logging::warning("Peptide bond formation: %zu of %zu %s atoms carry no out-of-plane lobe site, so for those "
-                         "the Burgi-Dunitz condition cannot be evaluated and peptidebond.weight is inert. Declare "
-                         "them in the .hbond table as '<res> %s 0 1 O ^CA:75'.",
-                         _electrophiles.size() - sited, _electrophiles.size(), _electrophilename.c_str(),
+                         "the Burgi-Dunitz condition cannot be evaluated and peptidebond.weight is inert -- the "
+                         "factor is SKIPPED, which makes a bond form more readily, not less. Declare them %s as "
+                         "'<res> %s O ^CA:75'.",
+                         _electrophiles.size() - sited, _electrophiles.size(), _electrophilename.c_str(), where,
                          _electrophilename.c_str());
+    if (pointed < _nucleophiles.size())
+        logging::warning("Peptide bond formation: %zu of %zu %s atoms have no direction, so for those the attack "
+                         "angle at the NITROGEN is not judged either. Declare them %s as '<res> %s CA'.",
+                         _nucleophiles.size() - pointed, _nucleophiles.size(), _nucleophilename.c_str(), where,
+                         _nucleophilename.c_str());
 
     _leaving.clear();
     for (const std::string & name : utils::string::split(settings.leaving, " "))
@@ -313,6 +342,82 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
 // with two different tables, and the table INDEX is this network's own. So the
 // pattern is LEARNED from a peptide bond the structure already has rather than
 // written down here: whatever pdb2spn built, this builds the same.
+void PeptideBondFormation::_resolveSites(const SpringNetwork & network, const std::string & path)
+{
+    io::PeptideSiteRuleReader reader(path);
+    reader.read();
+
+    // Grouped by residue name so a particle only tests the handful of lines
+    // that could apply to it. The ATOM name is matched through _isNamed, which
+    // is what lets one file in plain PDB names serve a reduced network too.
+    std::map<std::string, std::vector<std::pair<std::string, io::PeptideSite>>> byresidue;
+    for (const auto & entry : reader.rules())
+        byresidue[entry.first.first].push_back({entry.first.second, entry.second});
+
+    _sites.assign(network.getNumberOfParticles(), Site());
+    unsigned resolved = 0, missing = 0;
+    for (unsigned i = 0; i < network.getNumberOfParticles(); ++i)
+    {
+        const auto family = byresidue.find(network.getParticle(i).getResName());
+        if (family == byresidue.end())
+            continue;
+        for (const auto & candidate : family->second)
+        {
+            if (!_isNamed(network, i, candidate.first))
+                continue;
+            const io::PeptideSite & rule = candidate.second;
+            const int a1 = _atomInResidue(network, _residueof[i], rule.antecedent);
+            if (a1 < 0)
+            {
+                ++missing;
+                break;
+            }
+            Site site;
+            site.antecedent = a1;
+            if (!rule.antecedent2.empty())
+            {
+                const int a2 = _atomInResidue(network, _residueof[i], rule.antecedent2);
+                // A second reference that is not there is not an error: the site
+                // keeps the single-antecedent direction, which is degraded but
+                // valid. Lobes without their plane would not be.
+                if (a2 >= 0)
+                {
+                    site.antecedent2 = a2;
+                    site.mode = rule.lobeMode;
+                    const float r = rule.lobeAngle * static_cast<float>(M_PI) / 180.0f;
+                    site.cosangle = std::cos(r);
+                    site.sinangle = std::sin(r);
+                }
+                else
+                    ++missing;
+            }
+            _sites[i] = site;
+            ++resolved;
+            break;
+        }
+    }
+    _hassites = true;
+    logging::info("Peptide bond formation: %u reactive site(s) resolved from '%s'.", resolved, path.c_str());
+    if (missing > 0)
+        logging::warning("Peptide bond formation: %u site(s) in '%s' name an atom absent from their residue, so "
+                         "they are undirected or have no plane.",
+                         missing, path.c_str());
+}
+
+PeptideBondFormation::Site PeptideBondFormation::_siteInputs(const SpringNetwork & network, unsigned index) const
+{
+    if (_hassites)
+        return _sites[index];
+    const Particle & p = network.getParticle(index);
+    Site s;
+    s.antecedent = p.antecedentIndex();
+    s.antecedent2 = p.antecedentIndex2();
+    s.mode = p.lobeMode();
+    s.cosangle = p.lobeCos();
+    s.sinangle = p.lobeSin();
+    return s;
+}
+
 void PeptideBondFormation::_learnTorsionPattern(const SpringNetwork & network)
 {
     _torsionpattern.clear();
@@ -471,12 +576,13 @@ unsigned PeptideBondFormation::update(SpringNetwork & network, unsigned iteratio
             // still six A out reported an angular weight of 0, which reads as
             // "the angle is wrong" when it means "no pair was close enough for
             // anyone to have looked at its angle".
+            const Site ie = _siteInputs(network, e);
+            const Site in = _siteInputs(network, n);
             const SpringNetwork::HydrogenBondSite se =
-                network.hydrogenBondSite(pe, pe.antecedentIndex(), pe.antecedentIndex2(), pe.lobeMode(), pe.lobeCos(),
-                                         pe.lobeSin(), vhat);
+                network.hydrogenBondSite(pe, ie.antecedent, ie.antecedent2, ie.mode, ie.cosangle, ie.sinangle, vhat);
             const SpringNetwork::HydrogenBondSite sn =
-                network.hydrogenBondSite(pn, pn.antecedentIndex(), pn.antecedentIndex2(), pn.lobeMode(), pn.lobeCos(),
-                                         pn.lobeSin(), -vhat);
+                network.hydrogenBondSite(pn, in.antecedent, in.antecedent2, in.mode, in.cosangle, in.sinangle,
+                                         -vhat);
             float weight = 1.0f;
             if (se.valid)
                 weight *= forcefield::hydrogen_bond_angular_factor(se.hhat.dot(vhat));

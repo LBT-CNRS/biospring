@@ -71,7 +71,8 @@ struct Pair
 };
 
 Pair build(spn::SpringNetwork & network, configuration::Configuration & config, const std::string & rules,
-           float attack, bool inPlane, unsigned dwell, unsigned ramp, unsigned steps, bool ester = false)
+           float attack, bool inPlane, unsigned dwell, unsigned ramp, unsigned steps, bool ester = false,
+           const std::string & sites = "")
 {
     Pair idx;
     // Residue 1: the carbonyl, in the xy plane. C at the origin, O along -x-ish
@@ -162,6 +163,7 @@ Pair build(spn::SpringNetwork & network, configuration::Configuration & config, 
     config.peptidebond.weight = 0.5;
     config.peptidebond.dwell = dwell;
     config.peptidebond.ramp = ramp;
+    config.peptidebond.sites = sites;
     network.setup(config);
     return idx;
 }
@@ -536,4 +538,56 @@ TEST(PeptideBond, TheRampPullsTheBondToItsIdealLength)
     // the rest length mean anything.
     EXPECT_LT((network.getParticle(idx.c).getPosition() - network.getParticle(idx.n).getPosition()).norm(), 2.0f)
         << "the rest length reached 1.329 A but the two atoms stayed apart";
+}
+
+// peptidebond.sites WINS over whatever tagged the particle, and that is the
+// point of giving this term its own file.
+//
+// The attack site used to be read from the particle's hydrogen-bond fields,
+// which only DonorAcceptorRuleReader fills -- so a peptide-bond parameter had
+// to be written into the .hbond table, and either file could silently overwrite
+// the other's direction on an atom both named. Here the particle is tagged with
+// the WRONG geometry on purpose (lobes in the sp2 plane, where there is no pi*
+// to attack) while the .psite gives the right one, out of plane at 75 degrees.
+//
+// The two halves are what make it a measurement rather than an assertion: the
+// same out-of-plane approach must FORM with the file and must NOT form without
+// it. Either half alone would also pass if the file were ignored and the
+// particle happened to agree.
+TEST(PeptideBond, TakesItsAttackSiteFromItsOwnFileRatherThanTheHydrogenBondTable)
+{
+    RulesFile rules;
+
+    const std::string sitepath = std::string(std::tmpnam(nullptr)) + ".psite";
+    std::ofstream(sitepath) << "# the real Burgi-Dunitz site: out of the (C, O, CA) plane\n"
+                               "ALA  C  O  ^CA:75\n";
+
+    const auto tagWrongly = [](spn::SpringNetwork & network, const Pair & idx)
+    { network.getParticle(idx.c).setLobes(spn::Particle::HBOND_LOBES_IN_PLANE, 62.0f); };
+
+    // With the file: the site is the file's, so an out-of-plane approach is the
+    // right one and the bond forms.
+    {
+        spn::SpringNetwork network;
+        configuration::Configuration config;
+        const Pair idx = build(network, config, rules.path(), 2.6f, false, 1, 1, 2, false, sitepath);
+        tagWrongly(network, idx);
+        network.run();
+        EXPECT_EQ(network.getPeptideBonds().getNumberOfBonds(), 1u)
+            << "the .psite declares an out-of-plane site, so this approach must be accepted";
+    }
+
+    // Without it: the term falls back to the particle, which says the lobes are
+    // IN the plane, and the very same approach is refused.
+    {
+        spn::SpringNetwork network;
+        configuration::Configuration config;
+        const Pair idx = build(network, config, rules.path(), 2.6f, false, 1, 1, 2);
+        tagWrongly(network, idx);
+        network.run();
+        EXPECT_EQ(network.getPeptideBonds().getNumberOfBonds(), 0u)
+            << "with no .psite the particle's own (wrong) site is used, and it refuses this approach";
+    }
+
+    std::remove(sitepath.c_str());
 }

@@ -182,12 +182,14 @@ set(BIOSPRING_CORE_SOURCES
     src/IO/CSVSampleWriter.cpp
     src/IO/DonorAcceptorRuleReader.cpp
     src/IO/ForceFieldReader.cpp
+    src/IO/LobeSpec.cpp
     src/IO/NetCDFReader.cpp
     src/IO/NetCDFWriter.cpp
     src/IO/OpenDXReader.cpp
     src/IO/PDBReader.cpp
     src/IO/PDBTrajectoryWriter.cpp
     src/IO/PDBWriter.cpp
+    src/IO/PeptideSiteRuleReader.cpp
     src/IO/PQRReader.cpp
     src/IO/PQRWriter.cpp
     src/IO/ReduceRuleReader.cpp

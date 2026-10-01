@@ -78,6 +78,7 @@ set(TEST_MODULES
     ReduceRuleReader
     HydrogenBondGroups
     PeptideBond
+    PeptideSite
     StaticBondBuilder
     Vector3f
 )
