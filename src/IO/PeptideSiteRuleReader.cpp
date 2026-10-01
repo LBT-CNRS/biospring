@@ -24,6 +24,9 @@ void PeptideSiteRuleReader::_parse_line(const std::string & line, size_t line_id
             parse_lobe_spec(tokens[3], site.lobeMode, site.lobeAngle, "PeptideSiteRuleReader", line_id);
 
     const auto key = std::make_pair(tokens[0], tokens[1]);
+    if (tokens[0] == "*" && site.antecedent == "*")
+        logging::die("PeptideSiteRuleReader: line %d: '*' is a residue wildcard, not an atom or an antecedent",
+                     static_cast<int>(line_id));
     if (_sites.count(key))
         logging::die("PeptideSiteRuleReader: line %d: %s:%s is declared twice", static_cast<int>(line_id),
                      tokens[0].c_str(), tokens[1].c_str());
