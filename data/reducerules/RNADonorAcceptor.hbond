@@ -1,0 +1,100 @@
+#Donor/acceptor classification for the dynamic hydrogen-bond mechanism.
+#
+#Format: <resname> <type> <donor> <acceptor> [<antecedent> [[~|^]<second>[:angle]]]
+#
+#ATOMS ARE NAMED BY THEIR GROUP, which is the first column of the .grp -- AN for
+#alanine's backbone nitrogen, ACA for its alpha carbon. That is the name the
+#topology carries once it has been reduced, so there is ONE convention and
+#nothing to translate: no .grp to restate in the .msp, no second copy of this
+#table in another spelling, and no guessing.
+#
+#The one exception is a CROSS-RESIDUE antecedent, '-C' or '+P', which cannot be
+#a group name: the type of an atom in the neighbouring residue depends on which
+#residue that is. Those are written as plain atom names, and pdb2spn records
+#what its .grp renamed so that they resolve exactly -- see
+#spn::Particle::getOriginalName.
+#
+#Companion to RNAAtomRigidGroups.rbody and RNAAtomTorsion.bi.ff, and named
+#like them. Kept separate from the protein and DNA tables on purpose.
+#
+#The classification is not invented here: it follows HBPLUS (McDonald &
+#Thornton) and Reduce/Probe, and the files it replaces carried it unchanged.
+
+A    rOP1   0 2 rP
+RA   rOP1   0 2 rP
+A    rOP2   0 2 rP
+RA   rOP2   0 2 rP
+A    rO5    0 2 rC5   rP
+RA   rO5    0 2 rC5   rP
+A    rO4    0 2 rC4   1C1
+RA   rO4    0 2 rC4   1C1
+A    aN7    0 1 aC5   aC8
+RA   aN7    0 1 aC5   aC8
+A    aN6    2 0 aC6   ~aN1
+RA   aN6    2 0 aC6
+A    aN1    0 1 aC2   aC6
+RA   aN1    0 1 aC2   aC6
+A    aN3    0 1 aC2   aC4
+RA   aN3    0 1 aC2   aC4
+A    rO2    1 2 rC2
+RA   rO2    1 2 rC2
+A    rO3    0 2 rC3   +P
+RA   rO3    0 2 rC3   +P
+C    rOP1   0 2 rP
+RC   rOP1   0 2 rP
+C    rOP2   0 2 rP
+RC   rOP2   0 2 rP
+C    rO5    0 2 rC5   rP
+RC   rO5    0 2 rC5   rP
+C    rO4    0 2 rC4   2C1
+RC   rO4    0 2 rC4   2C1
+C    cN4    2 0 cC4   ~cN3
+RC   cN4    2 0 cC4
+C    cN3    0 1 cC2   cC4
+RC   cN3    0 1 cC2   cC4
+C    cO2    0 2 cC2   ~cN3
+RC   cO2    0 2 cC2
+C    rO2    1 2 rC2
+RC   rO2    1 2 rC2
+C    rO3    0 2 rC3   +P
+RC   rO3    0 2 rC3   +P
+G    rOP1   0 2 rP
+RG   rOP1   0 2 rP
+G    rOP2   0 2 rP
+RG   rOP2   0 2 rP
+G    rO5    0 2 rC5   rP
+RG   rO5    0 2 rC5   rP
+G    rO4    0 2 rC4   3C1
+RG   rO4    0 2 rC4   3C1
+G    gN7    0 1 gC5   gC8
+RG   gN7    0 1 gC5   gC8
+G    gO6    0 2 gC6   ~gN1
+RG   gO6    0 2 gC6
+G    gN1    1 0 gC2   gC6
+RG   gN1    1 0 gC2   gC6
+G    gN2    2 0 gC2   ~gN1
+RG   gN2    2 0 gC2
+G    gN3    0 1 gC2   gC4
+RG   gN3    0 1 gC2   gC4
+G    rO2    1 2 rC2
+RG   rO2    1 2 rC2
+G    rO3    0 2 rC3   +P
+RG   rO3    0 2 rC3   +P
+U    rOP1   0 2 rP
+RU   rOP1   0 2 rP
+U    rOP2   0 2 rP
+RU   rOP2   0 2 rP
+U    rO5    0 2 rC5   rP
+RU   rO5    0 2 rC5   rP
+U    rO4    0 2 rC4   4C1
+RU   rO4    0 2 rC4   4C1
+U    uO4    0 2 uC4   ~uN3
+RU   uO4    0 2 uC4
+U    uN3    1 0 uC2   uC4
+RU   uN3    1 0 uC2   uC4
+U    uO2    0 2 uC2
+RU   uO2    0 2 uC2
+U    rO2    1 2 rC2
+RU   rO2    1 2 rC2
+U    rO3    0 2 rC3   +P
+RU   rO3    0 2 rC3   +P

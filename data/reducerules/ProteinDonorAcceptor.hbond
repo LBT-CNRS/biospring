@@ -1,90 +1,106 @@
-#Donor/acceptor classification for the dynamic hydrogen-bond mechanism
-#(distance-only Morse potential between donor and acceptor heavy atoms, no
-#explicit H needed -- see the hbond.* settings in doc/MSP_Options.md).
+#Donor/acceptor classification for the dynamic hydrogen-bond mechanism.
 #
-#Same classification as used by standard structural-biology H-bond tools
-#(HBPLUS/McDonald & Thornton, Reduce/Probe): not invented here, just encoded
-#for BioSpring's own per-residue lookup.
+#Format: <resname> <type> <donor> <acceptor> [<antecedent> [[~|^]<second>[:angle]]]
 #
-#Format: <resname> <atomname> <donor> <acceptor>, donor/acceptor are 0 or 1
-#(a hydroxyl oxygen is both: it carries a donatable H and has a lone pair to
-#accept one).
+#ATOMS ARE NAMED BY THEIR GROUP, which is the first column of the .grp -- AN for
+#alanine's backbone nitrogen, ACA for its alpha carbon. That is the name the
+#topology carries once it has been reduced, so there is ONE convention and
+#nothing to translate: no .grp to restate in the .msp, no second copy of this
+#table in another spelling, and no guessing.
 #
-#Keyed by plain, unreduced PDB atom names -- use this table when the
-#topology was built without --grp/--ff (e.g. plain -cutoff spring
-#creation). For a topology reduced with --grp amber.grp --ff amber.ff,
-#particles are renamed (e.g. ALA:N -> AN), so use amber.hbond instead,
-#which carries the same classification keyed by those renamed types.
+#The one exception is a CROSS-RESIDUE antecedent, '-C' or '+P', which cannot be
+#a group name: the type of an atom in the neighbouring residue depends on which
+#residue that is. Those are written as plain atom names, and pdb2spn records
+#what its .grp renamed so that they resolve exactly -- see
+#spn::Particle::getOriginalName.
 #
-#Backbone (every residue, standard rules below):
-#  N  1 0  -- amide H (absent for Pro, which has no entry for N here)
-#  O  0 1
+#One file per kind of structure, deliberately: protein, DNA and RNA
+#chemistries are read side by side and keeping them apart is what makes either
+#one legible. Concatenate them when a system has both -- the type names cannot
+#collide, since amber.grp prefixes protein types with an UPPERCASE residue
+#letter and the nucleic ones use lowercase.
 #
-#His is listed donor+acceptor on both ring nitrogens: without an explicit H,
-#the actual tautomer/protonation state is unknown, so either ring nitrogen
-#may act as donor or acceptor depending on the real structure.
-#
-#Cys SG is a weak, optional donor/acceptor (sulfur, much less electronegative
-#than N/O) -- included for completeness, matching HBPLUS, but expect it to
-#contribute far less than a N/O-mediated hydrogen bond.
-#
-#SECOND ANTECEDENT, sixth column. A backbone amide nitrogen is planar with
-#two heavy neighbours -- CA and the PREVIOUS residue's C -- and its hydrogen
-#points opposite their bisector. Naming only CA puts the reference direction
-#58 degrees off: measured on ubiquitin's alpha helix, cos^2(theta) comes out
-#at 0.28 where the real N-H direction gives 0.91, so every backbone bond
-#loses a factor 3.2 on geometry that is in fact ideal. With both named, the
-#bisector reproduces the true direction to 0.7 degrees and recovers 99 % of
-#the weight -- the geometric form of the rule DSSP has used since Kabsch &
-#Sander 1983. "-C" is the previous residue's C, same +/- convention as
-#.rbody and .bi.ff. A chain's first residue simply has none and falls back
-#to the single-antecedent direction.
+#The classification is not invented here: it follows HBPLUS (McDonald &
+#Thornton) and Reduce/Probe, and the files it replaces carried it unchanged.
 
-#THE BACKBONE, SAID ONCE. It is the same in every amino acid -- that is what
-#makes it a backbone -- so '*' carries it, and the residues that differ say so
-#below and win.
+ACE  XO    0 2 XC
 
-*    N     1 0 CA -C
-*    O     0 2 C
+ALA  AN    1 0 ACA -C
+ALA  AO    0 2 AC
 
-#Proline's ring nitrogen is a secondary amine: no amide hydrogen, so it is NOT
-#a donor. Declared with capacity 0 so it OVERRIDES the wildcard -- leaving it
-#out would let '*' tag it, which is a chemistry error and the reason helices
-#break at proline.
-PRO  N     0 0 CA -C
+ARG  RN    1 0 RCA -C
+ARG  RO    0 2 RC
+ARG  RNE   1 0 RCD
+ARG  RNH1   2 0 RCZ   ~RNE
+ARG  RNH2   2 0 RCZ   ~RNE
 
-#The N-methyl cap's nitrogen hangs off its own methyl, not an alpha carbon.
-NME  N     1 0 CH3
+ASN  NN    1 0 NCA -C
+ASN  NO    0 2 NC
+ASN  NND2   2 0 NCG   ~NOD1
+ASN  NOD1   0 2 NCG   ~NND2
 
-#The acetyl cap needs no exception: it has no nitrogen for '*' to find, and
-#its carbonyl oxygen is exactly what the wildcard says.
+ASP  DN    1 0 DCA -C
+ASP  DO    0 2 DC
+ASP  DOD1  0 2 DCG
+ASP  DOD2  0 2 DCG
 
-#THE SIDE CHAINS, which genuinely differ residue by residue.
-#
-#The '~' column on the exocyclic amines and the amide oxygens is NOT optional.
-#An sp2 centre with one heavy neighbour and two hydrogens (or two lone pairs)
-#has TWO directions at +/- 62 degrees of the plane, not one along the bond: with
-#a single direction the angular weights of a Watson-Crick pair come out at 0.03
-#instead of 0.93 and base pairing does not hold. This file had lost the six
-#columns below while amber.hbond kept them -- the two were not interchangeable,
-#and comparing only their capacity columns said they were.
+CYS  CN    1 0 CCA -C
+CYS  CO    0 2 CC
+CYS  CSG   1 1 CCB
 
-ARG  NE    1 0 CD
-ARG  NH1   2 0 CZ   ~NE
-ARG  NH2   2 0 CZ   ~NE
-ASN  ND2   2 0 CG   ~OD1
-ASN  OD1   0 2 CG   ~ND2
-ASP  OD1   0 2 CG
-ASP  OD2   0 2 CG
-CYS  SG    1 1 CB
-GLN  NE2   2 0 CD   ~OE1
-GLN  OE1   0 2 CD   ~NE2
-GLU  OE1   0 2 CD
-GLU  OE2   0 2 CD
-HIS  ND1   1 1 CE1
-HIS  NE2   1 1 CE1
-LYS  NZ    3 0 CE
-SER  OG    1 2 CB
-THR  OG1   1 2 CB
-TRP  NE1   1 0 CD1
-TYR  OH    1 2 CZ
+GLN  QN    1 0 QCA -C
+GLN  QO    0 2 QC
+GLN  QNE2   2 0 QCD   ~QOE1
+GLN  QOE1   0 2 QCD   ~QNE2
+
+GLU  EN    1 0 ECA -C
+GLU  EO    0 2 EC
+GLU  EOE1  0 2 ECD
+GLU  EOE2  0 2 ECD
+
+GLY  GN    1 0 GCA -C
+GLY  GO    0 2 GC
+
+HIS  HN    1 0 HCA -C
+HIS  HO    0 2 HC
+HIS  HND1  1 1 HCE1
+HIS  HNE2  1 1 HCE1
+
+ILE  IN    1 0 ICA -C
+ILE  IO    0 2 IC
+
+LEU  LN    1 0 LCA -C
+LEU  LO    0 2 LC
+
+LYS  KN    1 0 KCA -C
+LYS  KO    0 2 KC
+LYS  KNZ   3 0 KCE
+
+MET  MN    1 0 MCA -C
+MET  MO    0 2 MC
+
+NME  ZN    1 0 ZC
+
+PHE  FN    1 0 FCA -C
+PHE  FO    0 2 FC
+
+PRO  PO    0 2 PC
+
+SER  SN    1 0 SCA -C
+SER  SO    0 2 SC
+SER  SOG   1 2 SCB
+
+THR  TN    1 0 TCA -C
+THR  TO    0 2 TC
+THR  TOG1  1 2 TCB
+
+TRP  WN    1 0 WCA -C
+TRP  WO    0 2 WC
+TRP  WNE1  1 0 WCD1
+
+TYR  YN    1 0 YCA -C
+TYR  YO    0 2 YC
+TYR  YOH   1 2 YCZ
+
+VAL  VN    1 0 VCA -C
+VAL  VO    0 2 VC
