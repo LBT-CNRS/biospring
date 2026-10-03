@@ -353,46 +353,26 @@ void PeptideBondFormation::_resolveSites(const SpringNetwork & network, const st
 
     // Grouped by residue name so a particle only tests the handful of lines
     // that could apply to it. The ATOM name is matched through _isNamed, which
-    // is what lets one file in plain PDB names serve a reduced network too.
-    //
-    // '*' is a separate list, tried only after the residue's own lines: a
-    // residue that says something specific must win, or the two lines that
-    // describe every backbone could not be overridden for the one case that
-    // differs.
+    // tries the name the topology carries and the one it carried before a .grp
+    // renamed it.
     std::map<std::string, std::vector<std::pair<std::string, io::PeptideSite>>> byresidue;
-    std::vector<std::pair<std::string, io::PeptideSite>> anyresidue;
     for (const auto & entry : reader.rules())
-    {
-        if (entry.first.first == "*")
-            anyresidue.push_back({entry.first.second, entry.second});
-        else
-            byresidue[entry.first.first].push_back({entry.first.second, entry.second});
-    }
+        byresidue[entry.first.first].push_back({entry.first.second, entry.second});
 
     _sites.assign(network.getNumberOfParticles(), Site());
     unsigned resolved = 0, missing = 0;
     for (unsigned i = 0; i < network.getNumberOfParticles(); ++i)
     {
-        // Its own lines first, then the wildcard's, and the FIRST match stops
-        // the search -- which is what makes a specific residue beat '*'. Walked
-        // as two lists rather than one concatenation, so nothing is copied per
-        // particle.
         const auto family = byresidue.find(network.getParticle(i).getResName());
+        if (family == byresidue.end())
+            continue;
         const io::PeptideSite * rule = nullptr;
-        if (family != byresidue.end())
-            for (const auto & candidate : family->second)
-                if (_isNamed(network, i, candidate.first))
-                {
-                    rule = &candidate.second;
-                    break;
-                }
-        if (rule == nullptr)
-            for (const auto & candidate : anyresidue)
-                if (_isNamed(network, i, candidate.first))
-                {
-                    rule = &candidate.second;
-                    break;
-                }
+        for (const auto & candidate : family->second)
+            if (_isNamed(network, i, candidate.first))
+            {
+                rule = &candidate.second;
+                break;
+            }
         if (rule == nullptr)
             continue;
         const int a1 = _atomInResidue(network, _residueof[i], rule->antecedent);

@@ -115,16 +115,16 @@ std::string DonorAcceptorRuleReader::_plainName(const spn::Particle & p) const
 
 const DonorAcceptorRole * DonorAcceptorRuleReader::_roleFor(const spn::Particle & p) const
 {
-    const std::string plain = _plainName(p);
-    // Four lookups, most specific first: the residue's own entry under the name
-    // the topology carries, then under the plain name, then the wildcard's two.
-    for (const std::string & res : {p.getResName(), std::string("*")})
-        for (const std::string & atom : {p.getName(), plain})
-        {
-            const auto it = _roles.find({res, atom});
-            if (it != _roles.end())
-                return &it->second;
-        }
+    // The name the topology carries first, then the name it carried before a
+    // .grp renamed it. The second is what lets a table in plain atom names
+    // apply to a reduced topology; the shipped tables name groups, so it is the
+    // first that hits.
+    for (const std::string & atom : {p.getName(), _plainName(p)})
+    {
+        const auto it = _roles.find({p.getResName(), atom});
+        if (it != _roles.end())
+            return &it->second;
+    }
     return nullptr;
 }
 

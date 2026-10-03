@@ -75,14 +75,6 @@ struct HydrogenBondGroup
     float width = 0.0f;       // A-1
 };
 
-// <resname> may be '*', which matches ANY residue. The protein backbone is the
-// same in every amino acid, so its two lines are said once instead of forty
-// times -- and a residue that differs says so explicitly and wins. Two do:
-// proline, whose ring nitrogen has no amide hydrogen and is therefore NOT a
-// donor, and the N-methyl cap, whose nitrogen hangs off its methyl rather than
-// an alpha carbon. The acetyl cap needs no exception: it has no nitrogen for
-// the wildcard to find.
-//
 // Parses a .hbond file: lines of
 // "<resname> <atomname> <donor> <acceptor> [<antecedent> [[~|^]<antecedent2>[:angle]]]", donor/acceptor
 // being CAPACITIES (0, 1, 2...) rather than flags -- 0/1 keeps its old
@@ -130,11 +122,8 @@ class DonorAcceptorRuleReader : public ReaderBase
     // where the .grp was.
     std::string _plainName(const spn::Particle & p) const;
 
-    // The role that applies to a particle: its residue's own entry first, then
-    // the '*' wildcard's. A residue that says something specific must win, or
-    // the two lines that describe every backbone could not be overridden for
-    // proline -- whose nitrogen has no hydrogen to give and must NOT be tagged
-    // a donor.
+    // The role that applies to a particle, looked up under the name the
+    // topology carries and then under its pre-reduction name.
     const DonorAcceptorRole * _roleFor(const spn::Particle & p) const;
 };
 

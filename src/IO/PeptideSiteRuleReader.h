@@ -38,14 +38,6 @@ struct PeptideSite
 //
 //     <resname> <atomname> <antecedent> [[~|^]<plane>[:angle]]
 //
-// <resname> may be '*', which matches ANY residue. That is not a convenience:
-// the peptide backbone is the same in every amino acid -- that is what makes it
-// a backbone -- so the whole protein table is two lines, and a residue nobody
-// thought to list (an acyl group, a cap, a modified amino acid) is covered
-// instead of being silently left with no criterion. A line naming a residue
-// explicitly wins over the wildcard for that residue, so one odd case costs one
-// line and does not mean writing the other nineteen out again.
-//
 // WHY THIS IS NOT THE .hbond TABLE. The two files describe different
 // chemistry and are consumed by different terms. A .hbond line classifies an
 // atom as a hydrogen-bond donor or acceptor and gives it capacities; a .psite
