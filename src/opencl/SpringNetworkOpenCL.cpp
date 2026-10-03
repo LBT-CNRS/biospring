@@ -1206,6 +1206,7 @@ void SpringNetworkOpenCL::idleRun()
 			_kernelhbondrepulsion.setArg(a++, getForceField()->getHydrogenBondWidth());
 			_kernelhbondrepulsion.setArg(a++, getForceField()->getHydrogenBondScale());
 			_kernelhbondrepulsion.setArg(a++, static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
+			_kernelhbondrepulsion.setArg(a++, _inDynamicBuffer);
 			_kernelhbondrepulsion.setArg(a++, _hbond.energybuffer);
 			_kernelhbondrepulsion.setArg(a++, _nbparticlesocl);
 			_err = _queue.enqueueNDRangeKernel(_kernelhbondrepulsion, cl::NullRange,
@@ -3167,6 +3168,29 @@ void SpringNetworkOpenCL::_warnAboutTermsTheDeviceIgnores() const
 
 // Only the terms biospring.cl evaluates, so that an enabled-but-unevaluated
 // term reads as absent rather than as a measured zero.
+// The device's slots, copied into the arrays SpringNetwork's own reporting
+// reads. The two layouts are the same by construction: both are CSR over
+// donorCapacity()/acceptorCapacity() in particle order, so this is a straight
+// copy and not a translation.
+void SpringNetworkOpenCL::_readBackHydrogenBondSlots()
+	{
+	if (!_hbond.uploaded)
+		return;
+	if (!_hbDonorSlot.empty())
+		{
+		_err = _queue.enqueueReadBuffer(_hbond.donorslotbuffer, CL_TRUE, 0,
+		                                sizeof(int) * _hbDonorSlot.size(), _hbDonorSlot.data());
+		checkErr("enqueueReadBuffer(hydrogen bond donor slots)");
+		}
+	if (!_hbAcceptorSlot.empty())
+		{
+		_err = _queue.enqueueReadBuffer(_hbond.acceptorslotbuffer, CL_TRUE, 0,
+		                                sizeof(int) * _hbAcceptorSlot.size(), _hbAcceptorSlot.data());
+		checkErr("enqueueReadBuffer(hydrogen bond acceptor slots)");
+		}
+	}
+
+
 void SpringNetworkOpenCL::_displayFrameData()
 	{
 	biospring::logging::info("Step: %5d", _nbiter);
@@ -3189,11 +3213,24 @@ void SpringNetworkOpenCL::_displayFrameData()
 		biospring::logging::info("IMP energy: %5.2f kJ.mol-1", _energies.imp);
 	if (isHydrophobicityEnabled())
 		biospring::logging::info("Hydrophobic energy: %5.2f kJ.mol-1", _energies.hydrophobic);
-	// Reported without the bond COUNT the CPU prints beside it: the count
-	// lives in the device's slot arrays, and bringing them back every logged
-	// step to print a number would cost a transfer the energy does not need.
+	// With the bond COUNT, the census and the dump the CPU prints beside it.
+	// The slots live on the device, so they have to come back for any of that
+	// to exist -- but only on a LOGGED step, which is the one the two backends
+	// are compared on. An interactive step still pays no transfer for the
+	// assignment. Without this the GPU printed an energy and nothing to check
+	// it against, and a hydrogen bond total that disagreed with the CPU's by a
+	// factor could not be told from one that agreed.
 	if (isHydrogenBondEnabled())
-		biospring::logging::info("Hydrogen bond energy: %5.2f kJ.mol-1", _energies.hbond);
+		{
+		_readBackHydrogenBondSlots();
+		const std::array<size_t, 4> census = getHydrogenBondPairCensus();
+		biospring::logging::info("Hydrogen bond energy: %5.2f kJ.mol-1 over %zu bond(s); residue pairs holding "
+		                         "1/2/3/4+ bonds: %zu/%zu/%zu/%zu",
+		                         _energies.hbond, getHydrogenBondCount(), census[0], census[1], census[2],
+		                         census[3]);
+		if (!_config.hbond.log.empty())
+			dumpHydrogenBonds(_config.hbond.log, _nbiter);
+		}
 	// Measurements rather than energies, and the ones an IMPALA run is read on.
 	if (isInsertionVectorEnabled() && _insertionVector)
 		{

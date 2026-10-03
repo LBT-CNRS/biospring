@@ -1496,10 +1496,25 @@ __kernel void hbondCoreRepulsion(const __global float4 * positions, __global flo
                                  const __global uint * acceptoroffsets, const __global int * acceptorslots,
                                  const float cutoff, const float welldepth, const float equilibrium,
                                  const float width, const float hbondscale, const float convert,
+                                 // Who writes. Particle::addHydrogenBondCoreRepulsion runs inside
+                                 // SpringNetwork's loop over _dynamicparticules, so a static bead
+                                 // never visits a pair on its own and a pair with two static ends
+                                 // is never seen at all. This kernel took half a pair's energy from
+                                 // each side unconditionally, which is the right total only while
+                                 // both sides visit -- so a frozen partner's own internal pairs
+                                 // counted in full instead of not at all. On the inner wall of the
+                                 // Morse well that energy is NEGATIVE, which is why 077.Ribosome's
+                                 // reported hydrogen bond total was the more negative of the two.
+                                 const __global int * isdynamic,
                                  __global float * energyper, const uint N)
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
+	// A plain return, leaving energyper[tid] alone: hbondForce has already
+	// written this particle's engaged-pair energy there, and that term is not
+	// restricted to the dynamic beads -- SpringNetwork::computeHydrogenBondForces
+	// walks the bond list, not _dynamicparticules.
+	if (!isdynamic[tid]) return;
 
 	const float4 here = positions[tid];
 	const float cutoffsq = cutoff * cutoff;
@@ -1525,7 +1540,12 @@ __kernel void hbondCoreRepulsion(const __global float4 * positions, __global flo
 			continue;
 		const float module = hbondscale * biospring_hbond_force_module(dist, welldepth, equilibrium, width, convert);
 		sum += (axis / dist) * module;
-		e += 0.5f * hbondscale * biospring_hbond_energy(dist, welldepth, equilibrium, width);
+		// Half when the other side will visit this pair too, the whole of it
+		// when that side is static and will not. Same share-out as the three
+		// pairwise kernels, and the same one Particle::addHydrogenBondCoreRepulsion
+		// gets by skipping the lower-id side only for a DYNAMIC neighbour.
+		const float pair = hbondscale * biospring_hbond_energy(dist, welldepth, equilibrium, width);
+		e += isdynamic[p] ? 0.5f * pair : pair;
 	)
 
 	forces[tid].xyz += sum;

@@ -810,6 +810,7 @@ class SpringNetworkOpenCL : public SpringNetwork
 
 		// Prints only what this backend measured (see SpringNetwork's).
 		virtual void _displayFrameData();
+		void _readBackHydrogenBondSlots();
 		void wrappingOcl();
 		void InitOcl();
 		void createBuffer();
