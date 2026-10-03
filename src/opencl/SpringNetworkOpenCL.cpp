@@ -277,7 +277,8 @@ void SpringNetworkOpenCL::createBuffer()
 		// these, and it reads them into a local.
 		for (cl::Buffer * b : {&_stericEnergyBuffer, &_electrostaticEnergyBuffer,
 		                       &_hydrophobicEnergyBuffer, &_impEnergyBuffer,
-		                       &_fieldEnergyBuffer})
+		                       &_fieldEnergyBuffer,
+		                       &_probeStericEnergyBuffer, &_probeElectrostaticEnergyBuffer})
 			{
 			*b = cl::Buffer(_context, CL_MEM_READ_WRITE, sizeof(float) * _nbparticlesocl, NULL, &_err);
 			checkErr("Buffer(pairwise energy)");
@@ -731,6 +732,7 @@ void SpringNetworkOpenCL::idleRun()
     _kernelspring.setArg(sa++, _inSpringIndexesBuffer);
     _kernelspring.setArg(sa++, _bondedForceBuffer);
     _kernelspring.setArg(sa++, _springEnergyBuffer);
+    _kernelspring.setArg(sa++, _inDynamicBuffer);
     _kernelspring.setArg(sa++, _nbparticlesocl);
     _kernelspring.setArg(sa++, springForceScale);
     _kernelspring.setArg(sa++, getForceField()->getSpringScale());
@@ -1013,6 +1015,7 @@ void SpringNetworkOpenCL::idleRun()
         _kernelelectrostaticfield.setArg(a++, _fieldEnergyBuffer);
         _kernelelectrostaticfield.setArg(a++, static_cast<float>(
             biospring::forcefield::GLOBAL_ELECTROSTATIC_FIELD_ENERGY_CONVERT));
+        _kernelelectrostaticfield.setArg(a++, _inDynamicBuffer);
         _kernelelectrostaticfield.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kernelelectrostaticfield, cl::NullRange,
@@ -1037,6 +1040,7 @@ void SpringNetworkOpenCL::idleRun()
         _kerneldensityfield.setArg(a++, _densitymap.boxmin);
         _kerneldensityfield.setArg(a++, _densitymap.boxmax);
         _kerneldensityfield.setArg(a++, getDensityGridScale());
+        _kerneldensityfield.setArg(a++, _inDynamicBuffer);
         _kerneldensityfield.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kerneldensityfield, cl::NullRange,
@@ -1066,6 +1070,7 @@ void SpringNetworkOpenCL::idleRun()
             biospring::forcefield::GLOBAL_IMP_FORCE_CONVERT));
         _kernelimpala.setArg(a++, getForceField()->getIMPScale());
         _kernelimpala.setArg(a++, _impEnergyBuffer);
+        _kernelimpala.setArg(a++, _inDynamicBuffer);
         _kernelimpala.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kernelimpala, cl::NullRange,
@@ -1115,6 +1120,13 @@ void SpringNetworkOpenCL::idleRun()
             biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT));
         _kernelprobe.setArg(a++, getForceField()->getStericScale());
         _kernelprobe.setArg(a++, getForceField()->getCoulombScale());
+        _kernelprobe.setArg(a++, static_cast<float>(
+            biospring::forcefield::GLOBAL_ELECTROSTATIC_ENERGY_CONVERT));
+        // The probe's own pair energies, which the device used to compute no
+        // part of. Their own buffers because the probe's steric can be enabled
+        // while the pairwise steric is not, so there is no walk to add to.
+        _kernelprobe.setArg(a++, _probeStericEnergyBuffer);
+        _kernelprobe.setArg(a++, _probeElectrostaticEnergyBuffer);
         _kernelprobe.setArg(a++, _nbparticlesocl);
 
         _err = _queue.enqueueNDRangeKernel(_kernelprobe, cl::NullRange,
@@ -2833,6 +2845,35 @@ void SpringNetworkOpenCL::_computeEnergiesFromDeviceState()
 			}
 
 		// The FIELD's energy goes into the same total as Coulomb's, because that
+		// The probe's pairs go into the SAME totals as the walks', which is where
+		// SpringNetwork::computeParticleForces puts them -- it adds what
+		// addStericProbeForce and addElectrostaticProbeForce RETURN, the whole
+		// pair, to the same two accumulators. ADDED, not assigned, and that is
+		// the whole reason these are not rows in the table above: a row assigns,
+		// so the probe's own sum would have replaced the walk's. On 034.VirusCA,
+		// whose probe carries charge 0, that turned -55410.38 kJ/mol of Coulomb
+		// into 0.00 -- and made the steric look right only because the walk's
+		// own total there happens to be zero.
+		//
+		// Gated on the probe's switches alone: its steric can be enabled while
+		// the pairwise steric is not.
+		if (isProbeEnabled() && isProbeStericEnabled() && _probeStericEnergyBuffer() != NULL)
+			{
+			_err = _queue.enqueueReadBuffer(_probeStericEnergyBuffer, CL_TRUE, 0,
+			                                sizeof(float) * _nbparticlesocl, per.data());
+			checkErr("probe steric energy");
+			for (unsigned i = 0; i < _nbparticlesocl; ++i)
+				_energies.steric += per[i];
+			}
+		if (isProbeEnabled() && isProbeElectrostaticEnabled() && _probeElectrostaticEnergyBuffer() != NULL)
+			{
+			_err = _queue.enqueueReadBuffer(_probeElectrostaticEnergyBuffer, CL_TRUE, 0,
+			                                sizeof(float) * _nbparticlesocl, per.data());
+			checkErr("probe electrostatic energy");
+			for (unsigned i = 0; i < _nbparticlesocl; ++i)
+				_energies.electrostatic += per[i];
+			}
+
 		// is where the CPU puts it: Particle::addElectrostaticFieldForce credits
 		// it to the particle's electrostatic energy, and the two are reported as
 		// one number. Added, therefore, not assigned.

@@ -320,12 +320,35 @@ __kernel void probe(const __global float4 * positions,
                     const float coulombmindistance, const float fourpi,
                     const float stericconvert, const float coulombconvert,
                     const float stericscale, const float coulombscale,
+                    // The probe's own pair energies, per particle and in FULL:
+                    // SpringNetwork::computeParticleForces adds what
+                    // Particle::addStericProbeForce RETURNS, which is the whole
+                    // pair, and it adds it to the same steric and electrostatic
+                    // totals the walks feed. The device reported none of it, so
+                    // on 034.VirusCA -- a 50 A probe overlapping the capsid --
+                    // the CPU read 15533.10 kJ/mol of steric where the GPU read
+                    // 0.00, and every other term on that example agreed to five
+                    // figures.
+                    //
+                    // Their own buffers rather than the walks': the probe's
+                    // steric can be on while the pairwise steric is off, so
+                    // adding into a buffer no kernel had written would
+                    // accumulate stale memory. Assigned here, summed on the
+                    // host, added to the same totals.
+                    // The Coulomb ENERGY's own conversion constant, which is
+                    // not the force's: the pairwise kernel takes both for the
+                    // same reason.
+                    const float coulombenergyconvert,
+                    __global float * probestericenergy,
+                    __global float * probecoulombenergy,
                     const uint N)
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
 
 	probeforces[tid] = (float4)(0.0f, 0.0f, 0.0f, 0.0f);
+	probestericenergy[tid] = 0.0f;
+	probecoulombenergy[tid] = 0.0f;
 	if (tid == probeid || !dynamicstate[tid]) return;
 
 	const float4 axis = positions[probeid] - positions[tid];
@@ -341,6 +364,10 @@ __kernel void probe(const __global float4 * positions,
 		    mode, proberadius, radii[tid], probeepsilon, epsilons[tid], dist,
 		    linearstiffness, stericmindistance, stericconvert, radiusrule);
 		f += (axis.xyz / dist) * (stericscale * module);
+		/* Probe first, self second, as addStericProbeForce calls it. */
+		probestericenergy[tid] = stericscale * biospring_steric_energy(
+		    mode, proberadius, radii[tid], probeepsilon, epsilons[tid], dist,
+		    linearstiffness, stericmindistance, radiusrule);
 		}
 
 	if (coulombenabled)
@@ -349,6 +376,9 @@ __kernel void probe(const __global float4 * positions,
 		    probecharge, charges[tid], dist, dielectric, coulombmindistance, fourpi,
 		    coulombconvert);
 		f += (axis.xyz / dist) * (coulombscale * module);
+		probecoulombenergy[tid] = coulombscale * biospring_electrostatic_energy(
+		    probecharge, charges[tid], dist, dielectric, coulombmindistance,
+		    coulombenergyconvert);
 		}
 
 	forces[tid].xyz += f;
@@ -395,6 +425,12 @@ __kernel void spring(const __global float4 * positions,
                      const __global int * springoffsets,
                      __global float4 * forces,
                      __global float * energy,
+                     // A spring is static only when BOTH of its ends are, and
+                     // SpringNetwork::addSpring puts exactly those outside
+                     // _dynamicsprings -- so the CPU gives them neither force nor
+                     // energy. The device had no such test, and a frozen shell put
+                     // every one of its internal springs into the reported total.
+                     const __global int * isdynamic,
                      const uint N,
                      const float scale,
                      // spring.scale ALONE. `scale` above carries it multiplied
@@ -417,6 +453,8 @@ __kernel void spring(const __global float4 * positions,
 
 	for(int i=begin;i<end;i++)
 		{
+		if (!isdynamic[tid] && !isdynamic[springs[i].id2]) continue;
+
 		float3 axis = positions[springs[i].id2].xyz - here;
 		float dist = length(axis);
 		sum += normalize(axis) * biospring_spring_force_module(dist,
@@ -528,6 +566,34 @@ __kernel void electrostatic(const __global float4 * positions,
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
+	// A STATIC particle never walks a pair of its own. SpringNetwork::
+	// computeParticleForces iterates _dynamicparticules and nothing else --
+	// its own comment says "forces that apply on dynamic particles" -- so a
+	// pair of two static particles is never evaluated at all on the CPU. That
+	// is correct: its energy is a constant and its force is discarded, since a
+	// static particle is not integrated.
+	//
+	// This kernel was launched over every particle and walked from every one,
+	// so it counted exactly those pairs. Measured on 012.MgSite_GK, 2895 of
+	// 2896 particles static: 0.00 kJ/mol of steric on the CPU against
+	// 2 406 265 on the device, and the two agree to five figures once the same
+	// file is made all-mobile.
+	//
+	// `targets` is the mask this term already carries to share a pair's energy
+	// (half when the neighbour walks too, all of it when it does not), and it
+	// is exactly "is a writer here": dynamic for the steric, dynamic AND
+	// charged for Coulomb, dynamic AND hydrophobic for the hydrophobic term.
+	// A null mask means every particle is a writer, which is what a topology
+	// with nothing static gives.
+	// Its energy slot is cleared on the way out, because these buffers are
+	// allocated once and the walk below ASSIGNS rather than accumulates: a
+	// particle that returned here without writing would keep whatever the
+	// previous step had left in it.
+	if (targets != 0 && targets[tid] == 0)
+		{
+		energy[tid] = 0.0f;
+		return;
+		}
 
 	const float4 here = positions[tid];
 	const float q = charges[tid];
@@ -600,6 +666,34 @@ __kernel void steric(const __global float4 * positions,
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
+	// A STATIC particle never walks a pair of its own. SpringNetwork::
+	// computeParticleForces iterates _dynamicparticules and nothing else --
+	// its own comment says "forces that apply on dynamic particles" -- so a
+	// pair of two static particles is never evaluated at all on the CPU. That
+	// is correct: its energy is a constant and its force is discarded, since a
+	// static particle is not integrated.
+	//
+	// This kernel was launched over every particle and walked from every one,
+	// so it counted exactly those pairs. Measured on 012.MgSite_GK, 2895 of
+	// 2896 particles static: 0.00 kJ/mol of steric on the CPU against
+	// 2 406 265 on the device, and the two agree to five figures once the same
+	// file is made all-mobile.
+	//
+	// `targets` is the mask this term already carries to share a pair's energy
+	// (half when the neighbour walks too, all of it when it does not), and it
+	// is exactly "is a writer here": dynamic for the steric, dynamic AND
+	// charged for Coulomb, dynamic AND hydrophobic for the hydrophobic term.
+	// A null mask means every particle is a writer, which is what a topology
+	// with nothing static gives.
+	// Its energy slot is cleared on the way out, because these buffers are
+	// allocated once and the walk below ASSIGNS rather than accumulates: a
+	// particle that returned here without writing would keep whatever the
+	// previous step had left in it.
+	if (targets != 0 && targets[tid] == 0)
+		{
+		energy[tid] = 0.0f;
+		return;
+		}
 
 	const float4 here = positions[tid];
 	const float radius = radii[tid];
@@ -670,6 +764,34 @@ __kernel void hydrophobic(const __global float4 * positions,
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
+	// A STATIC particle never walks a pair of its own. SpringNetwork::
+	// computeParticleForces iterates _dynamicparticules and nothing else --
+	// its own comment says "forces that apply on dynamic particles" -- so a
+	// pair of two static particles is never evaluated at all on the CPU. That
+	// is correct: its energy is a constant and its force is discarded, since a
+	// static particle is not integrated.
+	//
+	// This kernel was launched over every particle and walked from every one,
+	// so it counted exactly those pairs. Measured on 012.MgSite_GK, 2895 of
+	// 2896 particles static: 0.00 kJ/mol of steric on the CPU against
+	// 2 406 265 on the device, and the two agree to five figures once the same
+	// file is made all-mobile.
+	//
+	// `targets` is the mask this term already carries to share a pair's energy
+	// (half when the neighbour walks too, all of it when it does not), and it
+	// is exactly "is a writer here": dynamic for the steric, dynamic AND
+	// charged for Coulomb, dynamic AND hydrophobic for the hydrophobic term.
+	// A null mask means every particle is a writer, which is what a topology
+	// with nothing static gives.
+	// Its energy slot is cleared on the way out, because these buffers are
+	// allocated once and the walk below ASSIGNS rather than accumulates: a
+	// particle that returned here without writing would keep whatever the
+	// previous step had left in it.
+	if (targets != 0 && targets[tid] == 0)
+		{
+		energy[tid] = 0.0f;
+		return;
+		}
 
 	const float4 here = positions[tid];
 	const float h = hydrophobicities[tid];
@@ -724,6 +846,11 @@ __kernel void impala(const __global float4 * positions,
                      // The IMPALA energy, which the device did not report: its kernel wrote only a
                      // force, so a --opencl run logged no IMP line at all.
                      __global float * energy,
+                     // Who this term is computed FOR. The CPU adds every field term inside
+                     // its loop over _dynamicparticules, so a static bead gets no force and
+                     // contributes no energy there; without this the device computed both,
+                     // and the totals disagreed by the whole static part of the system.
+                     const __global int * isdynamic,
                      const uint N)
 	{
 	const uint tid = get_global_id(0);
@@ -731,6 +858,8 @@ __kernel void impala(const __global float4 * positions,
 	// Cleared BEFORE the early returns below, or a particle that leaves the term
 	// this step would keep the energy it had last step for ever.
 	energy[tid] = 0.0f;
+
+	if (!isdynamic[tid]) return;
 
 	const float surface = surfaces[tid];
 	if (surface == 0.0f) return;        // no surface, no term -- and most beads of a
@@ -788,11 +917,15 @@ __kernel void electrostaticfield(const __global float4 * positions,
                                  __global float * energy,
                                  // potential * charge -> kJ.mol-1, all units at once.
                                  const float energyconvert,
+                                 // As in impala: this term belongs to the dynamic beads only.
+                                 const __global int * isdynamic,
                                  const uint N)
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
 	energy[tid] = 0.0f;   // before the bounds tests below, same reason as impala
+
+	if (!isdynamic[tid]) return;
 
 	const float4 p = positions[tid];
 
@@ -846,10 +979,14 @@ __kernel void densityfield(const __global float4 * positions,
                            const float4 boxmin,
                            const float4 boxmax,
                            const float gridscale,
+                           // As in impala: this term belongs to the dynamic beads only. It
+                           // reports no energy, so the mask only spares a static bead a force.
+                           const __global int * isdynamic,
                            const uint N)
 	{
 	const uint tid = get_global_id(0);
 	if (tid >= N) return;
+	if (!isdynamic[tid]) return;
 
 	const float4 p = positions[tid];
 

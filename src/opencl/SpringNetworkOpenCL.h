@@ -770,6 +770,12 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// The field's energy belongs to the SAME total as Coulomb's, as it does
 		// on the CPU, so this one is summed INTO _energies.electrostatic.
 		cl::Buffer _fieldEnergyBuffer;
+		// The probe's own pair energies, per particle. Separate from the walks'
+		// buffers because the probe's steric can be enabled while the pairwise
+		// steric is not: adding into a buffer no kernel wrote would accumulate
+		// stale memory. Summed on the host into the same totals the CPU uses.
+		cl::Buffer _probeStericEnergyBuffer;
+		cl::Buffer _probeElectrostaticEnergyBuffer;
 		cl::Buffer _torsionEnergyBuffer;
 		float * _springenergyper = nullptr;
 		float * _torsionenergyper = nullptr;
