@@ -208,7 +208,8 @@ unsigned long long pairKey(unsigned a, unsigned b)
 
 } // namespace
 
-void PeptideBondFormation::setup(SpringNetwork & network, const configuration::PeptideBondSetting & settings)
+void PeptideBondFormation::setup(SpringNetwork & network, const configuration::PeptideBondSetting & settings,
+                                 const std::string & fallbacknaming)
 {
     _enabled = false;
     if (!settings.enable)
@@ -229,9 +230,10 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
     _suffix = "_" + settings.group;
 
     _hastranslation = false;
-    if (!settings.naming.empty())
+    const std::string & namingpath = settings.naming.empty() ? fallbacknaming : settings.naming;
+    if (!namingpath.empty())
     {
-        reduce::ReduceRuleReader naming(settings.naming);
+        reduce::ReduceRuleReader naming(namingpath);
         naming.read();
         _translation = naming.rules();
         _hastranslation = true;

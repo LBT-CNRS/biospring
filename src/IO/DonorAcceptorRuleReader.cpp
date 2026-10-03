@@ -1,5 +1,6 @@
 #include "IO/DonorAcceptorRuleReader.h"
 #include "IO/LobeSpec.h"
+#include "IO/ReduceRuleReader.h"
 
 #include "logging.h"
 #include "utils/string.hpp"
@@ -104,6 +105,47 @@ void DonorAcceptorRuleReader::read()
     close();
 }
 
+void DonorAcceptorRuleReader::setNaming(const std::string & path)
+{
+    if (path.empty())
+        return;
+    reduce::ReduceRuleReader naming(path);
+    naming.read();
+    _translation = naming.rules();
+    _hastranslation = true;
+}
+
+std::string DonorAcceptorRuleReader::_plainName(const spn::Particle & p) const
+{
+    if (_hastranslation)
+    {
+        // A one-atom rule IS a renaming: its name is the type, its single atom
+        // the original. A rule with several atoms is a real coarse-grain grain
+        // and has no plain equivalent, so it is left alone.
+        for (const auto & rule : _translation.get_rules_for_residue(p.getResName()))
+            if (rule.getName() == p.getName() && rule.getNumberOfAtoms() == 1)
+                return *rule.getAtomNames().begin();
+        return p.getName();
+    }
+    const std::string & n = p.getName();
+    return n.size() > 1 ? n.substr(1) : n;
+}
+
+const DonorAcceptorRole * DonorAcceptorRuleReader::_roleFor(const spn::Particle & p) const
+{
+    const std::string plain = _plainName(p);
+    // Four lookups, most specific first: the residue's own entry under the name
+    // the topology carries, then under the plain name, then the wildcard's two.
+    for (const std::string & res : {p.getResName(), std::string("*")})
+        for (const std::string & atom : {p.getName(), plain})
+        {
+            const auto it = _roles.find({res, atom});
+            if (it != _roles.end())
+                return &it->second;
+        }
+    return nullptr;
+}
+
 void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
 {
     // The named Morse parameters, in the order they were declared: a site's
@@ -134,9 +176,7 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
     {
         const spn::Particle & p = spn.getParticle(i);
         by_atom.emplace(std::make_tuple(p.getChainName(), p.getResId(), p.getName()), i);
-        const std::string & n = p.getName();
-        if (n.size() > 1)
-            by_plain.emplace(std::make_tuple(p.getChainName(), p.getResId(), n.substr(1)), i);
+        by_plain.emplace(std::make_tuple(p.getChainName(), p.getResId(), _plainName(p)), i);
     }
 
     // Resolves one antecedent name, which may carry a CHARMM-style "-"/"+"
@@ -153,38 +193,50 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
             const auto f = by_plain.find(std::make_tuple(self.getChainName(), rid, name.substr(1)));
             return f == by_plain.end() ? -1 : static_cast<int>(f->second);
         }
-        const auto f = by_atom.find(std::make_tuple(self.getChainName(), self.getResId(), name));
-        return f == by_atom.end() ? -1 : static_cast<int>(f->second);
+        // The carried name first, then the plain one. BOTH are needed: a table
+        // keyed by amber.grp's types writes this antecedent 'ACA', a table in
+        // plain names writes it 'CA', and the same table has to work on a
+        // reduced topology and an unreduced one. Trying only the carried name
+        // silently left every unprefixed antecedent of a plain table
+        // unresolved -- measured on the three-resolution ribosome: 1459
+        // directional sites instead of 1548, with no error of any kind.
+        const auto key = std::make_tuple(self.getChainName(), self.getResId(), name);
+        const auto own = by_atom.find(key);
+        if (own != by_atom.end())
+            return static_cast<int>(own->second);
+        const auto plain = by_plain.find(key);
+        return plain == by_plain.end() ? -1 : static_cast<int>(plain->second);
     };
 
     for (unsigned i = 0; i < spn.getNumberOfParticles(); ++i)
     {
         spn::Particle & p = spn.getParticle(i);
-        const auto it = _roles.find({p.getResName(), p.getName()});
-        if (it == _roles.end())
+        const DonorAcceptorRole * role = _roleFor(p);
+        if (role == nullptr)
             continue;
+        const DonorAcceptorRole & entry = *role;
 
-        p.setDonorCapacity(it->second.donorCapacity);
-        p.setAcceptorCapacity(it->second.acceptorCapacity);
-        if (!it->second.group.empty())
+        p.setDonorCapacity(entry.donorCapacity);
+        p.setAcceptorCapacity(entry.acceptorCapacity);
+        if (!entry.group.empty())
         {
             int index = 0;
             for (size_t g = 0; g < _groups.size(); ++g)
-                if (_groups[g].name == it->second.group)
+                if (_groups[g].name == entry.group)
                     index = static_cast<int>(g) + 1;
             if (index == 0)
                 logging::die("DonorAcceptorRuleReader: %s:%s names group '%s', which no GROUP line declares",
-                             it->first.first.c_str(), it->first.second.c_str(), it->second.group.c_str());
+                             p.getResName().c_str(), p.getName().c_str(), entry.group.c_str());
             p.setHydrogenBondGroup(index);
         }
-        if (it->second.donorCapacity > 0)
+        if (entry.donorCapacity > 0)
             ++nb_donors;
-        if (it->second.acceptorCapacity > 0)
+        if (entry.acceptorCapacity > 0)
             ++nb_acceptors;
 
-        if (it->second.antecedent.empty())
+        if (entry.antecedent.empty())
             continue;
-        const int anc = resolve(p, it->second.antecedent);
+        const int anc = resolve(p, entry.antecedent);
         if (anc < 0)
         {
             ++nb_missing_antecedent;
@@ -196,12 +248,12 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
         // The second antecedent is optional and its absence is not an error:
         // a chain's first residue has no previous one, and the site simply
         // falls back to the single-antecedent direction.
-        const int anc2 = resolve(p, it->second.antecedent2);
+        const int anc2 = resolve(p, entry.antecedent2);
         if (anc2 >= 0)
         {
             p.setAntecedentIndex2(anc2);
-            p.setLobes(it->second.lobeMode, it->second.lobeAngle);
-            if (it->second.lobeMode != spn::Particle::HBOND_LOBES_NONE)
+            p.setLobes(entry.lobeMode, entry.lobeAngle);
+            if (entry.lobeMode != spn::Particle::HBOND_LOBES_NONE)
                 ++nb_lobes;
             else
                 ++nb_bisector;

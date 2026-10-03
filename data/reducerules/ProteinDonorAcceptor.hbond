@@ -40,84 +40,51 @@
 #.rbody and .bi.ff. A chain's first residue simply has none and falls back
 #to the single-antecedent direction.
 
-ACE  O     0 2 C
+#THE BACKBONE, SAID ONCE. It is the same in every amino acid -- that is what
+#makes it a backbone -- so '*' carries it, and the residues that differ say so
+#below and win.
 
-ALA  N     1 0 CA -C
-ALA  O     0 2 C
+*    N     1 0 CA -C
+*    O     0 2 C
 
-ARG  N     1 0 CA -C
-ARG  O     0 2 C
-ARG  NE    1 0 CD
-ARG  NH1   2 0 CZ
-ARG  NH2   2 0 CZ
+#Proline's ring nitrogen is a secondary amine: no amide hydrogen, so it is NOT
+#a donor. Declared with capacity 0 so it OVERRIDES the wildcard -- leaving it
+#out would let '*' tag it, which is a chemistry error and the reason helices
+#break at proline.
+PRO  N     0 0 CA -C
 
-ASN  N     1 0 CA -C
-ASN  O     0 2 C
-ASN  ND2   2 0 CG
-ASN  OD1   0 2 CG
-
-ASP  N     1 0 CA -C
-ASP  O     0 2 C
-ASP  OD1   0 2 CG
-ASP  OD2   0 2 CG
-
-CYS  N     1 0 CA -C
-CYS  O     0 2 C
-CYS  SG    1 1 CB
-
-GLN  N     1 0 CA -C
-GLN  O     0 2 C
-GLN  NE2   2 0 CD
-GLN  OE1   0 2 CD
-
-GLU  N     1 0 CA -C
-GLU  O     0 2 C
-GLU  OE1   0 2 CD
-GLU  OE2   0 2 CD
-
-GLY  N     1 0 CA -C
-GLY  O     0 2 C
-
-HIS  N     1 0 CA -C
-HIS  O     0 2 C
-HIS  ND1   1 1 CE1
-HIS  NE2   1 1 CE1
-
-ILE  N     1 0 CA -C
-ILE  O     0 2 C
-
-LEU  N     1 0 CA -C
-LEU  O     0 2 C
-
-LYS  N     1 0 CA -C
-LYS  O     0 2 C
-LYS  NZ    3 0 CE
-
-MET  N     1 0 CA -C
-MET  O     0 2 C
-
+#The N-methyl cap's nitrogen hangs off its own methyl, not an alpha carbon.
 NME  N     1 0 CH3
 
-PHE  N     1 0 CA -C
-PHE  O     0 2 C
+#The acetyl cap needs no exception: it has no nitrogen for '*' to find, and
+#its carbonyl oxygen is exactly what the wildcard says.
 
-PRO  O     0 2 C
+#THE SIDE CHAINS, which genuinely differ residue by residue.
+#
+#The '~' column on the exocyclic amines and the amide oxygens is NOT optional.
+#An sp2 centre with one heavy neighbour and two hydrogens (or two lone pairs)
+#has TWO directions at +/- 62 degrees of the plane, not one along the bond: with
+#a single direction the angular weights of a Watson-Crick pair come out at 0.03
+#instead of 0.93 and base pairing does not hold. This file had lost the six
+#columns below while amber.hbond kept them -- the two were not interchangeable,
+#and comparing only their capacity columns said they were.
 
-SER  N     1 0 CA -C
-SER  O     0 2 C
+ARG  NE    1 0 CD
+ARG  NH1   2 0 CZ   ~NE
+ARG  NH2   2 0 CZ   ~NE
+ASN  ND2   2 0 CG   ~OD1
+ASN  OD1   0 2 CG   ~ND2
+ASP  OD1   0 2 CG
+ASP  OD2   0 2 CG
+CYS  SG    1 1 CB
+GLN  NE2   2 0 CD   ~OE1
+GLN  OE1   0 2 CD   ~NE2
+GLU  OE1   0 2 CD
+GLU  OE2   0 2 CD
+HIS  ND1   1 1 CE1
+HIS  NE2   1 1 CE1
+LYS  NZ    3 0 CE
 SER  OG    1 2 CB
-
-THR  N     1 0 CA -C
-THR  O     0 2 C
 THR  OG1   1 2 CB
-
-TRP  N     1 0 CA -C
-TRP  O     0 2 C
 TRP  NE1   1 0 CD1
-
-TYR  N     1 0 CA -C
-TYR  O     0 2 C
 TYR  OH    1 2 CZ
-
-VAL  N     1 0 CA -C
-VAL  O     0 2 C

@@ -130,3 +130,67 @@ TEST(HydrogenBondGroups, ATableWithNoGroupIsUnchanged)
     const auto p = network.hydrogenBondParameters(a, b);
     EXPECT_FLOAT_EQ(p.welldepth, network.getForceField()->getHydrogenBondWellDepth());
 }
+
+// '*' matches any residue, which is what lets the protein backbone be said
+// once instead of forty times. Measured on the three-resolution ribosome: the
+// 23-line table tags 5203 of 5207 particles exactly as the 60-line one did.
+TEST(HydrogenBondGroups, TheWildcardCarriesTheBackboneForEveryResidue)
+{
+    Table table("*  N  1 0 CA\n"
+                "*  O  0 2 C\n");
+    spn::SpringNetwork network;
+    const unsigned n = place(network, "N", "TRP", 1, Vector3f(0.0f, 0.0f, 0.0f));
+    place(network, "CA", "TRP", 1, Vector3f(1.5f, 0.0f, 0.0f));
+    io::DonorAcceptorRuleReader reader(table.path());
+    reader.read();
+    reader.tagParticles(network);
+
+    EXPECT_EQ(network.getParticle(n).donorCapacity(), 1u) << "no TRP line, so '*' has to carry it";
+    EXPECT_GE(network.getParticle(n).antecedentIndex(), 0) << "and its antecedent has to resolve";
+}
+
+// A residue that genuinely differs overrides the wildcard, and PROLINE is why
+// the mechanism needs that at all: its ring nitrogen is a secondary amine with
+// no amide hydrogen, so it cannot donate. Capacity 0 says so, and a bare
+// wildcard would have tagged it a donor -- a chemistry error, and the reason
+// helices break at proline.
+TEST(HydrogenBondGroups, ProlineOverridesTheWildcardAndHoldsNothing)
+{
+    Table table("*    N  1 0 CA\n"
+                "PRO  N  0 0 CA\n");
+    spn::SpringNetwork network;
+    const unsigned pro = place(network, "N", "PRO", 1, Vector3f(0.0f, 0.0f, 0.0f));
+    place(network, "CA", "PRO", 1, Vector3f(1.5f, 0.0f, 0.0f));
+    const unsigned ala = place(network, "N", "ALA", 2, Vector3f(10.0f, 0.0f, 0.0f));
+    place(network, "CA", "ALA", 2, Vector3f(11.5f, 0.0f, 0.0f));
+    io::DonorAcceptorRuleReader reader(table.path());
+    reader.read();
+    reader.tagParticles(network);
+
+    EXPECT_EQ(network.getParticle(pro).donorCapacity(), 0u) << "proline has no amide hydrogen to give";
+    EXPECT_EQ(network.getParticle(ala).donorCapacity(), 1u) << "and the wildcard still serves everyone else";
+}
+
+// A table in plain PDB names resolves against a RENAMED topology once
+// simulation.naming gives the .grp -- both the role lookup and the antecedent
+// column. Leaving the antecedent out of that translation cost 89 of 1548
+// directional sites on the ribosome, silently.
+TEST(HydrogenBondGroups, APlainTableResolvesAgainstARenamedTopology)
+{
+    Table table("ALA  N  1 0 CA\n");
+    const std::string grp = std::string(std::tmpnam(nullptr)) + ".grp";
+    std::ofstream(grp) << "AN ALA N\nACA ALA CA\n";
+
+    spn::SpringNetwork network;
+    const unsigned n = place(network, "AN", "ALA", 1, Vector3f(0.0f, 0.0f, 0.0f));
+    const unsigned ca = place(network, "ACA", "ALA", 1, Vector3f(1.5f, 0.0f, 0.0f));
+    io::DonorAcceptorRuleReader reader(table.path());
+    reader.setNaming(grp);
+    reader.read();
+    reader.tagParticles(network);
+
+    EXPECT_EQ(network.getParticle(n).donorCapacity(), 1u) << "'N' has to find the particle named 'AN'";
+    EXPECT_EQ(network.getParticle(n).antecedentIndex(), static_cast<int>(ca))
+        << "and 'CA' has to find the particle named 'ACA'";
+    std::remove(grp.c_str());
+}

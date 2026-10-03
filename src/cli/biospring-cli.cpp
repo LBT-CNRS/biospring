@@ -171,6 +171,9 @@ int main(int argc, char ** argv)
 
         logging::status("Reading hydrogen bond donor/acceptor table %s.", config.hbond.path.c_str());
         biospring::io::DonorAcceptorRuleReader hbondreader(config.hbond.path);
+        // simulation.naming, not a per-term path: the table is written in plain
+        // PDB names and this is what resolves it against a renamed topology.
+        hbondreader.setNaming(config.sim.naming);
         hbondreader.read();
         hbondreader.tagParticles(*spn);
     }
