@@ -67,11 +67,7 @@ class PeptideBondFormation
 
     // Reads the rules and resolves the two atom names. Does nothing, and stays
     // disabled, when the setting is off.
-    // `fallbacknaming` is simulation.naming, used when peptidebond.naming is
-    // empty. One setting for the whole run is the simple case; the per-term
-    // one stays because configurations written before it existed use it.
-    void setup(SpringNetwork & network, const configuration::PeptideBondSetting & settings,
-               const std::string & fallbacknaming = "");
+    void setup(SpringNetwork & network, const configuration::PeptideBondSetting & settings);
 
     bool isEnabled() const { return _enabled; }
 

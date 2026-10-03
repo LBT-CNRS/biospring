@@ -315,21 +315,6 @@ class ThermostatSetting : public SettingBase
 class SimulationSetting : public SettingBase
 {
   public:
-    // The .grp the topology was REDUCED with, when it was. Every table that
-    // names atoms -- the hydrogen bond's .hbond, the peptide bond's .psite --
-    // is written in plain PDB names and resolved through this, so one table
-    // serves a reduced topology and an unreduced one.
-    //
-    // ONE setting for the whole simulation, not one per term. Per term meant
-    // the hydrogen bond, which had none, needed a SECOND copy of its table
-    // keyed by amber.grp's renamed types: 120 lines encoding 60, and choosing
-    // the wrong one of the two matched nothing at all and said nothing about
-    // it. Measured: the two protein tables agreed on 60 of 60 entries with 0
-    // differing capacities, so the duplication carried no information.
-    //
-    // Empty means the names in the topology are the names in the tables, which
-    // is the case for any topology built without --grp.
-    std::string naming;
     int nbsteps;
     double timestep;
     size_t samplerate;
@@ -342,9 +327,9 @@ class SimulationSetting : public SettingBase
     double cellsize;
 
     SimulationSetting(const std::string & name)
-        : SettingBase(name), nbsteps(0), timestep(0.0), samplerate(1), neighborskin(-1.0), cellsize(0.0), naming()
+        : SettingBase(name), nbsteps(0), timestep(0.0), samplerate(1), neighborskin(-1.0), cellsize(0.0)
     {
-        _parameterNames = {"nbsteps", "timestep", "samplerate", "neighborskin", "cellsize", "naming"};
+        _parameterNames = {"nbsteps", "timestep", "samplerate", "neighborskin", "cellsize"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -359,8 +344,6 @@ class SimulationSetting : public SettingBase
             utils::string::from_string<decltype(neighborskin)>(neighborskin, s);
         else if (param == "cellsize")
             utils::string::from_string<decltype(cellsize)>(cellsize, s);
-        else if (param == "naming")
-            naming = s;
         else
             logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
     }
@@ -372,7 +355,6 @@ class SimulationSetting : public SettingBase
         _mspFormatter.print("samplerate", samplerate, os);
         _mspFormatter.print("neighborskin", neighborskin, os);
         _mspFormatter.print("cellsize", cellsize, os);
-        _mspFormatter.print("naming", naming, os);
     }
 };
 

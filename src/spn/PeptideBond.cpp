@@ -208,8 +208,7 @@ unsigned long long pairKey(unsigned a, unsigned b)
 
 } // namespace
 
-void PeptideBondFormation::setup(SpringNetwork & network, const configuration::PeptideBondSetting & settings,
-                                 const std::string & fallbacknaming)
+void PeptideBondFormation::setup(SpringNetwork & network, const configuration::PeptideBondSetting & settings)
 {
     _enabled = false;
     if (!settings.enable)
@@ -230,10 +229,12 @@ void PeptideBondFormation::setup(SpringNetwork & network, const configuration::P
     _suffix = "_" + settings.group;
 
     _hastranslation = false;
-    const std::string & namingpath = settings.naming.empty() ? fallbacknaming : settings.naming;
-    if (!namingpath.empty())
+    // peptidebond.naming is now only for a topology built before the reduction
+    // recorded what it renamed. A current one needs nothing: the name before
+    // the renaming is in the .nc, put there by the only code that had the .grp.
+    if (!settings.naming.empty())
     {
-        reduce::ReduceRuleReader naming(namingpath);
+        reduce::ReduceRuleReader naming(settings.naming);
         naming.read();
         _translation = naming.rules();
         _hastranslation = true;
@@ -512,6 +513,8 @@ std::string PeptideBondFormation::_translate(const std::string & resname, const 
 std::string PeptideBondFormation::_original(const SpringNetwork & network, unsigned particle) const
 {
     const Particle & p = network.getParticle(particle);
+    if (!p.getOriginalName().empty())
+        return p.getOriginalName();
     if (!_hastranslation)
         return p.getName();
     for (const auto & rule : _translation.get_rules_for_residue(p.getResName()))
@@ -524,6 +527,9 @@ bool PeptideBondFormation::_isNamed(const SpringNetwork & network, unsigned part
 {
     const Particle & p = network.getParticle(particle);
     if (p.getName() == name)
+        return true;
+    // What the reduction recorded, which needs no .grp at run time.
+    if (p.getOriginalName() == name)
         return true;
     const std::string renamed = _translate(p.getResName(), name);
     return !renamed.empty() && p.getName() == renamed;

@@ -294,7 +294,6 @@ inline Configuration defaultConfiguration()
     config.sim.timestep = 0.01;
     config.sim.samplerate = 100;
     config.sim.neighborskin = -1.0;
-    config.sim.naming = "";
     config.thermostat.enable = false;   // see ThermostatSetting
     config.thermostat.temperature = 300.0; // negative: the backend chooses, see getNeighborSkin
 

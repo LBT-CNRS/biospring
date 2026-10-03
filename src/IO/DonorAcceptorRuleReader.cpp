@@ -1,6 +1,5 @@
 #include "IO/DonorAcceptorRuleReader.h"
 #include "IO/LobeSpec.h"
-#include "IO/ReduceRuleReader.h"
 
 #include "logging.h"
 #include "utils/string.hpp"
@@ -105,30 +104,13 @@ void DonorAcceptorRuleReader::read()
     close();
 }
 
-void DonorAcceptorRuleReader::setNaming(const std::string & path)
-{
-    if (path.empty())
-        return;
-    reduce::ReduceRuleReader naming(path);
-    naming.read();
-    _translation = naming.rules();
-    _hastranslation = true;
-}
-
 std::string DonorAcceptorRuleReader::_plainName(const spn::Particle & p) const
 {
-    if (_hastranslation)
-    {
-        // A one-atom rule IS a renaming: its name is the type, its single atom
-        // the original. A rule with several atoms is a real coarse-grain grain
-        // and has no plain equivalent, so it is left alone.
-        for (const auto & rule : _translation.get_rules_for_residue(p.getResName()))
-            if (rule.getName() == p.getName() && rule.getNumberOfAtoms() == 1)
-                return *rule.getAtomNames().begin();
-        return p.getName();
-    }
-    const std::string & n = p.getName();
-    return n.size() > 1 ? n.substr(1) : n;
+    // What the reduction recorded, and nothing else. It was resolved at BUILD
+    // time by the code that had the .grp in front of it, so there is nothing
+    // left to translate and nothing to guess. Empty means nothing renamed this
+    // particle, in which case its own name IS the one a table names.
+    return p.getOriginalName().empty() ? p.getName() : p.getOriginalName();
 }
 
 const DonorAcceptorRole * DonorAcceptorRuleReader::_roleFor(const spn::Particle & p) const
@@ -154,6 +136,36 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
     for (const HydrogenBondGroup & g : _groups)
         groups.push_back({g.welldepth, g.equilibrium, g.width});
     spn.setHydrogenBondGroups(groups);
+
+    // Said once, and only when it matters: a topology reduced by a .grp before
+    // the reduction recorded what it renamed cannot be matched against a table
+    // that names atoms, and nothing at run time can repair that -- the .grp is
+    // not here and guessing is what this replaced. Rebuilding with pdb2spn is
+    // the fix, and it is the whole fix.
+    {
+        bool renamed = false, recorded = false;
+        for (unsigned i = 0; i < spn.getNumberOfParticles(); ++i)
+            if (!spn.getParticle(i).getOriginalName().empty())
+            {
+                recorded = true;
+                break;
+            }
+        // A plain '-'/'+' antecedent is the one thing that cannot work without
+        // it, so its presence in the table is what makes this worth saying.
+        for (const auto & entry : _roles)
+            if ((!entry.second.antecedent.empty() && (entry.second.antecedent[0] == '-' ||
+                                                      entry.second.antecedent[0] == '+')) ||
+                (!entry.second.antecedent2.empty() && (entry.second.antecedent2[0] == '-' ||
+                                                       entry.second.antecedent2[0] == '+')))
+            {
+                renamed = true;
+                break;
+            }
+        if (renamed && !recorded)
+            logging::warning("DonorAcceptorRuleReader: this topology records no pre-reduction atom names, so a "
+                             "'-'/'+' antecedent cannot be resolved and those sites stay undirected. Rebuild it "
+                             "with pdb2spn, which records them.");
+    }
 
     unsigned nb_donors = 0;
     unsigned nb_acceptors = 0;

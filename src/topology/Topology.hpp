@@ -335,6 +335,7 @@ class Topology
         {
             spn::Particle target;
             target.setName(source.properties().name());
+            target.setOriginalName(source.properties().original_name());
             target.setResName(source.properties().residue_name());
             // residue_id()/atom_id() stay signed ints (some PDB files use
             // negative residue numbering), while the simulation-side

@@ -152,6 +152,12 @@ void NetCDFWriter::writeBinary()
     NcVar pnames = nc->addVar("particlenames", ncChar, stringdim);
     pnames.putAtt("long_name", "Particle name");
 
+    // The name before a .grp renamed it, resolved at BUILD time so that no
+    // reader has to be told the .grp again. A file written before this variable
+    // existed simply has none, and reads back as empty.
+    NcVar onames = nc->addVar("originalnames", ncChar, stringdim);
+    onames.putAtt("long_name", "Particle name before coarse-grain renaming");
+
     stringdim[1] = resnamelendim;
     NcVar resnames = nc->addVar("resnames", ncChar, stringdim);
     resnames.putAtt("long_name", "Particle residue name");
@@ -177,6 +183,7 @@ void NetCDFWriter::writeBinary()
     hydrophobicity.putVar(pbuffer.hydrophobicities);
     chainnames.putVar(pbuffer.chainnames);
     pnames.putVar(pbuffer.particlenames);
+    onames.putVar(pbuffer.originalnames);
     resnames.putVar(pbuffer.resnames);
 
     if (springnb > 0)

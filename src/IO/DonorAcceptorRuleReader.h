@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "IO/ReaderBase.h"
-#include "reduce/ReduceRuleContainer.hpp"
 #include "SpringNetwork.h"
 
 namespace biospring
@@ -107,18 +106,6 @@ class DonorAcceptorRuleReader : public ReaderBase
 
     void read();
 
-    // The .grp the topology was REDUCED with, from simulation.naming. With it,
-    // a table written in plain PDB names resolves against a renamed topology,
-    // so ONE table serves both -- instead of a second copy of the same 60
-    // entries keyed by amber.grp's types, which is what this file used to need.
-    //
-    // It also replaces a heuristic. A cross-residue antecedent like '-C' was
-    // resolved by dropping the first character of the type (AC -> C, ACA ->
-    // CA), which holds for amber.grp's one-letter prefixes and silently fails
-    // elsewhere: the N-formyl cap's carbon, FRC, becomes RC instead of C. With
-    // a real table the translation is exact; without one the heuristic is kept,
-    // so nothing that worked before stops working.
-    void setNaming(const std::string & path);
 
     // Sets the donor/acceptor capacities and resolves the antecedent on
     // every particle of `spn` whose (resname, name) matches an entry read
@@ -134,14 +121,13 @@ class DonorAcceptorRuleReader : public ReaderBase
   protected:
     std::map<std::pair<std::string, std::string>, DonorAcceptorRole> _roles;
     std::vector<HydrogenBondGroup> _groups;
-    reduce::ReduceRuleContainer _translation;
-    bool _hastranslation = false;
 
     void _parse_line(const std::string & line, size_t line_id);
 
-    // The particle's name in the convention the TABLE is written in: its own
-    // name translated back through the .grp when there is one, and the
-    // first-character heuristic when there is not.
+    // The particle's name in the convention a TABLE is written in: what the
+    // reduction recorded at build time, or its own name when nothing renamed
+    // it. No .grp and no heuristic at run time -- the question was answered
+    // where the .grp was.
     std::string _plainName(const spn::Particle & p) const;
 
     // The role that applies to a particle: its residue's own entry first, then

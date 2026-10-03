@@ -1457,7 +1457,7 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupHydrogenBond();
     // After the hydrogen bond term, whose out-of-plane lobe sites are what
     // brings a nucleophile into the attack conformation this then acts on.
-    _peptidebond.setup(*this, conf.peptidebond, conf.sim.naming);
+    _peptidebond.setup(*this, conf.peptidebond);
     _setupDensityGrid();
     _setupInsertionVector();
     _setupTrajectories();

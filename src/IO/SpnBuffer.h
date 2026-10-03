@@ -116,6 +116,11 @@ struct ParticleBuffer
     unsigned char * dynamic_states;
     char (*chainnames)[CHAIN_NAME_LENGTH];
     char (*particlenames)[PARTICLE_NAME_LENGTH];
+    // The name each particle had BEFORE a .grp renamed it. Written by the
+    // reduction, which is the only code that knows the .grp, so that no reader
+    // has to be told it again -- see spn::Particle::getOriginalName. Absent
+    // from files written before it existed, which read back as empty.
+    char (*originalnames)[PARTICLE_NAME_LENGTH];
     char (*resnames)[RESIDUE_NAME_LENGTH];
 
     // Allocates memory for all buffers.
@@ -139,6 +144,7 @@ struct ParticleBuffer
             dynamic_states = new unsigned char[nParticles]{};
             chainnames = new char[nParticles][CHAIN_NAME_LENGTH]{};
             particlenames = new char[nParticles][PARTICLE_NAME_LENGTH]{};
+            originalnames = new char[nParticles][PARTICLE_NAME_LENGTH]{};
             resnames = new char[nParticles][RESIDUE_NAME_LENGTH]{};
         }
     }
@@ -170,6 +176,7 @@ struct ParticleBuffer
 
             strncpy(chainnames[i], p.getChainName().c_str(), CHAIN_NAME_LENGTH);
             strncpy(particlenames[i], p.getName().c_str(), PARTICLE_NAME_LENGTH);
+            strncpy(originalnames[i], p.getOriginalName().c_str(), PARTICLE_NAME_LENGTH);
             strncpy(resnames[i], p.getResName().c_str(), RESIDUE_NAME_LENGTH);
 
         }
@@ -181,7 +188,7 @@ struct ParticleBuffer
     ParticleBuffer()
         : number_of_particles(0), coordinates(0), charges(0), radii(0), epsilons(0), masses(0), hydrophobicities(0),
           hscales(0), surface_accessibilities(0), ids(0), resids(0), dynamic_states(0), chainnames(0),
-          particlenames(0), resnames(0)
+          particlenames(0), originalnames(0), resnames(0)
     {
     }
 
@@ -211,6 +218,7 @@ struct ParticleBuffer
         delete[] dynamic_states;
         delete[] chainnames;
         delete[] particlenames;
+        delete[] originalnames;
         delete[] resnames;
 
         coordinates = nullptr;
@@ -226,6 +234,7 @@ struct ParticleBuffer
         dynamic_states = nullptr;
         chainnames = nullptr;
         particlenames = nullptr;
+        originalnames = nullptr;
         resnames = nullptr;
         number_of_particles = 0;
     }

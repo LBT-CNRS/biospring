@@ -46,6 +46,10 @@ void NetCDFReader::addParticlesToSpn()
         strncpy(buf, _pbuffer.particlenames[i], PARTICLE_NAME_LENGTH);
         p.properties().set_name(buf);
 
+        memset(buf, 0, PARTICLE_NAME_LENGTH);
+        strncpy(buf, _pbuffer.originalnames[i], PARTICLE_NAME_LENGTH);
+        p.properties().set_original_name(buf);
+
         memset(buf, 0, RESIDUE_NAME_LENGTH);
         strncpy(buf, _pbuffer.resnames[i], RESIDUE_NAME_LENGTH);
         p.properties().set_residue_name(buf);
@@ -120,6 +124,19 @@ void NetCDFReader::readParticles()
     checkDim(data, 0, _pbuffer.number_of_particles);
     checkDim(data, 1, PARTICLE_NAME_LENGTH);
     data.getVar(_pbuffer.particlenames);
+
+    // Optional, and quietly so: a topology built before the reduction recorded
+    // original names has none, and reads back as empty. What then needs the
+    // .grp again is reported by whoever needs it, not here -- see
+    // DonorAcceptorRuleReader::_plainName.
+    data = _file->getVar("originalnames");
+    if (!data.isNull())
+    {
+        checkNDims(data, 2);
+        checkDim(data, 0, _pbuffer.number_of_particles);
+        checkDim(data, 1, PARTICLE_NAME_LENGTH);
+        data.getVar(_pbuffer.originalnames);
+    }
 
     data = getNcVar("chainnames");
     checkNDims(data, 2);

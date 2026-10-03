@@ -167,6 +167,21 @@ class GrainBuilder
     {
         Grain grain;
         grain.properties().set_name(_grain_name());
+        // A grain built from ONE source particle is a renaming, and this is the
+        // name it replaced -- taken from the RULE, not from the structure. A
+        // type may accept several spellings (amber.grp has "XH1 ACE H1" and
+        // "XH1 ACE HH31", "ZC NME C" and "ZC NME CH3"), and a parameter table
+        // is written against one of them, so recording whichever spelling this
+        // particular PDB happened to use would match that table only by luck.
+        //
+        // A grain built from several particles is a real average and has no
+        // single original, so it keeps none.
+        //
+        // This is also why no heuristic is needed anywhere: the question is
+        // answered HERE, with the .grp in hand, and the answer is written into
+        // the .nc. Asking it again at run time is what forced a guess.
+        if (grain_particles.size() == 1)
+            grain.properties().set_original_name(_rule.getCanonicalAtomName());
         grain.properties().set_residue_name(_residue_name());
         grain.properties().set_residue_id(_residue_id());
         grain.properties().set_chain_name(_input_particles[0].properties().chain_name());

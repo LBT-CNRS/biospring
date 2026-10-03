@@ -87,6 +87,18 @@ class ParticleProperties
     Vector3f _previous_position = Vector3f();
 
     std::string _name;
+    // The name this particle had BEFORE a .grp renamed it, when it did. A
+    // reduction that maps one atom to one grain IS a renaming, and the name it
+    // replaced is the only thing that lets a parameter table written in plain
+    // PDB names be matched later. Recorded at BUILD time, by the only code that
+    // knows the .grp: asking for it again at run time was opaque -- the user had
+    // to remember which .grp a topology was reduced with, and getting it wrong
+    // matched nothing and reported nothing.
+    //
+    // Empty when nothing renamed this particle (the name IS the original) or
+    // when the grain is a real coarse-grain average of several atoms, which has
+    // no single original.
+    std::string _original_name;
     std::string _residue_name;
     std::string _chain_name;
     std::string _element_name;
@@ -122,6 +134,7 @@ class ParticleProperties
     Vector3f previous_position() const { return _previous_position; }
 
     std::string name() const { return _name; }
+    std::string original_name() const { return _original_name; }
     std::string residue_name() const { return _residue_name; }
     std::string chain_name() const { return _chain_name; }
     std::string element_name() const { return _element_name; }
@@ -156,6 +169,7 @@ class ParticleProperties
     void set_force(const Vector3f & force) { _force = force; }
 
     void set_name(const std::string & name) { _name = name; }
+    void set_original_name(const std::string & name) { _original_name = name; }
     void set_residue_name(const std::string & residue_name) { _residue_name = residue_name; }
     void set_chain_name(const std::string & chain_name) { _chain_name = chain_name; }
 
@@ -179,6 +193,7 @@ class ParticleProperties
                float_eq(_burying, other._burying) && _imp == other._imp && _position == other._position &&
                _velocity == other._velocity && _force == other._force &&
                _previous_position == other._previous_position && _name == other._name &&
+               _original_name == other._original_name &&
                _residue_name == other._residue_name && _chain_name == other._chain_name &&
                _element_name == other._element_name && _residue_id == other._residue_id && _atom_id == other._atom_id &&
                _is_static == other._is_static && _topology_id == other._topology_id;

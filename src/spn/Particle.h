@@ -109,6 +109,14 @@ class Particle : public ParticleProperty
     void setResName(const std::string & resname) { _resname = resname; }
 
     const std::string & getName() const { return _name; }
+    // The name this particle had BEFORE a .grp renamed it, recorded at BUILD
+    // time by the reduction and carried in the .nc. Empty when nothing renamed
+    // it. This is what lets a parameter table written in plain PDB names match
+    // a reduced topology without the user restating the .grp at run time --
+    // which was opaque: remembering the wrong one matched nothing and said so
+    // nowhere.
+    const std::string & getOriginalName() const { return _originalname; }
+    void setOriginalName(const std::string & name) { _originalname = name; }
     void setName(const std::string & name) { _name = name; }
 
     const std::string & getCGName() const { return _cgname; }
@@ -226,7 +234,8 @@ class Particle : public ParticleProperty
     Vector3f _velocity;
     bool _isstatic;
 
-    std::string _name;   // name in pdb
+    std::string _name;           // name in pdb, or the type a .grp renamed it to
+    std::string _originalname;   // the name before that renaming, when there was one
     std::string _cgname; // coarse grain name in pdb
     unsigned _resid;
     std::string _resname;
