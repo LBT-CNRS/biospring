@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "logging.h"
 #include "Particle.hpp"
 #include "ParticleCollection.hpp"
 #include "Spring.hpp"
@@ -82,6 +83,7 @@ class Topology
     {
         _copy_particles(other);
         _copy_springs(other);
+        _copy_torsions(other, 0);
     }
 
     // Assignment operator.
@@ -103,8 +105,11 @@ class Topology
     Topology & operator=(const Topology & other)
     {
         _springs.clear();
+        _torsions.clear();
+        _torsiontables.clear();
         _copy_particles(other);
         _copy_springs(other);
+        _copy_torsions(other, 0);
 
         return *this;
     }
@@ -314,6 +319,8 @@ class Topology
         result._particles += top1._particles + top2._particles;
         result._copy_springs(top1, 0);
         result._copy_springs(top2, top1.number_of_particles());
+        result._copy_torsions(top1, 0);
+        result._copy_torsions(top2, top1.number_of_particles());
         return result;
     }
 
@@ -464,6 +471,56 @@ class Topology
     void _copy_springs(const Topology & other, size_t offset = 0)
     {
         _copy_spring_collection(_springs, other._springs, other._particles, offset);
+    }
+
+    // Copies `other`'s torsions, and the tables they index because a torsion is
+    // useless without its curve. `offset` is where `other`'s particles begin in
+    // this collection, as for _copy_springs.
+    //
+    // A TORSION NAMES ITS FOUR ATOMS BY UNIQUE ID, and a merge gives every
+    // particle a fresh one -- ParticleCollection::push_back stores
+    // Particle::copy(), which assigns a new uid -- so the ids cannot be carried
+    // over unchanged. They are translated through the positional correspondence
+    // the merge establishes, exactly as a spring's two ends are. Table indices
+    // shift by however many tables are already here.
+    //
+    // Without this, merging silently produced a network with NO torsions at all,
+    // whatever its inputs carried: every dihedral family reported 0.00 kJ/mol,
+    // and the peptide bond term, which learns what a C-N bond looks like from
+    // the network's own torsions, warned that a new bond's omega would be free.
+    void _copy_torsions(const Topology & other, size_t offset)
+    {
+        if (other._torsions.empty() && other._torsiontables.empty())
+            return;
+
+        // Two inputs tabulating different numbers of points cannot share one
+        // table array, and the writer sizes that array from the first table.
+        if (!_torsiontables.empty() && !other._torsiontables.empty() &&
+            _torsiontables.front().energy.size() != other._torsiontables.front().energy.size())
+            logging::die("Topology::merge: torsion tables are sampled at %zu points here and %zu in the "
+                         "topology being merged; they cannot share one table array.",
+                         _torsiontables.front().energy.size(), other._torsiontables.front().energy.size());
+
+        const size_t table_offset = _torsiontables.size();
+        _torsiontables.insert(_torsiontables.end(), other._torsiontables.begin(), other._torsiontables.end());
+
+        const auto & src_by_uid = other._particles.by_uid();
+        for (const Torsion & source : other._torsions)
+        {
+            Torsion t = source;
+            bool resolved = true;
+            for (unsigned k = 0; k < 4 && resolved; ++k)
+            {
+                const auto it = src_by_uid.find(source.atoms[k]);
+                resolved = it != src_by_uid.end();
+                if (resolved)
+                    t.atoms[k] = _particles[offset + it->second].unique_id();
+            }
+            if (!resolved)
+                continue;
+            t.table = static_cast<unsigned>(table_offset + source.table);
+            _torsions.push_back(t);
+        }
     }
 
 };

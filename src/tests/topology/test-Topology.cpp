@@ -98,6 +98,110 @@ TEST(Topology, merge)
     EXPECT_EQ(merged.number_of_springs(), expected_number_of_springs);
 }
 
+// Merging used to drop every torsion, silently: Topology's copy constructor,
+// its assignment operator and merge() all copied particles and springs and left
+// the torsions behind. A merged network then had no dihedral at all whatever
+// its inputs carried -- every family reported 0.00 kJ/mol -- and the peptide
+// bond term, which learns what a C-N bond looks like from the network's own
+// torsions, warned that a new bond's omega would be free.
+//
+// THE COUNTS ARE NOT ENOUGH TO TEST IT. A torsion names its four atoms by
+// UNIQUE ID, and copying a particle assigns it a new one, so simply appending
+// the vectors gives the right number of torsions pointing at ids that no longer
+// exist -- and to_spring_network drops those without a word. The positions are
+// therefore checked here, not just the totals.
+// Checks that torsion `which` of `top` names the particles at `positions`, after
+// resolving its unique ids the way to_spring_network does.
+static void expect_torsion_on_positions(const topology::Topology & top, size_t which,
+                                        const std::array<size_t, 4> & positions)
+{
+    const auto & by_uid = top.particles().by_uid();
+    ASSERT_GT(top.torsions().size(), which);
+    for (size_t k = 0; k < 4; ++k)
+    {
+        const auto it = by_uid.find(top.torsions()[which].atoms[k]);
+        ASSERT_NE(it, by_uid.end()) << "torsion " << which << " atom " << k << " names a dead unique id";
+        EXPECT_EQ(it->second, positions[k]);
+    }
+}
+
+static topology::Topology::TorsionTable sample_table(float scale)
+{
+    topology::Topology::TorsionTable t;
+    t.bins = 4;
+    for (unsigned i = 0; i <= t.bins; ++i)
+    {
+        t.energy.push_back(scale * static_cast<float>(i));
+        t.torque.push_back(-scale * static_cast<float>(i));
+    }
+    return t;
+}
+
+TEST(Topology, merge_keeps_torsions_and_points_them_at_the_right_atoms)
+{
+    topology::Topology top1, top2;
+    top1.add_particles(generate_random_particles(10));
+    top2.add_particles(generate_random_particles(8));
+
+    top1.set_torsion_tables({sample_table(1.0f), sample_table(2.0f)});
+    top2.set_torsion_tables({sample_table(3.0f)});
+
+    // One torsion each, on known positions and known tables.
+    top1.add_torsion(7, top1.get_particle(0), top1.get_particle(1), top1.get_particle(2),
+                     top1.get_particle(3), 1);
+    top2.add_torsion(9, top2.get_particle(4), top2.get_particle(5), top2.get_particle(6),
+                     top2.get_particle(7), 0);
+
+    const topology::Topology merged = top1.merge(top2);
+
+    ASSERT_EQ(merged.torsions().size(), 2u);
+    ASSERT_EQ(merged.torsion_tables().size(), 3u);
+
+    // top2's table index shifts by the number of tables top1 contributed.
+    EXPECT_EQ(merged.torsions()[0].family, 7u);
+    EXPECT_EQ(merged.torsions()[0].table, 1u);
+    EXPECT_EQ(merged.torsions()[1].family, 9u);
+    EXPECT_EQ(merged.torsions()[1].table, 2u);
+
+    // And the atoms: top1's torsion on positions 0-3, top2's on 10+4 .. 10+7.
+    expect_torsion_on_positions(merged, 0, {0, 1, 2, 3});
+    expect_torsion_on_positions(merged, 1, {10 + 4, 10 + 5, 10 + 6, 10 + 7});
+
+    // The curves travel with them, in order.
+    EXPECT_FLOAT_EQ(merged.torsion_tables()[0].energy[1], 1.0f);
+    EXPECT_FLOAT_EQ(merged.torsion_tables()[1].energy[1], 2.0f);
+    EXPECT_FLOAT_EQ(merged.torsion_tables()[2].energy[1], 3.0f);
+}
+
+// readTopology returns by value, so the torsions were already gone before
+// merge() ever ran: a single-file round trip lost them too.
+TEST(Topology, copy_and_assignment_keep_torsions)
+{
+    topology::Topology top;
+    top.add_particles(generate_random_particles(6));
+    top.set_torsion_tables({sample_table(5.0f)});
+    top.add_torsion(3, top.get_particle(1), top.get_particle(2), top.get_particle(3),
+                    top.get_particle(4), 0);
+
+    const topology::Topology copied(top);
+    ASSERT_EQ(copied.torsions().size(), 1u);
+    ASSERT_EQ(copied.torsion_tables().size(), 1u);
+    EXPECT_EQ(copied.torsions()[0].family, 3u);
+
+    topology::Topology assigned;
+    assigned = top;
+    ASSERT_EQ(assigned.torsions().size(), 1u);
+    ASSERT_EQ(assigned.torsion_tables().size(), 1u);
+
+    // Assignment replaces rather than accumulates.
+    assigned = top;
+    EXPECT_EQ(assigned.torsions().size(), 1u);
+    EXPECT_EQ(assigned.torsion_tables().size(), 1u);
+
+    expect_torsion_on_positions(copied, 0, {1, 2, 3, 4});
+    expect_torsion_on_positions(assigned, 0, {1, 2, 3, 4});
+}
+
 // ====================================================================================
 //
 // Add particles
