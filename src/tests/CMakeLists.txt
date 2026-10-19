@@ -79,6 +79,7 @@ set(TEST_MODULES
     HydrogenBondGroups
     PeptideBond
     PeptideSite
+    Stacking
     StaticBondBuilder
     Vector3f
 )

@@ -8,6 +8,7 @@
 #include "forcefield/shared/torsion_shared.h"
 #include "forcefield/ForceField.h"
 #include "forcefield/energy/hydrogenbond.hpp"
+#include "forcefield/energy/stacking.hpp"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Lewitt.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias.h"
@@ -551,6 +552,244 @@ void SpringNetwork::computeHydrogenBondForces()
 
     _energies.hbond = hbond_energy;}
 
+// Base stacking, after HiRE-RNA v3 (Cragnolini, Laurin, Derreumaux & Pasquali,
+// arXiv:1404.0568), their equation (4). Per pair of base planes,
+//
+//     E = -eps G(d) P A_i A_j
+//
+// with d the distance between the two frame CENTRES, G the Gaussian,
+// P = (n_i.n_j)^2 the parallel factor and A = u^2(2-u^2), u = n.rhat, the
+// face-to-face factor of each base. The forms and the measured parameters are
+// in forcefield/shared/stacking_shared.h; what is here is the geometry and the
+// gradient.
+//
+// SIX BODIES, NOT TWO. A frame's normal and its centre are both built from all
+// three of its atoms, so every one of the six carries force. Writing
+// b = p1 - p0, c = p2 - p0, m = b x c and n = m/|m|, the centre is the plain
+// mean of the three and
+//
+//     dE/dm       = (N - n (n.N)) / |m|,     N = dE/dn
+//     dE/dp1      = c x (dE/dm)
+//     dE/dp2      = (dE/dm) x b
+//     dE/dp0      = -(the other two)
+//
+// the last line making each frame's three normal-forces sum to zero exactly, by
+// construction rather than by balancing. The centre's share is dE/dv split in
+// three equal parts, with the sign of which frame it belongs to. Translation
+// invariance therefore holds to the bit, and the finite-difference test checks
+// the rest.
+void SpringNetwork::computeStackingForces()
+{
+    _energies.stacking = 0.0f;
+    if (_baseFrames.empty() || !_nsearch.stacking)
+        return;
+
+    const float cutoff = getStackingCutoff();
+    // `scale` multiplies the well depth, which is what it means everywhere
+    // else: one knob to weigh the whole family without touching its shape.
+    const float eps = static_cast<float>(_config.stacking.epsilon * _config.stacking.scale);
+    const float r_st = static_cast<float>(_config.stacking.equilibrium);
+    const float sigma = static_cast<float>(_config.stacking.width);
+    const float conv = static_cast<float>(forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+
+    // The pair list first, so the force loop below is a flat parallel loop over
+    // pairs rather than a nested walk with a shared accumulator.
+    struct Pair
+    {
+        size_t i, j;
+    };
+    std::vector<Pair> pairs;
+    for (size_t fi = 0; fi < _baseFrames.size(); ++fi)
+        _nsearch.stacking->for_each_neighbor(_baseFrameAnchors[fi], [&](size_t candidate) {
+            const int fj = _frameOfAnchor[candidate];
+            // Each pair once: the grid returns both directions.
+            if (fj > static_cast<int>(fi))
+                pairs.push_back({fi, static_cast<size_t>(fj)});
+        });
+
+    _stackingForceScratch.assign(pairs.size() * 6, Vector3f());
+    std::vector<float> pairEnergy(pairs.size(), 0.0f);
+
+#ifdef OPENMP_SUPPORT
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t k = 0; k < pairs.size(); ++k)
+    {
+        const BaseFrame & fi = _baseFrames[pairs[k].i];
+        const BaseFrame & fj = _baseFrames[pairs[k].j];
+
+        Vector3f pi[3], pj[3];
+        for (unsigned a = 0; a < 3; ++a)
+        {
+            pi[a] = getParticle(fi.atoms[a]).getPosition();
+            pj[a] = getParticle(fj.atoms[a]).getPosition();
+        }
+
+        const Vector3f bi = pi[1] - pi[0], ci = pi[2] - pi[0];
+        const Vector3f bj = pj[1] - pj[0], cj = pj[2] - pj[0];
+        const Vector3f mi = bi ^ ci, mj = bj ^ cj;
+        const float lmi = mi.norm(), lmj = mj.norm();
+        // Three collinear plane atoms have no normal. The tables pick triples
+        // whose smallest angle has a sine above 0.7, so this does not happen on
+        // real geometry; it is here so that a pathological frame is skipped
+        // rather than producing a NaN that spreads to every other term.
+        if (lmi < 1e-8f || lmj < 1e-8f)
+            continue;
+        const Vector3f ni = mi / lmi, nj = mj / lmj;
+
+        const Vector3f centre_i = (pi[0] + pi[1] + pi[2]) / 3.0f;
+        const Vector3f centre_j = (pj[0] + pj[1] + pj[2]) / 3.0f;
+        const Vector3f v = centre_j - centre_i;
+        const float d = v.norm();
+        if (d < 1e-6f || d >= cutoff)
+            continue;
+        const Vector3f rhat = v / d;
+
+        const float w = ni.dot(nj);
+        const float P = w * w;
+        const float ui = ni.dot(rhat), uj = nj.dot(rhat);
+        const float Ai = forcefield::stacking_alignment_factor(ui);
+        const float Aj = forcefield::stacking_alignment_factor(uj);
+        const float dAi = forcefield::stacking_alignment_derivative(ui);
+        const float dAj = forcefield::stacking_alignment_derivative(uj);
+        const float G = forcefield::stacking_distance_factor(d, r_st, sigma);
+        const float dG = forcefield::stacking_distance_derivative(d, r_st, sigma);
+
+        pairEnergy[k] = -eps * G * P * Ai * Aj;
+
+        // dE/dv: the distance through G, and rhat through both alignments.
+        const Vector3f dEdv = (rhat * (dG * P * Ai * Aj) + (ni - rhat * ui) * (G * P * dAi * Aj / d) +
+                               (nj - rhat * uj) * (G * P * Ai * dAj / d)) *
+                              (-eps);
+
+        // dE/dn of each side: the parallel factor through the OTHER normal, and
+        // its own alignment through rhat.
+        const Vector3f Ni = (nj * (2.0f * w * Ai) + rhat * (P * dAi)) * (-eps * G * Aj);
+        const Vector3f Nj = (ni * (2.0f * w * Aj) + rhat * (P * dAj)) * (-eps * G * Ai);
+        const Vector3f gi = (Ni - ni * ni.dot(Ni)) / lmi;
+        const Vector3f gj = (Nj - nj * nj.dot(Nj)) / lmj;
+
+        // Forces are -dE/dx, converted from kJ.mol-1.A-1 to the integrator's
+        // own unit the way every molar term in this code is.
+        // v = centre_j - centre_i, so dE/dp is -dEdv/3 on each atom of i and
+        // +dEdv/3 on each atom of j; the force is minus that.
+        const Vector3f share_i = dEdv * (conv / 3.0f);
+        const Vector3f share_j = dEdv * (-conv / 3.0f);
+
+        const Vector3f fi1 = (ci ^ gi) * -conv;
+        const Vector3f fi2 = (gi ^ bi) * -conv;
+        const Vector3f fj1 = (cj ^ gj) * -conv;
+        const Vector3f fj2 = (gj ^ bj) * -conv;
+
+        _stackingForceScratch[6 * k + 0] = share_i - fi1 - fi2;
+        _stackingForceScratch[6 * k + 1] = share_i + fi1;
+        _stackingForceScratch[6 * k + 2] = share_i + fi2;
+        _stackingForceScratch[6 * k + 3] = share_j - fj1 - fj2;
+        _stackingForceScratch[6 * k + 4] = share_j + fj1;
+        _stackingForceScratch[6 * k + 5] = share_j + fj2;
+    }
+
+    // Serial, like the hydrogen bond's: one particle can be in many stacking
+    // pairs at once, so this is a genuine write conflict rather than a
+    // question of summation order.
+    float stacking_energy = 0.0f;
+    for (size_t k = 0; k < pairs.size(); ++k)
+    {
+        for (unsigned a = 0; a < 3; ++a)
+        {
+            getParticle(_baseFrames[pairs[k].i].atoms[a]).addForce(_stackingForceScratch[6 * k + a]);
+            getParticle(_baseFrames[pairs[k].j].atoms[a]).addForce(_stackingForceScratch[6 * k + 3 + a]);
+        }
+        stacking_energy += pairEnergy[k];
+    }
+    _energies.stacking = stacking_energy;
+}
+
+std::pair<size_t, size_t> SpringNetwork::getStackingPairCensus() const
+{
+    size_t within = 0, sprung = 0;
+    if (_baseFrames.empty() || !_nsearch.stacking)
+        return {0, 0};
+    const float cutoff = getStackingCutoff();
+    auto centre = [&](const BaseFrame & f) {
+        return (getParticle(f.atoms[0]).getPosition() + getParticle(f.atoms[1]).getPosition() +
+                getParticle(f.atoms[2]).getPosition()) /
+               3.0f;
+    };
+    for (size_t fi = 0; fi < _baseFrames.size(); ++fi)
+        _nsearch.stacking->for_each_neighbor(_baseFrameAnchors[fi], [&](size_t candidate) {
+            const int fj = _frameOfAnchor[candidate];
+            if (fj <= static_cast<int>(fi))
+                return;
+            if ((centre(_baseFrames[static_cast<size_t>(fj)]) - centre(_baseFrames[fi])).norm() >= cutoff)
+                return;
+            within++;
+            for (unsigned a = 0; a < 3; ++a)
+                for (unsigned b = 0; b < 3; ++b)
+                    if (getParticle(_baseFrames[fi].atoms[a])
+                            .isInSpringNeighbors(
+                                static_cast<unsigned>(_baseFrames[static_cast<size_t>(fj)].atoms[b])))
+                    {
+                        sprung++;
+                        return;
+                    }
+        });
+    return {within, sprung};
+}
+
+void SpringNetwork::_setupStacking()
+{
+    if (!isStackingEnabled())
+        return;
+    if (getStackingCutoff() < 1e-6)
+        throw std::runtime_error("Stacking cutoff must be > 0");
+    if (_config.stacking.width <= 0.0)
+        logging::die("stacking.width (sigma) must be > 0: the distance factor is e^(-(r-r_st)^2/sigma).");
+    if (_baseFrames.empty())
+    {
+        logging::warning("stacking.enable is set but no base plane frame was installed: the term will do "
+                         "nothing. Check stacking.path and that the topology carries nucleic residues.");
+        return;
+    }
+
+    _baseFrameAnchors.clear();
+    _frameOfAnchor.assign(_particles.size(), -1);
+    for (size_t f = 0; f < _baseFrames.size(); ++f)
+    {
+        const size_t anchor = _baseFrames[f].atoms[0];
+        if (_frameOfAnchor[anchor] >= 0)
+            logging::die("Stacking: particle %zu is the first plane atom of two different base frames.", anchor);
+        _frameOfAnchor[anchor] = static_cast<int>(f);
+        _baseFrameAnchors.push_back(anchor);
+    }
+
+    // The grid is queried AT A PARTICLE -- atoms[0] -- while the term measures
+    // centre to centre, so the search radius has to cover the cutoff plus the
+    // offset at BOTH ends. Measured here rather than assumed: a nucleobase ring
+    // is rigid, so this offset is a property of the frames the table chose and
+    // cannot grow during a run. The margin is for the ring breathing under the
+    // mesh.
+    float widest = 0.0f;
+    for (const BaseFrame & f : _baseFrames)
+    {
+        const Vector3f centre = (getParticle(f.atoms[0]).getPosition() + getParticle(f.atoms[1]).getPosition() +
+                                 getParticle(f.atoms[2]).getPosition()) /
+                                3.0f;
+        widest = std::max(widest, (getParticle(f.atoms[0]).getPosition() - centre).norm());
+    }
+    const float margin = 0.5f;
+    const float radius = getStackingCutoff() + 2.0f * (widest + margin);
+
+    _nsearch.stacking = make_nsearch(_particles, radius, _baseFrameAnchors, getNeighborSkin(),
+                                     getCellWidthFor(radius));
+    _excludeProbeFromNeighborSearch(*_nsearch.stacking);
+
+    logging::info("Stacking: %zu base frame(s), well %.3g kJ.mol-1 at %.2f A (sigma %.3g A2), cutoff %.2f A, "
+                  "grid radius %.2f A (anchor offset up to %.2f A).",
+                  _baseFrames.size(), _config.stacking.epsilon * _config.stacking.scale,
+                  _config.stacking.equilibrium, _config.stacking.width, getStackingCutoff(), radius, widest);
+}
+
 // Calculate forces that apply on dynamic particles.
 void SpringNetwork::computeParticleForces()
 {
@@ -749,6 +988,12 @@ void SpringNetwork::computeForces()
         _assignHydrogenBondPairs();
         computeHydrogenBondForces();
     }
+    // Outside isSpringEnabled() too, and with no assignment phase of its own:
+    // unlike a hydrogen bond, stacking holds no slots and needs no partner to
+    // be chosen. Every pair of base planes within the cutoff contributes what
+    // its geometry is worth, the way the steric term does.
+    if (isStackingEnabled())
+        computeStackingForces();
     computeParticleForces();
 }
 
@@ -1022,6 +1267,17 @@ void SpringNetwork::_displayFrameData()
                       _energies.hbond, getHydrogenBondCount(), census[0], census[1], census[2], census[3]);
         if (!_config.hbond.log.empty())
             dumpHydrogenBonds(_config.hbond.log, _nbiter);
+    }
+    if (isStackingEnabled())
+    {
+        // The sprung count beside the total: a cutoff-built elastic network
+        // puts springs between stacked bases, and such a spring is a crude
+        // stand-in for exactly this term, so a report that hid the overlap
+        // would let the two double count unnoticed.
+        const std::pair<size_t, size_t> census = getStackingPairCensus();
+        logging::info("Stacking energy: %5.2f kJ.mol-1 over %zu base pair(s) within the cutoff, %zu of them "
+                      "also joined by a spring",
+                      _energies.stacking, census.first, census.second);
     }
     if (isPeptideBondEnabled())
     {
@@ -1455,6 +1711,7 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupElectrostatic();
     _setupHydrophobic();
     _setupHydrogenBond();
+    _setupStacking();
     // After the hydrogen bond term, whose out-of-plane lobe sites are what
     // brings a nucleophile into the attack conformation this then acts on.
     _peptidebond.setup(*this, conf.peptidebond);

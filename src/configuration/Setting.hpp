@@ -691,6 +691,53 @@ class HydrogenBondSetting : public EnergySetting
     }
 };
 
+// Base stacking, after HiRE-RNA v3 (arXiv:1404.0568). Same enable/scale/cutoff
+// triplet as EnergySetting, plus a `path` to the base plane table (see
+// IO/BasePlaneRuleReader.h and data/reducerules/*.stack) the way
+// HydrogenBondSetting carries its donor/acceptor table.
+//
+// The well's three numbers live HERE rather than in the force field, unlike the
+// hydrogen bond's, because there is one global parameter set: stacking has no
+// per-couple named groups to resolve. Their defaults are measured -- see
+// forcefield/energy/stacking.hpp for the measurement and its sample.
+class StackingSetting : public EnergySetting
+{
+  public:
+    std::string path;
+    double epsilon;     // well depth, kJ.mol-1
+    double equilibrium; // r_st, A
+    double width;       // sigma, A^2 -- the factor is e^(-(r-r_st)^2/sigma)
+
+    StackingSetting(const std::string & name)
+        : EnergySetting(name), path(), epsilon(8.0), equilibrium(3.92), width(0.85)
+    {
+        _parameterNames = {"enable", "scale", "cutoff", "path", "epsilon", "equilibrium", "width"};
+    }
+
+    void setFromString(const std::string & param, const std::string & s) override
+    {
+        if (param == "path")
+            path = s;
+        else if (param == "epsilon")
+            utils::string::from_string<decltype(epsilon)>(epsilon, s);
+        else if (param == "equilibrium")
+            utils::string::from_string<decltype(equilibrium)>(equilibrium, s);
+        else if (param == "width")
+            utils::string::from_string<decltype(width)>(width, s);
+        else
+            EnergySetting::setFromString(param, s);
+    }
+
+    void print(std::ostream & os = std::cout) const override
+    {
+        EnergySetting::print(os);
+        _mspFormatter.print("path", path, os);
+        _mspFormatter.print("epsilon", epsilon, os);
+        _mspFormatter.print("equilibrium", equilibrium, os);
+        _mspFormatter.print("width", width, os);
+    }
+};
+
 // The SECOND stage of making a covalent bond at run time: once two residues
 // have been held in the attack conformation long enough, the spring topology is
 // REWRITTEN so the new bond exists and cannot come undone.
