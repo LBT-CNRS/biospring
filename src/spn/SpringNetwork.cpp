@@ -167,6 +167,7 @@ void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
         logging::warning("Cannot open hydrogen bond log '%s'.", path.c_str());
         return;
     }
+    const int exponent = getHydrogenBondAngularExponent();
     out << "# step " << step << "\n";
     for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
         for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
@@ -187,10 +188,10 @@ void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
                 const Vector3f vhat = v / distance;
                 const Vector3f hd = donorDirection(d, vhat);
                 if (hd.norm() > 1e-6f)
-                    w *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat));
+                    w *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat), exponent);
                 const Vector3f ha = donorDirection(a, -vhat);
                 if (ha.norm() > 1e-6f)
-                    w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
+                    w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat), exponent);
             }
             // The planarity factor folded into the reported weight, so the log
             // says what the force applies, and appended as its own last column
@@ -277,8 +278,11 @@ SpringNetwork::HydrogenBondPlanarity SpringNetwork::hydrogenBondPlanarity(size_t
     const Vector3f e1b = pb[1] - pb[0], e2b = pb[2] - pb[0];
     const Vector3f ma = e1a ^ e2a, mb = e1b ^ e2b;
     const float lma = ma.norm(), lmb = mb.norm();
-    if (lma < 1e-8f || lmb < 1e-8f)
+    if (lma < BASE_PLANE_MIN_AREA || lmb < BASE_PLANE_MIN_AREA)
+    {
+        out.degenerate = true;
         return out;
+    }
     const Vector3f na = ma / lma, nb = mb / lmb;
     const Vector3f oa = (pa[0] + pa[1] + pa[2]) / 3.0f;
     const Vector3f ob = (pb[0] + pb[1] + pb[2]) / 3.0f;
@@ -468,6 +472,7 @@ void SpringNetwork::computeHydrogenBondForces()
         // than a second bond: see ParticleProperties::hasLobes.
         int donorLobes, acceptorLobes;
     };
+    const int exponent = getHydrogenBondAngularExponent();
     std::vector<Bond> bonds;
     bonds.reserve(_hbDonorSlot.size());
     for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
@@ -535,10 +540,10 @@ void SpringNetwork::computeHydrogenBondForces()
 
         const float cd = hasD ? dhat.dot(vhat) : 1.0f;
         const float ca = hasA ? ahat.dot(-vhat) : 1.0f;
-        const float wd = hasD ? forcefield::hydrogen_bond_angular_factor(cd) : 1.0f;
-        const float wa = hasA ? forcefield::hydrogen_bond_angular_factor(ca) : 1.0f;
-        const float dwd = hasD ? forcefield::hydrogen_bond_angular_derivative(cd) : 0.0f;
-        const float dwa = hasA ? forcefield::hydrogen_bond_angular_derivative(ca) : 0.0f;
+        const float wd = hasD ? forcefield::hydrogen_bond_angular_factor(cd, exponent) : 1.0f;
+        const float wa = hasA ? forcefield::hydrogen_bond_angular_factor(ca, exponent) : 1.0f;
+        const float dwd = hasD ? forcefield::hydrogen_bond_angular_derivative(cd, exponent) : 0.0f;
+        const float dwa = hasA ? forcefield::hydrogen_bond_angular_derivative(ca, exponent) : 0.0f;
         const float w = wd * wa;
 
         // Three sub-terms, each balanced on its OWN atoms rather than letting
@@ -673,6 +678,7 @@ void SpringNetwork::computeHydrogenBondForces()
     }
 
     float hbond_energy = 0.0f;
+    size_t degenerate_planes = 0;
     for (size_t k = 0; k < bonds.size(); ++k)
     {
         if (bonds[k].antecedent >= 0)
@@ -691,9 +697,15 @@ void SpringNetwork::computeHydrogenBondForces()
             for (unsigned slot = 0; slot < 6; ++slot)
                 getParticle(planarityScratch[k].atoms[slot])
                     .addForce(_hydrogenBondForceScratch[12 * k + 6 + slot]);
+        if (planarityScratch[k].degenerate)
+            degenerate_planes++;
         hbond_energy += pairEnergyScratch[k];
     }
 
+    if (degenerate_planes)
+        logging::warning("Hydrogen bond planarity: %zu bond(s) took a factor of 1 because a base plane frame "
+                         "has collapsed below %.2f A2 of area.",
+                         degenerate_planes, static_cast<double>(BASE_PLANE_MIN_AREA));
     _energies.hbond = hbond_energy;}
 
 // Base stacking, after HiRE-RNA v3 (Cragnolini, Laurin, Derreumaux & Pasquali,
@@ -753,6 +765,7 @@ void SpringNetwork::computeStackingForces()
 
     _stackingForceScratch.assign(pairs.size() * 6, Vector3f());
     std::vector<float> pairEnergy(pairs.size(), 0.0f);
+    std::vector<unsigned char> degenerateScratch(pairs.size(), 0);
 
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
@@ -773,12 +786,16 @@ void SpringNetwork::computeStackingForces()
         const Vector3f bj = pj[1] - pj[0], cj = pj[2] - pj[0];
         const Vector3f mi = bi ^ ci, mj = bj ^ cj;
         const float lmi = mi.norm(), lmj = mj.norm();
-        // Three collinear plane atoms have no normal. The tables pick triples
-        // whose smallest angle has a sine above 0.7, so this does not happen on
-        // real geometry; it is here so that a pathological frame is skipped
-        // rather than producing a NaN that spreads to every other term.
-        if (lmi < 1e-8f || lmj < 1e-8f)
+        // A frame whose three atoms have nearly collapsed onto a line has no
+        // usable normal, and the gradient below divides by this quantity -- so
+        // the threshold is the PHYSICAL one, not an epsilon. See
+        // BASE_PLANE_MIN_AREA; the tables pick triples whose smallest angle has
+        // a sine above 0.7, so this does not fire on healthy geometry.
+        if (lmi < BASE_PLANE_MIN_AREA || lmj < BASE_PLANE_MIN_AREA)
+        {
+            degenerateScratch[k] = 1;
             continue;
+        }
         const Vector3f ni = mi / lmi, nj = mj / lmj;
 
         const Vector3f centre_i = (pi[0] + pi[1] + pi[2]) / 3.0f;
@@ -847,6 +864,11 @@ void SpringNetwork::computeStackingForces()
         stacking_energy += pairEnergy[k];
     }
     _energies.stacking = stacking_energy;
+    const size_t degenerate = std::count(degenerateScratch.begin(), degenerateScratch.end(), 1);
+    if (degenerate)
+        logging::warning("Stacking: %zu base pair(s) skipped because a plane frame has collapsed below %.2f A2 "
+                         "of area. The geometry has already gone wrong where that happens.",
+                         degenerate, static_cast<double>(BASE_PLANE_MIN_AREA));
 }
 
 std::pair<size_t, size_t> SpringNetwork::getStackingPairCensus() const
@@ -2135,6 +2157,7 @@ std::vector<size_t> SpringNetwork::_donorAcceptorParticleIndexes() const
 void SpringNetwork::_assignHydrogenBondPairs()
 {
     const float cutoff = getHydrogenBondCutoff();
+    const int exponent = getHydrogenBondAngularExponent();
     const size_t n = _particles.size();
     if (_hbDonorOffset.size() != n + 1)
         return;
@@ -2259,13 +2282,13 @@ void SpringNetwork::_assignHydrogenBondPairs()
                     const Vector3f vhat = (q.getPosition() - p.getPosition()) / distance;
                     const Vector3f hd = donorDirection(p, vhat);
                     if (hd.norm() > 1e-6f)
-                        weight *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat));
+                        weight *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat), exponent);
                     // The acceptor's own geometry decides too: a lone pair
                     // pointing away forbids the bond as surely as a hydrogen
                     // pointing away does.
                     const Vector3f ha = donorDirection(q, -vhat);
                     if (ha.norm() > 1e-6f)
-                        weight *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
+                        weight *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat), exponent);
                 }
                 // Ranked on the well this COUPLE would use, not the force
                 // field's: a pair that carries a group is worth what its own

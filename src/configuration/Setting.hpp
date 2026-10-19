@@ -690,11 +690,21 @@ class HydrogenBondSetting : public EnergySetting
     // 30-fold and 11-fold discrimination for a 13 % attenuation that leaves the
     // existing well depth usable as it stands.
     double planaritywidth;
+    // The exponent in the angular weight max(cos theta, 0)^n, applied at BOTH
+    // ends. Two is what this code has always used; HiRE-RNA v3 uses SIX
+    // (nu(alpha) = cos^6), a far narrower acceptance. Unlike the planarity
+    // factor this says nothing about bases, so it is the one part of the
+    // HiRE-RNA treatment that can change a PROTEIN hydrogen bond.
+    //
+    // The OpenCL kernel hard-codes two, so a value other than two is refused on
+    // that backend rather than silently disagreeing with the CPU.
+    int angularexponent;
 
     HydrogenBondSetting(const std::string & name)
-        : EnergySetting(name), path(), log(), planarity(false), planaritywidth(2.5)
+        : EnergySetting(name), path(), log(), planarity(false), planaritywidth(2.5), angularexponent(2)
     {
-        _parameterNames = {"enable", "scale", "cutoff", "path", "log", "planarity", "planaritywidth"};
+        _parameterNames = {"enable",    "scale",          "cutoff", "path", "log", "planarity",
+                           "planaritywidth", "angularexponent"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -707,6 +717,8 @@ class HydrogenBondSetting : public EnergySetting
             _parse_bool(planarity, s, param);
         else if (param == "planaritywidth")
             utils::string::from_string<decltype(planaritywidth)>(planaritywidth, s);
+        else if (param == "angularexponent")
+            utils::string::from_string<decltype(angularexponent)>(angularexponent, s);
         else
             EnergySetting::setFromString(param, s);
     }
@@ -718,6 +730,7 @@ class HydrogenBondSetting : public EnergySetting
         _mspFormatter.print("log", log, os);
         _mspFormatter.print("planarity", planarity, os);
         _mspFormatter.print("planaritywidth", planaritywidth, os);
+        _mspFormatter.print("angularexponent", angularexponent, os);
     }
 };
 

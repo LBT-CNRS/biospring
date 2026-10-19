@@ -432,6 +432,20 @@ class SpringNetwork
     {
         unsigned atoms[3];
     };
+
+    /// |e1 x e2| of a base plane frame -- twice the triangle's area, in A^2 --
+    /// below which both terms that use the frame refuse to differentiate
+    /// through it. BOTH of their gradients divide by this quantity, so a
+    /// collapsing ring does not give a slightly wrong force, it gives an
+    /// arbitrarily large one.
+    ///
+    /// Measured on 8PKL: 4.80 A^2 for a purine frame and 4.73 to 5.33 for a
+    /// pyrimidine one. 1.0 A^2 is a ring squashed to a fifth of its area, which
+    /// a mesh-held nucleobase cannot reach -- so this never fires on healthy
+    /// geometry and bounds the force when something has already gone wrong.
+    /// The old threshold was 1e-8, which bounded nothing: it admitted a
+    /// gradient a hundred million times too large.
+    static constexpr float BASE_PLANE_MIN_AREA = 1.0f;
     void setBaseFrames(const std::vector<BaseFrame> & frames) { _baseFrames = frames; }
     /// Which base frame each particle's residue has, -1 for none. Needed by the
     /// planarity factor, which is asked about a donor or an acceptor atom
@@ -463,12 +477,17 @@ class SpringNetwork
     struct HydrogenBondPlanarity
     {
         bool active = false;
+        // A base whose three plane atoms have very nearly collapsed onto a
+        // line: see BASE_PLANE_MIN_AREA. The factor is left at 1 and the pair
+        // reported, rather than taking a gradient that divides by that area.
+        bool degenerate = false;
         float factor = 1.0f;
         unsigned atoms[6] = {0, 0, 0, 0, 0, 0};
         Vector3f gradient[6];
     };
     HydrogenBondPlanarity hydrogenBondPlanarity(size_t a, size_t b) const;
     bool isHydrogenBondPlanarityEnabled() const { return _config.hbond.planarity; }
+    int getHydrogenBondAngularExponent() const { return _config.hbond.angularexponent; }
     // -1 if particle `index` currently holds no hydrogen bond at all,
     // otherwise the index of one of its partners. Used by the core-repulsion
     // term, which only needs to know whether two particles are already bound

@@ -336,6 +336,7 @@ inline Configuration defaultConfiguration()
     // configuration written before it existed may start feeling it.
     config.hbond.planarity = false;
     config.hbond.planaritywidth = 2.5;
+    config.hbond.angularexponent = 2;
 
     // Off, and with no table: a network built before the term existed must not
     // start collecting a stacking energy because it was upgraded. The cutoff is

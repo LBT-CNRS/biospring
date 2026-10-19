@@ -255,3 +255,79 @@ TEST(HydrogenBondPlanarity, a_narrower_width_is_always_stricter_and_never_reward
         previous = factor;
     }
 }
+
+// The angular exponent generalises max(cos theta, 0)^2 to ^n, which is the one
+// part of HiRE-RNA's hydrogen bond treatment that says nothing about bases and
+// so can reach a protein. Its derivative is n cos^(n-1), a second place to get
+// an exponent wrong, so the gradient is checked at every exponent the setting
+// is likely to carry -- including the default, which must not have moved.
+class AngularExponent : public ::testing::TestWithParam<int>
+{
+};
+
+TEST_P(AngularExponent, forces_match_energy_gradient_by_finite_differences)
+{
+    spn::SpringNetwork spn;
+    build(spn, SKEWED);
+    configuration::Configuration conf = hbondOnly(true);
+    conf.hbond.angularexponent = GetParam();
+    spn.setup(conf);
+
+    const float e0 = energyOf(spn);
+    std::array<Vector3f, 8> analytic;
+    for (size_t i = 0; i < 8; ++i)
+        analytic[i] = spn.getParticle(i).getForce();
+    ASSERT_LT(e0, -0.05f) << "exponent " << GetParam() << " left no bond to differentiate";
+
+    const float h = 1e-3f;
+    for (size_t i = 0; i < 8; ++i)
+        for (int dim = 0; dim < 3; ++dim)
+        {
+            auto set_dim = [&](Vector3f & v, float value) {
+                if (dim == 0)
+                    v.setX(value);
+                else if (dim == 1)
+                    v.setY(value);
+                else
+                    v.setZ(value);
+            };
+            auto get_dim = [&](const Vector3f & v) {
+                return dim == 0 ? v.getX() : (dim == 1 ? v.getY() : v.getZ());
+            };
+            const Vector3f saved = spn.getParticle(i).getPosition();
+            Vector3f displaced = saved;
+            set_dim(displaced, get_dim(saved) + h);
+            spn.getParticle(i).setPosition(displaced);
+            const float e_plus = energyOf(spn);
+            set_dim(displaced, get_dim(saved) - h);
+            spn.getParticle(i).setPosition(displaced);
+            const float e_minus = energyOf(spn);
+            spn.getParticle(i).setPosition(saved);
+            const float fd = -(e_plus - e_minus) / (2.0f * h);
+            const float an =
+                get_dim(analytic[i]) / static_cast<float>(biospring::forcefield::GLOBAL_SPRING_FORCE_CONVERT);
+            EXPECT_NEAR(fd, an, 3e-2f * std::max(1.0f, std::abs(an)))
+                << "exponent " << GetParam() << " atom " << i << " dim " << dim;
+        }
+}
+
+INSTANTIATE_TEST_SUITE_P(TwoFourAndSix, AngularExponent, ::testing::Values(1, 2, 3, 4, 6, 8));
+
+// A higher exponent is strictly stricter off-axis and leaves a perfectly
+// aligned bond alone, and the default must still be two.
+TEST(HydrogenBondPlanarity, a_higher_angular_exponent_is_stricter_off_axis)
+{
+    EXPECT_FLOAT_EQ(forcefield::hydrogen_bond_angular_factor(1.0f, 2),
+                    forcefield::hydrogen_bond_angular_factor(1.0f, 6));
+    EXPECT_LT(forcefield::hydrogen_bond_angular_factor(0.8f, 6),
+              forcefield::hydrogen_bond_angular_factor(0.8f, 2));
+    // Behind the donor is not a weak bond, it is not one at all, at any
+    // exponent -- including the odd ones, where the clamp is what prevents a
+    // NEGATIVE weight rather than a revived one.
+    for (const int n : {1, 2, 3, 6})
+    {
+        EXPECT_FLOAT_EQ(forcefield::hydrogen_bond_angular_factor(-0.5f, n), 0.0f) << "exponent " << n;
+        EXPECT_FLOAT_EQ(forcefield::hydrogen_bond_angular_derivative(-0.5f, n), 0.0f) << "exponent " << n;
+    }
+    EXPECT_FLOAT_EQ(forcefield::hydrogen_bond_angular_factor(0.7f), forcefield::hydrogen_bond_angular_factor(0.7f, 2));
+}

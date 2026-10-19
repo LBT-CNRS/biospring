@@ -43,22 +43,48 @@ inline float biospring_hbond_force_module(float distance, float welldepth, float
 
 // ---- Angular weight -----------------------------------------------------
 //
-// w = max(cos theta, 0)^2. Clamped at zero rather than squared through: an
-// acceptor sitting BEHIND the donor is not a weak hydrogen bond, it is not one
-// at all, and cos^2 alone would revive it with the sign lost.
+// w = max(cos theta, 0)^n, n = 2 by default. Clamped at zero rather than raised
+// through: an acceptor sitting BEHIND the donor is not a weak hydrogen bond, it
+// is not one at all, and an even power alone would revive it with the sign lost.
+//
+// n is a setting because HiRE-RNA v3 uses SIX where this has always used two
+// (its nu(alpha) = cos^6(alpha - alpha0)), which is a far narrower angular
+// acceptance. The exponent is a small integer, so the power is a loop rather
+// than a pow() call: at n = 2 that is one multiply, and the function is on the
+// innermost path of the term.
 
 /// @param cos_theta Cosine of the angle between the side's own direction and
 ///     the bond axis.
 /// @return Dimensionless weight in [0, 1].
-inline float biospring_hbond_angular_factor(float cos_theta)
+inline float biospring_hbond_angular_factor_n(float cos_theta, int exponent)
 {
-    return cos_theta > 0.0f ? cos_theta * cos_theta : 0.0f;
+    if (cos_theta <= 0.0f)
+        return 0.0f;
+    float w = 1.0f;
+    for (int k = 0; k < exponent; ++k)
+        w *= cos_theta;
+    return w;
 }
 
 /// d(weight)/d(cos theta), for the force.
+inline float biospring_hbond_angular_derivative_n(float cos_theta, int exponent)
+{
+    if (cos_theta <= 0.0f || exponent < 1)
+        return 0.0f;
+    float w = (float) exponent;
+    for (int k = 1; k < exponent; ++k)
+        w *= cos_theta;
+    return w;
+}
+
+inline float biospring_hbond_angular_factor(float cos_theta)
+{
+    return biospring_hbond_angular_factor_n(cos_theta, 2);
+}
+
 inline float biospring_hbond_angular_derivative(float cos_theta)
 {
-    return cos_theta > 0.0f ? 2.0f * cos_theta : 0.0f;
+    return biospring_hbond_angular_derivative_n(cos_theta, 2);
 }
 
 // ---- Planarity factor --------------------------------------------------

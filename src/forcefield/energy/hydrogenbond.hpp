@@ -70,15 +70,15 @@ inline float hydrogen_bond_force_module(float distance, float wellDepth, float e
 
 /// @param cos_theta Cosine of the angle at the donor.
 /// @return Dimensionless weight in [0, 1].
-inline float hydrogen_bond_angular_factor(float cos_theta)
+inline float hydrogen_bond_angular_factor(float cos_theta, int exponent = 2)
 {
-    return biospring_hbond_angular_factor(cos_theta);
+    return biospring_hbond_angular_factor_n(cos_theta, exponent);
 }
 
 /// d(weight)/d(cos theta), for the force.
-inline float hydrogen_bond_angular_derivative(float cos_theta)
+inline float hydrogen_bond_angular_derivative(float cos_theta, int exponent = 2)
 {
-    return biospring_hbond_angular_derivative(cos_theta);
+    return biospring_hbond_angular_derivative_n(cos_theta, exponent);
 }
 
 /// HiRE-RNA v3's planarity factor, one plane atom at a time. The form and why
