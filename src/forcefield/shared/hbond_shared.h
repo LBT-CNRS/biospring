@@ -61,4 +61,35 @@ inline float biospring_hbond_angular_derivative(float cos_theta)
     return cos_theta > 0.0f ? 2.0f * cos_theta : 0.0f;
 }
 
+// ---- Planarity factor --------------------------------------------------
+//
+// HiRE-RNA v3's equation (5), which MULTIPLIES the well. Two bases pair when
+// they meet edge to edge IN A SHARED PLANE, and the factor says how well they
+// do: each of one base's plane atoms contributes e^(-(d/delta)^2) for its
+// distance d out of the OTHER base's plane, the three are averaged, and the two
+// sides multiply.
+//
+// Averaging rather than summing, unlike the reference's bare sum, so that a
+// perfectly coplanar pair scores exactly 1. That matters here and not there:
+// this multiplies a well depth that is already calibrated, and a factor that
+// could exceed 1 would silently recalibrate it.
+//
+// It is a REDUCTION, never a reward: in [0, 1], 1 only at perfect coplanarity.
+
+/// One plane atom's contribution.
+/// @param out_of_plane Signed distance from the partner base's plane, in A.
+/// @param delta        Width in A; the contribution is e^(-(d/delta)^2).
+inline float biospring_hbond_planarity_term(float out_of_plane, float delta)
+{
+    const float u = out_of_plane / delta;
+    return exp(-u * u);
+}
+
+/// d(term)/d(out_of_plane), in A-1.
+inline float biospring_hbond_planarity_derivative(float out_of_plane, float delta)
+{
+    const float u = out_of_plane / delta;
+    return -2.0f * out_of_plane / (delta * delta) * exp(-u * u);
+}
+
 #endif // __BIOSPRING_HBOND_SHARED_H__

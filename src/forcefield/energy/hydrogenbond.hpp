@@ -81,6 +81,20 @@ inline float hydrogen_bond_angular_derivative(float cos_theta)
     return biospring_hbond_angular_derivative(cos_theta);
 }
 
+/// HiRE-RNA v3's planarity factor, one plane atom at a time. The form and why
+/// it is averaged rather than summed are documented in
+/// forcefield/shared/hbond_shared.h.
+inline float hydrogen_bond_planarity_term(float out_of_plane, float delta)
+{
+    return biospring_hbond_planarity_term(out_of_plane, delta);
+}
+
+/// d(term)/d(out_of_plane), for the force.
+inline float hydrogen_bond_planarity_derivative(float out_of_plane, float delta)
+{
+    return biospring_hbond_planarity_derivative(out_of_plane, delta);
+}
+
 } // namespace forcefield
 } // namespace biospring
 

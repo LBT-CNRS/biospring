@@ -25,6 +25,7 @@ class Configuration
     HydrophobicitySetting hydrophobicity;
     HydrogenBondSetting hbond;
     StackingSetting stacking;
+    BasePlaneSetting baseplane;
     // Not an energy term: the irreversible topology rewrite that makes a bond
     // real once the hbond term above has held its two ends in the attack
     // conformation. See PeptideBondSetting.
@@ -79,7 +80,7 @@ class Configuration
 
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"), hbond("hbond"),
-          stacking("stacking"), peptidebond("peptidebond"), electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"), thermostat("thermostat"),
+          stacking("stacking"), baseplane("baseplane"), peptidebond("peptidebond"), electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"), thermostat("thermostat"),
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"),
           electrostaticgrid("electrostaticgrid"), densitygrid("densitygrid"), probe("probe"),
           rigidbody("rigidbody"), dihedralphi("dihedralphi"), dihedralpsi("dihedralpsi"),
@@ -93,6 +94,7 @@ class Configuration
         _register(hydrophobicity);
         _register(hbond);
         _register(stacking);
+        _register(baseplane);
         _register(peptidebond);
         _register(electrostatic);
         _register(imp);
@@ -129,6 +131,8 @@ class Configuration
         hbond.print();
         os << "\n";
         stacking.print();
+        os << "\n";
+        baseplane.print();
         os << "\n";
         peptidebond.print();
         os << "\n";
@@ -236,6 +240,8 @@ class Configuration
             hbond.setFromString(name, value);
         else if (group == stacking.name)
             stacking.setFromString(name, value);
+        else if (group == baseplane.name)
+            baseplane.setFromString(name, value);
         else if (group == peptidebond.name)
             peptidebond.setFromString(name, value);
         else if (group == electrostatic.name)
@@ -326,6 +332,10 @@ inline Configuration defaultConfiguration()
     config.hbond.scale = 1.0;
     config.hbond.path = "";
     config.hbond.log = "";
+    // Off: the planarity factor multiplies an already calibrated well, so no
+    // configuration written before it existed may start feeling it.
+    config.hbond.planarity = false;
+    config.hbond.planaritywidth = 2.5;
 
     // Off, and with no table: a network built before the term existed must not
     // start collecting a stacking energy because it was upgraded. The cutoff is
@@ -335,10 +345,11 @@ inline Configuration defaultConfiguration()
     config.stacking.enable = false;
     config.stacking.cutoff = 7.0;
     config.stacking.scale = 1.0;
-    config.stacking.path = "";
     config.stacking.epsilon = 8.0;
     config.stacking.equilibrium = 3.92;
     config.stacking.width = 0.85;
+    // Shared by the stacking term and the hydrogen bond's planarity factor.
+    config.baseplane.path = "";
 
     // Off, and with no rules path: forming a covalent bond is never something
     // an .msp should start doing because it was upgraded.

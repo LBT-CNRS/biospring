@@ -177,14 +177,17 @@ int main(int argc, char ** argv)
     }
 
     // Before setup() too: _setupStacking builds its neighbour grid from the
-    // frames installed here, and measures its search radius on them.
-    if (config.stacking.enable)
+    // frames installed here, and measures its search radius on them. TWO terms
+    // need them -- stacking, and the hydrogen bond's planarity factor -- so the
+    // table is read when either asks for it.
+    if (config.stacking.enable || config.hbond.planarity)
     {
-        if (config.stacking.path.empty())
-            logging::die("stacking.enable is set but stacking.path (base plane table) is not.");
+        if (config.baseplane.path.empty())
+            logging::die("%s needs baseplane.path (the base plane table), which is not set.",
+                         config.stacking.enable ? "stacking.enable" : "hbond.planarity");
 
-        logging::status("Reading base plane table %s.", config.stacking.path.c_str());
-        biospring::io::BasePlaneRuleReader planereader(config.stacking.path);
+        logging::status("Reading base plane table %s.", config.baseplane.path.c_str());
+        biospring::io::BasePlaneRuleReader planereader(config.baseplane.path);
         planereader.read();
         planereader.buildFrames(*spn);
     }

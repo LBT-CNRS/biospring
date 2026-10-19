@@ -433,6 +433,14 @@ class SpringNetwork
         unsigned atoms[3];
     };
     void setBaseFrames(const std::vector<BaseFrame> & frames) { _baseFrames = frames; }
+    /// Which base frame each particle's residue has, -1 for none. Needed by the
+    /// planarity factor, which is asked about a donor or an acceptor atom
+    /// rather than about one of the three plane atoms.
+    void setBaseFrameOfParticle(const std::vector<int> & of_particle) { _frameOfParticle = of_particle; }
+    int getBaseFrameOfParticle(size_t index) const
+    {
+        return index < _frameOfParticle.size() ? _frameOfParticle[index] : -1;
+    }
     const std::vector<BaseFrame> & getBaseFrames() const { return _baseFrames; }
 
     /// How many base pairs are within the stacking cutoff right now, and how
@@ -441,6 +449,26 @@ class SpringNetwork
     /// stand-in for exactly what this term computes, so the second count is
     /// what says whether the two are double counting.
     std::pair<size_t, size_t> getStackingPairCensus() const;
+
+    /// HiRE-RNA v3's planarity factor for one candidate pair, with the gradient
+    /// the force needs. `factor` is 1 and `active` false whenever the factor
+    /// cannot apply -- the setting off, or either end's residue carrying no base
+    /// plane -- so a protein hydrogen bond is untouched to the bit.
+    ///
+    /// `gradient[k]` is d(factor)/d(position of atoms[k]), the six being the
+    /// three plane atoms of each end's residue, in that order. Returned
+    /// together with the factor rather than recomputed, because this quantity
+    /// is needed in three places -- the candidate ranking, the energy and the
+    /// force -- and a geometry computed three times is a geometry that drifts.
+    struct HydrogenBondPlanarity
+    {
+        bool active = false;
+        float factor = 1.0f;
+        unsigned atoms[6] = {0, 0, 0, 0, 0, 0};
+        Vector3f gradient[6];
+    };
+    HydrogenBondPlanarity hydrogenBondPlanarity(size_t a, size_t b) const;
+    bool isHydrogenBondPlanarityEnabled() const { return _config.hbond.planarity; }
     // -1 if particle `index` currently holds no hydrogen bond at all,
     // otherwise the index of one of its partners. Used by the core-repulsion
     // term, which only needs to know whether two particles are already bound
@@ -963,6 +991,7 @@ class SpringNetwork
     // -1 for every particle that is not a frame's first atom.
     std::vector<size_t> _baseFrameAnchors;
     std::vector<int> _frameOfAnchor;
+    std::vector<int> _frameOfParticle;
 
 
     Energies _energies;

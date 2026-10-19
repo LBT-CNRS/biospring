@@ -668,9 +668,33 @@ class HydrogenBondSetting : public EnergySetting
     // neighbouring residues.
     std::string log;
 
-    HydrogenBondSetting(const std::string & name) : EnergySetting(name), path(), log()
+    // HiRE-RNA v3's planarity factor (arXiv:1404.0568, equation 5), which
+    // MULTIPLIES the well: a pair of bases scores 1 when every one of their
+    // plane atoms lies in the other's plane and falls off as they skew. It
+    // needs a base plane at BOTH ends (baseplane.path), so a residue without
+    // one -- every amino acid -- keeps a factor of exactly 1 and behaves as
+    // before, to the bit.
+    //
+    // This is deliberately NOT applied to protein backbone hydrogen bonds even
+    // though their amide plane is available. In an alpha helix the donor's and
+    // the acceptor's peptide planes are NOT coplanar, so requiring coplanarity
+    // would unmake the helix. Coplanarity is a property of two aromatic rings
+    // meeting edge to edge, not of an amide bond.
+    bool planarity;
+    // delta in equation (5), in A. Measured on 8PKL's 1893 real base pairs
+    // (two or more base-edge N/O contacts under 3.3 A, excluding sequence
+    // neighbours, which are STACKED rather than paired): their plane atoms sit
+    // 0.55 A out of the partner's plane at the median, against 3.32 A for a
+    // stack and 2.80 A for a single skewed contact. At 2.5 A a real pair keeps
+    // 87 % of its well while a stack keeps 3 % and a skewed contact 8 % --
+    // 30-fold and 11-fold discrimination for a 13 % attenuation that leaves the
+    // existing well depth usable as it stands.
+    double planaritywidth;
+
+    HydrogenBondSetting(const std::string & name)
+        : EnergySetting(name), path(), log(), planarity(false), planaritywidth(2.5)
     {
-        _parameterNames = {"enable", "scale", "cutoff", "path", "log"};
+        _parameterNames = {"enable", "scale", "cutoff", "path", "log", "planarity", "planaritywidth"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -679,6 +703,10 @@ class HydrogenBondSetting : public EnergySetting
             path = s;
         else if (param == "log")
             log = s;
+        else if (param == "planarity")
+            _parse_bool(planarity, s, param);
+        else if (param == "planaritywidth")
+            utils::string::from_string<decltype(planaritywidth)>(planaritywidth, s);
         else
             EnergySetting::setFromString(param, s);
     }
@@ -688,13 +716,35 @@ class HydrogenBondSetting : public EnergySetting
         EnergySetting::print(os);
         _mspFormatter.print("path", path, os);
         _mspFormatter.print("log", log, os);
+        _mspFormatter.print("planarity", planarity, os);
+        _mspFormatter.print("planaritywidth", planaritywidth, os);
     }
 };
 
+// Where the base plane frames come from. Its own group because TWO terms read
+// them: the stacking term, whose whole geometry they are, and the hydrogen
+// bond's planarity factor. Filing the path inside either one would make the
+// other depend on a setting named after something it is not.
+class BasePlaneSetting : public SettingBase
+{
+  public:
+    std::string path;
+
+    BasePlaneSetting(const std::string & name) : SettingBase(name), path() { _parameterNames = {"path"}; }
+
+    void setFromString(const std::string & param, const std::string & s) override
+    {
+        if (param == "path")
+            path = s;
+        else
+            logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
+    }
+
+    void print(std::ostream & os = std::cout) const override { _mspFormatter.print("path", path, os); }
+};
+
 // Base stacking, after HiRE-RNA v3 (arXiv:1404.0568). Same enable/scale/cutoff
-// triplet as EnergySetting, plus a `path` to the base plane table (see
-// IO/BasePlaneRuleReader.h and data/reducerules/*.stack) the way
-// HydrogenBondSetting carries its donor/acceptor table.
+// triplet as EnergySetting; the frames come from baseplane.path.
 //
 // The well's three numbers live HERE rather than in the force field, unlike the
 // hydrogen bond's, because there is one global parameter set: stacking has no
@@ -703,22 +753,19 @@ class HydrogenBondSetting : public EnergySetting
 class StackingSetting : public EnergySetting
 {
   public:
-    std::string path;
     double epsilon;     // well depth, kJ.mol-1
     double equilibrium; // r_st, A
     double width;       // sigma, A^2 -- the factor is e^(-(r-r_st)^2/sigma)
 
     StackingSetting(const std::string & name)
-        : EnergySetting(name), path(), epsilon(8.0), equilibrium(3.92), width(0.85)
+        : EnergySetting(name), epsilon(8.0), equilibrium(3.92), width(0.85)
     {
-        _parameterNames = {"enable", "scale", "cutoff", "path", "epsilon", "equilibrium", "width"};
+        _parameterNames = {"enable", "scale", "cutoff", "epsilon", "equilibrium", "width"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
     {
-        if (param == "path")
-            path = s;
-        else if (param == "epsilon")
+        if (param == "epsilon")
             utils::string::from_string<decltype(epsilon)>(epsilon, s);
         else if (param == "equilibrium")
             utils::string::from_string<decltype(equilibrium)>(equilibrium, s);
@@ -731,7 +778,6 @@ class StackingSetting : public EnergySetting
     void print(std::ostream & os = std::cout) const override
     {
         EnergySetting::print(os);
-        _mspFormatter.print("path", path, os);
         _mspFormatter.print("epsilon", epsilon, os);
         _mspFormatter.print("equilibrium", equilibrium, os);
         _mspFormatter.print("width", width, os);

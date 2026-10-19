@@ -77,6 +77,7 @@ set(TEST_MODULES
     RigidBodiesManager
     ReduceRuleReader
     HydrogenBondGroups
+    HydrogenBondPlanarity
     PeptideBond
     PeptideSite
     Stacking

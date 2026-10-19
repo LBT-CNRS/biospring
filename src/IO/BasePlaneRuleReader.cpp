@@ -79,6 +79,11 @@ void BasePlaneRuleReader::buildFrames(spn::SpringNetwork & spn) const
     }
 
     std::vector<spn::SpringNetwork::BaseFrame> frames;
+    // Which frame each PARTICLE's residue has, for a caller holding an atom
+    // rather than a residue -- the planarity factor is asked about a donor or
+    // an acceptor, which is not generally one of the three plane atoms.
+    std::vector<int> frame_of_particle(spn.getNumberOfParticles(), -1);
+    std::map<std::pair<std::string, unsigned>, int> frame_of_residue;
     unsigned nb_incomplete = 0;
     for (const auto & residue : residues)
     {
@@ -104,7 +109,19 @@ void BasePlaneRuleReader::buildFrames(spn::SpringNetwork & spn) const
             nb_incomplete++;
             continue;
         }
+        frame_of_residue[std::make_pair(std::get<0>(residue), std::get<1>(residue))] =
+            static_cast<int>(frames.size());
         frames.push_back(frame);
+    }
+
+    // One pass, after the frames are known: scanning every particle per framed
+    // residue instead would be 4757 x 100 000 comparisons on a ribosome.
+    for (unsigned i = 0; i < spn.getNumberOfParticles(); ++i)
+    {
+        const spn::Particle & p = spn.getParticle(i);
+        const auto found = frame_of_residue.find(std::make_pair(p.getChainName(), p.getResId()));
+        if (found != frame_of_residue.end())
+            frame_of_particle[i] = found->second;
     }
 
     if (nb_incomplete)
@@ -113,6 +130,7 @@ void BasePlaneRuleReader::buildFrames(spn::SpringNetwork & spn) const
                          nb_incomplete);
     logging::info("BasePlaneRuleReader: %d base frame(s) installed.", static_cast<int>(frames.size()));
     spn.setBaseFrames(frames);
+    spn.setBaseFrameOfParticle(frame_of_particle);
 }
 
 } // namespace io

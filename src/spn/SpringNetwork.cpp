@@ -192,9 +192,16 @@ void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
                 if (ha.norm() > 1e-6f)
                     w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
             }
+            // The planarity factor folded into the reported weight, so the log
+            // says what the force applies, and appended as its own last column
+            // so it can be read on its own. Appended rather than inserted: the
+            // first eleven columns keep their meaning and their position.
+            const float planarity = hydrogenBondPlanarity(i, static_cast<size_t>(j)).factor;
+            w *= planarity;
             out << d.getChainName() << ' ' << d.getResId() << ' ' << d.getResName() << ' ' << d.getName() << ' '
                 << a.getChainName() << ' ' << a.getResId() << ' ' << a.getResName() << ' ' << a.getName() << ' '
-                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << '\n';
+                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << ' '
+                << planarity << '\n';
         }
 }
 
@@ -217,6 +224,113 @@ bool SpringNetwork::areHydrogenBonded(size_t a, size_t b) const
             if (_hbDonorSlot[s] == static_cast<int>(a))
                 return true;
     return false;
+}
+
+// HiRE-RNA v3's planarity factor (arXiv:1404.0568, equation 5) and its
+// gradient. The factor is
+//
+//     Pl = Fi Fj,   Fi = (1/3) sum_k g(s_k),   g(s) = e^(-(s/delta)^2)
+//
+// where s_k is the distance of the k-th plane atom of residue j out of the
+// PLANE of residue i, and Fj the same with the roles swapped. It multiplies the
+// well, so a pair of bases that meet edge to edge in a shared plane keeps its
+// full depth and a skewed contact loses most of it.
+//
+// THE GRADIENT. Each F depends on six atoms: the three whose out-of-plane
+// distances it measures, and the three that define the plane it measures them
+// from -- through the centroid AND through the normal. Writing e1 = p1 - p0,
+// e2 = p2 - p0, m = e1 x e2, n = m/|m|, o = (p0+p1+p2)/3 and
+//
+//     Si = sum_k g'(s_k),   Vi = (1/3) sum_k g'(s_k) (q_k - o_i),
+//     Gi = (Vi - n_i (n_i.Vi)) / |m_i|
+//
+// the three plane atoms of i each take -(Si/9) n_i from the centroid, and from
+// the normal p1 takes e2 x Gi, p2 takes Gi x e1 and p0 minus their sum -- so
+// the normal's three forces cancel exactly, as they must. The partner's atom
+// q_k takes (1/3) g'(s_k) n_i. Checked against the numerical gradient.
+SpringNetwork::HydrogenBondPlanarity SpringNetwork::hydrogenBondPlanarity(size_t a, size_t b) const
+{
+    HydrogenBondPlanarity out;
+    if (!isHydrogenBondPlanarityEnabled())
+        return out;
+    const int fa = getBaseFrameOfParticle(a), fb = getBaseFrameOfParticle(b);
+    // No plane at one end is the ordinary case, not an error: it is every amino
+    // acid, every sugar and every phosphate. Same residue would mean one base
+    // paired with itself.
+    if (fa < 0 || fb < 0 || fa == fb)
+        return out;
+
+    const float delta = static_cast<float>(_config.hbond.planaritywidth);
+    const BaseFrame & Fa = _baseFrames[static_cast<size_t>(fa)];
+    const BaseFrame & Fb = _baseFrames[static_cast<size_t>(fb)];
+
+    Vector3f pa[3], pb[3];
+    for (unsigned k = 0; k < 3; ++k)
+    {
+        pa[k] = getParticle(Fa.atoms[k]).getPosition();
+        pb[k] = getParticle(Fb.atoms[k]).getPosition();
+        out.atoms[k] = Fa.atoms[k];
+        out.atoms[3 + k] = Fb.atoms[k];
+    }
+
+    const Vector3f e1a = pa[1] - pa[0], e2a = pa[2] - pa[0];
+    const Vector3f e1b = pb[1] - pb[0], e2b = pb[2] - pb[0];
+    const Vector3f ma = e1a ^ e2a, mb = e1b ^ e2b;
+    const float lma = ma.norm(), lmb = mb.norm();
+    if (lma < 1e-8f || lmb < 1e-8f)
+        return out;
+    const Vector3f na = ma / lma, nb = mb / lmb;
+    const Vector3f oa = (pa[0] + pa[1] + pa[2]) / 3.0f;
+    const Vector3f ob = (pb[0] + pb[1] + pb[2]) / 3.0f;
+
+    // s[k]: plane atom k of b, out of a's plane. t[k]: the other way round.
+    float s[3], t[3], gs[3], gt[3], dgs[3], dgt[3];
+    float Fi = 0.0f, Fj = 0.0f;
+    for (unsigned k = 0; k < 3; ++k)
+    {
+        s[k] = (pb[k] - oa).dot(na);
+        t[k] = (pa[k] - ob).dot(nb);
+        gs[k] = forcefield::hydrogen_bond_planarity_term(s[k], delta);
+        gt[k] = forcefield::hydrogen_bond_planarity_term(t[k], delta);
+        dgs[k] = forcefield::hydrogen_bond_planarity_derivative(s[k], delta);
+        dgt[k] = forcefield::hydrogen_bond_planarity_derivative(t[k], delta);
+        Fi += gs[k] / 3.0f;
+        Fj += gt[k] / 3.0f;
+    }
+    out.active = true;
+    out.factor = Fi * Fj;
+
+    float Si = 0.0f, Sj = 0.0f;
+    Vector3f Vi, Vj;
+    for (unsigned k = 0; k < 3; ++k)
+    {
+        Si += dgs[k];
+        Sj += dgt[k];
+        Vi = Vi + (pb[k] - oa) * (dgs[k] / 3.0f);
+        Vj = Vj + (pa[k] - ob) * (dgt[k] / 3.0f);
+    }
+    const Vector3f Gi = (Vi - na * na.dot(Vi)) / lma;
+    const Vector3f Gj = (Vj - nb * nb.dot(Vj)) / lmb;
+
+    // dFi/d(atoms of a): a's own plane, through its centroid and its normal.
+    Vector3f dFi_a[3], dFj_b[3];
+    const Vector3f ai1 = e2a ^ Gi, ai2 = Gi ^ e1a;
+    const Vector3f bj1 = e2b ^ Gj, bj2 = Gj ^ e1b;
+    dFi_a[0] = na * (-Si / 9.0f) - ai1 - ai2;
+    dFi_a[1] = na * (-Si / 9.0f) + ai1;
+    dFi_a[2] = na * (-Si / 9.0f) + ai2;
+    dFj_b[0] = nb * (-Sj / 9.0f) - bj1 - bj2;
+    dFj_b[1] = nb * (-Sj / 9.0f) + bj1;
+    dFj_b[2] = nb * (-Sj / 9.0f) + bj2;
+
+    // d(Fi Fj)/dx, with each F's dependence on the OTHER residue's atoms being
+    // the plain (1/3) g'(.) n of the out-of-plane distance.
+    for (unsigned k = 0; k < 3; ++k)
+    {
+        out.gradient[k] = dFi_a[k] * Fj + nb * (dgt[k] / 3.0f) * Fi;
+        out.gradient[3 + k] = dFj_b[k] * Fi + na * (dgs[k] / 3.0f) * Fj;
+    }
+    return out;
 }
 
 // Applies the Morse potential to every currently active hydrogen bond --
@@ -366,11 +480,15 @@ void SpringNetwork::computeHydrogenBondForces()
                                  getParticle(i).lobeMode(),
                                  getParticle(static_cast<size_t>(_hbDonorSlot[s])).lobeMode()});
 
-    // Six slots per bond: two antecedents on each side, the donor, the
-    // acceptor. The angular weight is now a product of two factors, one per
-    // side, so its gradient reaches every one of them.
-    _hydrogenBondForceScratch.resize(bonds.size() * 6);
+    // Twelve slots per bond: two antecedents on each side, the donor, the
+    // acceptor -- the angular weight is a product of two factors, one per side,
+    // so its gradient reaches every one of them -- and then the three base
+    // plane atoms of each end's residue, which the planarity factor reaches.
+    // The last six are unused, and left at zero, whenever that factor does not
+    // apply, which is every hydrogen bond outside a base pair.
+    _hydrogenBondForceScratch.resize(bonds.size() * 12);
     std::vector<float> pairEnergyScratch(bonds.size());
+    std::vector<HydrogenBondPlanarity> planarityScratch(bonds.size());
 
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
@@ -383,9 +501,8 @@ void SpringNetwork::computeHydrogenBondForces()
         const float distance = v.norm();
         if (distance < 1e-6f)
         {
-            _hydrogenBondForceScratch[3 * k + 0] = Vector3f();
-            _hydrogenBondForceScratch[3 * k + 1] = Vector3f();
-            _hydrogenBondForceScratch[3 * k + 2] = Vector3f();
+            for (unsigned slot = 0; slot < 12; ++slot)
+                _hydrogenBondForceScratch[12 * k + slot] = Vector3f();
             pairEnergyScratch[k] = 0.0f;
             continue;
         }
@@ -525,28 +642,55 @@ void SpringNetwork::computeHydrogenBondForces()
             f_acceptor -= (f_a1 + f_a2 + on_donor);
         }
 
-        _hydrogenBondForceScratch[6 * k + 0] = f_d1;
-        _hydrogenBondForceScratch[6 * k + 1] = f_d2;
-        _hydrogenBondForceScratch[6 * k + 2] = f_a1;
-        _hydrogenBondForceScratch[6 * k + 3] = f_a2;
-        _hydrogenBondForceScratch[6 * k + 4] = f_donor;
-        _hydrogenBondForceScratch[6 * k + 5] = f_acceptor;
-        pairEnergyScratch[k] = morse * w;
+        // (D) the planarity factor, which MULTIPLIES everything above: the six
+        // forces already computed are scaled by it, and its own gradient lands
+        // on the six base plane atoms. E = M(d) w Pl, so d(M w Pl) = Pl d(M w)
+        // + M w dPl, which is exactly these two lines of bookkeeping.
+        const HydrogenBondPlanarity pl = hydrogenBondPlanarity(bonds[k].donor, bonds[k].acceptor);
+        if (pl.active)
+        {
+            f_d1 = f_d1 * pl.factor;
+            f_d2 = f_d2 * pl.factor;
+            f_a1 = f_a1 * pl.factor;
+            f_a2 = f_a2 * pl.factor;
+            f_donor = f_donor * pl.factor;
+            f_acceptor = f_acceptor * pl.factor;
+            for (unsigned slot = 0; slot < 6; ++slot)
+                _hydrogenBondForceScratch[12 * k + 6 + slot] = pl.gradient[slot] * (-morse * w * conv);
+        }
+        else
+            for (unsigned slot = 0; slot < 6; ++slot)
+                _hydrogenBondForceScratch[12 * k + 6 + slot] = Vector3f();
+
+        _hydrogenBondForceScratch[12 * k + 0] = f_d1;
+        _hydrogenBondForceScratch[12 * k + 1] = f_d2;
+        _hydrogenBondForceScratch[12 * k + 2] = f_a1;
+        _hydrogenBondForceScratch[12 * k + 3] = f_a2;
+        _hydrogenBondForceScratch[12 * k + 4] = f_donor;
+        _hydrogenBondForceScratch[12 * k + 5] = f_acceptor;
+        pairEnergyScratch[k] = morse * w * pl.factor;
+        planarityScratch[k] = pl;
     }
 
     float hbond_energy = 0.0f;
     for (size_t k = 0; k < bonds.size(); ++k)
     {
         if (bonds[k].antecedent >= 0)
-            getParticle(static_cast<size_t>(bonds[k].antecedent)).addForce(_hydrogenBondForceScratch[6 * k + 0]);
+            getParticle(static_cast<size_t>(bonds[k].antecedent)).addForce(_hydrogenBondForceScratch[12 * k + 0]);
         if (bonds[k].antecedent2 >= 0)
-            getParticle(static_cast<size_t>(bonds[k].antecedent2)).addForce(_hydrogenBondForceScratch[6 * k + 1]);
+            getParticle(static_cast<size_t>(bonds[k].antecedent2)).addForce(_hydrogenBondForceScratch[12 * k + 1]);
         if (bonds[k].acceptorAntecedent >= 0)
-            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent)).addForce(_hydrogenBondForceScratch[6 * k + 2]);
+            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent)).addForce(_hydrogenBondForceScratch[12 * k + 2]);
         if (bonds[k].acceptorAntecedent2 >= 0)
-            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent2)).addForce(_hydrogenBondForceScratch[6 * k + 3]);
-        getParticle(bonds[k].donor).addForce(_hydrogenBondForceScratch[6 * k + 4]);
-        getParticle(bonds[k].acceptor).addForce(_hydrogenBondForceScratch[6 * k + 5]);
+            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent2)).addForce(_hydrogenBondForceScratch[12 * k + 3]);
+        getParticle(bonds[k].donor).addForce(_hydrogenBondForceScratch[12 * k + 4]);
+        getParticle(bonds[k].acceptor).addForce(_hydrogenBondForceScratch[12 * k + 5]);
+        // A plane atom can also be the acceptor or an antecedent -- guanine's
+        // N3 is both -- so these are separate additions, not a replacement.
+        if (planarityScratch[k].active)
+            for (unsigned slot = 0; slot < 6; ++slot)
+                getParticle(planarityScratch[k].atoms[slot])
+                    .addForce(_hydrogenBondForceScratch[12 * k + 6 + slot]);
         hbond_energy += pairEnergyScratch[k];
     }
 
@@ -2128,8 +2272,14 @@ void SpringNetwork::_assignHydrogenBondPairs()
                 // group says, and ranking it as an ordinary hydrogen bond
                 // would let a shallower neighbour take the slot.
                 const HydrogenBondParameters mp = hydrogenBondParameters(i, j);
+                // And on the planarity factor, so the ranking sees the same
+                // quantity the energy and the force will. Ranking without it
+                // would hand a slot to a skewed contact that the force term
+                // then values at almost nothing -- which is the failure the
+                // angular factor was added to this ranking to fix, repeated.
                 const float strength =
-                    _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width) * weight;
+                    _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width) * weight *
+                    hydrogenBondPlanarity(i, j).factor;
                 if (strength < nearest_distance[i])
                 {
                     nearest_distance[i] = strength;
