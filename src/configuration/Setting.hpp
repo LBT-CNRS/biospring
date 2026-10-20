@@ -714,6 +714,32 @@ class HydrogenBondSetting : public EnergySetting
     // binding (18.8 kJ/mol below 2.5 A against a 10.8 combined standard error,
     // 1.7 sigma, where 1.0 A is 2.2 sigma worse and so genuinely worse), and the
     // widest that leaves the duplex parasite at exactly zero.
+    //
+    // A RIBOSOME WANTS 2.0 A, and the reason is physical rather than a fudge.
+    // Narrowing delta on a 21-mer B-DNA duplex costs nothing -- all 20 native
+    // pairs survive at every width -- because a B-form pair is ideal and
+    // coplanar. Many ribosomal RNA pairs are NOT: non-canonical, Hoogsteen,
+    // sheared, part of a base triple. They therefore pay a factor the ideal pair
+    // does not, and on 8PKL's all-atom region the native pairing weight falls
+    // 34 % between 2.5 and 1.5 A:
+    //
+    //   delta   native  correct share  native kept
+    //   off       22.1          0.280           --
+    //   2.5       18.5          0.614         84 %
+    //   2.0       16.9          0.679         76 %
+    //   1.5       14.5          0.748         66 %
+    //
+    // 2.0 A recovers 17 % more native pairing than 1.5 for 0.069 of
+    // cleanliness. Set it per configuration; this default is the simple-nucleic
+    // one.
+    //
+    // Two things that breakdown settled, worth not re-deriving: pairing weight
+    // involving a COARSE bead is exactly zero (a one-bead residue has no
+    // base-edge N or O and cannot pair at all, so the multi-resolution boundary
+    // is not a source of error), and the crystal holds 111 pairs with a SINGLE
+    // edge contact -- base triples, A-minor motifs -- which a two-contact ground
+    // truth miscounts as parasitic. A ground truth demanding two contacts
+    // understates a ribosome.
     double planaritywidth;
     // The exponent in the angular weight max(cos theta, 0)^n, applied at BOTH
     // ends. Two is what this code has always used; HiRE-RNA v3 uses SIX
