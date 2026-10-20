@@ -681,14 +681,39 @@ class HydrogenBondSetting : public EnergySetting
     // would unmake the helix. Coplanarity is a property of two aromatic rings
     // meeting edge to edge, not of an amide bond.
     bool planarity;
-    // delta in equation (5), in A. Measured on 8PKL's 1893 real base pairs
-    // (two or more base-edge N/O contacts under 3.3 A, excluding sequence
-    // neighbours, which are STACKED rather than paired): their plane atoms sit
-    // 0.55 A out of the partner's plane at the median, against 3.32 A for a
-    // stack and 2.80 A for a single skewed contact. At 2.5 A a real pair keeps
-    // 87 % of its well while a stack keeps 3 % and a skewed contact 8 % --
-    // 30-fold and 11-fold discrimination for a 13 % attenuation that leaves the
-    // existing well depth usable as it stands.
+    // delta in equation (5), in A. 1.5 A, chosen by MEASUREMENT OF BEHAVIOUR on
+    // three simple systems, after a first value of 2.5 taken from a structural
+    // histogram alone turned out to be too wide.
+    //
+    // The structural measurement still holds and is worth keeping: over 8PKL's
+    // 1893 real base pairs (two or more base-edge N/O contacts under 3.3 A,
+    // excluding sequence neighbours, which are STACKED rather than paired) the
+    // plane atoms sit 0.55 A out of the partner's plane at the median, against
+    // 3.32 A for a stack and 2.80 A for a single skewed contact. What it does
+    // NOT determine is where to put delta: its p90 tail at 2.95 A is mostly
+    // non-canonical pairs the 2-contact criterion admitted, and reading that
+    // tail as real pairs needing tolerance is what made 2.5 too wide.
+    //
+    // Scanned instead on what the term DOES, over 0.75 to 3.5 A:
+    //
+    //   21-mer DNA duplex, starting native -- all 20 native pairs survive at
+    //     every width (-772 to -822 kJ/mol, a 6 % spread), while the parasitic
+    //     pairing the hydrogen bond term's own comment documents falls from
+    //     -7.4 kJ/mol at 3.5 A to exactly -0.0 at 1.5 A and below;
+    //   RNA hairpin, starting unfolded, ten paired starts -- the native-register
+    //     share of the pairing rises monotonically as delta narrows, 0.575 +/-
+    //     0.085 at 3.5 A to 0.824 +/- 0.054 at 0.75 A;
+    //   anticodon trimer, starting in register, three paired starts -- the
+    //     OPPOSITE trend: in-register binding deepens as delta widens, -44.2
+    //     +/- 11.1 kJ/mol at 1.0 A to -72.3 +/- 6.8 at 2.5 A. This is the
+    //     stringent system, a 3-nt trimer with no neighbours, no continuous
+    //     backbone and nothing else holding it.
+    //
+    // The three do not agree on an optimum, they bracket one. 1.5 A is the only
+    // width satisfying all three: the narrowest that costs nothing measurable in
+    // binding (18.8 kJ/mol below 2.5 A against a 10.8 combined standard error,
+    // 1.7 sigma, where 1.0 A is 2.2 sigma worse and so genuinely worse), and the
+    // widest that leaves the duplex parasite at exactly zero.
     double planaritywidth;
     // The exponent in the angular weight max(cos theta, 0)^n, applied at BOTH
     // ends. Two is what this code has always used; HiRE-RNA v3 uses SIX
@@ -701,7 +726,7 @@ class HydrogenBondSetting : public EnergySetting
     int angularexponent;
 
     HydrogenBondSetting(const std::string & name)
-        : EnergySetting(name), path(), log(), planarity(false), planaritywidth(2.5), angularexponent(2)
+        : EnergySetting(name), path(), log(), planarity(false), planaritywidth(1.5), angularexponent(2)
     {
         _parameterNames = {"enable",    "scale",          "cutoff", "path", "log", "planarity",
                            "planaritywidth", "angularexponent"};

@@ -335,7 +335,7 @@ inline Configuration defaultConfiguration()
     // Off: the planarity factor multiplies an already calibrated well, so no
     // configuration written before it existed may start feeling it.
     config.hbond.planarity = false;
-    config.hbond.planaritywidth = 2.5;
+    config.hbond.planaritywidth = 1.5;
     config.hbond.angularexponent = 2;
 
     // Off, and with no table: a network built before the term existed must not
