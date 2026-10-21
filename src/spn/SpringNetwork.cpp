@@ -159,6 +159,76 @@ std::array<size_t, 4> SpringNetwork::getHydrogenBondPairCensus() const
     return census;
 }
 
+// Every candidate the assignment could consider, and what became of it. The
+// point is to answer "why was this pair not formed?" with the code's own
+// arithmetic rather than a transcription of it.
+//
+// Columns: the two ends, the distance, the angular weight of each side, the
+// planarity factor, the resulting strength in kJ/mol, how many slots each end
+// has free, and whether the pair is currently held.
+void SpringNetwork::dumpHydrogenBondCandidates(const std::string & path, int step) const
+{
+    std::ofstream out(path, std::ios::app);
+    if (!out)
+    {
+        logging::warning("Cannot open hydrogen bond candidate log '%s'.", path.c_str());
+        return;
+    }
+    const int exponent = getHydrogenBondAngularExponent();
+    const float cutoff = getHydrogenBondCutoff();
+    auto free_slots = [&](size_t i, bool donor) {
+        const auto & off = donor ? _hbDonorOffset : _hbAcceptorOffset;
+        const auto & slot = donor ? _hbDonorSlot : _hbAcceptorSlot;
+        if (i + 1 >= off.size())
+            return 0;
+        int n = 0;
+        for (size_t s = off[i]; s < off[i + 1]; ++s)
+            if (slot[s] < 0)
+                n++;
+        return n;
+    };
+    out << "# step " << step << "\n";
+    out << "# chainA residA resA atomA chainB residB resB atomB distance wA wB planarity "
+           "strength freeDonorA freeAccA freeDonorB freeAccB held\n";
+    const std::vector<size_t> candidates = _donorAcceptorParticleIndexes();
+    for (const size_t i : candidates)
+    {
+        const Particle & p = getParticle(i);
+        _nsearch.hbond->for_each_neighbor(i, [&](size_t j) {
+            if (j <= i || isProbeParticle(j))
+                return;
+            const Particle & q = getParticle(j);
+            if (p.getResId() == q.getResId() && p.getChainName() == q.getChainName())
+                return;
+            const float d = Particle::distance(p, q);
+            if (d >= cutoff || d < 1e-6f)
+                return;
+            // Roles must be complementary in at least one direction, which is
+            // what the assignment requires too.
+            if (!((p.isDonor() && q.isAcceptor()) || (q.isDonor() && p.isAcceptor())))
+                return;
+            const Vector3f vhat = (q.getPosition() - p.getPosition()) / d;
+            const Vector3f hd = donorDirection(p, vhat);
+            const Vector3f ha = donorDirection(q, -vhat);
+            const float wd = hd.norm() > 1e-6f
+                                 ? forcefield::hydrogen_bond_angular_factor(hd.dot(vhat), exponent)
+                                 : 1.0f;
+            const float wa = ha.norm() > 1e-6f
+                                 ? forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat), exponent)
+                                 : 1.0f;
+            const float pl = hydrogenBondPlanarity(i, j).factor;
+            const HydrogenBondParameters mp = hydrogenBondParameters(i, j);
+            const float strength =
+                _ff->computeHydrogenBondEnergy(d, mp.welldepth, mp.equilibrium, mp.width) * wd * wa * pl;
+            out << p.getChainName() << ' ' << p.getResId() << ' ' << p.getResName() << ' ' << p.getName()
+                << ' ' << q.getChainName() << ' ' << q.getResId() << ' ' << q.getResName() << ' '
+                << q.getName() << ' ' << d << ' ' << wd << ' ' << wa << ' ' << pl << ' ' << strength << ' '
+                << free_slots(i, true) << ' ' << free_slots(i, false) << ' ' << free_slots(j, true) << ' '
+                << free_slots(j, false) << ' ' << (areHydrogenBonded(i, j) ? 1 : 0) << '\n';
+        });
+    }
+}
+
 void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
 {
     std::ofstream out(path, std::ios::app);
@@ -1433,6 +1503,8 @@ void SpringNetwork::_displayFrameData()
                       _energies.hbond, getHydrogenBondCount(), census[0], census[1], census[2], census[3]);
         if (!_config.hbond.log.empty())
             dumpHydrogenBonds(_config.hbond.log, _nbiter);
+        if (!_config.hbond.candidatelog.empty())
+            dumpHydrogenBondCandidates(_config.hbond.candidatelog, _nbiter);
     }
     if (isStackingEnabled())
     {
@@ -2180,8 +2252,37 @@ void SpringNetwork::_assignHydrogenBondPairs()
             const int j = _hbDonorSlot[sd];
             if (j < 0)
                 continue;
-            if (Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j))) <= cutoff &&
-                !getParticle(i).isInSpringNeighbors(static_cast<unsigned>(j)))
+            // Beyond the cutoff, newly sprung, or no longer WORTH its slot.
+            // The third test matters because a slot is held until released: a
+            // contact that was worth taking when it formed, and that a factor
+            // has since reduced to nothing, would otherwise keep the atom for
+            // the rest of the run.
+            const bool far =
+                Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j))) > cutoff;
+            const bool sprung = getParticle(i).isInSpringNeighbors(static_cast<unsigned>(j));
+            bool worthless = false;
+            if (!far && !sprung && getHydrogenBondMinimumStrength() > 0.0f)
+            {
+                const HydrogenBondParameters mp = hydrogenBondParameters(i, static_cast<size_t>(j));
+                const float d = Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j)));
+                float w = 1.0f;
+                if (d > 1e-6f)
+                {
+                    const Vector3f vhat =
+                        (getParticle(static_cast<size_t>(j)).getPosition() - getParticle(i).getPosition()) / d;
+                    const Vector3f hd = donorDirection(getParticle(i), vhat);
+                    if (hd.norm() > 1e-6f)
+                        w *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat), exponent);
+                    const Vector3f ha = donorDirection(getParticle(static_cast<size_t>(j)), -vhat);
+                    if (ha.norm() > 1e-6f)
+                        w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat), exponent);
+                }
+                const float strength =
+                    _ff->computeHydrogenBondEnergy(d, mp.welldepth, mp.equilibrium, mp.width) * w *
+                    hydrogenBondPlanarity(i, static_cast<size_t>(j)).factor;
+                worthless = strength > -getHydrogenBondMinimumStrength();
+            }
+            if (!far && !sprung && !worthless)
                 continue;
             _hbDonorSlot[sd] = -1;
             for (size_t sa = _hbAcceptorOffset[j]; sa < _hbAcceptorOffset[j + 1]; ++sa)
@@ -2212,13 +2313,40 @@ void SpringNetwork::_assignHydrogenBondPairs()
     // capacity are enough -- 2 or 3 in practice. The loop stops early as
     // soon as a round confirms nothing, so the common single-slot case
     // costs exactly what it did before.
+    //
+    // AN OPEN QUESTION, measured but not explained. On 8PKL's all-atom region
+    // this holds 16 of the 49 base pairs the crystal has. The 33 it misses are
+    // not weak: asked through dumpHydrogenBondCandidates -- which uses these
+    // same functions, so it cannot disagree -- their best atom couple scores
+    // -15.7 kJ/mol at the median against -10.8 for the pairs that DO form, with
+    // better distances, better angular weights and better planarity.
+    //
+    // Three explanations were tried and none survived:
+    //   25 of the 33 have no free DONOR facing a free ACCEPTOR, so slots are
+    //     part of it -- but freeing 320 parasite slots with
+    //     hbond.minimumstrength recovered none of them;
+    //   the remaining 8 are fully pairable and still unformed, which looks like
+    //     the reciprocal-best rule stranding a pair whose ends prefer others --
+    //     but adding a Gale-Shapley fallback (a refused particle tries its next
+    //     choice) gained nothing and cost one real pair, 16 -> 15;
+    //   raising the round count from 4 to 24 changed the result not at all,
+    //     bit for bit.
+    // Whatever is missing, it is none of those. Worth settling on a small
+    // controlled case where the assignment can be watched, not on a ribosome.
     for (unsigned round = 0; round < 4; ++round)
     {
         std::vector<int> nearest(n, -1);
-        // Holds the best bond STRENGTH seen so far, in kJ/mol, so it starts
-        // at zero: a candidate whose angular factor kills it is worth exactly
-        // nothing and must not take a slot from a real partner.
-        std::vector<float> nearest_distance(n, 0.0f);
+        // Holds the best bond STRENGTH seen so far, in kJ/mol. It starts at
+        // MINUS THE FLOOR rather than at zero: a candidate whose angular or
+        // planarity factor kills it is worth exactly nothing and must not take
+        // a slot from a real partner, which is what the previous version of
+        // this comment said -- but a threshold of zero exactly admits a bond
+        // worth -0.07 kJ/mol, and that bond then holds the slot while a real
+        // pair worth -15 finds the atom taken. Measured on the ribosome: 330
+        // slots held by stacked sequence neighbours worth 0.000 kJ/mol at the
+        // median. See hbond.minimumstrength, which is zero by default.
+        const float floor = -getHydrogenBondMinimumStrength();
+        std::vector<float> nearest_distance(n, floor);
 
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)

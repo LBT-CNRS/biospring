@@ -667,6 +667,10 @@ class HydrogenBondSetting : public EnergySetting
     // reports a perfectly healthy count made entirely of contacts between
     // neighbouring residues.
     std::string log;
+    // Where to write EVERY candidate pair with what it is worth and whether its
+    // slots are free, for answering "why was this pair not formed?". Empty by
+    // default and expensive when on -- one line per candidate within the cutoff.
+    std::string candidatelog;
 
     // HiRE-RNA v3's planarity factor (arXiv:1404.0568, equation 5), which
     // MULTIPLIES the well: a pair of bases scores 1 when every one of their
@@ -750,12 +754,32 @@ class HydrogenBondSetting : public EnergySetting
     // The OpenCL kernel hard-codes two, so a value other than two is refused on
     // that backend rather than silently disagreeing with the CPU.
     int angularexponent;
+    // What a bond must be WORTH, in kJ.mol-1, to occupy one of a site's slots.
+    //
+    // The ranking already scores candidates by strength rather than distance,
+    // and the comment that made it so says why: a candidate whose angular
+    // factor kills it "is worth exactly nothing and must not take a slot from a
+    // real partner". But the threshold it uses is zero EXACTLY, so a bond worth
+    // -0.07 kJ.mol-1 still passes -- "worth nothing" physically is not "worth
+    // zero" in floating point, and the slot stays taken.
+    //
+    // Measured on 8PKL's all-atom region with the planarity factor on: a real
+    // base pair's bonds are worth 5.29 kJ.mol-1 at the median, while the
+    // stacked sequence-neighbour contacts that occupy 330 slots are worth 0.000
+    // at the median and 0.005 at p90. A floor of 0.1 kJ.mol-1 rejects 320 of
+    // those 332 stacks and costs 8 of 40 real bonds -- and those 8 are the
+    // WEAKEST bonds of real pairs (p10 = 0.028), not the pairs themselves,
+    // since a pair holds two or three.
+    //
+    // Zero by default, which is the behaviour every existing configuration has.
+    double minimumstrength;
 
     HydrogenBondSetting(const std::string & name)
-        : EnergySetting(name), path(), log(), planarity(false), planaritywidth(1.5), angularexponent(2)
+        : EnergySetting(name), path(), log(), candidatelog(), planarity(false), planaritywidth(1.5),
+          angularexponent(2), minimumstrength(0.0)
     {
-        _parameterNames = {"enable",    "scale",          "cutoff", "path", "log", "planarity",
-                           "planaritywidth", "angularexponent"};
+        _parameterNames = {"enable",         "scale",           "cutoff", "path", "log", "planarity",
+                           "planaritywidth", "angularexponent", "minimumstrength", "candidatelog"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -764,12 +788,16 @@ class HydrogenBondSetting : public EnergySetting
             path = s;
         else if (param == "log")
             log = s;
+        else if (param == "candidatelog")
+            candidatelog = s;
         else if (param == "planarity")
             _parse_bool(planarity, s, param);
         else if (param == "planaritywidth")
             utils::string::from_string<decltype(planaritywidth)>(planaritywidth, s);
         else if (param == "angularexponent")
             utils::string::from_string<decltype(angularexponent)>(angularexponent, s);
+        else if (param == "minimumstrength")
+            utils::string::from_string<decltype(minimumstrength)>(minimumstrength, s);
         else
             EnergySetting::setFromString(param, s);
     }
@@ -779,9 +807,11 @@ class HydrogenBondSetting : public EnergySetting
         EnergySetting::print(os);
         _mspFormatter.print("path", path, os);
         _mspFormatter.print("log", log, os);
+        _mspFormatter.print("candidatelog", candidatelog, os);
         _mspFormatter.print("planarity", planarity, os);
         _mspFormatter.print("planaritywidth", planaritywidth, os);
         _mspFormatter.print("angularexponent", angularexponent, os);
+        _mspFormatter.print("minimumstrength", minimumstrength, os);
     }
 };
 

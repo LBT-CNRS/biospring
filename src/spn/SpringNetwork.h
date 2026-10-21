@@ -291,6 +291,15 @@ class SpringNetwork
     // the output can.
     void dumpHydrogenBonds(const std::string & path, int step) const;
 
+    /// Every candidate pair the assignment could see, with what it is WORTH and
+    /// whether its slots were free -- written through the SAME functions the
+    /// ranking uses (donorDirection, which knows about lobe sites, and
+    /// hydrogenBondPlanarity), so the diagnosis cannot drift from the code it
+    /// diagnoses. Reproducing the formula in a script instead got the lobe
+    /// geometry wrong on the six amine and carbonyl sites that do most of the
+    /// base pairing, and produced a confident wrong answer.
+    void dumpHydrogenBondCandidates(const std::string & path, int step) const;
+
     // ================================================================================
     // Used to define the minimum IMP energy of all possible conformations at a 
     // given insertion angle (rotation around the axis of the insertion vector).
@@ -488,6 +497,11 @@ class SpringNetwork
     HydrogenBondPlanarity hydrogenBondPlanarity(size_t a, size_t b) const;
     bool isHydrogenBondPlanarityEnabled() const { return _config.hbond.planarity; }
     int getHydrogenBondAngularExponent() const { return _config.hbond.angularexponent; }
+    /// kJ.mol-1 a bond must be worth to occupy a slot. See the setting.
+    float getHydrogenBondMinimumStrength() const
+    {
+        return static_cast<float>(_config.hbond.minimumstrength);
+    }
     // -1 if particle `index` currently holds no hydrogen bond at all,
     // otherwise the index of one of its partners. Used by the core-repulsion
     // term, which only needs to know whether two particles are already bound

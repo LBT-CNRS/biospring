@@ -332,11 +332,13 @@ inline Configuration defaultConfiguration()
     config.hbond.scale = 1.0;
     config.hbond.path = "";
     config.hbond.log = "";
+    config.hbond.candidatelog = "";
     // Off: the planarity factor multiplies an already calibrated well, so no
     // configuration written before it existed may start feeling it.
     config.hbond.planarity = false;
     config.hbond.planaritywidth = 1.5;
     config.hbond.angularexponent = 2;
+    config.hbond.minimumstrength = 0.0;
 
     // Off, and with no table: a network built before the term existed must not
     // start collecting a stacking energy because it was upgraded. The cutoff is
