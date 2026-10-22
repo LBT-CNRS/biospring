@@ -2017,9 +2017,6 @@ void SpringNetworkOpenCL::_updateNeighbourLists()
 	// Counting every term first and collecting every total at once costs ONE
 	// stop instead of one per term, and leaves the chains free to overlap the
 	// day they are put on separate queues: they share no buffer at all.
-	struct Pending { NeighbourList * list; const CellGrid * grid; double * timer; };
-	Pending pending[4];
-	unsigned npending = 0;
 
 	// TARGETS: who gets a list. A static particle's force is never read -- the
 	// CPU only loops over _dynamicparticules -- so finding its neighbours is

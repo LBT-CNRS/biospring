@@ -9,6 +9,8 @@
 #include "spn/PeptideBond.h"
 #include "spn/SpringNetwork.h"
 
+#include "TempPath.h"
+
 using namespace biospring;
 
 namespace
@@ -24,7 +26,7 @@ class RulesFile
   public:
     RulesFile()
     {
-        _path = std::string(std::tmpnam(nullptr)) + ".rbody";
+        _path = biospring::tests::temp_path(".rbody");
         std::ofstream out(_path);
         out << "# name resname atoms...\n";
         out << "A_CA ALA N CA C CB\n";
@@ -558,7 +560,7 @@ TEST(PeptideBond, TakesItsAttackSiteFromItsOwnFileRatherThanTheHydrogenBondTable
 {
     RulesFile rules;
 
-    const std::string sitepath = std::string(std::tmpnam(nullptr)) + ".psite";
+    const std::string sitepath = biospring::tests::temp_path(".psite");
     std::ofstream(sitepath) << "# the real Burgi-Dunitz site: out of the (C, O, CA) plane\n"
                                "ALA  C  O  ^CA:75\n";
 

@@ -25,12 +25,12 @@ class ForceField
 {
   public:
     ForceField()
-        : _stericscale(1.0), _springscale(1.0), _impscale(1.0), _impuppermebraneoffset(0.0), _implowermembraneoffset(0.0),
+        : _stericscale(1.0), _radiusrule(BIOSPRING_RADIUS_SUM), _springscale(1.0), _impscale(1.0), _impuppermebraneoffset(0.0), _implowermembraneoffset(0.0),
           _uppermembtubecurv(0.0), _lowermembtubecurv(0.0),
           _forcefieldscale(1.0), _coulombscale(1.0), _hydrophobicityscale(1.0),
           _hydrophobicitydecaylength(10.0), _dielectric(1.0), _distancedependentdielectric(false),
           _hydrogenbondscale(1.0), _hydrogenbondwelldepth(16.7), _hydrogenbondequilibrium(2.9),
-          _hydrogenbondwidth(1.34), _radiusrule(BIOSPRING_RADIUS_SUM)
+          _hydrogenbondwidth(1.34)
     {
     }
     virtual ~ForceField() {}

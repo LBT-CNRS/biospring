@@ -247,10 +247,10 @@ bool SpringNetwork::areHydrogenBonded(size_t a, size_t b) const
 // 8.2 to 15.3 degrees of its real partner, where naming the real hydrogen gives 8.5
 // to 14.0. The reconstruction is as good as knowing where the hydrogen is.
 //
-// The angle is per site now, because the OTHER two-lobe geometry in this chemistry
+// The angle is per site, because the OTHER two-lobe geometry in this chemistry
 // wants 105: the Burgi-Dunitz approach of a nucleophile to a carbonyl carbon, which
-// leaves the sp2 plane instead of lying in it. The .hbond table carries both.
-static const float HBOND_LOBE_DEFAULT_DEGREES = 62.0f;
+// leaves the sp2 plane instead of lying in it. The .hbond table carries both, and
+// the 62 degrees above is the table's default rather than a constant here.
 
 SpringNetwork::HydrogenBondSite SpringNetwork::hydrogenBondSite(const Particle & self, int a1, int a2, int lobes,
                                                                float lcos, float lsin,

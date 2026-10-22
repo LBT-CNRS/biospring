@@ -236,19 +236,6 @@ class SpringNetwork
         DIHEDRAL_FAMILY_COUNT
     };
 
-    // The .nc variable-group prefix of each family, in DihedralFamilyIndex
-    // order. Stated once here so the writer and the reader cannot drift out
-    // of step -- they used to spell these names out separately, four times
-    // over.
-    static constexpr const char * DIHEDRAL_FAMILY_NAMES[DIHEDRAL_FAMILY_COUNT] = {
-        "dihedralphi",      "dihedralpsi",   "dihedralomega",           "dihedralsidechain", "dihedralplanarity",
-        "dihedralnucleicbackbone", "dihedralnucleicchi", "dihedralnucleicsugar"};
-
-    // Read-only view of one family's springs, for NetCDF I/O.
-    const std::vector<Spring> & getDihedralSprings(unsigned family) const
-    {
-    }
-
     float getDihedralEnergy() const { return _energies.dihedral; }
     float getStericEnergy() const { return _energies.steric; }
     float getElectrostaticEnergy() const { return _energies.electrostatic; }

@@ -55,7 +55,13 @@ endfunction()
 function(add_test_module_cli MODULE)
     add_executable(test-${MODULE} ${CMAKE_CURRENT_SOURCE_DIR}/test-${MODULE}.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../../cli/${MODULE}-cli.cpp)
     target_link_libraries(test-${MODULE} PRIVATE biospring-core GTest::gtest_main)
-    gtest_discover_tests(test-${MODULE})
+    # These exercise the real command-line tool, and several cases of one binary
+    # write the SAME output filenames in the same working directory. Discovery
+    # registers one ctest entry per case, so without a lock `ctest -j` runs them
+    # concurrently and they clobber each other: seven of them failed under -j8
+    # and every one passed when re-run alone, which is the signature of this and
+    # not of a broken tool.
+    gtest_discover_tests(test-${MODULE} PROPERTIES RESOURCE_LOCK "cli-${MODULE}")
 endfunction()
 
 # List of modules to be tested.

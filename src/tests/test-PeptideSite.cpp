@@ -7,6 +7,8 @@
 #include "IO/PeptideSiteRuleReader.h"
 #include "spn/Particle.h"
 
+#include "TempPath.h"
+
 // HBOND_LOBES_* are static const ints with no out-of-line definition, so they
 // are usable by value but not by reference -- and EXPECT_EQ binds both of its
 // arguments to a const reference. Hence the static_cast on each one.
@@ -22,7 +24,7 @@ class SiteFile
   public:
     explicit SiteFile(const std::string & body)
     {
-        _path = std::string(std::tmpnam(nullptr)) + ".psite";
+        _path = biospring::tests::temp_path(".psite");
         std::ofstream(_path) << body;
     }
     ~SiteFile() { std::remove(_path.c_str()); }

@@ -84,10 +84,10 @@ class SpringNetworkOpenCL : public SpringNetwork
 	public :
 		SpringNetworkOpenCL();
 		virtual ~SpringNetworkOpenCL();
-		virtual void run();
-		virtual void idleRun();
-		virtual void initRun();
-		virtual void endRun();
+		virtual void run() override;
+		virtual void idleRun() override;
+		virtual void initRun() override;
+		virtual void endRun() override;
 
 		// A cell list: the linked-list grid of biospring.cl, plus the frame it
 		// is counted in.
@@ -809,18 +809,18 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void _warnAboutTermsTheDeviceIgnores() const;
 
 		// Prints only what this backend measured (see SpringNetwork's).
-		virtual void _displayFrameData();
+		virtual void _displayFrameData() override;
 		void _readBackHydrogenBondSlots();
 		void wrappingOcl();
 		void InitOcl();
 		void createBuffer();
 		static void convertSpringtoSpringocl(const Spring & spin, Springocl & spout) ;
 		void computeRandomSet();
-		virtual void getParticlePosition(unsigned i, float position[3]) const;
+		virtual void getParticlePosition(unsigned i, float position[3]) const override;
 		virtual unsigned getNumberOfParticles() const;
 		virtual unsigned getNumberOfSprings() const;
 
-		virtual void setForce(unsigned i, float force[3]);
+		virtual void setForce(unsigned i, float force[3]) override;
 
 
 

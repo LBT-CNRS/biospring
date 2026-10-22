@@ -8,6 +8,8 @@
 #include "configuration/Configuration.hpp"
 #include "spn/SpringNetwork.h"
 
+#include "TempPath.h"
+
 using namespace biospring;
 
 namespace
@@ -19,7 +21,7 @@ class Table
   public:
     explicit Table(const std::string & body)
     {
-        _path = std::string(std::tmpnam(nullptr)) + ".hbond";
+        _path = biospring::tests::temp_path(".hbond");
         std::ofstream(_path) << body;
     }
     ~Table() { std::remove(_path.c_str()); }
