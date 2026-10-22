@@ -66,7 +66,6 @@ class SpringNetwork
         float imp = 0.0f;
         float hydrophobic = 0.0f;
         float hbond = 0.0f;
-        float stacking = 0.0f;
 
         void reset()
         {
@@ -78,7 +77,6 @@ class SpringNetwork
             imp = 0.0;
             hydrophobic = 0.0;
             hbond = 0.0;
-            stacking = 0.0;
         }
     };
 
@@ -114,12 +112,6 @@ class SpringNetwork
         // candidates by isAcceptor() itself, mirroring how steric's single
         // "all particles" grid is filtered per-pair rather than pre-split.
         SearcherPtr hbond;
-        // Bins the FIRST atom of each base frame, not the frame's centre, because
-        // the grid can only be queried at a particle. Its radius is therefore the
-        // stacking cutoff widened by twice the largest atom-to-centre offset in
-        // this network -- see _setupStacking, which measures that offset rather
-        // than assuming it. A base ring is rigid, so it cannot grow during a run.
-        SearcherPtr stacking;
     };
 
     static NeighborSearch::SearcherPtr make_nsearch(const NeighborSearch::Container & particles, float cutoff,
@@ -263,7 +255,6 @@ class SpringNetwork
     float getIMPEnergy() const { return _energies.imp; }
     float getHydrophobicEnergy() const { return _energies.hydrophobic; }
     float getHydrogenBondEnergy() const { return _energies.hbond; }
-    float getStackingEnergy() const { return _energies.stacking; }
 
     // How many hydrogen bonds are held right now. Walks the donor slots, so
     // each bond counts once. Worth reporting alongside the energy: the total
@@ -290,15 +281,6 @@ class SpringNetwork
     // settle a disagreement about WHICH bonds are held, and nothing else in
     // the output can.
     void dumpHydrogenBonds(const std::string & path, int step) const;
-
-    /// Every candidate pair the assignment could see, with what it is WORTH and
-    /// whether its slots were free -- written through the SAME functions the
-    /// ranking uses (donorDirection, which knows about lobe sites, and
-    /// hydrogenBondPlanarity), so the diagnosis cannot drift from the code it
-    /// diagnoses. Reproducing the formula in a script instead got the lobe
-    /// geometry wrong on the six amine and carbonyl sites that do most of the
-    /// base pairing, and produced a confident wrong answer.
-    void dumpHydrogenBondCandidates(const std::string & path, int step) const;
 
     // ================================================================================
     // Used to define the minimum IMP energy of all possible conformations at a 
@@ -404,7 +386,6 @@ class SpringNetwork
 
     float getStericCutoff() const { return _config.steric.cutoff; }
     float getHydrogenBondCutoff() const { return _config.hbond.cutoff; }
-    float getStackingCutoff() const { return _config.stacking.cutoff; }
 
     /// The Morse parameters a PAIR uses: the force field's own, unless both
     /// ends name the SAME group, in which case that group's.
@@ -425,83 +406,6 @@ class SpringNetwork
     /// "no group", which is what an untagged particle carries.
     void setHydrogenBondGroups(const std::vector<HydrogenBondParameters> & groups) { _hbgroups = groups; }
     const std::vector<HydrogenBondParameters> & getHydrogenBondGroups() const { return _hbgroups; }
-
-    /// Three atoms of one nucleobase that span its plane. The stacking term
-    /// takes the base's CENTRE as their centroid and its NORMAL as
-    /// (atoms[1]-atoms[0]) x (atoms[2]-atoms[0]).
-    ///
-    /// Both of the term's orientation factors are EVEN in the normal, so the
-    /// order the three are named in changes no energy and no force -- which it
-    /// must not, because a base plane has no preferred face for stacking.
-    ///
-    /// One frame per residue, installed from a .stack table by
-    /// io::BasePlaneRuleReader. A residue with no frame -- every amino acid,
-    /// among others -- takes no part in the term at all.
-    struct BaseFrame
-    {
-        unsigned atoms[3];
-    };
-
-    /// |e1 x e2| of a base plane frame -- twice the triangle's area, in A^2 --
-    /// below which both terms that use the frame refuse to differentiate
-    /// through it. BOTH of their gradients divide by this quantity, so a
-    /// collapsing ring does not give a slightly wrong force, it gives an
-    /// arbitrarily large one.
-    ///
-    /// Measured on 8PKL: 4.80 A^2 for a purine frame and 4.73 to 5.33 for a
-    /// pyrimidine one. 1.0 A^2 is a ring squashed to a fifth of its area, which
-    /// a mesh-held nucleobase cannot reach -- so this never fires on healthy
-    /// geometry and bounds the force when something has already gone wrong.
-    /// The old threshold was 1e-8, which bounded nothing: it admitted a
-    /// gradient a hundred million times too large.
-    static constexpr float BASE_PLANE_MIN_AREA = 1.0f;
-    void setBaseFrames(const std::vector<BaseFrame> & frames) { _baseFrames = frames; }
-    /// Which base frame each particle's residue has, -1 for none. Needed by the
-    /// planarity factor, which is asked about a donor or an acceptor atom
-    /// rather than about one of the three plane atoms.
-    void setBaseFrameOfParticle(const std::vector<int> & of_particle) { _frameOfParticle = of_particle; }
-    int getBaseFrameOfParticle(size_t index) const
-    {
-        return index < _frameOfParticle.size() ? _frameOfParticle[index] : -1;
-    }
-    const std::vector<BaseFrame> & getBaseFrames() const { return _baseFrames; }
-
-    /// How many base pairs are within the stacking cutoff right now, and how
-    /// many of those are ALSO joined by a spring. A cutoff-built elastic
-    /// network puts springs between stacked bases, and such a spring is a crude
-    /// stand-in for exactly what this term computes, so the second count is
-    /// what says whether the two are double counting.
-    std::pair<size_t, size_t> getStackingPairCensus() const;
-
-    /// HiRE-RNA v3's planarity factor for one candidate pair, with the gradient
-    /// the force needs. `factor` is 1 and `active` false whenever the factor
-    /// cannot apply -- the setting off, or either end's residue carrying no base
-    /// plane -- so a protein hydrogen bond is untouched to the bit.
-    ///
-    /// `gradient[k]` is d(factor)/d(position of atoms[k]), the six being the
-    /// three plane atoms of each end's residue, in that order. Returned
-    /// together with the factor rather than recomputed, because this quantity
-    /// is needed in three places -- the candidate ranking, the energy and the
-    /// force -- and a geometry computed three times is a geometry that drifts.
-    struct HydrogenBondPlanarity
-    {
-        bool active = false;
-        // A base whose three plane atoms have very nearly collapsed onto a
-        // line: see BASE_PLANE_MIN_AREA. The factor is left at 1 and the pair
-        // reported, rather than taking a gradient that divides by that area.
-        bool degenerate = false;
-        float factor = 1.0f;
-        unsigned atoms[6] = {0, 0, 0, 0, 0, 0};
-        Vector3f gradient[6];
-    };
-    HydrogenBondPlanarity hydrogenBondPlanarity(size_t a, size_t b) const;
-    bool isHydrogenBondPlanarityEnabled() const { return _config.hbond.planarity; }
-    int getHydrogenBondAngularExponent() const { return _config.hbond.angularexponent; }
-    /// kJ.mol-1 a bond must be worth to occupy a slot. See the setting.
-    float getHydrogenBondMinimumStrength() const
-    {
-        return static_cast<float>(_config.hbond.minimumstrength);
-    }
     // -1 if particle `index` currently holds no hydrogen bond at all,
     // otherwise the index of one of its partners. Used by the core-repulsion
     // term, which only needs to know whether two particles are already bound
@@ -677,7 +581,6 @@ class SpringNetwork
     bool isConstraintEnabled() const { return _constraintenabled; }
     bool isHydrophobicityEnabled() const { return _config.hydrophobicity.enable; }
     bool isHydrogenBondEnabled() const { return _config.hbond.enable; }
-    bool isStackingEnabled() const { return _config.stacking.enable; }
     bool isProbeEnabled() const { return _config.probe.enable; }
     bool isProbeElectrostaticEnabled() const { return _config.probe.enableelectrostatic; }
     bool isProbeStericEnabled() const { return _config.probe.enablesteric; }
@@ -719,7 +622,6 @@ class SpringNetwork
     virtual void computeSpringForces();
     virtual void computeDihedralForces();
     virtual void computeHydrogenBondForces();
-    virtual void computeStackingForces();
 
     // The geometry of ONE END of a hydrogen bond: the direction its hydrogen or
     // its lone pair points, and everything the angular gradient needs to reach
@@ -886,7 +788,6 @@ class SpringNetwork
     void _setupSteric();
     void _setupHydrophobic();
     void _setupHydrogenBond();
-    void _setupStacking();
     void _setupForceField();
     void _setupElectrostatic();
     void _setupDensityGrid();
@@ -1014,17 +915,6 @@ class SpringNetwork
     // _springForceScratch. Three entries per bond: antecedent, donor,
     // acceptor -- the angular weight makes the antecedent a third body.
     std::vector<Vector3f> _hydrogenBondForceScratch;
-    // Six entries per stacking pair: the three plane atoms of each base. Every
-    // one of them carries force, because the normal and the centre are both
-    // built from all three.
-    std::vector<Vector3f> _stackingForceScratch;
-    std::vector<BaseFrame> _baseFrames;
-    // atoms[0] of each frame, which is what the grid is built on and queried
-    // at, and the reverse map so a returned candidate names its frame in O(1).
-    // -1 for every particle that is not a frame's first atom.
-    std::vector<size_t> _baseFrameAnchors;
-    std::vector<int> _frameOfAnchor;
-    std::vector<int> _frameOfParticle;
 
 
     Energies _energies;

@@ -8,7 +8,6 @@
 #include "forcefield/shared/torsion_shared.h"
 #include "forcefield/ForceField.h"
 #include "forcefield/energy/hydrogenbond.hpp"
-#include "forcefield/energy/stacking.hpp"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_12_6Amber.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Lewitt.h"
 #include "forcefield/ForceFieldElectrostaticCoulombAndStericLennardJones_8_6Zacharias.h"
@@ -159,76 +158,6 @@ std::array<size_t, 4> SpringNetwork::getHydrogenBondPairCensus() const
     return census;
 }
 
-// Every candidate the assignment could consider, and what became of it. The
-// point is to answer "why was this pair not formed?" with the code's own
-// arithmetic rather than a transcription of it.
-//
-// Columns: the two ends, the distance, the angular weight of each side, the
-// planarity factor, the resulting strength in kJ/mol, how many slots each end
-// has free, and whether the pair is currently held.
-void SpringNetwork::dumpHydrogenBondCandidates(const std::string & path, int step) const
-{
-    std::ofstream out(path, std::ios::app);
-    if (!out)
-    {
-        logging::warning("Cannot open hydrogen bond candidate log '%s'.", path.c_str());
-        return;
-    }
-    const int exponent = getHydrogenBondAngularExponent();
-    const float cutoff = getHydrogenBondCutoff();
-    auto free_slots = [&](size_t i, bool donor) {
-        const auto & off = donor ? _hbDonorOffset : _hbAcceptorOffset;
-        const auto & slot = donor ? _hbDonorSlot : _hbAcceptorSlot;
-        if (i + 1 >= off.size())
-            return 0;
-        int n = 0;
-        for (size_t s = off[i]; s < off[i + 1]; ++s)
-            if (slot[s] < 0)
-                n++;
-        return n;
-    };
-    out << "# step " << step << "\n";
-    out << "# chainA residA resA atomA chainB residB resB atomB distance wA wB planarity "
-           "strength freeDonorA freeAccA freeDonorB freeAccB held\n";
-    const std::vector<size_t> candidates = _donorAcceptorParticleIndexes();
-    for (const size_t i : candidates)
-    {
-        const Particle & p = getParticle(i);
-        _nsearch.hbond->for_each_neighbor(i, [&](size_t j) {
-            if (j <= i || isProbeParticle(j))
-                return;
-            const Particle & q = getParticle(j);
-            if (p.getResId() == q.getResId() && p.getChainName() == q.getChainName())
-                return;
-            const float d = Particle::distance(p, q);
-            if (d >= cutoff || d < 1e-6f)
-                return;
-            // Roles must be complementary in at least one direction, which is
-            // what the assignment requires too.
-            if (!((p.isDonor() && q.isAcceptor()) || (q.isDonor() && p.isAcceptor())))
-                return;
-            const Vector3f vhat = (q.getPosition() - p.getPosition()) / d;
-            const Vector3f hd = donorDirection(p, vhat);
-            const Vector3f ha = donorDirection(q, -vhat);
-            const float wd = hd.norm() > 1e-6f
-                                 ? forcefield::hydrogen_bond_angular_factor(hd.dot(vhat), exponent)
-                                 : 1.0f;
-            const float wa = ha.norm() > 1e-6f
-                                 ? forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat), exponent)
-                                 : 1.0f;
-            const float pl = hydrogenBondPlanarity(i, j).factor;
-            const HydrogenBondParameters mp = hydrogenBondParameters(i, j);
-            const float strength =
-                _ff->computeHydrogenBondEnergy(d, mp.welldepth, mp.equilibrium, mp.width) * wd * wa * pl;
-            out << p.getChainName() << ' ' << p.getResId() << ' ' << p.getResName() << ' ' << p.getName()
-                << ' ' << q.getChainName() << ' ' << q.getResId() << ' ' << q.getResName() << ' '
-                << q.getName() << ' ' << d << ' ' << wd << ' ' << wa << ' ' << pl << ' ' << strength << ' '
-                << free_slots(i, true) << ' ' << free_slots(i, false) << ' ' << free_slots(j, true) << ' '
-                << free_slots(j, false) << ' ' << (areHydrogenBonded(i, j) ? 1 : 0) << '\n';
-        });
-    }
-}
-
 void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
 {
     std::ofstream out(path, std::ios::app);
@@ -237,7 +166,6 @@ void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
         logging::warning("Cannot open hydrogen bond log '%s'.", path.c_str());
         return;
     }
-    const int exponent = getHydrogenBondAngularExponent();
     out << "# step " << step << "\n";
     for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
         for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
@@ -258,21 +186,14 @@ void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
                 const Vector3f vhat = v / distance;
                 const Vector3f hd = donorDirection(d, vhat);
                 if (hd.norm() > 1e-6f)
-                    w *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat), exponent);
+                    w *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat));
                 const Vector3f ha = donorDirection(a, -vhat);
                 if (ha.norm() > 1e-6f)
-                    w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat), exponent);
+                    w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
             }
-            // The planarity factor folded into the reported weight, so the log
-            // says what the force applies, and appended as its own last column
-            // so it can be read on its own. Appended rather than inserted: the
-            // first eleven columns keep their meaning and their position.
-            const float planarity = hydrogenBondPlanarity(i, static_cast<size_t>(j)).factor;
-            w *= planarity;
             out << d.getChainName() << ' ' << d.getResId() << ' ' << d.getResName() << ' ' << d.getName() << ' '
                 << a.getChainName() << ' ' << a.getResId() << ' ' << a.getResName() << ' ' << a.getName() << ' '
-                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << ' '
-                << planarity << '\n';
+                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << '\n';
         }
 }
 
@@ -295,116 +216,6 @@ bool SpringNetwork::areHydrogenBonded(size_t a, size_t b) const
             if (_hbDonorSlot[s] == static_cast<int>(a))
                 return true;
     return false;
-}
-
-// HiRE-RNA v3's planarity factor (arXiv:1404.0568, equation 5) and its
-// gradient. The factor is
-//
-//     Pl = Fi Fj,   Fi = (1/3) sum_k g(s_k),   g(s) = e^(-(s/delta)^2)
-//
-// where s_k is the distance of the k-th plane atom of residue j out of the
-// PLANE of residue i, and Fj the same with the roles swapped. It multiplies the
-// well, so a pair of bases that meet edge to edge in a shared plane keeps its
-// full depth and a skewed contact loses most of it.
-//
-// THE GRADIENT. Each F depends on six atoms: the three whose out-of-plane
-// distances it measures, and the three that define the plane it measures them
-// from -- through the centroid AND through the normal. Writing e1 = p1 - p0,
-// e2 = p2 - p0, m = e1 x e2, n = m/|m|, o = (p0+p1+p2)/3 and
-//
-//     Si = sum_k g'(s_k),   Vi = (1/3) sum_k g'(s_k) (q_k - o_i),
-//     Gi = (Vi - n_i (n_i.Vi)) / |m_i|
-//
-// the three plane atoms of i each take -(Si/9) n_i from the centroid, and from
-// the normal p1 takes e2 x Gi, p2 takes Gi x e1 and p0 minus their sum -- so
-// the normal's three forces cancel exactly, as they must. The partner's atom
-// q_k takes (1/3) g'(s_k) n_i. Checked against the numerical gradient.
-SpringNetwork::HydrogenBondPlanarity SpringNetwork::hydrogenBondPlanarity(size_t a, size_t b) const
-{
-    HydrogenBondPlanarity out;
-    if (!isHydrogenBondPlanarityEnabled())
-        return out;
-    const int fa = getBaseFrameOfParticle(a), fb = getBaseFrameOfParticle(b);
-    // No plane at one end is the ordinary case, not an error: it is every amino
-    // acid, every sugar and every phosphate. Same residue would mean one base
-    // paired with itself.
-    if (fa < 0 || fb < 0 || fa == fb)
-        return out;
-
-    const float delta = static_cast<float>(_config.hbond.planaritywidth);
-    const BaseFrame & Fa = _baseFrames[static_cast<size_t>(fa)];
-    const BaseFrame & Fb = _baseFrames[static_cast<size_t>(fb)];
-
-    Vector3f pa[3], pb[3];
-    for (unsigned k = 0; k < 3; ++k)
-    {
-        pa[k] = getParticle(Fa.atoms[k]).getPosition();
-        pb[k] = getParticle(Fb.atoms[k]).getPosition();
-        out.atoms[k] = Fa.atoms[k];
-        out.atoms[3 + k] = Fb.atoms[k];
-    }
-
-    const Vector3f e1a = pa[1] - pa[0], e2a = pa[2] - pa[0];
-    const Vector3f e1b = pb[1] - pb[0], e2b = pb[2] - pb[0];
-    const Vector3f ma = e1a ^ e2a, mb = e1b ^ e2b;
-    const float lma = ma.norm(), lmb = mb.norm();
-    if (lma < BASE_PLANE_MIN_AREA || lmb < BASE_PLANE_MIN_AREA)
-    {
-        out.degenerate = true;
-        return out;
-    }
-    const Vector3f na = ma / lma, nb = mb / lmb;
-    const Vector3f oa = (pa[0] + pa[1] + pa[2]) / 3.0f;
-    const Vector3f ob = (pb[0] + pb[1] + pb[2]) / 3.0f;
-
-    // s[k]: plane atom k of b, out of a's plane. t[k]: the other way round.
-    float s[3], t[3], gs[3], gt[3], dgs[3], dgt[3];
-    float Fi = 0.0f, Fj = 0.0f;
-    for (unsigned k = 0; k < 3; ++k)
-    {
-        s[k] = (pb[k] - oa).dot(na);
-        t[k] = (pa[k] - ob).dot(nb);
-        gs[k] = forcefield::hydrogen_bond_planarity_term(s[k], delta);
-        gt[k] = forcefield::hydrogen_bond_planarity_term(t[k], delta);
-        dgs[k] = forcefield::hydrogen_bond_planarity_derivative(s[k], delta);
-        dgt[k] = forcefield::hydrogen_bond_planarity_derivative(t[k], delta);
-        Fi += gs[k] / 3.0f;
-        Fj += gt[k] / 3.0f;
-    }
-    out.active = true;
-    out.factor = Fi * Fj;
-
-    float Si = 0.0f, Sj = 0.0f;
-    Vector3f Vi, Vj;
-    for (unsigned k = 0; k < 3; ++k)
-    {
-        Si += dgs[k];
-        Sj += dgt[k];
-        Vi = Vi + (pb[k] - oa) * (dgs[k] / 3.0f);
-        Vj = Vj + (pa[k] - ob) * (dgt[k] / 3.0f);
-    }
-    const Vector3f Gi = (Vi - na * na.dot(Vi)) / lma;
-    const Vector3f Gj = (Vj - nb * nb.dot(Vj)) / lmb;
-
-    // dFi/d(atoms of a): a's own plane, through its centroid and its normal.
-    Vector3f dFi_a[3], dFj_b[3];
-    const Vector3f ai1 = e2a ^ Gi, ai2 = Gi ^ e1a;
-    const Vector3f bj1 = e2b ^ Gj, bj2 = Gj ^ e1b;
-    dFi_a[0] = na * (-Si / 9.0f) - ai1 - ai2;
-    dFi_a[1] = na * (-Si / 9.0f) + ai1;
-    dFi_a[2] = na * (-Si / 9.0f) + ai2;
-    dFj_b[0] = nb * (-Sj / 9.0f) - bj1 - bj2;
-    dFj_b[1] = nb * (-Sj / 9.0f) + bj1;
-    dFj_b[2] = nb * (-Sj / 9.0f) + bj2;
-
-    // d(Fi Fj)/dx, with each F's dependence on the OTHER residue's atoms being
-    // the plain (1/3) g'(.) n of the out-of-plane distance.
-    for (unsigned k = 0; k < 3; ++k)
-    {
-        out.gradient[k] = dFi_a[k] * Fj + nb * (dgt[k] / 3.0f) * Fi;
-        out.gradient[3 + k] = dFj_b[k] * Fi + na * (dgs[k] / 3.0f) * Fj;
-    }
-    return out;
 }
 
 // Applies the Morse potential to every currently active hydrogen bond --
@@ -542,7 +353,6 @@ void SpringNetwork::computeHydrogenBondForces()
         // than a second bond: see ParticleProperties::hasLobes.
         int donorLobes, acceptorLobes;
     };
-    const int exponent = getHydrogenBondAngularExponent();
     std::vector<Bond> bonds;
     bonds.reserve(_hbDonorSlot.size());
     for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
@@ -555,15 +365,11 @@ void SpringNetwork::computeHydrogenBondForces()
                                  getParticle(i).lobeMode(),
                                  getParticle(static_cast<size_t>(_hbDonorSlot[s])).lobeMode()});
 
-    // Twelve slots per bond: two antecedents on each side, the donor, the
-    // acceptor -- the angular weight is a product of two factors, one per side,
-    // so its gradient reaches every one of them -- and then the three base
-    // plane atoms of each end's residue, which the planarity factor reaches.
-    // The last six are unused, and left at zero, whenever that factor does not
-    // apply, which is every hydrogen bond outside a base pair.
-    _hydrogenBondForceScratch.resize(bonds.size() * 12);
+    // Six slots per bond: two antecedents on each side, the donor, the
+    // acceptor. The angular weight is now a product of two factors, one per
+    // side, so its gradient reaches every one of them.
+    _hydrogenBondForceScratch.resize(bonds.size() * 6);
     std::vector<float> pairEnergyScratch(bonds.size());
-    std::vector<HydrogenBondPlanarity> planarityScratch(bonds.size());
 
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
@@ -576,8 +382,9 @@ void SpringNetwork::computeHydrogenBondForces()
         const float distance = v.norm();
         if (distance < 1e-6f)
         {
-            for (unsigned slot = 0; slot < 12; ++slot)
-                _hydrogenBondForceScratch[12 * k + slot] = Vector3f();
+            _hydrogenBondForceScratch[3 * k + 0] = Vector3f();
+            _hydrogenBondForceScratch[3 * k + 1] = Vector3f();
+            _hydrogenBondForceScratch[3 * k + 2] = Vector3f();
             pairEnergyScratch[k] = 0.0f;
             continue;
         }
@@ -610,10 +417,10 @@ void SpringNetwork::computeHydrogenBondForces()
 
         const float cd = hasD ? dhat.dot(vhat) : 1.0f;
         const float ca = hasA ? ahat.dot(-vhat) : 1.0f;
-        const float wd = hasD ? forcefield::hydrogen_bond_angular_factor(cd, exponent) : 1.0f;
-        const float wa = hasA ? forcefield::hydrogen_bond_angular_factor(ca, exponent) : 1.0f;
-        const float dwd = hasD ? forcefield::hydrogen_bond_angular_derivative(cd, exponent) : 0.0f;
-        const float dwa = hasA ? forcefield::hydrogen_bond_angular_derivative(ca, exponent) : 0.0f;
+        const float wd = hasD ? forcefield::hydrogen_bond_angular_factor(cd) : 1.0f;
+        const float wa = hasA ? forcefield::hydrogen_bond_angular_factor(ca) : 1.0f;
+        const float dwd = hasD ? forcefield::hydrogen_bond_angular_derivative(cd) : 0.0f;
+        const float dwa = hasA ? forcefield::hydrogen_bond_angular_derivative(ca) : 0.0f;
         const float w = wd * wa;
 
         // Three sub-terms, each balanced on its OWN atoms rather than letting
@@ -717,314 +524,32 @@ void SpringNetwork::computeHydrogenBondForces()
             f_acceptor -= (f_a1 + f_a2 + on_donor);
         }
 
-        // (D) the planarity factor, which MULTIPLIES everything above: the six
-        // forces already computed are scaled by it, and its own gradient lands
-        // on the six base plane atoms. E = M(d) w Pl, so d(M w Pl) = Pl d(M w)
-        // + M w dPl, which is exactly these two lines of bookkeeping.
-        const HydrogenBondPlanarity pl = hydrogenBondPlanarity(bonds[k].donor, bonds[k].acceptor);
-        if (pl.active)
-        {
-            f_d1 = f_d1 * pl.factor;
-            f_d2 = f_d2 * pl.factor;
-            f_a1 = f_a1 * pl.factor;
-            f_a2 = f_a2 * pl.factor;
-            f_donor = f_donor * pl.factor;
-            f_acceptor = f_acceptor * pl.factor;
-            for (unsigned slot = 0; slot < 6; ++slot)
-                _hydrogenBondForceScratch[12 * k + 6 + slot] = pl.gradient[slot] * (-morse * w * conv);
-        }
-        else
-            for (unsigned slot = 0; slot < 6; ++slot)
-                _hydrogenBondForceScratch[12 * k + 6 + slot] = Vector3f();
-
-        _hydrogenBondForceScratch[12 * k + 0] = f_d1;
-        _hydrogenBondForceScratch[12 * k + 1] = f_d2;
-        _hydrogenBondForceScratch[12 * k + 2] = f_a1;
-        _hydrogenBondForceScratch[12 * k + 3] = f_a2;
-        _hydrogenBondForceScratch[12 * k + 4] = f_donor;
-        _hydrogenBondForceScratch[12 * k + 5] = f_acceptor;
-        pairEnergyScratch[k] = morse * w * pl.factor;
-        planarityScratch[k] = pl;
+        _hydrogenBondForceScratch[6 * k + 0] = f_d1;
+        _hydrogenBondForceScratch[6 * k + 1] = f_d2;
+        _hydrogenBondForceScratch[6 * k + 2] = f_a1;
+        _hydrogenBondForceScratch[6 * k + 3] = f_a2;
+        _hydrogenBondForceScratch[6 * k + 4] = f_donor;
+        _hydrogenBondForceScratch[6 * k + 5] = f_acceptor;
+        pairEnergyScratch[k] = morse * w;
     }
 
     float hbond_energy = 0.0f;
-    size_t degenerate_planes = 0;
     for (size_t k = 0; k < bonds.size(); ++k)
     {
         if (bonds[k].antecedent >= 0)
-            getParticle(static_cast<size_t>(bonds[k].antecedent)).addForce(_hydrogenBondForceScratch[12 * k + 0]);
+            getParticle(static_cast<size_t>(bonds[k].antecedent)).addForce(_hydrogenBondForceScratch[6 * k + 0]);
         if (bonds[k].antecedent2 >= 0)
-            getParticle(static_cast<size_t>(bonds[k].antecedent2)).addForce(_hydrogenBondForceScratch[12 * k + 1]);
+            getParticle(static_cast<size_t>(bonds[k].antecedent2)).addForce(_hydrogenBondForceScratch[6 * k + 1]);
         if (bonds[k].acceptorAntecedent >= 0)
-            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent)).addForce(_hydrogenBondForceScratch[12 * k + 2]);
+            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent)).addForce(_hydrogenBondForceScratch[6 * k + 2]);
         if (bonds[k].acceptorAntecedent2 >= 0)
-            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent2)).addForce(_hydrogenBondForceScratch[12 * k + 3]);
-        getParticle(bonds[k].donor).addForce(_hydrogenBondForceScratch[12 * k + 4]);
-        getParticle(bonds[k].acceptor).addForce(_hydrogenBondForceScratch[12 * k + 5]);
-        // A plane atom can also be the acceptor or an antecedent -- guanine's
-        // N3 is both -- so these are separate additions, not a replacement.
-        if (planarityScratch[k].active)
-            for (unsigned slot = 0; slot < 6; ++slot)
-                getParticle(planarityScratch[k].atoms[slot])
-                    .addForce(_hydrogenBondForceScratch[12 * k + 6 + slot]);
-        if (planarityScratch[k].degenerate)
-            degenerate_planes++;
+            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent2)).addForce(_hydrogenBondForceScratch[6 * k + 3]);
+        getParticle(bonds[k].donor).addForce(_hydrogenBondForceScratch[6 * k + 4]);
+        getParticle(bonds[k].acceptor).addForce(_hydrogenBondForceScratch[6 * k + 5]);
         hbond_energy += pairEnergyScratch[k];
     }
 
-    if (degenerate_planes)
-        logging::warning("Hydrogen bond planarity: %zu bond(s) took a factor of 1 because a base plane frame "
-                         "has collapsed below %.2f A2 of area.",
-                         degenerate_planes, static_cast<double>(BASE_PLANE_MIN_AREA));
     _energies.hbond = hbond_energy;}
-
-// Base stacking, after HiRE-RNA v3 (Cragnolini, Laurin, Derreumaux & Pasquali,
-// arXiv:1404.0568), their equation (4). Per pair of base planes,
-//
-//     E = -eps G(d) P A_i A_j
-//
-// with d the distance between the two frame CENTRES, G the Gaussian,
-// P = (n_i.n_j)^2 the parallel factor and A = u^2(2-u^2), u = n.rhat, the
-// face-to-face factor of each base. The forms and the measured parameters are
-// in forcefield/shared/stacking_shared.h; what is here is the geometry and the
-// gradient.
-//
-// SIX BODIES, NOT TWO. A frame's normal and its centre are both built from all
-// three of its atoms, so every one of the six carries force. Writing
-// b = p1 - p0, c = p2 - p0, m = b x c and n = m/|m|, the centre is the plain
-// mean of the three and
-//
-//     dE/dm       = (N - n (n.N)) / |m|,     N = dE/dn
-//     dE/dp1      = c x (dE/dm)
-//     dE/dp2      = (dE/dm) x b
-//     dE/dp0      = -(the other two)
-//
-// the last line making each frame's three normal-forces sum to zero exactly, by
-// construction rather than by balancing. The centre's share is dE/dv split in
-// three equal parts, with the sign of which frame it belongs to. Translation
-// invariance therefore holds to the bit, and the finite-difference test checks
-// the rest.
-void SpringNetwork::computeStackingForces()
-{
-    _energies.stacking = 0.0f;
-    if (_baseFrames.empty() || !_nsearch.stacking)
-        return;
-
-    const float cutoff = getStackingCutoff();
-    // `scale` multiplies the well depth, which is what it means everywhere
-    // else: one knob to weigh the whole family without touching its shape.
-    const float eps = static_cast<float>(_config.stacking.epsilon * _config.stacking.scale);
-    const float r_st = static_cast<float>(_config.stacking.equilibrium);
-    const float sigma = static_cast<float>(_config.stacking.width);
-    const float conv = static_cast<float>(forcefield::GLOBAL_SPRING_FORCE_CONVERT);
-
-    // The pair list first, so the force loop below is a flat parallel loop over
-    // pairs rather than a nested walk with a shared accumulator.
-    struct Pair
-    {
-        size_t i, j;
-    };
-    std::vector<Pair> pairs;
-    for (size_t fi = 0; fi < _baseFrames.size(); ++fi)
-        _nsearch.stacking->for_each_neighbor(_baseFrameAnchors[fi], [&](size_t candidate) {
-            const int fj = _frameOfAnchor[candidate];
-            // Each pair once: the grid returns both directions.
-            if (fj > static_cast<int>(fi))
-                pairs.push_back({fi, static_cast<size_t>(fj)});
-        });
-
-    _stackingForceScratch.assign(pairs.size() * 6, Vector3f());
-    std::vector<float> pairEnergy(pairs.size(), 0.0f);
-    std::vector<unsigned char> degenerateScratch(pairs.size(), 0);
-
-#ifdef OPENMP_SUPPORT
-#pragma omp parallel for schedule(static)
-#endif
-    for (size_t k = 0; k < pairs.size(); ++k)
-    {
-        const BaseFrame & fi = _baseFrames[pairs[k].i];
-        const BaseFrame & fj = _baseFrames[pairs[k].j];
-
-        Vector3f pi[3], pj[3];
-        for (unsigned a = 0; a < 3; ++a)
-        {
-            pi[a] = getParticle(fi.atoms[a]).getPosition();
-            pj[a] = getParticle(fj.atoms[a]).getPosition();
-        }
-
-        const Vector3f bi = pi[1] - pi[0], ci = pi[2] - pi[0];
-        const Vector3f bj = pj[1] - pj[0], cj = pj[2] - pj[0];
-        const Vector3f mi = bi ^ ci, mj = bj ^ cj;
-        const float lmi = mi.norm(), lmj = mj.norm();
-        // A frame whose three atoms have nearly collapsed onto a line has no
-        // usable normal, and the gradient below divides by this quantity -- so
-        // the threshold is the PHYSICAL one, not an epsilon. See
-        // BASE_PLANE_MIN_AREA; the tables pick triples whose smallest angle has
-        // a sine above 0.7, so this does not fire on healthy geometry.
-        if (lmi < BASE_PLANE_MIN_AREA || lmj < BASE_PLANE_MIN_AREA)
-        {
-            degenerateScratch[k] = 1;
-            continue;
-        }
-        const Vector3f ni = mi / lmi, nj = mj / lmj;
-
-        const Vector3f centre_i = (pi[0] + pi[1] + pi[2]) / 3.0f;
-        const Vector3f centre_j = (pj[0] + pj[1] + pj[2]) / 3.0f;
-        const Vector3f v = centre_j - centre_i;
-        const float d = v.norm();
-        if (d < 1e-6f || d >= cutoff)
-            continue;
-        const Vector3f rhat = v / d;
-
-        const float w = ni.dot(nj);
-        const float P = w * w;
-        const float ui = ni.dot(rhat), uj = nj.dot(rhat);
-        const float Ai = forcefield::stacking_alignment_factor(ui);
-        const float Aj = forcefield::stacking_alignment_factor(uj);
-        const float dAi = forcefield::stacking_alignment_derivative(ui);
-        const float dAj = forcefield::stacking_alignment_derivative(uj);
-        const float G = forcefield::stacking_distance_factor(d, r_st, sigma);
-        const float dG = forcefield::stacking_distance_derivative(d, r_st, sigma);
-
-        pairEnergy[k] = -eps * G * P * Ai * Aj;
-
-        // dE/dv: the distance through G, and rhat through both alignments.
-        const Vector3f dEdv = (rhat * (dG * P * Ai * Aj) + (ni - rhat * ui) * (G * P * dAi * Aj / d) +
-                               (nj - rhat * uj) * (G * P * Ai * dAj / d)) *
-                              (-eps);
-
-        // dE/dn of each side: the parallel factor through the OTHER normal, and
-        // its own alignment through rhat.
-        const Vector3f Ni = (nj * (2.0f * w * Ai) + rhat * (P * dAi)) * (-eps * G * Aj);
-        const Vector3f Nj = (ni * (2.0f * w * Aj) + rhat * (P * dAj)) * (-eps * G * Ai);
-        const Vector3f gi = (Ni - ni * ni.dot(Ni)) / lmi;
-        const Vector3f gj = (Nj - nj * nj.dot(Nj)) / lmj;
-
-        // Forces are -dE/dx, converted from kJ.mol-1.A-1 to the integrator's
-        // own unit the way every molar term in this code is.
-        // v = centre_j - centre_i, so dE/dp is -dEdv/3 on each atom of i and
-        // +dEdv/3 on each atom of j; the force is minus that.
-        const Vector3f share_i = dEdv * (conv / 3.0f);
-        const Vector3f share_j = dEdv * (-conv / 3.0f);
-
-        const Vector3f fi1 = (ci ^ gi) * -conv;
-        const Vector3f fi2 = (gi ^ bi) * -conv;
-        const Vector3f fj1 = (cj ^ gj) * -conv;
-        const Vector3f fj2 = (gj ^ bj) * -conv;
-
-        _stackingForceScratch[6 * k + 0] = share_i - fi1 - fi2;
-        _stackingForceScratch[6 * k + 1] = share_i + fi1;
-        _stackingForceScratch[6 * k + 2] = share_i + fi2;
-        _stackingForceScratch[6 * k + 3] = share_j - fj1 - fj2;
-        _stackingForceScratch[6 * k + 4] = share_j + fj1;
-        _stackingForceScratch[6 * k + 5] = share_j + fj2;
-    }
-
-    // Serial, like the hydrogen bond's: one particle can be in many stacking
-    // pairs at once, so this is a genuine write conflict rather than a
-    // question of summation order.
-    float stacking_energy = 0.0f;
-    for (size_t k = 0; k < pairs.size(); ++k)
-    {
-        for (unsigned a = 0; a < 3; ++a)
-        {
-            getParticle(_baseFrames[pairs[k].i].atoms[a]).addForce(_stackingForceScratch[6 * k + a]);
-            getParticle(_baseFrames[pairs[k].j].atoms[a]).addForce(_stackingForceScratch[6 * k + 3 + a]);
-        }
-        stacking_energy += pairEnergy[k];
-    }
-    _energies.stacking = stacking_energy;
-    const size_t degenerate = std::count(degenerateScratch.begin(), degenerateScratch.end(), 1);
-    if (degenerate)
-        logging::warning("Stacking: %zu base pair(s) skipped because a plane frame has collapsed below %.2f A2 "
-                         "of area. The geometry has already gone wrong where that happens.",
-                         degenerate, static_cast<double>(BASE_PLANE_MIN_AREA));
-}
-
-std::pair<size_t, size_t> SpringNetwork::getStackingPairCensus() const
-{
-    size_t within = 0, sprung = 0;
-    if (_baseFrames.empty() || !_nsearch.stacking)
-        return {0, 0};
-    const float cutoff = getStackingCutoff();
-    auto centre = [&](const BaseFrame & f) {
-        return (getParticle(f.atoms[0]).getPosition() + getParticle(f.atoms[1]).getPosition() +
-                getParticle(f.atoms[2]).getPosition()) /
-               3.0f;
-    };
-    for (size_t fi = 0; fi < _baseFrames.size(); ++fi)
-        _nsearch.stacking->for_each_neighbor(_baseFrameAnchors[fi], [&](size_t candidate) {
-            const int fj = _frameOfAnchor[candidate];
-            if (fj <= static_cast<int>(fi))
-                return;
-            if ((centre(_baseFrames[static_cast<size_t>(fj)]) - centre(_baseFrames[fi])).norm() >= cutoff)
-                return;
-            within++;
-            for (unsigned a = 0; a < 3; ++a)
-                for (unsigned b = 0; b < 3; ++b)
-                    if (getParticle(_baseFrames[fi].atoms[a])
-                            .isInSpringNeighbors(
-                                static_cast<unsigned>(_baseFrames[static_cast<size_t>(fj)].atoms[b])))
-                    {
-                        sprung++;
-                        return;
-                    }
-        });
-    return {within, sprung};
-}
-
-void SpringNetwork::_setupStacking()
-{
-    if (!isStackingEnabled())
-        return;
-    if (getStackingCutoff() < 1e-6)
-        throw std::runtime_error("Stacking cutoff must be > 0");
-    if (_config.stacking.width <= 0.0)
-        logging::die("stacking.width (sigma) must be > 0: the distance factor is e^(-(r-r_st)^2/sigma).");
-    if (_baseFrames.empty())
-    {
-        logging::warning("stacking.enable is set but no base plane frame was installed: the term will do "
-                         "nothing. Check stacking.path and that the topology carries nucleic residues.");
-        return;
-    }
-
-    _baseFrameAnchors.clear();
-    _frameOfAnchor.assign(_particles.size(), -1);
-    for (size_t f = 0; f < _baseFrames.size(); ++f)
-    {
-        const size_t anchor = _baseFrames[f].atoms[0];
-        if (_frameOfAnchor[anchor] >= 0)
-            logging::die("Stacking: particle %zu is the first plane atom of two different base frames.", anchor);
-        _frameOfAnchor[anchor] = static_cast<int>(f);
-        _baseFrameAnchors.push_back(anchor);
-    }
-
-    // The grid is queried AT A PARTICLE -- atoms[0] -- while the term measures
-    // centre to centre, so the search radius has to cover the cutoff plus the
-    // offset at BOTH ends. Measured here rather than assumed: a nucleobase ring
-    // is rigid, so this offset is a property of the frames the table chose and
-    // cannot grow during a run. The margin is for the ring breathing under the
-    // mesh.
-    float widest = 0.0f;
-    for (const BaseFrame & f : _baseFrames)
-    {
-        const Vector3f centre = (getParticle(f.atoms[0]).getPosition() + getParticle(f.atoms[1]).getPosition() +
-                                 getParticle(f.atoms[2]).getPosition()) /
-                                3.0f;
-        widest = std::max(widest, (getParticle(f.atoms[0]).getPosition() - centre).norm());
-    }
-    const float margin = 0.5f;
-    const float radius = getStackingCutoff() + 2.0f * (widest + margin);
-
-    _nsearch.stacking = make_nsearch(_particles, radius, _baseFrameAnchors, getNeighborSkin(),
-                                     getCellWidthFor(radius));
-    _excludeProbeFromNeighborSearch(*_nsearch.stacking);
-
-    logging::info("Stacking: %zu base frame(s), well %.3g kJ.mol-1 at %.2f A (sigma %.3g A2), cutoff %.2f A, "
-                  "grid radius %.2f A (anchor offset up to %.2f A).",
-                  _baseFrames.size(), _config.stacking.epsilon * _config.stacking.scale,
-                  _config.stacking.equilibrium, _config.stacking.width, getStackingCutoff(), radius, widest);
-}
 
 // Calculate forces that apply on dynamic particles.
 void SpringNetwork::computeParticleForces()
@@ -1224,12 +749,6 @@ void SpringNetwork::computeForces()
         _assignHydrogenBondPairs();
         computeHydrogenBondForces();
     }
-    // Outside isSpringEnabled() too, and with no assignment phase of its own:
-    // unlike a hydrogen bond, stacking holds no slots and needs no partner to
-    // be chosen. Every pair of base planes within the cutoff contributes what
-    // its geometry is worth, the way the steric term does.
-    if (isStackingEnabled())
-        computeStackingForces();
     computeParticleForces();
 }
 
@@ -1503,19 +1022,6 @@ void SpringNetwork::_displayFrameData()
                       _energies.hbond, getHydrogenBondCount(), census[0], census[1], census[2], census[3]);
         if (!_config.hbond.log.empty())
             dumpHydrogenBonds(_config.hbond.log, _nbiter);
-        if (!_config.hbond.candidatelog.empty())
-            dumpHydrogenBondCandidates(_config.hbond.candidatelog, _nbiter);
-    }
-    if (isStackingEnabled())
-    {
-        // The sprung count beside the total: a cutoff-built elastic network
-        // puts springs between stacked bases, and such a spring is a crude
-        // stand-in for exactly this term, so a report that hid the overlap
-        // would let the two double count unnoticed.
-        const std::pair<size_t, size_t> census = getStackingPairCensus();
-        logging::info("Stacking energy: %5.2f kJ.mol-1 over %zu base pair(s) within the cutoff, %zu of them "
-                      "also joined by a spring",
-                      _energies.stacking, census.first, census.second);
     }
     if (isPeptideBondEnabled())
     {
@@ -1949,7 +1455,6 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _setupElectrostatic();
     _setupHydrophobic();
     _setupHydrogenBond();
-    _setupStacking();
     // After the hydrogen bond term, whose out-of-plane lobe sites are what
     // brings a nucleophile into the attack conformation this then acts on.
     _peptidebond.setup(*this, conf.peptidebond);
@@ -2066,47 +1571,6 @@ void SpringNetwork::_setupHydrogenBond()
         _hbAcceptorSlot.assign(_hbAcceptorOffset[n], -1);
 
         logging::info("Hydrogen bond slots: %zu donor, %zu acceptor.", _hbDonorSlot.size(), _hbAcceptorSlot.size());
-
-        // How many candidate pairs a SPRING has already pre-empted.
-        //
-        // The assignment refuses any pair its two atoms are sprung by, and that
-        // is right -- a spring and a bond on the same pair would count one
-        // interaction twice. But it was silent, and silence cost a great deal:
-        // a 70S assembled with `mergespn --cutoff 7.0` carried 1780 springs
-        // across its own base-edge atoms, at the merge's default stiffness of
-        // 1.0 against 650 for the all-atom mesh. Removing all of them moved the
-        // spring energy from 40.03 to 40.07 kJ/mol -- they held nothing -- and
-        // took the real base pairs held from 16 of 49 to 48 of 49.
-        //
-        // Mechanically invisible, functionally decisive, and reported by
-        // nothing: the spring energy looked normal and the bond count looked
-        // plausible. One line here would have said it immediately.
-        if (_nsearch.hbond)
-        {
-            size_t preempted = 0;
-            for (const size_t i : donor_acceptor_particles)
-            {
-                const Particle & p = getParticle(i);
-                _nsearch.hbond->for_each_neighbor(i, [&](size_t j) {
-                    if (j <= i || isProbeParticle(j))
-                        return;
-                    const Particle & q = getParticle(j);
-                    if (p.getResId() == q.getResId() && p.getChainName() == q.getChainName())
-                        return;
-                    if (!((p.isDonor() && q.isAcceptor()) || (q.isDonor() && p.isAcceptor())))
-                        return;
-                    if (Particle::distance(p, q) < getHydrogenBondCutoff() &&
-                        p.isInSpringNeighbors(static_cast<unsigned>(q.getId())))
-                        preempted++;
-                });
-            }
-            if (preempted)
-                logging::warning("%zu donor/acceptor pair(s) within the hydrogen bond cutoff are joined by a "
-                                 "SPRING, so the term will decline them -- a spring and a bond on one pair "
-                                 "would count it twice. If this network was assembled with a cutoff, that "
-                                 "cutoff is welding the pairs the term is meant to form.",
-                                 preempted);
-        }
     }
 }
 
@@ -2270,7 +1734,6 @@ std::vector<size_t> SpringNetwork::_donorAcceptorParticleIndexes() const
 void SpringNetwork::_assignHydrogenBondPairs()
 {
     const float cutoff = getHydrogenBondCutoff();
-    const int exponent = getHydrogenBondAngularExponent();
     const size_t n = _particles.size();
     if (_hbDonorOffset.size() != n + 1)
         return;
@@ -2293,37 +1756,8 @@ void SpringNetwork::_assignHydrogenBondPairs()
             const int j = _hbDonorSlot[sd];
             if (j < 0)
                 continue;
-            // Beyond the cutoff, newly sprung, or no longer WORTH its slot.
-            // The third test matters because a slot is held until released: a
-            // contact that was worth taking when it formed, and that a factor
-            // has since reduced to nothing, would otherwise keep the atom for
-            // the rest of the run.
-            const bool far =
-                Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j))) > cutoff;
-            const bool sprung = getParticle(i).isInSpringNeighbors(static_cast<unsigned>(j));
-            bool worthless = false;
-            if (!far && !sprung && getHydrogenBondMinimumStrength() > 0.0f)
-            {
-                const HydrogenBondParameters mp = hydrogenBondParameters(i, static_cast<size_t>(j));
-                const float d = Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j)));
-                float w = 1.0f;
-                if (d > 1e-6f)
-                {
-                    const Vector3f vhat =
-                        (getParticle(static_cast<size_t>(j)).getPosition() - getParticle(i).getPosition()) / d;
-                    const Vector3f hd = donorDirection(getParticle(i), vhat);
-                    if (hd.norm() > 1e-6f)
-                        w *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat), exponent);
-                    const Vector3f ha = donorDirection(getParticle(static_cast<size_t>(j)), -vhat);
-                    if (ha.norm() > 1e-6f)
-                        w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat), exponent);
-                }
-                const float strength =
-                    _ff->computeHydrogenBondEnergy(d, mp.welldepth, mp.equilibrium, mp.width) * w *
-                    hydrogenBondPlanarity(i, static_cast<size_t>(j)).factor;
-                worthless = strength > -getHydrogenBondMinimumStrength();
-            }
-            if (!far && !sprung && !worthless)
+            if (Particle::distance(getParticle(i), getParticle(static_cast<size_t>(j))) <= cutoff &&
+                !getParticle(i).isInSpringNeighbors(static_cast<unsigned>(j)))
                 continue;
             _hbDonorSlot[sd] = -1;
             for (size_t sa = _hbAcceptorOffset[j]; sa < _hbAcceptorOffset[j + 1]; ++sa)
@@ -2354,40 +1788,13 @@ void SpringNetwork::_assignHydrogenBondPairs()
     // capacity are enough -- 2 or 3 in practice. The loop stops early as
     // soon as a round confirms nothing, so the common single-slot case
     // costs exactly what it did before.
-    //
-    // AN OPEN QUESTION, measured but not explained. On 8PKL's all-atom region
-    // this holds 16 of the 49 base pairs the crystal has. The 33 it misses are
-    // not weak: asked through dumpHydrogenBondCandidates -- which uses these
-    // same functions, so it cannot disagree -- their best atom couple scores
-    // -15.7 kJ/mol at the median against -10.8 for the pairs that DO form, with
-    // better distances, better angular weights and better planarity.
-    //
-    // Three explanations were tried and none survived:
-    //   25 of the 33 have no free DONOR facing a free ACCEPTOR, so slots are
-    //     part of it -- but freeing 320 parasite slots with
-    //     hbond.minimumstrength recovered none of them;
-    //   the remaining 8 are fully pairable and still unformed, which looks like
-    //     the reciprocal-best rule stranding a pair whose ends prefer others --
-    //     but adding a Gale-Shapley fallback (a refused particle tries its next
-    //     choice) gained nothing and cost one real pair, 16 -> 15;
-    //   raising the round count from 4 to 24 changed the result not at all,
-    //     bit for bit.
-    // Whatever is missing, it is none of those. Worth settling on a small
-    // controlled case where the assignment can be watched, not on a ribosome.
     for (unsigned round = 0; round < 4; ++round)
     {
         std::vector<int> nearest(n, -1);
-        // Holds the best bond STRENGTH seen so far, in kJ/mol. It starts at
-        // MINUS THE FLOOR rather than at zero: a candidate whose angular or
-        // planarity factor kills it is worth exactly nothing and must not take
-        // a slot from a real partner, which is what the previous version of
-        // this comment said -- but a threshold of zero exactly admits a bond
-        // worth -0.07 kJ/mol, and that bond then holds the slot while a real
-        // pair worth -15 finds the atom taken. Measured on the ribosome: 330
-        // slots held by stacked sequence neighbours worth 0.000 kJ/mol at the
-        // median. See hbond.minimumstrength, which is zero by default.
-        const float floor = -getHydrogenBondMinimumStrength();
-        std::vector<float> nearest_distance(n, floor);
+        // Holds the best bond STRENGTH seen so far, in kJ/mol, so it starts
+        // at zero: a candidate whose angular factor kills it is worth exactly
+        // nothing and must not take a slot from a real partner.
+        std::vector<float> nearest_distance(n, 0.0f);
 
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
@@ -2451,27 +1858,21 @@ void SpringNetwork::_assignHydrogenBondPairs()
                     const Vector3f vhat = (q.getPosition() - p.getPosition()) / distance;
                     const Vector3f hd = donorDirection(p, vhat);
                     if (hd.norm() > 1e-6f)
-                        weight *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat), exponent);
+                        weight *= forcefield::hydrogen_bond_angular_factor(hd.dot(vhat));
                     // The acceptor's own geometry decides too: a lone pair
                     // pointing away forbids the bond as surely as a hydrogen
                     // pointing away does.
                     const Vector3f ha = donorDirection(q, -vhat);
                     if (ha.norm() > 1e-6f)
-                        weight *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat), exponent);
+                        weight *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
                 }
                 // Ranked on the well this COUPLE would use, not the force
                 // field's: a pair that carries a group is worth what its own
                 // group says, and ranking it as an ordinary hydrogen bond
                 // would let a shallower neighbour take the slot.
                 const HydrogenBondParameters mp = hydrogenBondParameters(i, j);
-                // And on the planarity factor, so the ranking sees the same
-                // quantity the energy and the force will. Ranking without it
-                // would hand a slot to a skewed contact that the force term
-                // then values at almost nothing -- which is the failure the
-                // angular factor was added to this ranking to fix, repeated.
                 const float strength =
-                    _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width) * weight *
-                    hydrogenBondPlanarity(i, j).factor;
+                    _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width) * weight;
                 if (strength < nearest_distance[i])
                 {
                     nearest_distance[i] = strength;

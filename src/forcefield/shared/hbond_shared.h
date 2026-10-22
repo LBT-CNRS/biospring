@@ -43,79 +43,22 @@ inline float biospring_hbond_force_module(float distance, float welldepth, float
 
 // ---- Angular weight -----------------------------------------------------
 //
-// w = max(cos theta, 0)^n, n = 2 by default. Clamped at zero rather than raised
-// through: an acceptor sitting BEHIND the donor is not a weak hydrogen bond, it
-// is not one at all, and an even power alone would revive it with the sign lost.
-//
-// n is a setting because HiRE-RNA v3 uses SIX where this has always used two
-// (its nu(alpha) = cos^6(alpha - alpha0)), which is a far narrower angular
-// acceptance. The exponent is a small integer, so the power is a loop rather
-// than a pow() call: at n = 2 that is one multiply, and the function is on the
-// innermost path of the term.
+// w = max(cos theta, 0)^2. Clamped at zero rather than squared through: an
+// acceptor sitting BEHIND the donor is not a weak hydrogen bond, it is not one
+// at all, and cos^2 alone would revive it with the sign lost.
 
 /// @param cos_theta Cosine of the angle between the side's own direction and
 ///     the bond axis.
 /// @return Dimensionless weight in [0, 1].
-inline float biospring_hbond_angular_factor_n(float cos_theta, int exponent)
+inline float biospring_hbond_angular_factor(float cos_theta)
 {
-    if (cos_theta <= 0.0f)
-        return 0.0f;
-    float w = 1.0f;
-    for (int k = 0; k < exponent; ++k)
-        w *= cos_theta;
-    return w;
+    return cos_theta > 0.0f ? cos_theta * cos_theta : 0.0f;
 }
 
 /// d(weight)/d(cos theta), for the force.
-inline float biospring_hbond_angular_derivative_n(float cos_theta, int exponent)
-{
-    if (cos_theta <= 0.0f || exponent < 1)
-        return 0.0f;
-    float w = (float) exponent;
-    for (int k = 1; k < exponent; ++k)
-        w *= cos_theta;
-    return w;
-}
-
-inline float biospring_hbond_angular_factor(float cos_theta)
-{
-    return biospring_hbond_angular_factor_n(cos_theta, 2);
-}
-
 inline float biospring_hbond_angular_derivative(float cos_theta)
 {
-    return biospring_hbond_angular_derivative_n(cos_theta, 2);
-}
-
-// ---- Planarity factor --------------------------------------------------
-//
-// HiRE-RNA v3's equation (5), which MULTIPLIES the well. Two bases pair when
-// they meet edge to edge IN A SHARED PLANE, and the factor says how well they
-// do: each of one base's plane atoms contributes e^(-(d/delta)^2) for its
-// distance d out of the OTHER base's plane, the three are averaged, and the two
-// sides multiply.
-//
-// Averaging rather than summing, unlike the reference's bare sum, so that a
-// perfectly coplanar pair scores exactly 1. That matters here and not there:
-// this multiplies a well depth that is already calibrated, and a factor that
-// could exceed 1 would silently recalibrate it.
-//
-// It is a REDUCTION, never a reward: in [0, 1], 1 only at perfect coplanarity.
-
-/// One plane atom's contribution.
-/// @param out_of_plane Signed distance from the partner base's plane, in A.
-/// @param delta        Width in A; the contribution is e^(-(d/delta)^2).
-inline float biospring_hbond_planarity_term(float out_of_plane, float delta)
-{
-    const float u = out_of_plane / delta;
-    return exp(-u * u);
-}
-
-/// d(term)/d(out_of_plane), in A-1.
-inline float biospring_hbond_planarity_derivative(float out_of_plane, float delta)
-{
-    const float u = out_of_plane / delta;
-    return -2.0f * out_of_plane / (delta * delta) * exp(-u * u);
+    return cos_theta > 0.0f ? 2.0f * cos_theta : 0.0f;
 }
 
 #endif // __BIOSPRING_HBOND_SHARED_H__

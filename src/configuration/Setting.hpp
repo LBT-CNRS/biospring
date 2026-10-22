@@ -667,119 +667,10 @@ class HydrogenBondSetting : public EnergySetting
     // reports a perfectly healthy count made entirely of contacts between
     // neighbouring residues.
     std::string log;
-    // Where to write EVERY candidate pair with what it is worth and whether its
-    // slots are free, for answering "why was this pair not formed?". Empty by
-    // default and expensive when on -- one line per candidate within the cutoff.
-    std::string candidatelog;
 
-    // HiRE-RNA v3's planarity factor (arXiv:1404.0568, equation 5), which
-    // MULTIPLIES the well: a pair of bases scores 1 when every one of their
-    // plane atoms lies in the other's plane and falls off as they skew. It
-    // needs a base plane at BOTH ends (baseplane.path), so a residue without
-    // one -- every amino acid -- keeps a factor of exactly 1 and behaves as
-    // before, to the bit.
-    //
-    // This is deliberately NOT applied to protein backbone hydrogen bonds even
-    // though their amide plane is available. In an alpha helix the donor's and
-    // the acceptor's peptide planes are NOT coplanar, so requiring coplanarity
-    // would unmake the helix. Coplanarity is a property of two aromatic rings
-    // meeting edge to edge, not of an amide bond.
-    bool planarity;
-    // delta in equation (5), in A. 1.5 A, chosen by MEASUREMENT OF BEHAVIOUR on
-    // three simple systems, after a first value of 2.5 taken from a structural
-    // histogram alone turned out to be too wide.
-    //
-    // The structural measurement still holds and is worth keeping: over 8PKL's
-    // 1893 real base pairs (two or more base-edge N/O contacts under 3.3 A,
-    // excluding sequence neighbours, which are STACKED rather than paired) the
-    // plane atoms sit 0.55 A out of the partner's plane at the median, against
-    // 3.32 A for a stack and 2.80 A for a single skewed contact. What it does
-    // NOT determine is where to put delta: its p90 tail at 2.95 A is mostly
-    // non-canonical pairs the 2-contact criterion admitted, and reading that
-    // tail as real pairs needing tolerance is what made 2.5 too wide.
-    //
-    // Scanned instead on what the term DOES, over 0.75 to 3.5 A:
-    //
-    //   21-mer DNA duplex, starting native -- all 20 native pairs survive at
-    //     every width (-772 to -822 kJ/mol, a 6 % spread), while the parasitic
-    //     pairing the hydrogen bond term's own comment documents falls from
-    //     -7.4 kJ/mol at 3.5 A to exactly -0.0 at 1.5 A and below;
-    //   RNA hairpin, starting unfolded, ten paired starts -- the native-register
-    //     share of the pairing rises monotonically as delta narrows, 0.575 +/-
-    //     0.085 at 3.5 A to 0.824 +/- 0.054 at 0.75 A;
-    //   anticodon trimer, starting in register, three paired starts -- the
-    //     OPPOSITE trend: in-register binding deepens as delta widens, -44.2
-    //     +/- 11.1 kJ/mol at 1.0 A to -72.3 +/- 6.8 at 2.5 A. This is the
-    //     stringent system, a 3-nt trimer with no neighbours, no continuous
-    //     backbone and nothing else holding it.
-    //
-    // The three do not agree on an optimum, they bracket one. 1.5 A is the only
-    // width satisfying all three: the narrowest that costs nothing measurable in
-    // binding (18.8 kJ/mol below 2.5 A against a 10.8 combined standard error,
-    // 1.7 sigma, where 1.0 A is 2.2 sigma worse and so genuinely worse), and the
-    // widest that leaves the duplex parasite at exactly zero.
-    //
-    // A RIBOSOME WANTS 2.0 A, and the reason is physical rather than a fudge.
-    // Narrowing delta on a 21-mer B-DNA duplex costs nothing -- all 20 native
-    // pairs survive at every width -- because a B-form pair is ideal and
-    // coplanar. Many ribosomal RNA pairs are NOT: non-canonical, Hoogsteen,
-    // sheared, part of a base triple. They therefore pay a factor the ideal pair
-    // does not, and on 8PKL's all-atom region the native pairing weight falls
-    // 34 % between 2.5 and 1.5 A:
-    //
-    //   delta   native  correct share  native kept
-    //   off       22.1          0.280           --
-    //   2.5       18.5          0.614         84 %
-    //   2.0       16.9          0.679         76 %
-    //   1.5       14.5          0.748         66 %
-    //
-    // 2.0 A recovers 17 % more native pairing than 1.5 for 0.069 of
-    // cleanliness. Set it per configuration; this default is the simple-nucleic
-    // one.
-    //
-    // Two things that breakdown settled, worth not re-deriving: pairing weight
-    // involving a COARSE bead is exactly zero (a one-bead residue has no
-    // base-edge N or O and cannot pair at all, so the multi-resolution boundary
-    // is not a source of error), and the crystal holds 111 pairs with a SINGLE
-    // edge contact -- base triples, A-minor motifs -- which a two-contact ground
-    // truth miscounts as parasitic. A ground truth demanding two contacts
-    // understates a ribosome.
-    double planaritywidth;
-    // The exponent in the angular weight max(cos theta, 0)^n, applied at BOTH
-    // ends. Two is what this code has always used; HiRE-RNA v3 uses SIX
-    // (nu(alpha) = cos^6), a far narrower acceptance. Unlike the planarity
-    // factor this says nothing about bases, so it is the one part of the
-    // HiRE-RNA treatment that can change a PROTEIN hydrogen bond.
-    //
-    // The OpenCL kernel hard-codes two, so a value other than two is refused on
-    // that backend rather than silently disagreeing with the CPU.
-    int angularexponent;
-    // What a bond must be WORTH, in kJ.mol-1, to occupy one of a site's slots.
-    //
-    // The ranking already scores candidates by strength rather than distance,
-    // and the comment that made it so says why: a candidate whose angular
-    // factor kills it "is worth exactly nothing and must not take a slot from a
-    // real partner". But the threshold it uses is zero EXACTLY, so a bond worth
-    // -0.07 kJ.mol-1 still passes -- "worth nothing" physically is not "worth
-    // zero" in floating point, and the slot stays taken.
-    //
-    // Measured on 8PKL's all-atom region with the planarity factor on: a real
-    // base pair's bonds are worth 5.29 kJ.mol-1 at the median, while the
-    // stacked sequence-neighbour contacts that occupy 330 slots are worth 0.000
-    // at the median and 0.005 at p90. A floor of 0.1 kJ.mol-1 rejects 320 of
-    // those 332 stacks and costs 8 of 40 real bonds -- and those 8 are the
-    // WEAKEST bonds of real pairs (p10 = 0.028), not the pairs themselves,
-    // since a pair holds two or three.
-    //
-    // Zero by default, which is the behaviour every existing configuration has.
-    double minimumstrength;
-
-    HydrogenBondSetting(const std::string & name)
-        : EnergySetting(name), path(), log(), candidatelog(), planarity(false), planaritywidth(1.5),
-          angularexponent(2), minimumstrength(0.0)
+    HydrogenBondSetting(const std::string & name) : EnergySetting(name), path(), log()
     {
-        _parameterNames = {"enable",         "scale",           "cutoff", "path", "log", "planarity",
-                           "planaritywidth", "angularexponent", "minimumstrength", "candidatelog"};
+        _parameterNames = {"enable", "scale", "cutoff", "path", "log"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -788,16 +679,6 @@ class HydrogenBondSetting : public EnergySetting
             path = s;
         else if (param == "log")
             log = s;
-        else if (param == "candidatelog")
-            candidatelog = s;
-        else if (param == "planarity")
-            _parse_bool(planarity, s, param);
-        else if (param == "planaritywidth")
-            utils::string::from_string<decltype(planaritywidth)>(planaritywidth, s);
-        else if (param == "angularexponent")
-            utils::string::from_string<decltype(angularexponent)>(angularexponent, s);
-        else if (param == "minimumstrength")
-            utils::string::from_string<decltype(minimumstrength)>(minimumstrength, s);
         else
             EnergySetting::setFromString(param, s);
     }
@@ -807,74 +688,6 @@ class HydrogenBondSetting : public EnergySetting
         EnergySetting::print(os);
         _mspFormatter.print("path", path, os);
         _mspFormatter.print("log", log, os);
-        _mspFormatter.print("candidatelog", candidatelog, os);
-        _mspFormatter.print("planarity", planarity, os);
-        _mspFormatter.print("planaritywidth", planaritywidth, os);
-        _mspFormatter.print("angularexponent", angularexponent, os);
-        _mspFormatter.print("minimumstrength", minimumstrength, os);
-    }
-};
-
-// Where the base plane frames come from. Its own group because TWO terms read
-// them: the stacking term, whose whole geometry they are, and the hydrogen
-// bond's planarity factor. Filing the path inside either one would make the
-// other depend on a setting named after something it is not.
-class BasePlaneSetting : public SettingBase
-{
-  public:
-    std::string path;
-
-    BasePlaneSetting(const std::string & name) : SettingBase(name), path() { _parameterNames = {"path"}; }
-
-    void setFromString(const std::string & param, const std::string & s) override
-    {
-        if (param == "path")
-            path = s;
-        else
-            logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
-    }
-
-    void print(std::ostream & os = std::cout) const override { _mspFormatter.print("path", path, os); }
-};
-
-// Base stacking, after HiRE-RNA v3 (arXiv:1404.0568). Same enable/scale/cutoff
-// triplet as EnergySetting; the frames come from baseplane.path.
-//
-// The well's three numbers live HERE rather than in the force field, unlike the
-// hydrogen bond's, because there is one global parameter set: stacking has no
-// per-couple named groups to resolve. Their defaults are measured -- see
-// forcefield/energy/stacking.hpp for the measurement and its sample.
-class StackingSetting : public EnergySetting
-{
-  public:
-    double epsilon;     // well depth, kJ.mol-1
-    double equilibrium; // r_st, A
-    double width;       // sigma, A^2 -- the factor is e^(-(r-r_st)^2/sigma)
-
-    StackingSetting(const std::string & name)
-        : EnergySetting(name), epsilon(8.0), equilibrium(3.92), width(0.85)
-    {
-        _parameterNames = {"enable", "scale", "cutoff", "epsilon", "equilibrium", "width"};
-    }
-
-    void setFromString(const std::string & param, const std::string & s) override
-    {
-        if (param == "epsilon")
-            utils::string::from_string<decltype(epsilon)>(epsilon, s);
-        else if (param == "equilibrium")
-            utils::string::from_string<decltype(equilibrium)>(equilibrium, s);
-        else if (param == "width")
-            utils::string::from_string<decltype(width)>(width, s);
-        else
-            EnergySetting::setFromString(param, s);
-    }
-
-    void print(std::ostream & os = std::cout) const override
-    {
-        EnergySetting::print(os);
-        _mspFormatter.print("epsilon", epsilon, os);
-        _mspFormatter.print("equilibrium", equilibrium, os);
-        _mspFormatter.print("width", width, os);
     }
 };
 

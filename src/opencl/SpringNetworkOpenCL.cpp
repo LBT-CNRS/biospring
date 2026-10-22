@@ -1423,23 +1423,6 @@ void SpringNetworkOpenCL::idleRun()
 
 void SpringNetworkOpenCL::initRun()
 	{
-	// The device's own angular weight is cos^2, written into biospring.cl, and
-	// it has no planarity factor at all. Either option on the host would make
-	// the two backends compute different energies for the same network, which
-	// is the one thing the CPU/GPU parity tests exist to prevent. Refused here
-	// rather than left to disagree silently.
-	if (isHydrogenBondEnabled() && getHydrogenBondAngularExponent() != 2)
-		biospring::logging::die("hbond.angularexponent = %d is not available on the OpenCL backend, which "
-		                        "implements cos^2 only. Run this on the CPU, or leave the exponent at 2.",
-		                        getHydrogenBondAngularExponent());
-	if (isHydrogenBondEnabled() && isHydrogenBondPlanarityEnabled())
-		biospring::logging::die("hbond.planarity is not available on the OpenCL backend yet: the device would "
-		                        "compute the hydrogen bond without the factor and disagree with the CPU. Run "
-		                        "this on the CPU.");
-	if (isStackingEnabled())
-		biospring::logging::die("stacking.enable is not available on the OpenCL backend yet: the device has no "
-		                        "stacking kernel and would report an energy the CPU does not. Run this on the "
-		                        "CPU.");
 	SpringNetwork::initRun();
 	InitOcl();
 	wrappingOcl();

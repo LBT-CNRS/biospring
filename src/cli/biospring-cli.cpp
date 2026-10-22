@@ -18,7 +18,6 @@
 
 #include "SpringNetwork.h"
 
-#include "IO/BasePlaneRuleReader.h"
 #include "IO/DonorAcceptorRuleReader.h"
 #include "IO/NetCDFReader.h"
 #include "IO/PDBReader.h"
@@ -174,22 +173,6 @@ int main(int argc, char ** argv)
         biospring::io::DonorAcceptorRuleReader hbondreader(config.hbond.path);
         hbondreader.read();
         hbondreader.tagParticles(*spn);
-    }
-
-    // Before setup() too: _setupStacking builds its neighbour grid from the
-    // frames installed here, and measures its search radius on them. TWO terms
-    // need them -- stacking, and the hydrogen bond's planarity factor -- so the
-    // table is read when either asks for it.
-    if (config.stacking.enable || config.hbond.planarity)
-    {
-        if (config.baseplane.path.empty())
-            logging::die("%s needs baseplane.path (the base plane table), which is not set.",
-                         config.stacking.enable ? "stacking.enable" : "hbond.planarity");
-
-        logging::status("Reading base plane table %s.", config.baseplane.path.c_str());
-        biospring::io::BasePlaneRuleReader planereader(config.baseplane.path);
-        planereader.read();
-        planereader.buildFrames(*spn);
     }
 
     spn->setup(config);

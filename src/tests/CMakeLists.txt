@@ -77,11 +77,8 @@ set(TEST_MODULES
     RigidBodiesManager
     ReduceRuleReader
     HydrogenBondGroups
-    HydrogenBondAssignment
-    HydrogenBondPlanarity
     PeptideBond
     PeptideSite
-    Stacking
     StaticBondBuilder
     Vector3f
 )
