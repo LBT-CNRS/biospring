@@ -113,19 +113,27 @@ std::string DonorAcceptorRuleReader::_plainName(const spn::Particle & p) const
     return p.getOriginalName().empty() ? p.getName() : p.getOriginalName();
 }
 
-const DonorAcceptorRole * DonorAcceptorRuleReader::_roleFor(const spn::Particle & p) const
+const DonorAcceptorRole * DonorAcceptorRuleReader::roleFor(const std::string & resname, const std::string & name,
+                                                           const std::string & originalname) const
 {
     // The name the topology carries first, then the name it carried before a
     // .grp renamed it. The second is what lets a table in plain atom names
     // apply to a reduced topology; the shipped tables name groups, so it is the
     // first that hits.
-    for (const std::string & atom : {p.getName(), _plainName(p)})
+    for (const std::string & atom : {name, originalname.empty() ? name : originalname})
     {
-        const auto it = _roles.find({p.getResName(), atom});
+        const auto it = _roles.find({resname, atom});
         if (it != _roles.end())
             return &it->second;
     }
     return nullptr;
+}
+
+const DonorAcceptorRole * DonorAcceptorRuleReader::_roleFor(const spn::Particle & p) const
+{
+    // Delegates, so the network path and mergespn cannot drift apart on which
+    // atoms a table covers.
+    return roleFor(p.getResName(), p.getName(), p.getOriginalName());
 }
 
 void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const

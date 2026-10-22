@@ -110,6 +110,20 @@ class DonorAcceptorRuleReader : public ReaderBase
 
     const std::vector<HydrogenBondGroup> & groups() const { return _groups; }
 
+    // The role that applies to an atom named this way, or nullptr when the
+    // table names none. Takes strings rather than a particle so that a caller
+    // outside spn -- mergespn, which holds a topology and not a network --
+    // can ask the same question of the same table.
+    //
+    // `originalname` is what a .grp reduction recorded at build time; pass it
+    // empty when nothing renamed the atom. The lookup tries `name` first and
+    // then `originalname`, which is what lets a table written in plain atom
+    // names apply to a reduced topology. Reproducing that order in a caller
+    // instead of calling this is how two code paths come to disagree about
+    // which atoms can hydrogen bond.
+    const DonorAcceptorRole * roleFor(const std::string & resname, const std::string & name,
+                                      const std::string & originalname) const;
+
   protected:
     std::map<std::pair<std::string, std::string>, DonorAcceptorRole> _roles;
     std::vector<HydrogenBondGroup> _groups;

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <vector>
 
 #include "IO/io.h"
@@ -274,6 +275,79 @@ TEST(Topology, add_springs_from_cutoff)
             //     EXPECT_FALSE(top.has_spring_between(p1, p2));
         }
     }
+}
+
+// Four particles on a line, two per topology, every neighbour within the
+// cutoff. The join must cross the topology boundary and must NOT act inside one
+// -- the whole point of the "between" variant, and something nothing covered
+// although a 70S assembled with it lost two thirds of its base pairs to springs
+// this function created.
+static topology::Topology two_strands()
+{
+    topology::Topology top;
+    for (size_t t = 0; t < 2; ++t)
+        for (size_t k = 0; k < 2; ++k)
+        {
+            topology::Particle p;
+            const std::array<double, 3> pos = {static_cast<double>(k) * 2.0, static_cast<double>(t) * 2.0, 0.0};
+            p.set_position(pos);
+            p.properties().set_topology_id(t);
+            p.properties().set_name(k == 0 ? "N" : "O");
+            p.properties().set_residue_name("ALA");
+            top.add_particle(p);
+        }
+    return top;
+}
+
+TEST(Topology, add_springs_between_topologies_joins_across_and_not_within)
+{
+    topology::Topology top = two_strands();
+    top.add_springs_between_topologies_from_cutoff(10.0);
+
+    // 0,1 are topology 0 and 2,3 topology 1: the four crossing pairs, none of
+    // the two internal ones.
+    EXPECT_EQ(top.number_of_springs(), 4u);
+    EXPECT_FALSE(top.has_spring_between(top.get_particle(0), top.get_particle(1)));
+    EXPECT_FALSE(top.has_spring_between(top.get_particle(2), top.get_particle(3)));
+    for (size_t a = 0; a < 2; ++a)
+        for (size_t b = 2; b < 4; ++b)
+            EXPECT_TRUE(top.has_spring_between(top.get_particle(a), top.get_particle(b)))
+                << a << "-" << b;
+}
+
+// The veto mergespn uses to keep a join from welding a pair the hydrogen bond
+// term is meant to form. Here it refuses any pair of atoms both named "O", so
+// the expected outcome is exact rather than approximate.
+TEST(Topology, add_springs_between_topologies_honours_the_veto)
+{
+    topology::Topology top = two_strands();
+    size_t asked = 0;
+    top.add_springs_between_topologies_from_cutoff(
+        10.0, 1.0, [&asked](const topology::Particle & a, const topology::Particle & b) {
+            ++asked;
+            return a.properties().name() == "O" && b.properties().name() == "O";
+        });
+
+    // Particles 1 and 3 are the two "O": that one crossing pair is refused and
+    // the other three are kept.
+    EXPECT_EQ(top.number_of_springs(), 3u);
+    EXPECT_FALSE(top.has_spring_between(top.get_particle(1), top.get_particle(3)));
+    EXPECT_TRUE(top.has_spring_between(top.get_particle(0), top.get_particle(2)));
+    EXPECT_TRUE(top.has_spring_between(top.get_particle(0), top.get_particle(3)));
+    EXPECT_TRUE(top.has_spring_between(top.get_particle(1), top.get_particle(2)));
+    // And it was consulted, so a veto that is never called cannot pass by
+    // looking like one that refuses nothing.
+    EXPECT_GT(asked, 0u);
+}
+
+// A null veto must behave exactly as no veto at all, since every caller that
+// does not ask for one passes nullptr.
+TEST(Topology, add_springs_between_topologies_with_a_null_veto_is_unchanged)
+{
+    topology::Topology with = two_strands(), without = two_strands();
+    with.add_springs_between_topologies_from_cutoff(10.0, 1.0, nullptr);
+    without.add_springs_between_topologies_from_cutoff(10.0);
+    EXPECT_EQ(with.number_of_springs(), without.number_of_springs());
 }
 
 TEST(Topology, to_spring_network)

@@ -1,6 +1,7 @@
 #ifndef __TOPOLOGY_TOPOLOGY_HPP__
 #define __TOPOLOGY_TOPOLOGY_HPP__
 
+#include <functional>
 #include <array>
 #include <unordered_map>
 #include <utility>
@@ -228,7 +229,17 @@ class Topology
     // Adds springs betweens particles that originate from different topologies.
     // This function's main purpose is to add springs between particles during
     // topology merging.
-    void add_springs_between_topologies_from_cutoff(double cutoff, double stiffness = 1.0)
+    /// A pair the cutoff must NOT weld, answered per pair.
+    ///
+    /// The caller decides, because the reason to refuse lives outside the
+    /// topology: mergespn refuses a pair the hydrogen bond term is meant to
+    /// form, which it knows from a donor/acceptor table this class has never
+    /// heard of. Keeping it a predicate leaves Topology ignorant of hydrogen
+    /// bonds and makes the rule testable on its own.
+    using SpringVeto = std::function<bool(const Particle &, const Particle &)>;
+
+    void add_springs_between_topologies_from_cutoff(double cutoff, double stiffness = 1.0,
+                                                    const SpringVeto & veto = nullptr)
     {
         // Initializes the neighbor search object.
         nsearch::NeighborSearch nsearch(_particles, cutoff);
@@ -250,6 +261,12 @@ class Topology
 
                 // If both particles are static, skip them.
                 if (p.properties().is_static() && neighbor.properties().is_static())
+                    continue;
+                // A pair the caller has forbidden. See SpringVeto: a spring
+                // here is mechanically negligible at the default stiffness and
+                // yet pre-empts the pair for every term that refuses to act on
+                // sprung atoms, so refusing it is not an optimisation.
+                if (veto && veto(p, neighbor))
                     continue;
 
                 // Adds a spring between the current particle and the neighbor.

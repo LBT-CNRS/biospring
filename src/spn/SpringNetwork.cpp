@@ -1600,8 +1600,28 @@ void SpringNetwork::_setupHydrogenBond()
                         return;
                     if (!((p.isDonor() && q.isAcceptor()) || (q.isDonor() && p.isAcceptor())))
                         return;
-                    if (Particle::distance(p, q) < getHydrogenBondCutoff() &&
-                        p.isInSpringNeighbors(static_cast<unsigned>(q.getId())))
+                    const float d = Particle::distance(p, q);
+                    if (d >= getHydrogenBondCutoff() || !p.isInSpringNeighbors(static_cast<unsigned>(q.getId())))
+                        return;
+                    // Only a pair the term would actually have HELD.
+                    //
+                    // Declining a sprung pair is a defect when the term would
+                    // have bonded it and correct when it would not, and the
+                    // count is useless if it mixes the two. It did: on a 70S
+                    // whose uL1 interface is all-atom it reported 39 pairs that
+                    // were every one of them a backbone N(i) with the carbonyl
+                    // O(i-1), two bonds apart across the carbonyl carbon, held
+                    // at 2.23 to 2.36 A by the rigid-body mesh. The Morse is
+                    // REPULSIVE there -- +15.5 kJ/mol at 2.25 A against -16.7
+                    // at its 2.9 A minimum -- so the term was never going to
+                    // bond them and the spring pre-empted nothing.
+                    //
+                    // The test is the term's own well, not a list of cases to
+                    // excuse: a negative energy means a bond was on offer. It
+                    // needs no threshold of its own and it cannot drift from
+                    // the parameters the run uses, including a named group's.
+                    const HydrogenBondParameters mp = hydrogenBondParameters(i, static_cast<size_t>(j));
+                    if (_ff->computeHydrogenBondEnergy(d, mp.welldepth, mp.equilibrium, mp.width) < 0.0f)
                         preempted++;
                 });
             }
