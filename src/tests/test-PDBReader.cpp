@@ -8,6 +8,8 @@
 #include "IO/PDBReader.h"
 #include "topology/Topology.hpp"
 
+#include "TempPath.h"
+
 using namespace biospring;
 
 namespace
@@ -24,7 +26,7 @@ const std::string PDB_WITH_DANGLING_CONECT = "ATOM      1  N   ALA A   1       0
 
 std::string write_temp_pdb(const std::string & name, const std::string & content)
 {
-    const std::string path = (std::filesystem::temp_directory_path() / name).string();
+    const std::string path = biospring::tests::temp_path("-" + name);
     std::ofstream out(path);
     out << content;
     out.close();

@@ -6,6 +6,8 @@
 #include <gtest/gtest.h>
 #include <string>
 
+#include "TempPath.h"
+
 
 class StringCompareTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string>> {};
 
@@ -299,13 +301,13 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST(File, FileDoesNotExists)
 {
-    const std::string fname = (std::filesystem::temp_directory_path() / "foo").string();
+    const std::string fname = biospring::tests::temp_path(".txt");
     EXPECT_FALSE(file::exists(fname));
 }
 
 TEST(File, FileExists)
 {
-    const std::string fname = (std::filesystem::temp_directory_path() / "foo").string();
+    const std::string fname = biospring::tests::temp_path(".txt");
     std::ofstream outfile(fname, std::ofstream::out);
     EXPECT_TRUE(outfile);
     EXPECT_TRUE(file::exists(fname));
@@ -316,7 +318,7 @@ TEST(File, FileExists)
 // -- Open file for writing ---------------------------------------------------
 TEST(File, OpenwriteSuccess)
 {
-    const std::string fname = (std::filesystem::temp_directory_path() / "foo").string();
+    const std::string fname = biospring::tests::temp_path(".txt");
     std::ofstream outfile;
     file::openwrite(fname, outfile);
     EXPECT_TRUE(outfile);

@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <fstream>
 
+#include "TempPath.h"
+
 struct TestReduceRuleReader : public ::testing::Test
 {
     std::string content;
@@ -20,7 +22,7 @@ struct TestReduceRuleReader : public ::testing::Test
                   "RCA ARG CA\n"
                   "RCB ARG CG\n"
                   "RCG ARG NE CZ\n";
-        path = (std::filesystem::temp_directory_path() / "dummy.grp").string();
+        path = biospring::tests::temp_path(".grp");
         reader.setFileName(path);
     }
 

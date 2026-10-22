@@ -1571,6 +1571,47 @@ void SpringNetwork::_setupHydrogenBond()
         _hbAcceptorSlot.assign(_hbAcceptorOffset[n], -1);
 
         logging::info("Hydrogen bond slots: %zu donor, %zu acceptor.", _hbDonorSlot.size(), _hbAcceptorSlot.size());
+
+        // How many candidate pairs a SPRING has already pre-empted.
+        //
+        // The assignment refuses any pair its two atoms are sprung by, and that
+        // is right -- a spring and a bond on the same pair would count one
+        // interaction twice. But it was silent, and silence cost a great deal:
+        // a 70S assembled with `mergespn --cutoff 7.0` carried 1780 springs
+        // across its own base-edge atoms, at the merge's default stiffness of
+        // 1.0 against 650 for the all-atom mesh. Removing all of them moved the
+        // spring energy from 40.03 to 40.07 kJ/mol -- they held nothing -- and
+        // took the real base pairs held from 16 of 49 to 48 of 49.
+        //
+        // Mechanically invisible, functionally decisive, and reported by
+        // nothing: the spring energy looked normal and the bond count looked
+        // plausible. One line here would have said it immediately.
+        if (_nsearch.hbond)
+        {
+            size_t preempted = 0;
+            for (const size_t i : donor_acceptor_particles)
+            {
+                const Particle & p = getParticle(i);
+                _nsearch.hbond->for_each_neighbor(i, [&](size_t j) {
+                    if (j <= i || isProbeParticle(j))
+                        return;
+                    const Particle & q = getParticle(j);
+                    if (p.getResId() == q.getResId() && p.getChainName() == q.getChainName())
+                        return;
+                    if (!((p.isDonor() && q.isAcceptor()) || (q.isDonor() && p.isAcceptor())))
+                        return;
+                    if (Particle::distance(p, q) < getHydrogenBondCutoff() &&
+                        p.isInSpringNeighbors(static_cast<unsigned>(q.getId())))
+                        preempted++;
+                });
+            }
+            if (preempted)
+                logging::warning("%zu donor/acceptor pair(s) within the hydrogen bond cutoff are joined by a "
+                                 "SPRING, so the term will decline them -- a spring and a bond on one pair "
+                                 "would count it twice. If this network was assembled with a cutoff, that "
+                                 "cutoff is welding the pairs the term is meant to form.",
+                                 preempted);
+        }
     }
 }
 

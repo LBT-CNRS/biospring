@@ -83,6 +83,7 @@ set(TEST_MODULES
     RigidBodiesManager
     ReduceRuleReader
     HydrogenBondGroups
+    HydrogenBondAssignment
     PeptideBond
     PeptideSite
     StaticBondBuilder

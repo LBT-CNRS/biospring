@@ -10,6 +10,8 @@
 #include "SpringNetwork.h"
 #include "configuration/Configuration.hpp"
 
+#include "TempPath.h"
+
 using namespace biospring;
 
 namespace
@@ -37,7 +39,7 @@ struct TestNetCDFRoundTrip : public ::testing::Test
         config.sim.nbsteps = 1;
         config.sim.timestep = 0.01;
 
-        path = (std::filesystem::temp_directory_path() / "roundtrip.nc").string();
+        path = biospring::tests::temp_path(".nc");
 
         for (int i = 0; i < 2; ++i)
         {
