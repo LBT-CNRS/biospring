@@ -67,8 +67,20 @@ inline float biospring_hbond_angular_derivative(float cos_theta)
 // A REDUCTION, in [0, 1], on a pair of nucleotides whose base pair does not sit
 // in the geometry a Watson-Crick pair occupies with respect to its own
 // backbone. Like the well's angular weights it multiplies a depth that is
-// already calibrated, so it can only take energy away: a real pair pays almost
-// nothing and nothing can score above 1.
+// already calibrated, and nothing can score above 1.
+//
+// "It can only take energy away" is ALMOST true and the exception is worth
+// naming. The Morse is E = De[(1-u)^2 - 1] with u = e^(-a(r-re)), which is
+// POSITIVE below r = re - ln(2)/a -- about 2.55 A at the shipped re of 2.90 A
+// -- so on that inner wall multiplying by a factor under 1 weakens a
+// REPULSION, and a non-isosteric pair may approach slightly closer than an
+// isosteric one. This is a property of every multiplicative weight on this
+// well, not of this one: the two angular factors do exactly the same thing and
+// have always done it. What limits the exposure is that it applies only to a
+// pair that is ENGAGED and held under 2.55 A, since an unengaged pair's
+// exclusion is carried by the separate, always-on and UNWEIGHTED core
+// repulsion (Particle::addHydrogenBondCoreRepulsion), which an engaged pair
+// skips because the weighted well is supposed to carry both sides for it.
 //
 // WHAT IT IS FOR. The pairing term scores a bond by a distance and two angles,
 // and all three are EXACTLY preserved when the partner nucleotide is turned 180
@@ -157,19 +169,53 @@ inline float biospring_hbond_angular_derivative(float cos_theta)
 //
 // A real pair keeps 84 % of its well, which is the attenuation the planarity
 // factor was accepted at (87 %), and a mirror keeps 4.7 %. A NON-CANONICAL pair
-// keeps 34 %: attenuated and not forbidden, which is deliberate -- the U32.A38
-// that closes every tRNA's anticodon loop is a real, multi-bond, non-canonical
-// pair, and a factor that killed it would unmake the loop it holds.
+// keeps 34 % ON AVERAGE over the whole 70S -- and that average is NOT a promise
+// about any particular pair, which an earlier version of this comment wrongly
+// made.
 //
-// ONLY WHERE BOTH SIDES DECLARE A GLYCOSIDIC BOND. A protein site has no C1'
-// and no glycosidic nitrogen, so the factor is not defined there and must leave
-// such a bond untouched to the bit, not merely within a tolerance. The caller
-// is responsible for that test; this function is only the shape.
+// MEASURED, on 8PKL's own A-site tRNA, the pair that comment invoked:
+//
+//   pair                C1'-C1'    lambda_i  lambda_j   factor
+//   A32.U38 (closing)   10.22 A     82.2     42.1       0.0585
+//   U33.A37 (loop)      10.75 A     90.2     24.8       0.0013
+//   C31.G39 (stem)      10.21 A     57.2     55.6       0.9557
+//
+// So the anticodon loop's CLOSING pair keeps 5.9 %, not a third, and the loop
+// pair below it keeps 0.1 %, while the stem pair next to them keeps 96 %. The
+// distance is right in all three -- 10.2 to 10.8 A -- and it is lambda alone
+// that separates them, which is the factor working as designed and is also
+// exactly why it cannot be called harmless to a non-canonical pair. Whether
+// the covalent mesh holds that loop without its closing pair's well is a
+// question for a measurement, not for this comment; it is the reason the term
+// is off by default.
+//
+// ONLY WHERE BOTH SIDES DECLARE A GLYCOSIDIC BOND, AND ONLY BETWEEN TWO BASE
+// ATOMS. A protein site has no C1' and no glycosidic bond, so the factor is not
+// defined there and must leave such a bond untouched to the bit, not merely
+// within a tolerance. Neither is it defined on a nucleotide's SUGAR or
+// PHOSPHATE oxygens, which the shipped tables do declare as sites: a
+// backbone-to-base contact has no isosteric geometry to be measured against,
+// and scoring one against a base-base centre cut it by seven orders of
+// magnitude. Both tests are the caller's; this function is only the shape.
+//
+// The glycosidic partner is chosen by BOND LENGTH and not by residue name --
+// N9 in a purine, N1 in a pyrimidine, C5 in a C-glycoside. Pseudouridine is
+// the C-glycoside that makes this necessary: in 8PKL's A-site tRNA its C5 is
+// at 1.56 A and its N1 at 3.98 A, so a name-ordered rule built lambda on an
+// atom the sugar is not bonded to, and a tRNA carries several.
 
 /// Gaussian acceptance in one coordinate, and its derivative.
+///
+/// e^(-z^2) with z = (value - centre)/width, NOT e^(-z^2/2): the width is the
+/// scale at which the acceptance falls to 1/e, so the equivalent standard
+/// deviation is width/sqrt(2) -- 1.06 A and 12.7 deg at the shipped 1.5 A and
+/// 18 deg. The widths were SCANNED against three populations (see the table
+/// above) rather than derived from a standard deviation, so this is a
+/// statement about what they mean, not a calibration to redo.
+///
 /// @param value  The measured quantity.
 /// @param centre Its value in a Watson-Crick pair.
-/// @param width  The standard deviation of the acceptance, same unit.
+/// @param width  The 1/e half-width of the acceptance, same unit as value.
 /// @return Dimensionless weight in (0, 1], exactly 1 at the centre.
 inline float biospring_isostericity_gaussian(float value, float centre, float width)
 {

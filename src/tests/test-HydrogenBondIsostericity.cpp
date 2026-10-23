@@ -372,3 +372,109 @@ TEST(HydrogenBondIsostericity, AProteinBondIsBitIdenticalWithTheTermOnOrOff)
         EXPECT_EQ(std::memcmp(&foff[k], &fon[k], sizeof(Vector3f)), 0)
             << "the force on particle " << k << " moved";
 }
+
+// THE GLYCOSIDIC PARTNER IS CHOSEN BY BOND LENGTH, which is what makes
+// pseudouridine work. Psi is a C-GLYCOSIDE: its sugar is bonded to the base's
+// C5, and its N1 -- which a name-ordered rule picks -- is a ring atom 3.98 A
+// away, measured on 8PKL's A-site tRNA residue 55. A tRNA carries several, so
+// the anticodon arm's own geometry depended on this.
+TEST(HydrogenBondIsostericity, PseudouridineTakesItsCGlycosidicBondAndNotItsDistantN1)
+{
+    Table table("PSU N3 1 0 C2\n");
+    spn::SpringNetwork network;
+    const unsigned c1 = place(network, "C1'", "PSU", 55, "A", {0.0f, 0.0f, 0.0f});
+    // The real distances from 8PKL: C5 bonded at 1.56 A, N1 a ring atom at 3.98.
+    const unsigned c5 = place(network, "C5", "PSU", 55, "A", {1.56f, 0.0f, 0.0f});
+    place(network, "N1", "PSU", 55, "A", {3.60f, 1.70f, 0.0f});
+    place(network, "N3", "PSU", 55, "A", {4.60f, 0.40f, 0.0f});
+    place(network, "C2", "PSU", 55, "A", {5.60f, 0.90f, 0.0f});
+
+    configuration::Configuration config = configuration::defaultConfiguration();
+    config.hbond.enable = true;
+    config.hbond.isostericity = true;
+    config.sim.nbsteps = 1;
+    io::DonorAcceptorRuleReader reader(table.path());
+    reader.read();
+    reader.tagParticles(network);
+    network.setup(config);
+
+    EXPECT_TRUE(network.getParticle(c1).hasGlycosidicFrame());
+    EXPECT_EQ(network.getParticle(c1).glycosidicNIndex(), static_cast<int>(c5))
+        << "pseudouridine was given its N1, which its sugar is not bonded to";
+}
+
+// A SUGAR OR PHOSPHATE SITE IS NOT A BASE SITE. The shipped tables declare
+// rOP1, rOP2, rO5, rO4 and rO3 as acceptors and rO2 as both, and the glycosidic
+// frame is written onto every particle of the residue, so without this test the
+// factor would score a backbone contact against a centre measured only for
+// base-base pairs. Measured on 074.DNADuplex before the test existed: 24 of 77
+// bonds were between sequence neighbours, mostly through sugar oxygens, and the
+// factor cut them to between 3e-11 and 6e-6.
+TEST(HydrogenBondIsostericity, ABackboneContactIsNotScoredAgainstABasePairCentre)
+{
+    Table table("G N3 0 1 C2\nC O2' 1 0 C2'\n");
+    spn::SpringNetwork network;
+    const Nucleotide i =
+        placeNucleotide(network, "G", "N9", 1, "A", 0.0f, +1.0f, L0, 0.0f, {4.0f, 1.0f, 0.0f}, {3.0f, 0.5f, 0.0f});
+    // A second nucleotide whose SITE is its 2'-OH oxygen, not a base atom.
+    const float a = L0 * DEG;
+    place(network, "C1'", "C", 2, "B", {D0, 0.0f, 0.0f});
+    place(network, "N1", "C", 2, "B",
+          {D0 - std::cos(a) * 1.47f, -std::sin(a) * 1.47f, 0.0f});
+    const unsigned o2 = place(network, "O2'", "C", 2, "B", {6.9f, 1.0f, 0.0f});
+    place(network, "C2'", "C", 2, "B", {7.9f, 0.5f, 0.0f});
+
+    configuration::Configuration config = configuration::defaultConfiguration();
+    config.hbond.enable = true;
+    config.hbond.isostericity = true;
+    config.sim.nbsteps = 1;
+    io::DonorAcceptorRuleReader reader(table.path());
+    reader.read();
+    reader.tagParticles(network);
+    network.setup(config);
+
+    // Both residues HAVE a frame -- that is the point; it is the ATOM that
+    // disqualifies the bond, not the residue.
+    ASSERT_TRUE(network.getParticle(o2).hasGlycosidicFrame());
+    const auto iso =
+        network.isostericityFactor(network.getParticle(i.site), network.getParticle(o2), false);
+    EXPECT_FALSE(iso.applies) << "a 2'-OH contact was scored as a base pair";
+    EXPECT_FLOAT_EQ(iso.value, 1.0f);
+}
+
+// A FACTOR BELOW THE FLOOR IS EXACTLY ZERO, so the candidate ranking can refuse
+// the bond. The ranking tests strength < 0 against a nearest-so-far of 0, and a
+// Gaussian is never exactly zero: before the floor, a bond the term had cut to
+// 1e-11 still won a free donor slot and held it. Measured: 8 such bonds on
+// 074.DNADuplex, occupying slots for -2.3e-6 kJ.mol-1 in total.
+TEST(HydrogenBondIsostericity, AFactorBelowTheFloorIsExactlyZeroSoNoSlotIsTaken)
+{
+    Table table("G N3 0 1 C2\nC N3 1 0 C2\n");
+    spn::SpringNetwork network;
+    // lambda_i driven far off the centre: at 150 degrees against a centre of
+    // 54.9 and a width of 18 the acceptance is e^(-27.9).
+    const Nucleotide i =
+        placeNucleotide(network, "G", "N9", 1, "A", 0.0f, +1.0f, 150.0f, 0.0f, {4.0f, 1.0f, 0.0f}, {3.0f, 0.5f, 0.0f});
+    const Nucleotide j = placeNucleotide(network, "C", "N1", 2, "B", D0, -1.0f, L0, 0.0f, {6.9f, 1.0f, 0.0f},
+                                         {7.9f, 0.5f, 0.0f});
+
+    configuration::Configuration config = configuration::defaultConfiguration();
+    config.hbond.enable = true;
+    config.hbond.isostericity = true;
+    config.sim.nbsteps = 1;
+    io::DonorAcceptorRuleReader reader(table.path());
+    reader.read();
+    reader.tagParticles(network);
+    network.setup(config);
+
+    const auto iso =
+        network.isostericityFactor(network.getParticle(i.site), network.getParticle(j.site), true);
+    ASSERT_TRUE(iso.applies) << "the factor must still claim the bond, it is the VALUE that is zero";
+    EXPECT_EQ(iso.value, 0.0f) << "a factor under the floor must be exactly zero, not merely small";
+    for (size_t k = 0; k < 4; ++k)
+    {
+        EXPECT_FLOAT_EQ(iso.grad[k].getX(), 0.0f);
+        EXPECT_FLOAT_EQ(iso.grad[k].getY(), 0.0f);
+        EXPECT_FLOAT_EQ(iso.grad[k].getZ(), 0.0f);
+    }
+}

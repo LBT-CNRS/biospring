@@ -200,10 +200,18 @@ void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
             // reader that takes the first eleven fields is unaffected.
             const float isovalue = isostericityFactor(d, a, false).value;
             w *= isovalue;
+            // The COUPLE's own well, as hydrogenBondParameters gives it and as
+            // the force uses it -- not the force field's default. A pair that
+            // carries a group (a peptide bond's, two orders of magnitude
+            // deeper at a quarter of the distance) was reported here with the
+            // ordinary hydrogen bond's depth, so the log's energy column did
+            // not match the energy the run was integrating.
+            const HydrogenBondParameters mp = hydrogenBondParameters(i, static_cast<size_t>(j));
             out << d.getChainName() << ' ' << d.getResId() << ' ' << d.getResName() << ' ' << d.getName() << ' '
                 << a.getChainName() << ' ' << a.getResId() << ' ' << a.getResName() << ' ' << a.getName() << ' '
-                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << ' ' << isovalue
-                << '\n';
+                << distance << ' ' << w << ' '
+                << _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width) * w << ' '
+                << isovalue << '\n';
         }
 }
 
@@ -347,6 +355,18 @@ Vector3f SpringNetwork::donorDirection(const Particle & p, const Vector3f & towa
     return s.valid ? s.hhat : Vector3f();
 }
 
+// A base atom, as opposed to a sugar or a phosphate one. The name the topology
+// carries first, then the name it carried before a .grp renamed it, by the same
+// rule the donor/acceptor tables resolve on -- a reduced topology spells the
+// base's N3 'rN3' and its O2' 'rO2', and only the recorded original name says
+// which of those two is the base.
+bool SpringNetwork::_isBaseAtom(const Particle & p) const
+{
+    const std::string & name = p.getOriginalName().empty() ? p.getName() : p.getOriginalName();
+    return name.find('\'') == std::string::npos && name.find('*') == std::string::npos &&
+           name.find('P') == std::string::npos && name.find('p') == std::string::npos;
+}
+
 // The isostericity reduction and its gradient. The shape and the parameters are
 // in forcefield/shared/hbond_shared.h; what is here is the geometry that feeds
 // it and the chain rule that takes its derivative back to four atoms.
@@ -368,6 +388,29 @@ SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Partic
     if (!_config.hbond.isostericity)
         return iso;
     if (!pi.hasGlycosidicFrame() || !pj.hasGlycosidicFrame())
+        return iso;
+    // BOTH BONDED ATOMS MUST BE BASE ATOMS. The frame is written onto every
+    // particle of a nucleotide, and the shipped tables declare the PHOSPHATE
+    // and SUGAR oxygens as sites too -- rOP1, rOP2, rO5, rO4, rO3 acceptors
+    // and rO2 both. Without this test a backbone-to-base or a 2'-OH contact is
+    // scored against a centre measured only for base-base pairs, and it loses
+    // seven orders of magnitude: measured on 074.DNADuplex, 24 of 77 bonds are
+    // between sequence neighbours (down to -1.37 kJ.mol-1, mostly through dO3,
+    // dO4, dO5) and the term cut them to between 3e-11 and 6e-6, taking the
+    // total from -88.95 to -80.27 kJ.mol-1 and REPLACING 31 of the couples.
+    // Those contacts are not isosteric geometry at all; the factor has nothing
+    // to say about them and must not speak.
+    //
+    // Told from the name, like the frame itself: a base atom's name carries
+    // neither a prime nor a P. The prime separates the base's C5 and C6 from
+    // the sugar's C5' and C4', and no base atom's name contains a P while
+    // every phosphate atom's does (P, OP1, OP2, O1P, O2P).
+    //
+    // A bond between two bases of ADJACENT residues is still scored. The
+    // calibration population excluded sequence neighbours, so the factor
+    // treats such a pair as non-isosteric and attenuates it; that is a real
+    // consequence of the choice of population and not a filter anyone designed.
+    if (!_isBaseAtom(pi) || !_isBaseAtom(pj))
         return iso;
 
     const int ic = pi.glycosidicC1Index(), in = pi.glycosidicNIndex();
@@ -414,6 +457,29 @@ SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Partic
     const float Gi = forcefield::isostericity_gaussian(lami, l0, sl);
     const float Gj = forcefield::isostericity_gaussian(lamj, l0, sl);
     iso.value = Gd * Gi * Gj;
+    // CLIPPED TO EXACTLY ZERO below a floor, for the same reason the angular
+    // factor clamps at zero rather than squaring through. A Gaussian is never
+    // exactly zero, and the candidate ranking tests `strength < 0` against a
+    // nearest-so-far initialised to 0: a factor of 1e-11 still makes the
+    // strength strictly negative, so a bond the term has annihilated WINS a
+    // free donor slot and holds it against a real partner that arrives later.
+    // Measured before this: 8 bonds on 074.DNADuplex occupying slots for
+    // -2.3e-6 kJ.mol-1 in total, 7 of them between sequence neighbours. That
+    // is precisely the failure the ranking's own comment says scoring by
+    // strength avoids -- occupying the donor while holding nothing.
+    //
+    // The floor costs an energy step of welldepth * w * ISOSTERICITY_FLOOR,
+    // under 0.01 kJ.mol-1 at the shipped parameters, in exchange for the slot.
+    if (iso.value < ISOSTERICITY_FLOOR)
+    {
+        iso.value = 0.0f;
+        iso.atom[0] = ic;
+        iso.atom[1] = in;
+        iso.atom[2] = jc;
+        iso.atom[3] = jn;
+        iso.applies = true;
+        return iso; // gradients stay zero: the energy is flat here
+    }
     iso.atom[0] = ic;
     iso.atom[1] = in;
     iso.atom[2] = jc;
@@ -422,22 +488,31 @@ SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Partic
     if (!wantGradient)
         return iso;
 
-    // d(lambda)/d(cos lambda) = -1/sin(lambda), in degrees per unit cosine.
-    // Guarded at both ends: at lambda 0 or 180 the derivative is genuinely
-    // unbounded, and the Gaussian there is already 1e-4 of its peak, so the
-    // product is a vanishing force multiplied by an infinity. A C1'-C1' vector
-    // exactly along a glycosidic bond cannot occur -- the two share the C1' --
-    // so this guard is for arithmetic, not for a geometry anyone will see.
-    const float si = std::sqrt(std::max(0.0f, 1.0f - ci * ci));
-    const float sj = std::sqrt(std::max(0.0f, 1.0f - cj * cj));
+    // d(lambda)/d(cos lambda) = -1/sin(lambda), in degrees per unit cosine. It
+    // is unbounded at lambda 0 and 180, so sin is FLOORED rather than the
+    // gradient being zeroed there.
+    //
+    // Zeroing it was a step discontinuity of real size, not a removable
+    // singularity: just above a guard at sin = 1e-4 the coefficient is
+    // |dG/dlambda| * 57.3 / 1e-4, which at lambda ~ 0 is about 18 in these
+    // units, and it dropped to 0. Flooring sin at 0.02 -- lambda within 1.1
+    // degrees of either end -- caps the same coefficient at about 0.09 and
+    // leaves the force bounded. The energy there is already 1e-4 of its peak,
+    // and a C1'-C1' vector exactly along a glycosidic bond cannot occur since
+    // the two share the C1', so neither form is ever exercised by a real
+    // geometry; the floor is chosen because a bounded force is safe and a
+    // jump of 18 is not.
+    const float SINFLOOR = 0.02f;
+    const float si = std::max(SINFLOOR, std::sqrt(std::max(0.0f, 1.0f - ci * ci)));
+    const float sj = std::max(SINFLOOR, std::sqrt(std::max(0.0f, 1.0f - cj * cj)));
     const float dGd = forcefield::isostericity_gaussian_derivative(d, d0, sd);
-    const float dGi = si > 1e-4f ? forcefield::isostericity_gaussian_derivative(lami, l0, sl) : 0.0f;
-    const float dGj = sj > 1e-4f ? forcefield::isostericity_gaussian_derivative(lamj, l0, sl) : 0.0f;
+    const float dGi = forcefield::isostericity_gaussian_derivative(lami, l0, sl);
+    const float dGj = forcefield::isostericity_gaussian_derivative(lamj, l0, sl);
 
     // dF/d(each coordinate), already carrying the other two Gaussians.
-    const float kd = Gi * Gj * dGd;                                      // per A
-    const float ki = si > 1e-4f ? Gd * Gj * dGi * (-rad2deg / si) : 0.0f; // per unit cos lambda_i
-    const float kj = sj > 1e-4f ? Gd * Gi * dGj * (-rad2deg / sj) : 0.0f; // per unit cos lambda_j
+    const float kd = Gi * Gj * dGd;                      // per A
+    const float ki = Gd * Gj * dGi * (-rad2deg / si);    // per unit cos lambda_i
+    const float kj = Gd * Gi * dGj * (-rad2deg / sj);    // per unit cos lambda_j
 
     // The three cosine gradients, each the standard angle-at-a-vertex form.
     const Vector3f dci_dCj = (bi - u * ci) / d;

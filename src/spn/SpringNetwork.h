@@ -689,6 +689,18 @@ class SpringNetwork
     // ranking, which needs the value and nothing else.
     IsostericityFactor isostericityFactor(const Particle & pi, const Particle & pj, bool wantGradient) const;
 
+    // Below this the factor is clipped to EXACTLY zero, so a candidate the term
+    // has annihilated cannot win a donor slot: the ranking tests strength < 0
+    // against a nearest-so-far of 0, and a Gaussian is never exactly zero.
+    static constexpr float ISOSTERICITY_FLOOR = 1.0e-3f;
+
+    // Whether a particle is an atom of a nucleotide BASE, as opposed to its
+    // sugar or its phosphate. Told from the name the topology carries: a base
+    // atom's name holds neither a prime -- which is what separates the base's
+    // C5 and C6 from the sugar's C5' and C4' -- nor a P, which every phosphate
+    // atom's name holds and no base atom's does.
+    bool _isBaseAtom(const Particle & p) const;
+
     // The run-time bond formation, for a caller that wants to know what it did.
     // Empty and disabled unless peptidebond.enable is on.
     const PeptideBondFormation & getPeptideBonds() const { return _peptidebond; }

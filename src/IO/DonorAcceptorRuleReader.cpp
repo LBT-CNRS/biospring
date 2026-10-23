@@ -299,7 +299,7 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
     // chains.
     {
         std::map<std::tuple<std::string, int>, std::pair<int, int>> frame;
-        unsigned nb_purine = 0, nb_pyrimidine = 0;
+        unsigned nb_purine = 0, nb_pyrimidine = 0, nb_cglycoside = 0, nb_unbonded = 0;
         for (unsigned i = 0; i < spn.getNumberOfParticles(); ++i)
         {
             const spn::Particle & p = spn.getParticle(i);
@@ -312,24 +312,51 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
                 frame.emplace(key, std::make_pair(-1, -1));
                 continue;
             }
-            // N9 first: a purine has BOTH an N9 and an N1, and it is N9 the
-            // base hangs from. Testing N1 first would give every purine the
-            // pyrimidine's frame and point lambda at a ring atom on the far
-            // side of the base.
-            auto n = by_plain.find(std::make_tuple(p.getChainName(), p.getResId(), std::string("N9")));
-            bool purine = n != by_plain.end();
-            if (!purine)
-                n = by_plain.find(std::make_tuple(p.getChainName(), p.getResId(), std::string("N1")));
-            if (n == by_plain.end())
+            // WHICH atom the base hangs from is decided by the BOND LENGTH, not
+            // by the residue's name or by the order the candidates are tried.
+            // N9 for a purine, N1 for a pyrimidine -- and C5 for a
+            // C-glycoside, which is what pseudouridine is. Measured on 8PKL's
+            // A-site tRNA, residue 55 PSU: C5 at 1.56 A and N1 at 3.98 A. A
+            // rule that tried N9 then N1 gave it N1, so lambda was built on an
+            // atom the sugar is not bonded to at all -- and a tRNA carries
+            // several pseudouridines. H2U, G7M and 5MU in the same chain are
+            // correct either way (1.48, 1.46, 1.48 A), which is exactly why
+            // the defect would not have shown up on them.
+            //
+            // So: the closest candidate, and only if it is within 1.8 A. That
+            // also refuses a residue whose sugar or base is incomplete rather
+            // than measuring an angle to whatever atom happened to be named.
+            const char * candidates[] = {"N9", "N1", "C5"};
+            const Vector3f & c1pos = spn.getParticle(c1->second).getPosition();
+            int chosen = -1;
+            float chosen_d = 1.8f;
+            const char * chosen_name = nullptr;
+            for (const char * cand : candidates)
             {
+                const auto it = by_plain.find(std::make_tuple(p.getChainName(), p.getResId(), std::string(cand)));
+                if (it == by_plain.end())
+                    continue;
+                const float d = (spn.getParticle(it->second).getPosition() - c1pos).norm();
+                if (d < chosen_d)
+                {
+                    chosen_d = d;
+                    chosen = static_cast<int>(it->second);
+                    chosen_name = cand;
+                }
+            }
+            if (chosen < 0)
+            {
+                ++nb_unbonded;
                 frame.emplace(key, std::make_pair(-1, -1));
                 continue;
             }
-            frame.emplace(key, std::make_pair(static_cast<int>(c1->second), static_cast<int>(n->second)));
-            if (purine)
+            frame.emplace(key, std::make_pair(static_cast<int>(c1->second), chosen));
+            if (std::string(chosen_name) == "N9")
                 ++nb_purine;
-            else
+            else if (std::string(chosen_name) == "N1")
                 ++nb_pyrimidine;
+            else
+                ++nb_cglycoside;
         }
         unsigned nb_framed = 0;
         for (unsigned i = 0; i < spn.getNumberOfParticles(); ++i)
@@ -341,10 +368,16 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
             p.setGlycosidicFrame(f->second.first, f->second.second);
             ++nb_framed;
         }
-        if (nb_purine + nb_pyrimidine > 0)
-            logging::info("Glycosidic frames: %d purine(s) (C1'-N9) and %d pyrimidine(s) (C1'-N1), covering %d "
-                          "particle(s). A site without one is left untouched by the isostericity factor.",
-                          nb_purine, nb_pyrimidine, nb_framed);
+        if (nb_purine + nb_pyrimidine + nb_cglycoside > 0)
+            logging::info("Glycosidic frames: %d purine(s) (C1'-N9), %d pyrimidine(s) (C1'-N1) and %d "
+                          "C-glycoside(s) (C1'-C5, pseudouridine), covering %d particle(s). A site without one is "
+                          "left untouched by the isostericity factor.",
+                          nb_purine, nb_pyrimidine, nb_cglycoside, nb_framed);
+        if (nb_unbonded > 0)
+            logging::warning("DonorAcceptorRuleReader: %d residue(s) carry a C1' but no N9, N1 or C5 within 1.8 A of "
+                             "it, so they get no glycosidic frame and the isostericity factor leaves their bonds "
+                             "alone. An incomplete base or a naming the tables do not cover.",
+                             nb_unbonded);
     }
 
     logging::info("Hydrogen bond tagging: %d donor(s), %d acceptor(s) among %d particles, %d with a resolved "
