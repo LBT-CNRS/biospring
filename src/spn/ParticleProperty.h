@@ -29,7 +29,7 @@ class ParticleProperty
     ParticleProperty()
         : _mass(1.0), _charge(0.0), _electroncharge(0), _radius(1.0), _epsilon(0.0), _tempfactor(0.0), _occupancy(0.0),
           _hydrophobicity(0.0), _solventaccessibilitysurface(0.0), _transferenergybyaccessiblesurface(0.0),
-          _ischarged(false), _ishydrophobic(false), _burying(1.0), _donorcapacity(0), _acceptorcapacity(0), _antecedentindex(-1), _antecedentindex2(-1), _hblobemode(0), _hblobecos(1.0f), _hblobesin(0.0f)
+          _ischarged(false), _ishydrophobic(false), _burying(1.0), _donorcapacity(0), _acceptorcapacity(0), _antecedentindex(-1), _antecedentindex2(-1), _hblobemode(0), _hblobecos(1.0f), _hblobesin(0.0f), _glycosidicc1(-1), _glycosidicn(-1)
     {
     }
 
@@ -167,6 +167,26 @@ class ParticleProperty
     float lobeCos() const { return _hblobecos; }
     float lobeSin() const { return _hblobesin; }
     bool hasLobes() const { return _hblobemode != HBOND_LOBES_NONE; }
+
+    // THE GLYCOSIDIC FRAME of this particle's own residue: the index of its
+    // C1' and of the nitrogen its base hangs from, N9 for a purine and N1 for
+    // a pyrimidine. Both -1 on anything that is not a nucleotide, and on a
+    // nucleotide whose topology does not carry those two atoms -- a coarse
+    // bead standing for a whole residue, for instance.
+    //
+    // It is not an antecedent and not part of the bond: it is the reference
+    // the isostericity factor measures the pair against, which is why it
+    // names the SUGAR and not the base. The pair of indices is set together or
+    // not at all, so hasGlycosidicFrame is a single test (see
+    // forcefield/shared/hbond_shared.h for what it is measured for).
+    int glycosidicC1Index() const { return _glycosidicc1; }
+    int glycosidicNIndex() const { return _glycosidicn; }
+    bool hasGlycosidicFrame() const { return _glycosidicc1 >= 0 && _glycosidicn >= 0; }
+    void setGlycosidicFrame(int c1, int n)
+    {
+        _glycosidicc1 = c1;
+        _glycosidicn = n;
+    }
     void setLobes(int mode, float degrees)
     {
         _hblobemode = mode;
@@ -198,6 +218,8 @@ class ParticleProperty
     int _hblobemode;
     float _hblobecos;
     float _hblobesin;
+    int _glycosidicc1;
+    int _glycosidicn;
 };
 
 } // namespace spn

@@ -320,6 +320,11 @@ inline Configuration defaultConfiguration()
     config.hbond.scale = 1.0;
     config.hbond.path = "";
     config.hbond.log = "";
+    config.hbond.isostericity = false;
+    config.hbond.isostericitydistance = 10.46;
+    config.hbond.isostericitylambda = 54.9;
+    config.hbond.isostericitydistancewidth = 1.5;
+    config.hbond.isostericitylambdawidth = 18.0;
 
     // Off, and with no rules path: forming a covalent bond is never something
     // an .msp should start doing because it was upgraded.

@@ -657,6 +657,38 @@ class SpringNetwork
     HydrogenBondSite hydrogenBondSite(const Particle & self, int a1, int a2, int lobes, float lcos,
                                       float lsin, const Vector3f & towards) const;
 
+    // THE ISOSTERICITY REDUCTION on one candidate or one held bond, with
+    // everything its gradient needs. See forcefield/shared/hbond_shared.h for
+    // what it measures, why, and the parameter scan behind the centres and
+    // widths; this is only the geometry.
+    //
+    // `applies` is false whenever the factor is not DEFINED -- the term is off,
+    // either end names no glycosidic frame (every protein bond, every coarse
+    // bead), the two ends belong to the same nucleotide, or the geometry is
+    // degenerate. A caller that sees it false must leave the bond exactly as it
+    // found it: `value` is then 1.0f and the gradients zero, so multiplying
+    // through is also correct, but the test exists so the untouched path can be
+    // asserted to the BIT and not merely to a tolerance.
+    //
+    // The four atoms are the two C1' and the two glycosidic nitrogens, in that
+    // order, and NONE of them is the donor or the acceptor: the factor is a
+    // function of four third-party positions. Its force therefore lands
+    // entirely on atoms that are not in the bond, which is the same shape as
+    // the angular factors' antecedent forces -- and the same shape that a
+    // stride mismatch silently broke once before, on the GPU, while leaving
+    // every energy correct.
+    struct IsostericityFactor
+    {
+        bool applies = false;
+        float value = 1.0f;
+        int atom[4] = {-1, -1, -1, -1};
+        Vector3f grad[4]; // d(value)/d(position of atom[k])
+    };
+
+    // `wantGradient` false skips the gradient entirely, for the candidate
+    // ranking, which needs the value and nothing else.
+    IsostericityFactor isostericityFactor(const Particle & pi, const Particle & pj, bool wantGradient) const;
+
     // The run-time bond formation, for a caller that wants to know what it did.
     // Empty and disabled unless peptidebond.enable is on.
     const PeptideBondFormation & getPeptideBonds() const { return _peptidebond; }

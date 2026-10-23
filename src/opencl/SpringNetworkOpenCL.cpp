@@ -1423,6 +1423,17 @@ void SpringNetworkOpenCL::idleRun()
 
 void SpringNetworkOpenCL::initRun()
 	{
+	// REFUSED rather than ignored. The isostericity reduction is a CPU-only
+	// term: the device's hbondScore and hbondForce kernels know nothing about a
+	// glycosidic frame, so running it here would give a DIFFERENT force field
+	// from the same .msp without saying so -- and this project has already paid
+	// for one silent CPU/GPU divergence on exactly this term, where every
+	// energy stayed correct while third-party forces landed on the wrong atoms.
+	// A refusal costs a message; a silent divergence costs the measurement that
+	// was made with it.
+	if (isHydrogenBondEnabled() && _config.hbond.isostericity)
+		biospring::logging::die("hbond.isostericity is not implemented on the OpenCL device. Run this .msp on "
+		                        "the CPU, or turn the term off; it will not be silently ignored.");
 	SpringNetwork::initRun();
 	InitOcl();
 	wrappingOcl();

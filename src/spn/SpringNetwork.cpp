@@ -191,9 +191,19 @@ void SpringNetwork::dumpHydrogenBonds(const std::string & path, int step) const
                 if (ha.norm() > 1e-6f)
                     w *= forcefield::hydrogen_bond_angular_factor(ha.dot(-vhat));
             }
+            // And the isostericity reduction, folded into the SAME w the energy
+            // column is built from, so the log cannot report a bond as strong
+            // that the force path has reduced to nothing. Reported separately
+            // in a trailing column as well, because "attenuated by geometry" and
+            // "pointing the wrong way" are different diagnoses and a single
+            // product cannot tell them apart. The column is appended, so a
+            // reader that takes the first eleven fields is unaffected.
+            const float isovalue = isostericityFactor(d, a, false).value;
+            w *= isovalue;
             out << d.getChainName() << ' ' << d.getResId() << ' ' << d.getResName() << ' ' << d.getName() << ' '
                 << a.getChainName() << ' ' << a.getResId() << ' ' << a.getResName() << ' ' << a.getName() << ' '
-                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << '\n';
+                << distance << ' ' << w << ' ' << _ff->computeHydrogenBondEnergy(distance) * w << ' ' << isovalue
+                << '\n';
         }
 }
 
@@ -337,6 +347,115 @@ Vector3f SpringNetwork::donorDirection(const Particle & p, const Vector3f & towa
     return s.valid ? s.hhat : Vector3f();
 }
 
+// The isostericity reduction and its gradient. The shape and the parameters are
+// in forcefield/shared/hbond_shared.h; what is here is the geometry that feeds
+// it and the chain rule that takes its derivative back to four atoms.
+//
+//   w = Cj - Ci,  d = |w|,  u = w/d
+//   bi = (Ni - Ci)/li,      lambda_i = acos(u . bi)        angle AT Ci
+//   bj = (Nj - Cj)/lj,      lambda_j = acos(-u . bj)       angle AT Cj
+//   F  = Gd(d) Gl(lambda_i) Gl(lambda_j)
+//
+// The two angles are the standard angle-at-a-vertex, so their cosine gradients
+// are the standard ones; the only thing to be careful about is that Ci appears
+// in all THREE coordinates -- it is the vertex of lambda_i, one ray of
+// lambda_j, and one end of d -- which is why its gradient is assembled from
+// three contributions and not one.
+SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Particle & pi, const Particle & pj,
+                                                                    bool wantGradient) const
+{
+    IsostericityFactor iso;
+    if (!_config.hbond.isostericity)
+        return iso;
+    if (!pi.hasGlycosidicFrame() || !pj.hasGlycosidicFrame())
+        return iso;
+
+    const int ic = pi.glycosidicC1Index(), in = pi.glycosidicNIndex();
+    const int jc = pj.glycosidicC1Index(), jn = pj.glycosidicNIndex();
+    // Two atoms of the SAME nucleotide: there is no pair to measure, d is zero
+    // and lambda undefined. The ranking already refuses an intra-residue bond,
+    // but the force path must not depend on that staying true.
+    if (ic == jc)
+        return iso;
+
+    const Vector3f & Ci = _particles[static_cast<size_t>(ic)].getPosition();
+    const Vector3f & Ni = _particles[static_cast<size_t>(in)].getPosition();
+    const Vector3f & Cj = _particles[static_cast<size_t>(jc)].getPosition();
+    const Vector3f & Nj = _particles[static_cast<size_t>(jn)].getPosition();
+
+    const Vector3f w = Cj - Ci;
+    const float d = w.norm();
+    const Vector3f ni = Ni - Ci;
+    const Vector3f nj = Nj - Cj;
+    const float li = ni.norm(), lj = nj.norm();
+    if (d < 1e-6f || li < 1e-6f || lj < 1e-6f)
+        return iso;
+
+    const Vector3f u = w / d;
+    const Vector3f bi = ni / li;
+    const Vector3f bj = nj / lj;
+    const Vector3f a = -u; // lambda_j's ray from Cj towards Ci
+
+    // Clamped before the arc cosine: a dot product of two unit vectors can
+    // leave floating point at 1 + 1e-7 and acos returns a NaN, which then
+    // propagates through the energy of every bond in the sum.
+    const float ci = std::max(-1.0f, std::min(1.0f, u.dot(bi)));
+    const float cj = std::max(-1.0f, std::min(1.0f, a.dot(bj)));
+    const float rad2deg = 57.29577951308232f;
+    const float lami = std::acos(ci) * rad2deg;
+    const float lamj = std::acos(cj) * rad2deg;
+
+    const float d0 = static_cast<float>(_config.hbond.isostericitydistance);
+    const float l0 = static_cast<float>(_config.hbond.isostericitylambda);
+    const float sd = static_cast<float>(_config.hbond.isostericitydistancewidth);
+    const float sl = static_cast<float>(_config.hbond.isostericitylambdawidth);
+
+    const float Gd = forcefield::isostericity_gaussian(d, d0, sd);
+    const float Gi = forcefield::isostericity_gaussian(lami, l0, sl);
+    const float Gj = forcefield::isostericity_gaussian(lamj, l0, sl);
+    iso.value = Gd * Gi * Gj;
+    iso.atom[0] = ic;
+    iso.atom[1] = in;
+    iso.atom[2] = jc;
+    iso.atom[3] = jn;
+    iso.applies = true;
+    if (!wantGradient)
+        return iso;
+
+    // d(lambda)/d(cos lambda) = -1/sin(lambda), in degrees per unit cosine.
+    // Guarded at both ends: at lambda 0 or 180 the derivative is genuinely
+    // unbounded, and the Gaussian there is already 1e-4 of its peak, so the
+    // product is a vanishing force multiplied by an infinity. A C1'-C1' vector
+    // exactly along a glycosidic bond cannot occur -- the two share the C1' --
+    // so this guard is for arithmetic, not for a geometry anyone will see.
+    const float si = std::sqrt(std::max(0.0f, 1.0f - ci * ci));
+    const float sj = std::sqrt(std::max(0.0f, 1.0f - cj * cj));
+    const float dGd = forcefield::isostericity_gaussian_derivative(d, d0, sd);
+    const float dGi = si > 1e-4f ? forcefield::isostericity_gaussian_derivative(lami, l0, sl) : 0.0f;
+    const float dGj = sj > 1e-4f ? forcefield::isostericity_gaussian_derivative(lamj, l0, sl) : 0.0f;
+
+    // dF/d(each coordinate), already carrying the other two Gaussians.
+    const float kd = Gi * Gj * dGd;                                      // per A
+    const float ki = si > 1e-4f ? Gd * Gj * dGi * (-rad2deg / si) : 0.0f; // per unit cos lambda_i
+    const float kj = sj > 1e-4f ? Gd * Gi * dGj * (-rad2deg / sj) : 0.0f; // per unit cos lambda_j
+
+    // The three cosine gradients, each the standard angle-at-a-vertex form.
+    const Vector3f dci_dCj = (bi - u * ci) / d;
+    const Vector3f dci_dNi = (u - bi * ci) / li;
+    const Vector3f dcj_dCi = (bj - a * cj) / d;
+    const Vector3f dcj_dNj = (a - bj * cj) / lj;
+
+    // Ci: vertex of lambda_i, a ray of lambda_j, one end of d.
+    iso.grad[0] = u * (-kd) + (dci_dCj + dci_dNi) * (-ki) + dcj_dCi * kj;
+    // Ni: lambda_i only.
+    iso.grad[1] = dci_dNi * ki;
+    // Cj: one end of d, a ray of lambda_i, vertex of lambda_j.
+    iso.grad[2] = u * kd + dci_dCj * ki + (dcj_dCi + dcj_dNj) * (-kj);
+    // Nj: lambda_j only.
+    iso.grad[3] = dcj_dNj * kj;
+    return iso;
+}
+
 void SpringNetwork::computeHydrogenBondForces()
 {
     struct Bond
@@ -365,11 +484,20 @@ void SpringNetwork::computeHydrogenBondForces()
                                  getParticle(i).lobeMode(),
                                  getParticle(static_cast<size_t>(_hbDonorSlot[s])).lobeMode()});
 
-    // Six slots per bond: two antecedents on each side, the donor, the
-    // acceptor. The angular weight is now a product of two factors, one per
-    // side, so its gradient reaches every one of them.
-    _hydrogenBondForceScratch.resize(bonds.size() * 6);
+    // TEN slots per bond: two antecedents on each side, the donor, the
+    // acceptor, and the four atoms of the isostericity frame -- the two C1' and
+    // the two glycosidic nitrogens. The angular weight is a product of two
+    // factors, one per side, so its gradient reaches both sides' antecedents;
+    // the isostericity factor is a function of four further atoms that are not
+    // in the bond at all, so its gradient reaches those too.
+    //
+    // The frame indices are recorded per bond rather than re-derived in the
+    // serial pass, because the factor decides for itself whether it applies and
+    // the accumulation must agree with the force that was computed, not with a
+    // second opinion about the geometry.
+    _hydrogenBondForceScratch.resize(bonds.size() * 10);
     std::vector<float> pairEnergyScratch(bonds.size());
+    std::vector<std::array<int, 4>> isoAtomScratch(bonds.size(), {-1, -1, -1, -1});
 
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
@@ -382,9 +510,8 @@ void SpringNetwork::computeHydrogenBondForces()
         const float distance = v.norm();
         if (distance < 1e-6f)
         {
-            _hydrogenBondForceScratch[3 * k + 0] = Vector3f();
-            _hydrogenBondForceScratch[3 * k + 1] = Vector3f();
-            _hydrogenBondForceScratch[3 * k + 2] = Vector3f();
+            for (size_t slot = 0; slot < 10; ++slot)
+                _hydrogenBondForceScratch[10 * k + slot] = Vector3f();
             pairEnergyScratch[k] = 0.0f;
             continue;
         }
@@ -421,7 +548,15 @@ void SpringNetwork::computeHydrogenBondForces()
         const float wa = hasA ? forcefield::hydrogen_bond_angular_factor(ca) : 1.0f;
         const float dwd = hasD ? forcefield::hydrogen_bond_angular_derivative(cd) : 0.0f;
         const float dwa = hasA ? forcefield::hydrogen_bond_angular_derivative(ca) : 0.0f;
-        const float w = wd * wa;
+
+        // The isostericity reduction, which is 1.0 and gradient-free unless the
+        // term is on AND both ends name a glycosidic frame. Folded into `w`, so
+        // it reaches the radial force, both angular forces and the energy by
+        // the SAME arithmetic rather than by three separate multiplications
+        // that could drift apart.
+        const IsostericityFactor iso = isostericityFactor(pd, pa, true);
+        isoAtomScratch[k] = {iso.atom[0], iso.atom[1], iso.atom[2], iso.atom[3]};
+        const float w = wd * wa * iso.value;
 
         // Three sub-terms, each balanced on its OWN atoms rather than letting
         // one global "donor takes the rest" absorb everything. The acceptor
@@ -507,8 +642,9 @@ void SpringNetwork::computeHydrogenBondForces()
         // v-dependence on the acceptor, the donor balancing the three.
         if (hasD && dwd != 0.0f)
         {
-            angular(sd, vhat, cd, morse * wa * dwd * conv, f_d1, f_d2);
-            const Vector3f on_acceptor = (dhat - vhat * cd) * (-morse * wa * dwd * conv / distance);
+            angular(sd, vhat, cd, morse * wa * iso.value * dwd * conv, f_d1, f_d2);
+            const Vector3f on_acceptor =
+                (dhat - vhat * cd) * (-morse * wa * iso.value * dwd * conv / distance);
             f_acceptor += on_acceptor;
             f_donor -= (f_d1 + f_d2 + on_acceptor);
         }
@@ -518,18 +654,33 @@ void SpringNetwork::computeHydrogenBondForces()
         // lands on the DONOR, the acceptor balancing the three.
         if (hasA && dwa != 0.0f)
         {
-            angular(sa, -vhat, ca, morse * wd * dwa * conv, f_a1, f_a2);
-            const Vector3f on_donor = (ahat + vhat * ca) * (-morse * wd * dwa * conv / distance);
+            angular(sa, -vhat, ca, morse * wd * iso.value * dwa * conv, f_a1, f_a2);
+            const Vector3f on_donor = (ahat + vhat * ca) * (-morse * wd * iso.value * dwa * conv / distance);
             f_donor += on_donor;
             f_acceptor -= (f_a1 + f_a2 + on_donor);
         }
 
-        _hydrogenBondForceScratch[6 * k + 0] = f_d1;
-        _hydrogenBondForceScratch[6 * k + 1] = f_d2;
-        _hydrogenBondForceScratch[6 * k + 2] = f_a1;
-        _hydrogenBondForceScratch[6 * k + 3] = f_a2;
-        _hydrogenBondForceScratch[6 * k + 4] = f_donor;
-        _hydrogenBondForceScratch[6 * k + 5] = f_acceptor;
+        // (D) the isostericity factor's own gradient, entirely on the four frame
+        // atoms. Nothing lands on the donor or the acceptor here and nothing
+        // needs balancing: the factor does not depend on either of their
+        // positions, so the couple it exerts is already internal to the frame.
+        _hydrogenBondForceScratch[10 * k + 6] = Vector3f();
+        _hydrogenBondForceScratch[10 * k + 7] = Vector3f();
+        _hydrogenBondForceScratch[10 * k + 8] = Vector3f();
+        _hydrogenBondForceScratch[10 * k + 9] = Vector3f();
+        if (iso.applies)
+        {
+            const float kiso = -morse * wd * wa * conv;
+            for (size_t f = 0; f < 4; ++f)
+                _hydrogenBondForceScratch[10 * k + 6 + f] = iso.grad[f] * kiso;
+        }
+
+        _hydrogenBondForceScratch[10 * k + 0] = f_d1;
+        _hydrogenBondForceScratch[10 * k + 1] = f_d2;
+        _hydrogenBondForceScratch[10 * k + 2] = f_a1;
+        _hydrogenBondForceScratch[10 * k + 3] = f_a2;
+        _hydrogenBondForceScratch[10 * k + 4] = f_donor;
+        _hydrogenBondForceScratch[10 * k + 5] = f_acceptor;
         pairEnergyScratch[k] = morse * w;
     }
 
@@ -537,15 +688,23 @@ void SpringNetwork::computeHydrogenBondForces()
     for (size_t k = 0; k < bonds.size(); ++k)
     {
         if (bonds[k].antecedent >= 0)
-            getParticle(static_cast<size_t>(bonds[k].antecedent)).addForce(_hydrogenBondForceScratch[6 * k + 0]);
+            getParticle(static_cast<size_t>(bonds[k].antecedent)).addForce(_hydrogenBondForceScratch[10 * k + 0]);
         if (bonds[k].antecedent2 >= 0)
-            getParticle(static_cast<size_t>(bonds[k].antecedent2)).addForce(_hydrogenBondForceScratch[6 * k + 1]);
+            getParticle(static_cast<size_t>(bonds[k].antecedent2)).addForce(_hydrogenBondForceScratch[10 * k + 1]);
         if (bonds[k].acceptorAntecedent >= 0)
-            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent)).addForce(_hydrogenBondForceScratch[6 * k + 2]);
+            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent))
+                .addForce(_hydrogenBondForceScratch[10 * k + 2]);
         if (bonds[k].acceptorAntecedent2 >= 0)
-            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent2)).addForce(_hydrogenBondForceScratch[6 * k + 3]);
-        getParticle(bonds[k].donor).addForce(_hydrogenBondForceScratch[6 * k + 4]);
-        getParticle(bonds[k].acceptor).addForce(_hydrogenBondForceScratch[6 * k + 5]);
+            getParticle(static_cast<size_t>(bonds[k].acceptorAntecedent2))
+                .addForce(_hydrogenBondForceScratch[10 * k + 3]);
+        getParticle(bonds[k].donor).addForce(_hydrogenBondForceScratch[10 * k + 4]);
+        getParticle(bonds[k].acceptor).addForce(_hydrogenBondForceScratch[10 * k + 5]);
+        // The frame. Each index is checked on its own: a bond whose factor did
+        // not apply recorded -1 four times and adds nothing.
+        for (size_t f = 0; f < 4; ++f)
+            if (isoAtomScratch[k][f] >= 0)
+                getParticle(static_cast<size_t>(isoAtomScratch[k][f]))
+                    .addForce(_hydrogenBondForceScratch[10 * k + 6 + f]);
         hbond_energy += pairEnergyScratch[k];
     }
 
@@ -1932,8 +2091,17 @@ void SpringNetwork::_assignHydrogenBondPairs()
                 // group says, and ranking it as an ordinary hydrogen bond
                 // would let a shallower neighbour take the slot.
                 const HydrogenBondParameters mp = hydrogenBondParameters(i, j);
+                // And on the isostericity the couple would be REDUCED by. A
+                // candidate must be ranked on the energy the force path will
+                // actually give it: scoring the mirror of a Watson-Crick pair
+                // at its full depth hands it the slot, and the factor then
+                // reduces it to 5 % of that -- occupying the donor while
+                // holding nothing, which is exactly the failure that ranking by
+                // distance alone produced before.
+                const float isovalue = isostericityFactor(p, q, false).value;
                 const float strength =
-                    _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width) * weight;
+                    _ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width) * weight *
+                    isovalue;
                 if (strength < nearest_distance[i])
                 {
                     nearest_distance[i] = strength;

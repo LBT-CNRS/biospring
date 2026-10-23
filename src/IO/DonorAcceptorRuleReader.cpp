@@ -280,6 +280,73 @@ void DonorAcceptorRuleReader::tagParticles(spn::SpringNetwork & spn) const
         }
     }
 
+    // THE GLYCOSIDIC FRAME, resolved from the topology itself and from no table
+    // at all: the glycosidic bond is C1'-N9 in a purine and C1'-N1 in a
+    // pyrimidine, which is the definition of the bond and not a parameter
+    // anyone could tune. A residue carrying a C1' and an N9 is a purine; one
+    // carrying a C1' and an N1 but no N9 is a pyrimidine. Everything else --
+    // every amino acid, every coarse bead standing for a whole residue, every
+    // ion -- has neither and gets no frame, which is what makes the
+    // isostericity factor leave protein bonds untouched to the bit.
+    //
+    // Resolved once per RESIDUE and written onto all of its particles, because
+    // the factor is asked for it from the bonded atom, which is a base nitrogen
+    // or oxygen and never the sugar carbon itself.
+    //
+    // Keyed on (chain, residue id) like `resolve` above, and inheriting its
+    // assumption that the pair is unique in the network -- true of every
+    // topology pdb2spn and mergespn produce, since a merge renames colliding
+    // chains.
+    {
+        std::map<std::tuple<std::string, int>, std::pair<int, int>> frame;
+        unsigned nb_purine = 0, nb_pyrimidine = 0;
+        for (unsigned i = 0; i < spn.getNumberOfParticles(); ++i)
+        {
+            const spn::Particle & p = spn.getParticle(i);
+            const auto key = std::make_tuple(p.getChainName(), static_cast<int>(p.getResId()));
+            if (frame.count(key))
+                continue;
+            const auto c1 = by_plain.find(std::make_tuple(p.getChainName(), p.getResId(), std::string("C1'")));
+            if (c1 == by_plain.end())
+            {
+                frame.emplace(key, std::make_pair(-1, -1));
+                continue;
+            }
+            // N9 first: a purine has BOTH an N9 and an N1, and it is N9 the
+            // base hangs from. Testing N1 first would give every purine the
+            // pyrimidine's frame and point lambda at a ring atom on the far
+            // side of the base.
+            auto n = by_plain.find(std::make_tuple(p.getChainName(), p.getResId(), std::string("N9")));
+            bool purine = n != by_plain.end();
+            if (!purine)
+                n = by_plain.find(std::make_tuple(p.getChainName(), p.getResId(), std::string("N1")));
+            if (n == by_plain.end())
+            {
+                frame.emplace(key, std::make_pair(-1, -1));
+                continue;
+            }
+            frame.emplace(key, std::make_pair(static_cast<int>(c1->second), static_cast<int>(n->second)));
+            if (purine)
+                ++nb_purine;
+            else
+                ++nb_pyrimidine;
+        }
+        unsigned nb_framed = 0;
+        for (unsigned i = 0; i < spn.getNumberOfParticles(); ++i)
+        {
+            spn::Particle & p = spn.getParticle(i);
+            const auto f = frame.find(std::make_tuple(p.getChainName(), static_cast<int>(p.getResId())));
+            if (f == frame.end() || f->second.first < 0)
+                continue;
+            p.setGlycosidicFrame(f->second.first, f->second.second);
+            ++nb_framed;
+        }
+        if (nb_purine + nb_pyrimidine > 0)
+            logging::info("Glycosidic frames: %d purine(s) (C1'-N9) and %d pyrimidine(s) (C1'-N1), covering %d "
+                          "particle(s). A site without one is left untouched by the isostericity factor.",
+                          nb_purine, nb_pyrimidine, nb_framed);
+    }
+
     logging::info("Hydrogen bond tagging: %d donor(s), %d acceptor(s) among %d particles, %d with a resolved "
                   "antecedent (directional), %d of them with a bisector (two heavy neighbours, one direction), "
                   "%d with two lobes (one heavy neighbour, two directions).",

@@ -81,6 +81,33 @@ inline float hydrogen_bond_angular_derivative(float cos_theta)
     return biospring_hbond_angular_derivative(cos_theta);
 }
 
+// The isostericity reduction's three scalars. The shape, the measurement behind
+// the centres and the width scan are all in forcefield/shared/hbond_shared.h;
+// the geometry that feeds them is in SpringNetwork::isostericityFactor, because
+// it needs four third-party positions and a vector type this header is shared
+// with OpenCL C to avoid.
+
+/// One Gaussian acceptance. @param width in the same unit as value and centre.
+inline float isostericity_gaussian(float value, float centre, float width)
+{
+    return biospring_isostericity_gaussian(value, centre, width);
+}
+
+/// d(acceptance)/d(value), per unit of that value.
+inline float isostericity_gaussian_derivative(float value, float centre, float width)
+{
+    return biospring_isostericity_gaussian_derivative(value, centre, width);
+}
+
+/// The product of the three, for a caller that already has the geometry.
+/// @param lambda_i,lambda_j in DEGREES.
+inline float isostericity_factor(float distance, float lambda_i, float lambda_j, float distance_centre,
+                                 float lambda_centre, float distance_width, float lambda_width)
+{
+    return biospring_hbond_isostericity_factor(distance, lambda_i, lambda_j, distance_centre, lambda_centre,
+                                               distance_width, lambda_width);
+}
+
 } // namespace forcefield
 } // namespace biospring
 

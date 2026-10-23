@@ -668,9 +668,36 @@ class HydrogenBondSetting : public EnergySetting
     // neighbouring residues.
     std::string log;
 
-    HydrogenBondSetting(const std::string & name) : EnergySetting(name), path(), log()
+    // The isostericity reduction, off by default. It multiplies the well by how
+    // close the pair sits to the Watson-Crick geometry WITH RESPECT TO ITS OWN
+    // BACKBONE -- the C1'-C1' distance and the two glycosidic angles -- which
+    // is the one thing the donor-acceptor geometry provably cannot see: every
+    // quantity the pairing term scores is preserved exactly when the partner is
+    // turned 180 degrees about the bond axis. See
+    // forcefield/shared/hbond_shared.h for the measurement, the parameter scan
+    // and what the factor does and does not reproduce.
+    //
+    // Off by default because it is a reduction on an already-calibrated depth:
+    // every existing .msp keeps the trajectory it had, to the bit.
+    bool isostericity;
+    // The Watson-Crick centres, measured on 8PKL over 1121 strict pairs:
+    // 10.46 +/- 0.59 A and 54.9 +/- 5.6 degrees. The widths are NOT those
+    // standard deviations -- they were scanned against the native, mirror and
+    // non-canonical populations at once, and are wider, so that a real pair
+    // keeps 84 % of its well while its mirror keeps 4.7 %.
+    double isostericitydistance;
+    double isostericitylambda;
+    double isostericitydistancewidth;
+    double isostericitylambdawidth;
+
+    HydrogenBondSetting(const std::string & name)
+        : EnergySetting(name), path(), log(), isostericity(false), isostericitydistance(10.46),
+          isostericitylambda(54.9), isostericitydistancewidth(1.5), isostericitylambdawidth(18.0)
     {
-        _parameterNames = {"enable", "scale", "cutoff", "path", "log"};
+        _parameterNames = {"enable",        "scale",           "cutoff",
+                           "path",          "log",             "isostericity",
+                           "isostericitydistance",             "isostericitylambda",
+                           "isostericitydistancewidth",        "isostericitylambdawidth"};
     }
 
     void setFromString(const std::string & param, const std::string & s) override
@@ -679,6 +706,16 @@ class HydrogenBondSetting : public EnergySetting
             path = s;
         else if (param == "log")
             log = s;
+        else if (param == "isostericity")
+            _parse_bool(isostericity, s, param);
+        else if (param == "isostericitydistance")
+            utils::string::from_string<decltype(isostericitydistance)>(isostericitydistance, s);
+        else if (param == "isostericitylambda")
+            utils::string::from_string<decltype(isostericitylambda)>(isostericitylambda, s);
+        else if (param == "isostericitydistancewidth")
+            utils::string::from_string<decltype(isostericitydistancewidth)>(isostericitydistancewidth, s);
+        else if (param == "isostericitylambdawidth")
+            utils::string::from_string<decltype(isostericitylambdawidth)>(isostericitylambdawidth, s);
         else
             EnergySetting::setFromString(param, s);
     }
@@ -688,6 +725,11 @@ class HydrogenBondSetting : public EnergySetting
         EnergySetting::print(os);
         _mspFormatter.print("path", path, os);
         _mspFormatter.print("log", log, os);
+        _mspFormatter.print("isostericity", isostericity, os);
+        _mspFormatter.print("isostericitydistance", isostericitydistance, os);
+        _mspFormatter.print("isostericitylambda", isostericitylambda, os);
+        _mspFormatter.print("isostericitydistancewidth", isostericitydistancewidth, os);
+        _mspFormatter.print("isostericitylambdawidth", isostericitylambdawidth, os);
     }
 };
 
