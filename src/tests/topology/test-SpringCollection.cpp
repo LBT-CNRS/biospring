@@ -115,6 +115,47 @@ TEST(SpringCollection, add_spring_fails_if_spring_already_exists)
     EXPECT_THROW(container.add_spring(particles[0], particles[1], 1.0, 1.0), topology::SpringAlreadyExistsException);
 }
 
+TEST(SpringCollection, remove_spring)
+{
+    topology::ParticleCollection particles = generate_particles(4);
+    topology::SpringCollection container(particles);
+
+    container.add_spring(particles[0], particles[1], 1.0, 1.0);
+    container.add_spring(particles[1], particles[2], 2.0, 2.0);
+    container.add_spring(particles[2], particles[3], 3.0, 3.0);
+
+    // Particle order does not matter.
+    EXPECT_TRUE(container.remove_spring(particles[2], particles[1]));
+    EXPECT_FALSE(container.remove_spring(particles[1], particles[2]));
+    EXPECT_FALSE(container.remove_spring(particles[0], particles[3]));
+
+    EXPECT_EQ(container.size(), 2);
+    EXPECT_TRUE(container.exists(particles[0], particles[1]));
+    EXPECT_FALSE(container.exists(particles[1], particles[2]));
+    EXPECT_TRUE(container.exists(particles[2], particles[3]));
+
+    // Lookup by id still points to the right springs.
+    EXPECT_EQ(container.at_uid({particles[2].unique_id(), particles[3].unique_id()}).stiffness(), 3.0);
+}
+
+TEST(SpringCollection, remove_springs)
+{
+    topology::ParticleCollection particles = generate_particles(4);
+    topology::SpringCollection container(particles);
+
+    container.add_spring(particles[0], particles[1], 1.0, 1.0);
+    container.add_spring(particles[1], particles[2], 1.0, 1.0);
+    container.add_spring(particles[2], particles[3], 1.0, 1.0);
+
+    size_t removed = container.remove_springs({{particles[0].unique_id(), particles[1].unique_id()},
+                                               {particles[3].unique_id(), particles[2].unique_id()},
+                                               {particles[0].unique_id(), particles[3].unique_id()}});
+
+    EXPECT_EQ(removed, 2);
+    EXPECT_EQ(container.size(), 1);
+    EXPECT_TRUE(container.exists(particles[1], particles[2]));
+}
+
 TEST(SpringCollection, exists)
 {
     topology::ParticleCollection particles = generate_particles(3);

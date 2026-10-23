@@ -38,6 +38,7 @@ class CommandLineArguments : public argparse::CommandLineArgumentsBase
     std::string pathTopology;
     std::vector<std::string> pathOutputList;
     std::string pathUpdateSprings;
+    std::string pathRemoveSprings;
 
     // User options.
     float cutoff;    // cutoff value for spring creation
@@ -58,6 +59,13 @@ class CommandLineArguments : public argparse::CommandLineArgumentsBase
 void readSpringFile(const std::string & filename, std::vector<SpringDescriptor> & sdesc);
 void addSpringsToSpn(const std::vector<SpringDescriptor> & sdesc, biospring::topology::Topology & top);
 void addSpringsToSpn(const std::string & path, biospring::topology::Topology & top);
+
+void readSpringRemovalFile(const std::string & filename, std::vector<std::pair<std::string, std::string>> & pairs);
+void removeSpringsFromSpn(const std::vector<std::pair<std::string, std::string>> & pairs,
+                          biospring::topology::Topology & top);
+void removeSpringsFromSpn(const std::string & path, biospring::topology::Topology & top);
+
+std::unordered_map<std::string, unsigned> mapParticleIds(const biospring::topology::Topology & top);
 
 void checkParticleIdFormat(const std::string & pid, const unsigned & lineid);
 void checkParticleInSpn(const std::string & pid, const std::unordered_map<std::string, unsigned> & pidmap);

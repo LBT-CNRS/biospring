@@ -38,18 +38,25 @@ int main(int argc, char ** argv)
     if (args.useUserCutoff())
     {
         logging::status("Creating springs from user-defined cutoff distance %.2f.", args.cutoff);
+        double stiffness = 1.0;
         if (args.useUserStiffness())
         {
             logging::info("Using user-defined stiffness %.2f.", args.stiffness);
-            topology.springs().set_stiffnesses(args.stiffness);
+            stiffness = args.stiffness;
         }
-        topology.add_springs_from_cutoff(args.cutoff);
+        topology.add_springs_from_cutoff(args.cutoff, stiffness);
     }
 
     if (not args.pathUpdateSprings.empty())
     {
         logging::status("Updating spring parameters using spring file %s.", args.pathUpdateSprings.c_str());
         addSpringsToSpn(args.pathUpdateSprings, topology);
+    }
+
+    if (not args.pathRemoveSprings.empty())
+    {
+        logging::status("Removing springs using spring file %s.", args.pathRemoveSprings.c_str());
+        removeSpringsFromSpn(args.pathRemoveSprings, topology);
     }
 
     logging::info("Final spring network has %zu particles.", topology.number_of_particles());
@@ -108,13 +115,8 @@ void readSpringFile(const std::string & filename, vector<SpringDescriptor> & sde
 //
 void addSpringsToSpn(const vector<SpringDescriptor> & springDescriptors, biospring::topology::Topology & top)
 {
-    std::unordered_map<std::string, unsigned> pidmap;
-
     // First, maps all the particles std::string descriptor and ids
-    for (size_t pid = 0; pid < top.number_of_particles(); pid++)
-    {
-        pidmap[top.get_particle(pid).string_description()] = pid;
-    }
+    std::unordered_map<std::string, unsigned> pidmap = mapParticleIds(top);
 
     // Then, for each spring descriptor, if the spring does not exist, create it
     // otherwise change its properties.
@@ -163,24 +165,104 @@ void addSpringsToSpn(const std::string & path, biospring::topology::Topology & t
 }
 
 //
+// Reads a spring removal text file and store the particle id pairs in pairs.
+// Each line holds two particle ids; extra columns are ignored so that a spring
+// update file can be used as is.
+//
+void readSpringRemovalFile(const std::string & filename, vector<std::pair<std::string, std::string>> & pairs)
+{
+    std::ifstream filein;
+    biospring::utils::file::openread(filename, filein);
+
+    for (unsigned lineid = 1; not filein.eof(); ++lineid)
+    {
+        std::string buffer;
+        std::getline(filein, buffer);
+
+        if (not(buffer.empty() or buffer[0] == '#'))
+        {
+            istringstream iss(buffer);
+            std::string id1, id2;
+            iss >> id1 >> id2;
+
+            if (id2.empty())
+            {
+                logging::die("spring format error at line %d: \"%s\" (expected: <pidentifier1> <pidentifier2>)", lineid,
+                             buffer.c_str());
+            }
+
+            checkParticleIdFormat(id1, lineid);
+            checkParticleIdFormat(id2, lineid);
+
+            pairs.emplace_back(id1, id2);
+        }
+    }
+}
+
+//
+// Removes the springs between the particle pairs from the topology.
+// Pairs that are not linked by a spring are reported and skipped.
+//
+void removeSpringsFromSpn(const vector<std::pair<std::string, std::string>> & pairs,
+                          biospring::topology::Topology & top)
+{
+    std::unordered_map<std::string, unsigned> pidmap = mapParticleIds(top);
+
+    std::vector<topology::sid_t> uids;
+    for (const auto & [id1, id2] : pairs)
+    {
+        // Checks particles are actually known to the spring network.
+        checkParticleInSpn(id1, pidmap);
+        checkParticleInSpn(id2, pidmap);
+
+        const topology::Particle & p1 = top.get_particle(pidmap[id1]);
+        const topology::Particle & p2 = top.get_particle(pidmap[id2]);
+
+        if (top.has_spring_between(p1, p2))
+            uids.push_back({p1.unique_id(), p2.unique_id()});
+        else
+            logging::warning("no spring between %s and %s: skipping.", id1.c_str(), id2.c_str());
+    }
+
+    size_t removed = top.remove_springs(uids);
+    logging::info("Removed %zu springs.", removed);
+}
+
+//
+// Removes springs described in file from the topology.
+//
+void removeSpringsFromSpn(const std::string & path, biospring::topology::Topology & top)
+{
+    std::vector<std::pair<std::string, std::string>> pairs;
+    readSpringRemovalFile(path, pairs);
+    removeSpringsFromSpn(pairs, top);
+}
+
+//
+// Maps all the particles string descriptors to their position in the topology.
+//
+std::unordered_map<std::string, unsigned> mapParticleIds(const biospring::topology::Topology & top)
+{
+    std::unordered_map<std::string, unsigned> pidmap;
+    for (size_t pid = 0; pid < top.number_of_particles(); pid++)
+    {
+        pidmap[top.get_particle(pid).string_description()] = pid;
+    }
+    return pidmap;
+}
+
+//
 // Dies if the particle id does not have 4 tokens separated by "::"
 //
 void checkParticleIdFormat(const std::string & pid, const unsigned & lineid)
 {
-    vector<std::string> tokens;
-    std::string delimiters = "::";
+    // Fields may be empty (e.g. no chain name: "::ALA::1::CA"), so counts the
+    // "::" separators rather than the non-empty tokens.
+    size_t ntokens = 1;
+    for (size_t pos = pid.find("::"); pos != std::string::npos; pos = pid.find("::", pos + 2))
+        ++ntokens;
 
-    std::string::size_type lastPos = pid.find_first_not_of(delimiters, 0);
-    std::string::size_type pos = pid.find_first_of(delimiters, lastPos);
-
-    while (std::string::npos != pos || std::string::npos != lastPos)
-    {
-        tokens.push_back(pid.substr(lastPos, pos - lastPos));
-        lastPos = pid.find_first_not_of(delimiters, pos);
-        pos = pid.find_first_of(delimiters, lastPos);
-    }
-
-    if (tokens.size() != 4)
+    if (ntokens != 4)
     {
         logging::die(
             "spring format error at line %d: misformatted particle id: '%s' (expected chain::resname::resid::name)",
@@ -234,6 +316,13 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
                                      .metavar("SPRING_FILE")
                                      .argument_type(argparse::ArgumentType::PATH_INPUT);
 
+    argparse::Argument remove = argparse::Argument()
+                                    .name_short("-r")
+                                    .name_long("--remove-springs")
+                                    .description("remove springs defined in file.")
+                                    .metavar("SPRING_FILE")
+                                    .argument_type(argparse::ArgumentType::PATH_INPUT);
+
     argparse::Argument cutoff = argparse::Argument()
                                     .name_short("-c")
                                     .name_long("--cutoff")
@@ -251,6 +340,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(topology);
     _parser.add_argument(output);
     _parser.add_argument(springs);
+    _parser.add_argument(remove);
     _parser.add_argument(cutoff);
     _parser.add_argument(stiffness);
 }
@@ -261,6 +351,7 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     pathTopology = _parser.get_option_value<std::string>("--topology");
     pathOutputList = _parser.get_option_value<std::vector<std::string>>("--output");
     pathUpdateSprings = _parser.get_option_value<std::string>("--update-springs");
+    pathRemoveSprings = _parser.get_option_value<std::string>("--remove-springs");
     cutoff = _parser.get_option_value<float>("--cutoff");
     stiffness = _parser.get_option_value<float>("--stiffness");
 }
@@ -271,13 +362,15 @@ void CommandLineArguments::printArgumentValues() const
     logging::info("    topology: %s", pathTopology.c_str());
     if (not pathUpdateSprings.empty())
         logging::info("    spring update file: %s", pathUpdateSprings.c_str());
+    if (not pathRemoveSprings.empty())
+        logging::info("    spring removal file: %s", pathRemoveSprings.c_str());
     if (useUserCutoff())
         logging::info("    cutoff: %.1f", cutoff);
     if (useUserStiffness())
         logging::info("    stiffness: %.1f", stiffness);
     if (pathOutputList.size() > 1)
     {
-        logging::info("    output files: %s", pathTopology.c_str());
+        logging::info("    output files:");
         for (const auto & path : pathOutputList)
         {
             logging::info("        - %s", path.c_str());

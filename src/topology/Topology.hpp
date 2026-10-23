@@ -100,6 +100,13 @@ class Topology
         return _springs.add_spring(_particles[p1], _particles[p2], equilibrium, stiffness);
     }
 
+    // Removes the spring between two particles.
+    // Returns true if the spring existed.
+    bool remove_spring(const Particle & p1, const Particle & p2) { return _springs.remove_spring(p1, p2); }
+
+    // Removes the springs with the given ids. Returns the number of springs removed.
+    size_t remove_springs(const std::vector<sid_t> & uids) { return _springs.remove_springs(uids); }
+
     // Adds springs between all particles within a cutoff distance.
     // Equilibrium distance is set to the distance bewteen each pair.
     void add_springs_from_cutoff(double cutoff, double stiffness = 1.0)
