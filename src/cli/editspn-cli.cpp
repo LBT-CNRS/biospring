@@ -329,7 +329,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     argparse::Argument stiffness = argparse::Argument()
                                        .name_short("-d")
                                        .name_long("--stiffness")
-                                       .description("when used with -cutoff/--cutoff, sets the spring stiffness, in kJ.mol-1.A-2")
+                                       .description("when used with -c/--cutoff, sets the spring stiffness, in kJ.mol-1.A-2")
                                        .argument_type(argparse::ArgumentType::REAL)
                                        .default_value("1.0");
 
