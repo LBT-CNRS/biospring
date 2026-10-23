@@ -38,13 +38,9 @@ int main(int argc, char ** argv)
     if (args.useUserCutoff())
     {
         logging::status("Creating springs from user-defined cutoff distance %.2f.", args.cutoff);
-        double stiffness = 1.0;
         if (args.useUserStiffness())
-        {
             logging::info("Using user-defined stiffness %.2f.", args.stiffness);
-            stiffness = args.stiffness;
-        }
-        topology.add_springs_from_cutoff(args.cutoff, stiffness);
+        topology.add_springs_from_cutoff(args.cutoff, args.stiffness);
     }
 
     if (not args.pathUpdateSprings.empty())
@@ -290,7 +286,7 @@ void checkParticleInSpn(const std::string & pid, const unordered_map<std::string
 CommandLineArguments::CommandLineArguments(const std::string & name, const argparse::description_t & description,
                                            const std::string & version)
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathOutputList(0), cutoff(-1.0),
-      stiffness(0.0)
+      stiffness(1.0)
 {
     argparse::Argument topology = argparse::Argument()
                                       .name_short("-s")
@@ -335,7 +331,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
                                        .name_long("--stiffness")
                                        .description("when used with -cutoff/--cutoff, sets the spring stiffness, in kJ.mol-1.A-2")
                                        .argument_type(argparse::ArgumentType::REAL)
-                                       .default_value("-1.0");
+                                       .default_value("1.0");
 
     _parser.add_argument(topology);
     _parser.add_argument(output);

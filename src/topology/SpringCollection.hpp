@@ -4,6 +4,7 @@
 #include "ParticleCollection.hpp"
 #include "Spring.hpp"
 
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility> // std::hash
@@ -106,9 +107,10 @@ class SpringCollection
     reference operator[](size_type pos) { return _data[pos]; }
     const_reference operator[](size_type pos) const { return _data[pos]; }
 
-    // Returns a reference to the spring with the given id.
-    reference at_uid(sid_t uid) { return _data[_by_uid.at(uid)]; }
-    const_reference at_uid(sid_t uid) const { return _data[_by_uid.at(uid)]; }
+    // Returns a reference to the spring with the given id (in either particle order).
+    // Throws std::out_of_range if the spring does not exist.
+    reference at_uid(sid_t uid) { return _data[_position(uid)]; }
+    const_reference at_uid(sid_t uid) const { return _data[_position(uid)]; }
 
     // Returns an iterator to the first particle in the collection.
     iterator begin() { return _data.begin(); }
@@ -209,9 +211,7 @@ class SpringCollection
         std::unordered_set<size_t> positions;
         for (const sid_t & uid : uids)
         {
-            auto it = _by_uid.find(uid);
-            if (it == _by_uid.end())
-                it = _by_uid.find({uid.second, uid.first});
+            auto it = _find(uid);
             if (it != _by_uid.end())
                 positions.insert(it->second);
         }
@@ -273,6 +273,27 @@ class SpringCollection
     }
 
     bool exists(const Particle & p1, const Particle & p2) const { return exists(p1.unique_id(), p2.unique_id()); }
+
+  protected:
+    // Returns an iterator to the id map entry of the spring with the given id
+    // (in either particle order), or `_by_uid.end()` if the spring does not exist.
+    std::unordered_map<sid_t, size_t, sid_hash>::const_iterator _find(sid_t uid) const
+    {
+        auto it = _by_uid.find(uid);
+        if (it == _by_uid.end())
+            it = _by_uid.find({uid.second, uid.first});
+        return it;
+    }
+
+    // Returns the position of the spring with the given id (in either particle order).
+    // Throws std::out_of_range if the spring does not exist.
+    size_t _position(sid_t uid) const
+    {
+        auto it = _find(uid);
+        if (it == _by_uid.end())
+            throw std::out_of_range("Spring not found.");
+        return it->second;
+    }
 };
 
 } // namespace topology

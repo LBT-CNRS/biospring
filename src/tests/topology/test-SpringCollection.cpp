@@ -115,6 +115,18 @@ TEST(SpringCollection, add_spring_fails_if_spring_already_exists)
     EXPECT_THROW(container.add_spring(particles[0], particles[1], 1.0, 1.0), topology::SpringAlreadyExistsException);
 }
 
+TEST(SpringCollection, at_uid_ignores_particle_order)
+{
+    topology::ParticleCollection particles = generate_particles(3);
+    topology::SpringCollection container(particles);
+
+    container.add_spring(particles[0], particles[1], 1.0, 2.0);
+
+    EXPECT_EQ(container.at_uid({particles[0].unique_id(), particles[1].unique_id()}).stiffness(), 2.0);
+    EXPECT_EQ(container.at_uid({particles[1].unique_id(), particles[0].unique_id()}).stiffness(), 2.0);
+    EXPECT_THROW(container.at_uid({particles[0].unique_id(), particles[2].unique_id()}), std::out_of_range);
+}
+
 TEST(SpringCollection, remove_spring)
 {
     topology::ParticleCollection particles = generate_particles(4);
