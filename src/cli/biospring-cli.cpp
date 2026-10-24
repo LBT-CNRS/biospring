@@ -45,7 +45,7 @@ namespace
 
 bool isMDDriverOption(const std::string & option)
 {
-    return option == "-wait" || option == "--wait" ||
+    return option == "-imd" || option == "--imd" || option == "-wait" || option == "--wait" ||
            option == "-port" || option == "--port" ||
            option == "-debug" || option == "--debug" ||
            option == "-log" || option == "--log";
@@ -106,7 +106,11 @@ int main(int argc, char ** argv)
     iMDDriver.setForceScale(args.mddriverParam.forcescale);
     iMDDriver.setTransmissionRate(args.mddriverParam.transmissionrate);
     iMDDriver.setSpringNetwork(spn);
-    spn->addInteractor(&iMDDriver);
+    if (args.mddriverParam.enabled)
+        spn->addInteractor(&iMDDriver);
+    else
+        logging::info("Interactive MD is off: pass --imd (or --wait, or an explicit --port) to enable it. "
+                      "No socket is opened and no frame is published.");
 #endif
 
 #if defined(FREESASA_SUPPORT)
@@ -225,8 +229,21 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     // == MDDriver-specific options ==
 
 #ifdef MDDRIVER_SUPPORT
+    // The switch MDDriver never had. Until now the interactor was registered
+    // unconditionally, so every run -- batch included -- opened the port and
+    // copied all its positions into the transmission buffer once per step for a
+    // viewer that was never going to connect. There was no option to stop it:
+    // --port, --wait, --debug, --log and --imd-rate all TUNE interactive MD and
+    // none of them turns it off. This is the same opt-in --sasa already has, and
+    // for the same reason -- a feature nothing is asking for should not run.
+    argparse::Argument imd = argparse::StoreTrueArgument(
+        "", "--imd",
+        "Enable interactive MD (MDDriver): open the port and publish a frame every step. Off by "
+        "default, so an unattended run opens no socket and pays no transport. Implied by --wait and "
+        "by an explicit --port.");
+
     argparse::Argument wait =
-        argparse::StoreTrueArgument("", "--wait", "Waiting for a connection before starting the simulation.");
+        argparse::StoreTrueArgument("", "--wait", "Waiting for a connection before starting the simulation. Implies --imd.");
 
     argparse::Argument port = argparse::Argument()
                                   .name_long("--port")
@@ -254,6 +271,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
                                      .argument_type(argparse::ArgumentType::INTEGER)
                                      .default_value("1");
 
+    _parser.add_argument(imd);
     _parser.add_argument(port);
     _parser.add_argument(wait);
     _parser.add_argument(debug);
@@ -350,6 +368,13 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
 
 #ifdef MDDRIVER_SUPPORT
     mddriverParam.wait = _parser.get_option("--wait").is_set();
+    // Asked for explicitly: --imd says so outright, and --wait or an explicit
+    // --port say so by implication (both are meaningless without it). A --port
+    // left at its default does NOT count, which is what makes this a real
+    // switch rather than a rename of the old always-on behaviour.
+    mddriverParam.enabled = _parser.get_option("--imd").is_set() ||
+                            _parser.get_option("--wait").is_set() ||
+                            _parser.get_option("--port").is_set();
     mddriverParam.port = _parser.get_option_value<unsigned>("--port");
     mddriverParam.debug = _parser.get_option_value<unsigned>("--debug");
     mddriverParam.logpath = _parser.get_option_value<std::string>("--log");

@@ -16,6 +16,20 @@ const std::string PROGRAM_VERSION = "biospring " + biospring::VERSION_STRING;
 // Stores MDDriver parameters.
 struct MDDriverParameters
 {
+    // Whether the user ASKED for interactive MD, as opposed to the defaults
+    // below simply existing. Set only when --port or --wait is given on the
+    // command line.
+    //
+    // It gates registration of the interactor, and that gate is the point: the
+    // interactor used to be registered unconditionally, so every batch run
+    // copied all its positions into the transmission buffer once per step for
+    // a viewer that was never going to connect. Measured on a 389-particle
+    // system, that was about 6 % of the whole step -- and syncSystemStateData's
+    // own comment calls the transport "more expensive than the physics it
+    // carries". A viewer can now only connect when interactive MD was asked
+    // for, which is also the safer behaviour: an unattended run does not open
+    // a port.
+    bool enabled = false;
     bool wait = true;
     unsigned port = 8888;
     unsigned debug = 0;

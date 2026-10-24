@@ -827,7 +827,10 @@ class SpringNetwork
     void _setupInsertionVector();
     void _setupSelections();
     void _setupConstraints();
-    std::vector<size_t> _donorAcceptorParticleIndexes() const;
+    // Returns a reference into a cache built on first use; see
+    // _donorAcceptorIndexCache. The members it fills are mutable because the
+    // method is const and its callers hold a const network.
+    const std::vector<size_t> & _donorAcceptorParticleIndexes() const;
 
     // Updates _hydrogenBondPartner: breaks any active pair that has drifted
     // beyond the hbond cutoff, then matches newly-free donors and acceptors
@@ -938,6 +941,57 @@ class SpringNetwork
     // (distance beyond the hbond cutoff), so bonds do not flicker toward a
     // momentarily closer alternative -- and a particle with one slot behaves
     // exactly as the old single-partner array did.
+    // SCRATCH THAT OUTLIVES THE STEP, like _hydrogenBondForceScratch beside it.
+    // These six vectors used to be built fresh inside computeHydrogenBondForces
+    // and _assignHydrogenBondPairs, so every step allocated and freed six
+    // buffers of a size that never changes. A sampling profile of a 389-particle
+    // run put malloc, free and _platform_memmove together at about the same
+    // weight as powf. Resizing a member keeps the capacity and does no work
+    // after the first step -- the pattern the file already used one line away,
+    // which is what makes six allocations next to it an oversight rather than a
+    // choice.
+    std::vector<float> _hbPairEnergyScratch;
+    std::vector<std::array<int, 4>> _hbIsoAtomScratch;
+    std::vector<int> _hbNearestScratch;
+    struct Bond
+    {
+        size_t donor, acceptor;
+        int antecedent, antecedent2;
+        // The acceptor's own antecedents. A carbonyl oxygen's lone pairs are
+        // no less directional than the donor's hydrogen: measured on
+        // ubiquitin's native helix bonds, the angle between C->O and
+        // O->N(donor) is 25 degrees median, never past 30, so cos^2 about
+        // the C=O direction describes it as well as it describes the donor.
+        int acceptorAntecedent, acceptorAntecedent2;
+        // Whether each side's second antecedent is a plane reference rather
+        // than a second bond: see ParticleProperties::hasLobes.
+        int donorLobes, acceptorLobes;
+    };
+    // Cleared and refilled each step rather than reconstructed: clear() keeps
+    // the capacity, so after the first step it costs nothing where a fresh
+    // vector allocated and freed once per step.
+    //
+    // A MEMBER, and that word is the whole lesson. The first attempt made it
+    // `static thread_local`, reasoning that the function is only ever called
+    // from the simulation thread. It is -- but the loop that READS it is an
+    // OpenMP parallel for, so every worker thread got its own EMPTY copy. The
+    // OpenCL comparison test caught it immediately: CPU and GPU 0.51 A apart
+    // after 200 steps where the tolerance is 1e-3. Nothing else in the suite
+    // noticed, because a single-threaded run is correct either way.
+    std::vector<Bond> _hbBondScratch;
+
+    std::vector<float> _hbNearestDistanceScratch;
+
+    // The donor/acceptor index list, built ONCE. Only DonorAcceptorRuleReader
+    // sets a particle's donor or acceptor capacity, and it runs before the
+    // simulation starts, so this set cannot change while the run is going --
+    // yet _donorAcceptorParticleIndexes() rescanned every particle and returned
+    // a FRESH vector on each of its two calls per step. That is an O(N) scan
+    // and an allocation half a million times over for an answer that was
+    // settled before the first step.
+    mutable std::vector<size_t> _donorAcceptorIndexCache;
+    mutable bool _donorAcceptorIndexCacheValid = false;
+
     std::vector<int> _hbDonorSlot;
     std::vector<size_t> _hbDonorOffset;
     std::vector<int> _hbAcceptorSlot;
