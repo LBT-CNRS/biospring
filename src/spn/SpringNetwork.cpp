@@ -55,6 +55,33 @@ unsigned SpringNetwork::_currentstructid = 0;
 
 SpringNetwork::~SpringNetwork() {}
 
+// A NOTE SO NOBODY "OPTIMISES" THE OPENMP REGIONS AGAIN, including the author
+// of this line, who did.
+//
+// A sampling profile of a 389-particle run put __kmpc_fork_call,
+// __kmp_fork_call, __kmp_serial_fork_call and __kmp_invoke_microtask together
+// above powf, the heaviest single symbol -- eight regions are forked per step
+// for a few microseconds of work each. The obvious reading, that the system is
+// too small to be worth parallelising, is WRONG. Measured, one process alone on
+// 16 cores, steps per second:
+//
+//   particles   always parallel   always serial
+//   389              1482             1224
+//   879              1057              419
+//   1847              439              101
+//
+// Parallel wins at every size, by 21 % at the smallest and by 4.3x at 1847, so
+// a size threshold is a pessimisation on everything this code runs. The profile
+// had been taken at OMP_NUM_THREADS=1, where a fork buys nothing and still
+// costs its bookkeeping, and that regime was generalised to all of them.
+//
+// Guarding instead on omp_get_max_threads() > 1, which is the only honest
+// version of the question, was then measured too: 1265 against 1267 steps/s at
+// one thread, 1868 against 1868 at sixteen. The runtime already handles its own
+// serial case. So the guard was removed rather than kept -- it added a function
+// and a condition to every region and bought nothing, and a constant tuned on
+// one machine would not have held on another anyway.
+
 void SpringNetwork::_resetEnergies()
 {
     _energies.reset();
@@ -533,21 +560,8 @@ SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Partic
 
 void SpringNetwork::computeHydrogenBondForces()
 {
-    struct Bond
-    {
-        size_t donor, acceptor;
-        int antecedent, antecedent2;
-        // The acceptor's own antecedents. A carbonyl oxygen's lone pairs are
-        // no less directional than the donor's hydrogen: measured on
-        // ubiquitin's native helix bonds, the angle between C->O and
-        // O->N(donor) is 25 degrees median, never past 30, so cos^2 about
-        // the C=O direction describes it as well as it describes the donor.
-        int acceptorAntecedent, acceptorAntecedent2;
-        // Whether each side's second antecedent is a plane reference rather
-        // than a second bond: see ParticleProperties::hasLobes.
-        int donorLobes, acceptorLobes;
-    };
-    std::vector<Bond> bonds;
+    std::vector<Bond> & bonds = _hbBondScratch;
+    bonds.clear();
     bonds.reserve(_hbDonorSlot.size());
     for (size_t i = 0; i + 1 < _hbDonorOffset.size(); ++i)
         for (size_t s = _hbDonorOffset[i]; s < _hbDonorOffset[i + 1]; ++s)
@@ -571,8 +585,10 @@ void SpringNetwork::computeHydrogenBondForces()
     // the accumulation must agree with the force that was computed, not with a
     // second opinion about the geometry.
     _hydrogenBondForceScratch.resize(bonds.size() * 10);
-    std::vector<float> pairEnergyScratch(bonds.size());
-    std::vector<std::array<int, 4>> isoAtomScratch(bonds.size(), {-1, -1, -1, -1});
+    _hbPairEnergyScratch.resize(bonds.size());
+    _hbIsoAtomScratch.assign(bonds.size(), {-1, -1, -1, -1});
+    std::vector<float> & pairEnergyScratch = _hbPairEnergyScratch;
+    std::vector<std::array<int, 4>> & isoAtomScratch = _hbIsoAtomScratch;
 
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
@@ -1780,7 +1796,7 @@ void SpringNetwork::_setupHydrogenBond()
         // _assignHydrogenBondPairs), rather than pre-splitting them into two.
         // Its cells are the size of its own search radius, like every other
         // term's -- see getCellWidthFor.
-        const std::vector<size_t> donor_acceptor_particles = _donorAcceptorParticleIndexes();
+        const std::vector<size_t> & donor_acceptor_particles = _donorAcceptorParticleIndexes();
         if (!donor_acceptor_particles.empty())
         {
             _nsearch.hbond =
@@ -2012,18 +2028,18 @@ std::vector<size_t> SpringNetwork::_hydrophobicParticleIndexes() const
     return indexes;
 }
 
-std::vector<size_t> SpringNetwork::_donorAcceptorParticleIndexes() const
+const std::vector<size_t> & SpringNetwork::_donorAcceptorParticleIndexes() const
 {
-    std::vector<size_t> indexes;
-    indexes.reserve(_particles.size());
+    if (_donorAcceptorIndexCacheValid)
+        return _donorAcceptorIndexCache;
 
+    _donorAcceptorIndexCache.clear();
+    _donorAcceptorIndexCache.reserve(_particles.size());
     for (size_t i = 0; i < _particles.size(); ++i)
-    {
         if (_particles[i].isDonor() || _particles[i].isAcceptor())
-            indexes.push_back(i);
-    }
-
-    return indexes;
+            _donorAcceptorIndexCache.push_back(i);
+    _donorAcceptorIndexCacheValid = true;
+    return _donorAcceptorIndexCache;
 }
 
 void SpringNetwork::_assignHydrogenBondPairs()
@@ -2076,7 +2092,7 @@ void SpringNetwork::_assignHydrogenBondPairs()
         return false;
     };
 
-    const std::vector<size_t> candidates = _donorAcceptorParticleIndexes();
+    const std::vector<size_t> & candidates = _donorAcceptorParticleIndexes();
 
     // Steps 2 and 3, repeated: propose, then confirm mutual proposals. One
     // round fills one slot per particle, so as many rounds as the largest
@@ -2085,11 +2101,13 @@ void SpringNetwork::_assignHydrogenBondPairs()
     // costs exactly what it did before.
     for (unsigned round = 0; round < 4; ++round)
     {
-        std::vector<int> nearest(n, -1);
+        _hbNearestScratch.assign(n, -1);
+        std::vector<int> & nearest = _hbNearestScratch;
         // Holds the best bond STRENGTH seen so far, in kJ/mol, so it starts
         // at zero: a candidate whose angular factor kills it is worth exactly
         // nothing and must not take a slot from a real partner.
-        std::vector<float> nearest_distance(n, 0.0f);
+        _hbNearestDistanceScratch.assign(n, 0.0f);
+        std::vector<float> & nearest_distance = _hbNearestDistanceScratch;
 
 #ifdef OPENMP_SUPPORT
 #pragma omp parallel for schedule(static)
