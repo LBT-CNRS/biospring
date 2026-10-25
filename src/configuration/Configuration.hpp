@@ -321,6 +321,7 @@ inline Configuration defaultConfiguration()
     config.hbond.path = "";
     config.hbond.log = "";
     config.hbond.isostericity = false;
+    config.hbond.isostericitytwosided = false;
     config.hbond.isostericitydistance = 10.46;
     config.hbond.isostericitylambda = 54.9;
     config.hbond.isostericitydistancewidth = 1.5;

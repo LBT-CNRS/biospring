@@ -680,6 +680,29 @@ class HydrogenBondSetting : public EnergySetting
     // Off by default because it is a reduction on an already-calibrated depth:
     // every existing .msp keeps the trajectory it had, to the bit.
     bool isostericity;
+    // Whether the DISTANCE acceptance is a window or a floor.
+    //
+    // A window -- the original form -- is wrong for anything dynamic, and
+    // measurably so: two bases on their way to pairing are FURTHER apart than
+    // 10.46 A, so the Gaussian switches the well off exactly during the
+    // approach. At a C1'-C1' of 12.5 A the factor is 0.157, at 14.5 A it is
+    // 7e-4, and at the 18.6 A a free tRNA starts from it is zero. The term can
+    // then only ever judge a pair that is already formed, and it cannot help
+    // one form.
+    //
+    // A floor costs nothing and fixes it, because the parasites this term
+    // exists to reject are SHORTER than a real pair, not longer: the +1
+    // cross-strand diagonal measures 7.85 to 8.83 A against the native 10.5,
+    // and the 180-degree mirror is caught by lambda (36.6 deg against 54.9),
+    // not by distance. Measured on those populations:
+    //
+    //   form      native/parasite    approach kept
+    //   window         7.3 x             5.3 %
+    //   floor          7.0 x           100.0 %
+    //
+    // So the floor is the default and the window is kept only to reproduce the
+    // measurements that were made with it.
+    bool isostericitytwosided;
     // The Watson-Crick centres, measured on 8PKL over 1121 strict pairs:
     // 10.46 +/- 0.59 A and 54.9 +/- 5.6 degrees. The widths are NOT those
     // standard deviations -- they were scanned against the native, mirror and
@@ -691,11 +714,11 @@ class HydrogenBondSetting : public EnergySetting
     double isostericitylambdawidth;
 
     HydrogenBondSetting(const std::string & name)
-        : EnergySetting(name), path(), log(), isostericity(false), isostericitydistance(10.46),
+        : EnergySetting(name), path(), log(), isostericity(false), isostericitytwosided(false), isostericitydistance(10.46),
           isostericitylambda(54.9), isostericitydistancewidth(1.5), isostericitylambdawidth(18.0)
     {
         _parameterNames = {"enable",        "scale",           "cutoff",
-                           "path",          "log",             "isostericity",
+                           "path",          "log",             "isostericity",      "isostericitytwosided",
                            "isostericitydistance",             "isostericitylambda",
                            "isostericitydistancewidth",        "isostericitylambdawidth"};
     }
@@ -708,6 +731,8 @@ class HydrogenBondSetting : public EnergySetting
             log = s;
         else if (param == "isostericity")
             _parse_bool(isostericity, s, param);
+        else if (param == "isostericitytwosided")
+            _parse_bool(isostericitytwosided, s, param);
         else if (param == "isostericitydistance")
             utils::string::from_string<decltype(isostericitydistance)>(isostericitydistance, s);
         else if (param == "isostericitylambda")
@@ -726,6 +751,7 @@ class HydrogenBondSetting : public EnergySetting
         _mspFormatter.print("path", path, os);
         _mspFormatter.print("log", log, os);
         _mspFormatter.print("isostericity", isostericity, os);
+        _mspFormatter.print("isostericitytwosided", isostericitytwosided, os);
         _mspFormatter.print("isostericitydistance", isostericitydistance, os);
         _mspFormatter.print("isostericitylambda", isostericitylambda, os);
         _mspFormatter.print("isostericitydistancewidth", isostericitydistancewidth, os);

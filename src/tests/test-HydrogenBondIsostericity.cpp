@@ -478,3 +478,70 @@ TEST(HydrogenBondIsostericity, AFactorBelowTheFloorIsExactlyZeroSoNoSlotIsTaken)
         EXPECT_FLOAT_EQ(iso.grad[k].getZ(), 0.0f);
     }
 }
+
+// THE DISTANCE ACCEPTANCE IS A FLOOR, NOT A WINDOW, and this is the test that
+// says why. Two bases on their way to pairing are FURTHER apart than the
+// Watson-Crick 10.46 A, so a Gaussian on both sides switches the well off
+// exactly during the approach -- 0.157 of it left at a C1'-C1' of 12.5 A, 7e-4
+// at 14.5, and zero at the 18.6 A a free tRNA starts from. The term could then
+// only judge a pair already formed and could never help one form.
+//
+// Costing nothing, because the parasites it exists to reject are SHORTER than
+// a real pair: the +1 cross-strand diagonal measures 7.85 to 8.83 A against
+// the native 10.5, and the 180-degree mirror is caught by lambda, not by
+// distance. Measured on those populations the discrimination goes 7.3x -> 7.0x
+// while the approach goes 5.3 % -> 100 %.
+TEST(HydrogenBondIsostericity, BeyondTheCentreTheDistanceCostsNothing)
+{
+    Table table("G N3 0 1 C2\nC N3 1 0 C2\n");
+
+    auto factorAt = [&](float separation, bool twosided) {
+        spn::SpringNetwork network;
+        const Nucleotide i = placeNucleotide(network, "G", "N9", 1, "A", 0.0f, +1.0f, L0, 0.0f,
+                                             {4.0f, 1.0f, 0.0f}, {3.0f, 0.5f, 0.0f});
+        const Nucleotide j = placeNucleotide(network, "C", "N1", 2, "B", separation, -1.0f, L0, 0.0f,
+                                             {separation - 3.5f, 1.0f, 0.0f}, {separation - 2.5f, 0.5f, 0.0f});
+        configuration::Configuration config = configuration::defaultConfiguration();
+        config.hbond.enable = true;
+        config.hbond.isostericity = true;
+        config.hbond.isostericitytwosided = twosided;
+        config.sim.nbsteps = 1;
+        io::DonorAcceptorRuleReader reader(table.path());
+        reader.read();
+        reader.tagParticles(network);
+        network.setup(config);
+        const auto iso = network.isostericityFactor(network.getParticle(i.site), network.getParticle(j.site), true);
+        EXPECT_TRUE(iso.applies);
+        return iso;
+    };
+
+    // At the centre both forms agree, and both are 1.
+    EXPECT_NEAR(factorAt(D0, false).value, 1.0f, 1e-5f);
+    EXPECT_NEAR(factorAt(D0, true).value, 1.0f, 1e-5f);
+
+    // Beyond it the floor keeps the full weight where the window throws it away.
+    for (float d : {11.5f, 12.5f, 14.5f, 18.0f})
+    {
+        const auto floored = factorAt(d, false);
+        const auto window = factorAt(d, true);
+        EXPECT_NEAR(floored.value, 1.0f, 1e-5f) << "the floor taxed an approach at " << d << " A";
+        EXPECT_LT(window.value, floored.value) << "the window did not tax it at " << d << " A";
+        // And the floor's gradient vanishes there too: a flat acceptance must
+        // exert no force, or it would pull on the frame for no reason.
+        // And the DISTANCE part of the gradient vanishes there, so a flat
+        // acceptance exerts no pull. What is left is not exactly zero but
+        // float noise: this geometry puts lambda exactly at its centre, where
+        // the lambda derivative is zero, and acos plus the normalisations
+        // leave it a few 1e-5 degrees off. Measured, the residue runs 1e-7 to
+        // 6e-6 against a factor of 1, which is why the bound is 1e-5 and not 0.
+        for (size_t k = 0; k < 4; ++k)
+            EXPECT_LT(floored.grad[k].norm(), 1e-5f)
+                << "a flat acceptance still pushed, at " << d << " A, atom " << k;
+    }
+
+    // And SHORTER than the centre both forms penalise, which is what rejects
+    // the cross-strand diagonal.
+    EXPECT_LT(factorAt(8.5f, false).value, 0.3f) << "a too-short pair was not penalised";
+    EXPECT_NEAR(factorAt(8.5f, false).value, factorAt(8.5f, true).value, 1e-5f)
+        << "the two forms must agree below the centre";
+}

@@ -480,7 +480,12 @@ SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Partic
     const float sd = static_cast<float>(_config.hbond.isostericitydistancewidth);
     const float sl = static_cast<float>(_config.hbond.isostericitylambdawidth);
 
-    const float Gd = forcefield::isostericity_gaussian(d, d0, sd);
+    // A FLOOR, not a window: beyond the centre the acceptance is 1 and its
+    // derivative 0, so a pair on its way in is not taxed for not having arrived.
+    // See hbond.isostericitytwosided for the measurement behind this.
+    const bool twosided = _config.hbond.isostericitytwosided;
+    const bool beyond = !twosided && d >= d0;
+    const float Gd = beyond ? 1.0f : forcefield::isostericity_gaussian(d, d0, sd);
     const float Gi = forcefield::isostericity_gaussian(lami, l0, sl);
     const float Gj = forcefield::isostericity_gaussian(lamj, l0, sl);
     iso.value = Gd * Gi * Gj;
@@ -532,7 +537,7 @@ SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Partic
     const float SINFLOOR = 0.02f;
     const float si = std::max(SINFLOOR, std::sqrt(std::max(0.0f, 1.0f - ci * ci)));
     const float sj = std::max(SINFLOOR, std::sqrt(std::max(0.0f, 1.0f - cj * cj)));
-    const float dGd = forcefield::isostericity_gaussian_derivative(d, d0, sd);
+    const float dGd = beyond ? 0.0f : forcefield::isostericity_gaussian_derivative(d, d0, sd);
     const float dGi = forcefield::isostericity_gaussian_derivative(lami, l0, sl);
     const float dGj = forcefield::isostericity_gaussian_derivative(lamj, l0, sl);
 
