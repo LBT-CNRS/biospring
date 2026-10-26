@@ -1866,6 +1866,192 @@ TEST(SpringNetworkOpenCL, TheIsostericityCoupleLandsOnTheSameFourAtomsAsOnTheCPU
         << "smallest displacement of " << smallest << " A -- the couple is landing on different atoms";
 }
 
+// THE TABULATED TORSION on the device, against the CPU.
+//
+// This term had no cross-backend test at all, which is how a one-step lag in it
+// went unseen: the kernel runs on the bonded queue while everything that reads
+// what it writes runs on the main queue, and the only thing ordering the two
+// was a cross-queue wait. A term nobody compares is a term nobody can tell is
+// late.
+//
+// Two things are asserted, and they fail for different reasons:
+//   * the ENERGY after a single step, which catches a read that overtakes the
+//     kernel producing what it reads;
+//   * the POSITIONS after several, which catch a FORCE that arrives a step late
+//     -- a far more serious fault than a misreported number, and one the energy
+//     alone cannot see, because a smooth force applied one step late still
+//     produces a plausible trajectory.
+namespace
+{
+// A chain of six particles with two torsions on it, and a table that is a plain
+// 1 - cos well so the geometry below sits well off the minimum and the term has
+// real work to do. The table's SIGN convention does not matter here: both
+// backends read the same table, and what is compared is whether they agree.
+void buildTorsionChain(spn::SpringNetwork & network, configuration::Configuration & config,
+                       unsigned steps)
+{
+    const unsigned N = 6;
+    const float BOND = 1.5f;
+    // Built in INTERNAL COORDINATES, not laid out by hand. A chain placed by
+    // eye lands on a stationary point of the table without announcing it: the
+    // first attempt here was a zig-zag whose every dihedral came out at 180
+    // degrees, where A(1 - cos phi) is at its maximum and the torque A sin phi
+    // is exactly zero -- so the energy was large, the force was nil, and the
+    // chain did not move at all. Here each atom is placed at a bond length, a
+    // valence angle and a TORSION of 90 degrees from the three before it, which
+    // puts every dihedral where the table's gradient is largest.
+    const float ANGLE = 109.5f * static_cast<float>(M_PI) / 180.0f;
+    const float TORSION = 90.0f * static_cast<float>(M_PI) / 180.0f;
+    std::vector<Vector3f> at;
+    at.push_back(Vector3f(0.0f, 0.0f, 0.0f));
+    at.push_back(Vector3f(BOND, 0.0f, 0.0f));
+    at.push_back(at[1] + Vector3f(BOND * std::cos(static_cast<float>(M_PI) - ANGLE),
+                                  BOND * std::sin(static_cast<float>(M_PI) - ANGLE), 0.0f));
+    while (at.size() < N)
+    {
+        // Natural extension reference frame: the new atom in the frame of the
+        // last three, then rotated into place.
+        const Vector3f & A = at[at.size() - 3];
+        const Vector3f & B = at[at.size() - 2];
+        const Vector3f & C = at[at.size() - 1];
+        const Vector3f bc = (C - B) / (C - B).norm();
+        Vector3f n = (B - A) ^ bc;
+        n = n / n.norm();
+        const Vector3f m = bc ^ n;
+        const Vector3f local(-BOND * std::cos(ANGLE), BOND * std::sin(ANGLE) * std::cos(TORSION),
+                             BOND * std::sin(ANGLE) * std::sin(TORSION));
+        at.push_back(C + bc * local.getX() + m * local.getY() + n * local.getZ());
+    }
+    const auto place = [&](unsigned i) { return at[i]; };
+    for (unsigned i = 0; i < N; ++i)
+    {
+        spn::Particle p;
+        p.setPosition(place(i));
+        p.setMass(1.0f);          // 1 Da, so one step displaces enough to measure
+        p.setCharge(0.0f);
+        p.setRadius(1.8f);
+        p.setEpsilon(0.5f);
+        p.setResId(static_cast<int>(i));
+        network.addParticle(p);
+    }
+    for (unsigned i = 0; i + 1 < N; ++i)
+        network.addSpring(i, i + 1, (place(i + 1) - place(i)).norm(), 100.0f);
+
+    // One table, 360 bins over -pi..pi, V = A (1 - cos phi).
+    const unsigned BINS = 360;
+    std::vector<float> energy(BINS + 1), torque(BINS + 1);
+    const float A = 25.0f;   // kJ/mol, enough that 60 steps move the chain measurably
+    for (unsigned b = 0; b <= BINS; ++b)
+    {
+        const double phi = -M_PI + 2.0 * M_PI * b / BINS;
+        energy[b] = static_cast<float>(A * (1.0 - std::cos(phi)));
+        torque[b] = static_cast<float>(A * std::sin(phi));
+    }
+    network.setTorsionTables({{energy, torque}});
+    network.addTorsion(spn::SpringNetwork::DIHEDRAL_PHI, 0, 1, 2, 3, 0);
+    network.addTorsion(spn::SpringNetwork::DIHEDRAL_PHI, 2, 3, 4, 5, 0);
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = steps;
+    config.sim.samplerate = steps;   // report at the last step
+    config.sim.timestep = 0.5;
+    config.spring.enable = true;     // the torsion term is gated on this
+    config.spring.scale = 1.0;
+    config.dihedralphi.enable = true;
+    config.dihedralpsi.enable = false;
+    config.dihedralomega.enable = false;
+    config.dihedralchi.enable = false;
+    config.dihedralplanarity.enable = false;
+    config.steric.enable = false;
+    config.electrostatic.enable = false;
+    config.viscosity.enable = true;
+    config.viscosity.value = 0.05;
+    network.setup(config);
+}
+} // namespace
+
+TEST(SpringNetworkOpenCL, TheTorsionEnergyIsThisStepsOnTheDeviceToo)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    // Several step counts, because the fault had two faces. At ONE step the
+    // device reported whatever the energy buffer happened to hold, which is
+    // the zeros it was created with -- and it did so at RANDOM, 6 or 7 times
+    // out of 10, since it was a read racing the kernel that fills it. Past the
+    // first step the same race read the PREVIOUS step's value every time,
+    // which is a plausible number and therefore the more dangerous of the two:
+    // measured on 074.DNADuplex, the device reported 5539.31 kJ/mol where the
+    // step it had just taken was worth 5522.66.
+    //
+    // Ten attempts at one step, because a single pass had a one in three
+    // chance of passing on broken code.
+    for (unsigned steps : {1u, 2u, 3u, 6u})
+    {
+        spn::SpringNetwork cpu;
+        configuration::Configuration cpuconfig;
+        buildTorsionChain(cpu, cpuconfig, steps);
+        cpu.run();
+        ASSERT_GT(std::abs(cpu.getDihedralEnergy()), 1.0f)
+            << steps << " steps: the chain's torsions carry no energy, so this proves nothing";
+
+        const int attempts = steps == 1 ? 10 : 3;
+        for (int attempt = 0; attempt < attempts; ++attempt)
+        {
+            SpringNetworkOpenCL gpu;
+            configuration::Configuration gpuconfig;
+            buildTorsionChain(gpu, gpuconfig, steps);
+            gpu.run();
+            EXPECT_NEAR(gpu.getDihedralEnergy(), cpu.getDihedralEnergy(),
+                        1e-4f * std::abs(cpu.getDihedralEnergy()))
+                << steps << " steps, attempt " << attempt << ": CPU " << cpu.getDihedralEnergy()
+                << " vs GPU " << gpu.getDihedralEnergy() << " kJ/mol";
+        }
+    }
+}
+
+TEST(SpringNetworkOpenCL, TheTorsionFORCEReachesTheDeviceOnTheStepThatComputesIt)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    // The positions, which answer the FORCE. A torsion force applied one step
+    // late still moves the chain somewhere plausible, so only a comparison
+    // against the CPU can tell -- and it has to be made against the chain's
+    // OWN motion, or a bound met by a structure that did not move is met by
+    // any code at all.
+    const unsigned STEPS = 60;
+
+    spn::SpringNetwork cpu;
+    configuration::Configuration cpuconfig;
+    buildTorsionChain(cpu, cpuconfig, STEPS);
+    std::vector<Vector3f> before(cpu.getNumberOfParticles());
+    for (unsigned i = 0; i < cpu.getNumberOfParticles(); ++i)
+        before[i] = cpu.getParticle(i).getPosition();
+    cpu.run();
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration gpuconfig;
+    buildTorsionChain(gpu, gpuconfig, STEPS);
+    gpu.run();
+
+    float moved = 0.0f, worst = 0.0f;
+    for (unsigned i = 0; i < cpu.getNumberOfParticles(); ++i)
+    {
+        moved = std::max(moved, (cpu.getParticle(i).getPosition() - before[i]).norm());
+        worst = std::max(worst,
+            (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
+    }
+    EXPECT_GT(moved, 0.05f) << "the chain barely moved, so this comparison proves nothing";
+    EXPECT_LT(moved, 5.0f) << "the chain came apart (" << moved << " A)";
+    EXPECT_LT(worst, 1.0e-3f) << "the GPU is " << worst << " A from the CPU after " << STEPS
+                              << " steps, while the chain moved " << moved << " A";
+    EXPECT_NEAR(gpu.getDihedralEnergy(), cpu.getDihedralEnergy(),
+                1e-3f * std::abs(cpu.getDihedralEnergy()))
+        << "CPU " << cpu.getDihedralEnergy() << " vs GPU " << gpu.getDihedralEnergy()
+        << " kJ/mol after " << STEPS << " steps";
+}
+
 TEST(SpringNetworkOpenCL, AnInteractorsPullReachesTheDevice)
 {
     if (!hasOpenCLDevice())

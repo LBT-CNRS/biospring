@@ -2169,7 +2169,23 @@ void SpringNetworkOpenCL::_uploadTorsionFamilyScales()
 		_torsionScaleBuffer = cl::Buffer(_context, CL_MEM_READ_ONLY, sizeof(wanted), NULL, &_err);
 		checkErr("Buffer(torsion family scales)");
 		}
-	_err = _queue.enqueueWriteBuffer(_torsionScaleBuffer, CL_FALSE, 0, sizeof(wanted), _uploadedtorsionscales);
+	// ON THE BONDED QUEUE, because that is the queue whose kernel READS this
+	// buffer. Written on the main queue, nothing ordered the write before the
+	// torsion kernel: the two queues are independent, and the write is the
+	// only thing that ever fills this buffer, so on the FIRST step the kernel
+	// could read it still unwritten. Then familyscale[fam] was zero, which
+	// zeroes esum AND torque -- the whole torsion term, energy and force,
+	// silently absent for that step.
+	//
+	// Measured on 074.DNADuplex: a one-step run reported 0.00 kJ.mol-1 of
+	// dihedral energy instead of 5539.95, at random, 6 or 7 times out of 10 --
+	// the race between the write on one queue and the kernel on the other. And
+	// the cost was not only the number: the step lost its torsion FORCE too, so
+	// every later step ran on a trajectory permanently one torsion-step behind
+	// the CPU's, which is why the reported energy then looked like a one-step
+	// lag rather than a wrong value.
+	_err = _queuebonded.enqueueWriteBuffer(_torsionScaleBuffer, CL_FALSE, 0, sizeof(wanted),
+	                                       _uploadedtorsionscales);
 	checkErr("enqueueWriteBuffer(torsion family scales)");
 	}
 
