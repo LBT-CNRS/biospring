@@ -81,6 +81,13 @@ class InteractorFreeSASA : public Interactor
         // anything, so it cannot be used to decide that _sasa is readable.
         std::atomic<bool> _sasaValid;
 
+        // Whether setupFreesasaInteractions() has run since the last
+        // initializeSystemState(). The first computation now happens on the
+        // MAIN thread, and runthread() calls setupInteraction() again when a
+        // worker is started; the setup is not idempotent on its own, so it is
+        // gated here.
+        bool _setupDone = false;
+
         bool _isDynamic;
         unsigned _step;
         std::string _freeSASA_alg;

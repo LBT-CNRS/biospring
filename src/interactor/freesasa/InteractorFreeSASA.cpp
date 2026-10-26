@@ -32,7 +32,44 @@ InteractorFreeSASA::~InteractorFreeSASA() {}
 void InteractorFreeSASA::startInteractionThread()
 {
 	initializeSystemState();
-	Interactor::startInteractionThread();
+
+	// THE FIRST SURFACES ARE COMPUTED HERE, on the main thread, before the run
+	// starts -- not left to the worker to produce whenever it gets round to it.
+	//
+	// The worker used to produce them, and the first steps ran before it had.
+	// syncParticleStateData rightly refuses to publish a surface it does not
+	// have yet -- the surface MULTIPLIES the IMPALA energy and force, so
+	// publishing zero would switch the term off in silence -- so those steps
+	// ran on whatever surface the particles already carried. How MANY steps
+	// that was depended on how fast the worker happened to be, which made the
+	// trajectory of an IMPALA run depend on timing.
+	//
+	// That was not hypothetical, and it had a reproducible trigger: registering
+	// the MDDriver interactor makes SpringNetwork::run() sleep 100 ms before the
+	// loop, which is ample for the worker to finish. Measured on 052.Trypsin,
+	// three steps at 10 fs, spring energy 1.82 kJ.mol-1 with the interactor
+	// registered against 0.57 without -- the same binary on the same input, a
+	// transport deciding the physics. The three examples that moved when
+	// MDDriver stopped being registered by default were exactly the three with
+	// impala.enable = 1, which is the only term that reads a surface.
+	//
+	// Published to the particles here too, not merely computed: the two
+	// backends call SpringNetwork::idleRun() at opposite ends of a step (see
+	// SpringNetworkOpenCL::idleRun), so a surface that exists but has not been
+	// copied onto the particles would still reach the CPU's first force
+	// evaluation and not the device's.
+	{
+		std::lock_guard<std::mutex> lock(mutex);
+		setupFreesasaInteractions();
+		processFreesasaInteractions();
+	}
+	syncSystemStateData();
+
+	// The worker exists only to REFRESH them. Without --sasa-dynamic there is
+	// nothing to refresh, so no thread is started at all: one computation, on
+	// the main thread, and done.
+	if (isDynamic())
+		Interactor::startInteractionThread();
 }
 
 void InteractorFreeSASA::initializeSystemState()
@@ -48,6 +85,10 @@ void InteractorFreeSASA::initializeSystemState()
     coords_array.resize(_nbpositions * 3);
 	_sasa.assign(static_cast<size_t>(_nbpositions), 0.0);
 	_sasaValid.store(false, std::memory_order_release);
+	// Cleared for the same reason as _sasaValid: a second start may come with a
+	// different _nbpositions, so the radii and the parameters have to be built
+	// again. See _setupDone.
+	_setupDone = false;
 
 	initializeDataManager();
 }
@@ -59,6 +100,17 @@ void InteractorFreeSASA::initializeDataManager()
 
 void InteractorFreeSASA::setupFreesasaInteractions()
 {
+	// ONCE per start. startInteractionThread() now runs this on the main thread,
+	// and Interactor::runthread() calls setupInteraction() again when a worker
+	// is started -- running it twice would re-emit every missing-radius warning
+	// and leak the freesasa_parameters the first pass allocated. The flag is
+	// still set, because the worker's loop condition reads it.
+	if (_setupDone)
+	{
+		_isRunning.store(true, std::memory_order_release);
+		return;
+	}
+
 	_sleepDuration = 1500;  // For example, set sleep duration to 1500 microseconds for InteractorFreeSASA.
 	
     bool use_bs_radii = false;
@@ -142,7 +194,12 @@ void InteractorFreeSASA::setupFreesasaInteractions()
 
 		double radius = freesasa_classifier_radius(classifier, p.getResName().c_str(), p.getName().c_str());
 
-		if (radius == -1.0)
+		// substr(1) on an EMPTY name throws std::out_of_range, which left the
+		// run with an uncaught exception rather than a missing radius. A
+		// particle with no name is not hypothetical -- anything built without a
+		// topology has one -- and the answer here is the same as for a name the
+		// classifier does not know: fall through to the warning below.
+		if (radius == -1.0 && !p.getName().empty())
 		{
 			radius = freesasa_classifier_radius(classifier, p.getResName().c_str(), p.getName().substr(1).c_str());
 		}
@@ -163,6 +220,10 @@ void InteractorFreeSASA::setupFreesasaInteractions()
 		}
 	}
 	// setRadii(radii_array);
+	// Set only HERE, at the end: every error path above leaves by `return`
+	// without building the radii, and a setup that failed must be retriable
+	// rather than counted as done.
+	_setupDone = true;
 	_isRunning.store(true, std::memory_order_release);
 }
 
