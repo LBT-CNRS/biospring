@@ -571,6 +571,20 @@ class SpringNetworkOpenCL : public SpringNetwork
 			// at half the stride, and silently answers with another particle's
 			// antecedents.
 			cl::Buffer antecedentbuffer;
+			// THE GLYCOSIDIC FRAME, one int4 per particle, uploaded with the
+			// same stride the kernels read it at. An int2 would have fitted the
+			// two indices, and that is exactly the shape that broke this term
+			// once before: hbondForce and hbondScore declared the antecedent
+			// parameter int2 while the host uploaded int4, so the indices
+			// deciding WHICH atoms the gradient lands on were read at half the
+			// stride and named the wrong particles -- while the energies stayed
+			// correct, because the energy never touches those indices.
+			//
+			//   x : the residue's C1', -1 if it has none
+			//   y : its glycosidic N9/N1/C5, -1 if it has none
+			//   z : 1 if THIS particle is a base atom, 0 otherwise
+			//   w : unused, -1
+			cl::Buffer glycosidicbuffer;
 			cl::Buffer residbuffer;           // N ints
 			cl::Buffer chainbuffer;           // N ints: chain NAMES, mapped to indices here
 			cl::Buffer nearestbuffer;         // N ints, one round's proposal

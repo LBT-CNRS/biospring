@@ -471,7 +471,7 @@ SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Partic
     // propagates through the energy of every bond in the sum.
     const float ci = std::max(-1.0f, std::min(1.0f, u.dot(bi)));
     const float cj = std::max(-1.0f, std::min(1.0f, a.dot(bj)));
-    const float rad2deg = 57.29577951308232f;
+    const float rad2deg = BIOSPRING_RAD2DEG;
     const float lami = std::acos(ci) * rad2deg;
     const float lamj = std::acos(cj) * rad2deg;
 
@@ -524,17 +524,8 @@ SpringNetwork::IsostericityFactor SpringNetwork::isostericityFactor(const Partic
     // is unbounded at lambda 0 and 180, so sin is FLOORED rather than the
     // gradient being zeroed there.
     //
-    // Zeroing it was a step discontinuity of real size, not a removable
-    // singularity: just above a guard at sin = 1e-4 the coefficient is
-    // |dG/dlambda| * 57.3 / 1e-4, which at lambda ~ 0 is about 18 in these
-    // units, and it dropped to 0. Flooring sin at 0.02 -- lambda within 1.1
-    // degrees of either end -- caps the same coefficient at about 0.09 and
-    // leaves the force bounded. The energy there is already 1e-4 of its peak,
-    // and a C1'-C1' vector exactly along a glycosidic bond cannot occur since
-    // the two share the C1', so neither form is ever exercised by a real
-    // geometry; the floor is chosen because a bounded force is safe and a
-    // jump of 18 is not.
-    const float SINFLOOR = 0.02f;
+    // Why a floor and not a zero is in hbond_shared.h, beside the constant.
+    const float SINFLOOR = BIOSPRING_ISOSTERICITY_SINFLOOR;
     const float si = std::max(SINFLOOR, std::sqrt(std::max(0.0f, 1.0f - ci * ci)));
     const float sj = std::max(SINFLOOR, std::sqrt(std::max(0.0f, 1.0f - cj * cj)));
     const float dGd = beyond ? 0.0f : forcefield::isostericity_gaussian_derivative(d, d0, sd);

@@ -204,6 +204,20 @@ inline float biospring_hbond_angular_derivative(float cos_theta)
 // at 1.56 A and its N1 at 3.98 A, so a name-ordered rule built lambda on an
 // atom the sugar is not bonded to, and a tRNA carries several.
 
+// Two constants the factor's gradient needs, HERE rather than once per backend:
+// the host and the kernel each wrote their own copy of both, and a literal that
+// has to agree between two files is the same drift this header exists to stop.
+//
+// The sin floor bounds d(lambda)/d(cos lambda) = -1/sin(lambda), which is
+// unbounded at lambda 0 and 180. It is FLOORED rather than the gradient being
+// zeroed there: zeroing was a step discontinuity of real size, about 18 in
+// these units at a guard of 1e-4, while a floor at 0.02 -- lambda within 1.1
+// degrees of either end -- caps the same coefficient at about 0.09. Neither end
+// is reachable by a real geometry, since the two nucleotides cannot share a
+// C1'; the floor is chosen because a bounded force is safe and a jump is not.
+#define BIOSPRING_RAD2DEG 57.29577951308232f
+#define BIOSPRING_ISOSTERICITY_SINFLOOR 0.02f
+
 /// Gaussian acceptance in one coordinate, and its derivative.
 ///
 /// e^(-z^2) with z = (value - centre)/width, NOT e^(-z^2/2): the width is the

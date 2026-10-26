@@ -1348,6 +1348,106 @@ __kernel void hbondBreak(const __global float4 * positions,
 		}
 	}
 
+// THE ISOSTERICITY REDUCTION on the device. The same geometry and the same
+// chain rule as SpringNetwork::isostericityFactor, over the same two Gaussians
+// out of hbond_shared.h: the two backends must agree to the digit on the energy
+// and to within float summation order on the force.
+//
+// It is a function of FOUR atoms that are not in the bond -- the two C1' and
+// the two glycosidic nitrogens -- so its gradient lands entirely on third
+// parties, which is the same shape as the angular factors' antecedent forces.
+// The frame comes in as an int4 per particle, read at the SAME stride the host
+// uploads it at: an int2 would have fitted the two indices, and reading this
+// buffer at half its stride is precisely the bug that once sent the angular
+// gradients to the wrong atoms while leaving every energy correct.
+typedef struct
+	{
+	int applies;
+	float value;
+	int atom[4];
+	float3 grad[4];
+	} BiospringIso;
+
+inline BiospringIso biospring_isostericity(const __global float4 * positions,
+                                           const __global int4 * glyco, uint i, uint j,
+                                           int enabled, int twosided,
+                                           float d0, float l0, float sd, float sl,
+                                           float floorv, int wantgrad)
+	{
+	BiospringIso iso;
+	iso.applies = 0;
+	iso.value = 1.0f;
+	for (int k = 0; k < 4; k++) { iso.atom[k] = -1; iso.grad[k] = (float3)(0.0f, 0.0f, 0.0f); }
+	if (!enabled) return iso;
+
+	int4 gi = glyco[i], gj = glyco[j];
+	// Both ends must carry a frame AND be base atoms: the frame is written onto
+	// every particle of a nucleotide, and the shipped tables declare the sugar
+	// and phosphate oxygens as sites too.
+	if (gi.x < 0 || gi.y < 0 || gj.x < 0 || gj.y < 0) return iso;
+	if (gi.z == 0 || gj.z == 0) return iso;
+	if (gi.x == gj.x) return iso;   // same nucleotide: no pair to measure
+
+	float3 Ci = positions[gi.x].xyz, Ni = positions[gi.y].xyz;
+	float3 Cj = positions[gj.x].xyz, Nj = positions[gj.y].xyz;
+	float3 w = Cj - Ci;
+	float d = length(w);
+	float3 ni = Ni - Ci, nj = Nj - Cj;
+	float li = length(ni), lj = length(nj);
+	if (d < 1.0e-6f || li < 1.0e-6f || lj < 1.0e-6f) return iso;
+
+	float3 u = w / d, bi = ni / li, bj = nj / lj, a = -u;
+	float ci = clamp(dot(u, bi), -1.0f, 1.0f);
+	float cj = clamp(dot(a, bj), -1.0f, 1.0f);
+	const float rad2deg = BIOSPRING_RAD2DEG;
+	float lami = acos(ci) * rad2deg, lamj = acos(cj) * rad2deg;
+
+	// A FLOOR, not a window, beyond the centre: two bases on their way to
+	// pairing are FURTHER apart than d0, and a Gaussian on both sides switches
+	// the well off exactly during the approach.
+	int beyond = (!twosided && d >= d0);
+	float Gd = beyond ? 1.0f : biospring_isostericity_gaussian(d, d0, sd);
+	float Gi = biospring_isostericity_gaussian(lami, l0, sl);
+	float Gj = biospring_isostericity_gaussian(lamj, l0, sl);
+
+	iso.value = Gd * Gi * Gj;
+	iso.atom[0] = gi.x; iso.atom[1] = gi.y; iso.atom[2] = gj.x; iso.atom[3] = gj.y;
+	iso.applies = 1;
+	// Clipped to EXACTLY zero below the floor, like the angular factor's clamp:
+	// a Gaussian is never exactly zero, and the candidate ranking tests
+	// strength < 0, so an annihilated bond would still win a free slot.
+	if (iso.value < floorv)
+		{
+		iso.value = 0.0f;
+		return iso;
+		}
+	if (!wantgrad) return iso;
+
+	const float SINFLOOR = BIOSPRING_ISOSTERICITY_SINFLOOR;
+	float si = max(SINFLOOR, sqrt(max(0.0f, 1.0f - ci * ci)));
+	float sj = max(SINFLOOR, sqrt(max(0.0f, 1.0f - cj * cj)));
+	float dGd = beyond ? 0.0f : biospring_isostericity_gaussian_derivative(d, d0, sd);
+	float dGi = biospring_isostericity_gaussian_derivative(lami, l0, sl);
+	float dGj = biospring_isostericity_gaussian_derivative(lamj, l0, sl);
+
+	float kd = Gi * Gj * dGd;
+	float ki = Gd * Gj * dGi * (-rad2deg / si);
+	float kj = Gd * Gi * dGj * (-rad2deg / sj);
+
+	float3 dci_dCj = (bi - u * ci) / d;
+	float3 dci_dNi = (u - bi * ci) / li;
+	float3 dcj_dCi = (bj - a * cj) / d;
+	float3 dcj_dNj = (a - bj * cj) / lj;
+
+	// Ci is the vertex of lambda_i, a ray of lambda_j AND one end of d, which
+	// is why its gradient is three contributions and not one.
+	iso.grad[0] = u * (-kd) + (dci_dCj + dci_dNi) * (-ki) + dcj_dCi * kj;
+	iso.grad[1] = dci_dNi * ki;
+	iso.grad[2] = u * kd + dci_dCj * ki + (dcj_dCi + dcj_dNj) * (-kj);
+	iso.grad[3] = dcj_dNj * kj;
+	return iso;
+	}
+
 // Step 2, once per round: every particle with a free slot proposes its best
 // partner. Ranked by what the bond is WORTH -- the Morse well times both
 // angular factors -- and not by distance, because the nearest candidate is
@@ -1356,6 +1456,10 @@ __kernel void hbondScore(const __global float4 * positions,
                          const __global uint * donoroffsets, const __global int * donorslots,
                          const __global uint * acceptoroffsets, const __global int * acceptorslots,
                          const __global int4 * antecedents,
+                         const __global int4 * glycosidic,
+                         const int isoenabled, const int isotwosided,
+                         const float isod0, const float isol0, const float isosd,
+                         const float isosl, const float isofloor,
                          const __global int * resids, const __global int * chains,
                          const __global uint * listoffsets, const __global uint * listitems,
                          const __global uint * listguard,
@@ -1423,6 +1527,11 @@ __kernel void hbondScore(const __global float4 * positions,
 			weight *= biospring_hbond_angular_factor(dot(dirhere, vhat));
 		if (biospring_hb_direction(positions, antecedents, j, -vhat, &dirthere))
 			weight *= biospring_hbond_angular_factor(dot(dirthere, -vhat));
+		// And the isostericity reduction, its value alone: a candidate has to
+		// be ranked on the energy the force will actually give it.
+		weight *= biospring_isostericity(positions, glycosidic, tid, (uint)j,
+		                                 isoenabled, isotwosided, isod0, isol0,
+		                                 isosd, isosl, isofloor, 0).value;
 
 		float s = hbondscale * biospring_hbond_energy(dist, welldepth, equilibrium, width) * weight;
 		if (s < beststrength)
@@ -1595,6 +1704,10 @@ inline void biospring_atomic_add_float3(volatile __global float4 * forces, uint 
 __kernel void hbondForce(const __global float4 * positions, volatile __global float4 * forces,
                          const __global uint * donoroffsets, const __global int * donorslots,
                          const __global int4 * antecedents,
+                         const __global int4 * glycosidic,
+                         const int isoenabled, const int isotwosided,
+                         const float isod0, const float isol0, const float isosd,
+                         const float isosl, const float isofloor,
                          const float welldepth, const float equilibrium, const float width,
                          const float hbondscale, const float convert,
                          __global float * energyper, const uint N)
@@ -1639,7 +1752,16 @@ __kernel void hbondForce(const __global float4 * positions, volatile __global fl
 		float wa = hasA ? biospring_hbond_angular_factor(ca) : 1.0f;
 		float dwd = hasD ? biospring_hbond_angular_derivative(cd) : 0.0f;
 		float dwa = hasA ? biospring_hbond_angular_derivative(ca) : 0.0f;
-		float w = wd * wa;
+
+		// The isostericity reduction, which is 1.0 and gradient-free unless the
+		// term is on AND both ends name a glycosidic frame. Folded into `w`, so
+		// it reaches the radial force, both angular forces and the energy by
+		// the SAME arithmetic rather than by three separate multiplications
+		// that could drift apart. Same as the host, SpringNetwork.cpp.
+		BiospringIso iso = biospring_isostericity(positions, glycosidic, tid, (uint)acceptor,
+		                                          isoenabled, isotwosided, isod0, isol0,
+		                                          isosd, isosl, isofloor, 1);
+		float w = wd * wa * iso.value;
 
 		float3 f_donor = (float3)(0.0f), f_acceptor = (float3)(0.0f);
 		float3 f_d1 = (float3)(0.0f), f_d2 = (float3)(0.0f);
@@ -1654,8 +1776,8 @@ __kernel void hbondForce(const __global float4 * positions, volatile __global fl
 		// axis dependence on the acceptor, the donor balancing the three.
 		if (hasD && dwd != 0.0f)
 			{
-			biospring_hb_angular(sd, vhat, cd, morse * wa * dwd * convert, &f_d1, &f_d2);
-			float3 on_acceptor = (dhat - vhat * cd) * (-morse * wa * dwd * convert / dist);
+			biospring_hb_angular(sd, vhat, cd, morse * wa * iso.value * dwd * convert, &f_d1, &f_d2);
+			float3 on_acceptor = (dhat - vhat * cd) * (-morse * wa * iso.value * dwd * convert / dist);
 			f_acceptor += on_acceptor;
 			f_donor -= (f_d1 + f_d2 + on_acceptor);
 			}
@@ -1664,8 +1786,8 @@ __kernel void hbondForce(const __global float4 * positions, volatile __global fl
 		// direction is -vhat and its axis dependence lands on the DONOR.
 		if (hasA && dwa != 0.0f)
 			{
-			biospring_hb_angular(sa, -vhat, ca, morse * wd * dwa * convert, &f_a1, &f_a2);
-			float3 on_donor = (ahat + vhat * ca) * (-morse * wd * dwa * convert / dist);
+			biospring_hb_angular(sa, -vhat, ca, morse * wd * iso.value * dwa * convert, &f_a1, &f_a2);
+			float3 on_donor = (ahat + vhat * ca) * (-morse * wd * iso.value * dwa * convert / dist);
 			f_donor += on_donor;
 			f_acceptor -= (f_a1 + f_a2 + on_donor);
 			}
@@ -1673,6 +1795,20 @@ __kernel void hbondForce(const __global float4 * positions, volatile __global fl
 		// The donor's own contribution is the only one nobody else can be
 		// writing at the same time, but it goes through the same path for the
 		// sake of one expression rather than two.
+		// (D) the isostericity factor's own gradient, entirely on the four frame
+		// atoms. Nothing lands on the donor or the acceptor here and nothing
+		// needs balancing: the factor does not depend on either of their
+		// positions, so the couple it exerts is already internal to the frame.
+		// Each index is tested on its own -- a bond whose factor did not apply
+		// carries -1 four times and adds nothing.
+		if (iso.applies)
+			{
+			float kiso = -morse * wd * wa * convert;
+			for (int fk = 0; fk < 4; fk++)
+				if (iso.atom[fk] >= 0)
+					biospring_atomic_add_float3(forces, (uint)iso.atom[fk], iso.grad[fk] * kiso);
+			}
+
 		if (d1i >= 0)            biospring_atomic_add_float3(forces, (uint)d1i, f_d1);
 		if (d2i >= 0)            biospring_atomic_add_float3(forces, (uint)d2i, f_d2);
 		if (a1i >= 0)            biospring_atomic_add_float3(forces, (uint)a1i, f_a1);

@@ -1163,6 +1163,14 @@ void SpringNetworkOpenCL::idleRun()
 		_kernelhbondforce.setArg(a++, _hbond.donoroffsetbuffer);
 		_kernelhbondforce.setArg(a++, _hbond.donorslotbuffer);
 		_kernelhbondforce.setArg(a++, _hbond.antecedentbuffer);
+		_kernelhbondforce.setArg(a++, _hbond.glycosidicbuffer);
+		_kernelhbondforce.setArg(a++, static_cast<int>(_config.hbond.isostericity));
+		_kernelhbondforce.setArg(a++, static_cast<int>(_config.hbond.isostericitytwosided));
+		_kernelhbondforce.setArg(a++, static_cast<float>(_config.hbond.isostericitydistance));
+		_kernelhbondforce.setArg(a++, static_cast<float>(_config.hbond.isostericitylambda));
+		_kernelhbondforce.setArg(a++, static_cast<float>(_config.hbond.isostericitydistancewidth));
+		_kernelhbondforce.setArg(a++, static_cast<float>(_config.hbond.isostericitylambdawidth));
+		_kernelhbondforce.setArg(a++, ISOSTERICITY_FLOOR);
 		_kernelhbondforce.setArg(a++, getForceField()->getHydrogenBondWellDepth());
 		_kernelhbondforce.setArg(a++, getForceField()->getHydrogenBondEquilibrium());
 		_kernelhbondforce.setArg(a++, getForceField()->getHydrogenBondWidth());
@@ -1423,17 +1431,6 @@ void SpringNetworkOpenCL::idleRun()
 
 void SpringNetworkOpenCL::initRun()
 	{
-	// REFUSED rather than ignored. The isostericity reduction is a CPU-only
-	// term: the device's hbondScore and hbondForce kernels know nothing about a
-	// glycosidic frame, so running it here would give a DIFFERENT force field
-	// from the same .msp without saying so -- and this project has already paid
-	// for one silent CPU/GPU divergence on exactly this term, where every
-	// energy stayed correct while third-party forces landed on the wrong atoms.
-	// A refusal costs a message; a silent divergence costs the measurement that
-	// was made with it.
-	if (isHydrogenBondEnabled() && _config.hbond.isostericity)
-		biospring::logging::die("hbond.isostericity is not implemented on the OpenCL device. Run this .msp on "
-		                        "the CPU, or turn the term off; it will not be silently ignored.");
 	SpringNetwork::initRun();
 	InitOcl();
 	wrappingOcl();
@@ -2990,6 +2987,7 @@ void SpringNetworkOpenCL::_uploadHydrogenBondTopology()
 	// which way the lobes go, and w is the lobe angle in MILLIDEGREES. An OpenCL
 	// int3 occupies four words anyway, so both extra fields are free.
 	std::vector<cl_int4> antecedent(_nbparticlesocl);
+	std::vector<cl_int4> glycosidic(_nbparticlesocl);
 	std::vector<int> resid(_nbparticlesocl, -1);
 	std::vector<int> chain(_nbparticlesocl, -1);
 
@@ -3014,6 +3012,14 @@ void SpringNetworkOpenCL::_uploadHydrogenBondTopology()
 		antecedent[i].s[2] = p.lobeMode();
 		antecedent[i].s[3] = static_cast<int>(std::lround(
 		    std::atan2(p.lobeSin(), p.lobeCos()) * 180.0 / M_PI * 1000.0));
+		// The glycosidic frame, resolved on the host by
+		// DonorAcceptorRuleReader and copied across as it stands. The
+		// base-atom flag is computed HERE because it is told from a NAME, and
+		// a kernel has no names.
+		glycosidic[i].s[0] = p.glycosidicC1Index();
+		glycosidic[i].s[1] = p.glycosidicNIndex();
+		glycosidic[i].s[2] = _isBaseAtom(p) ? 1 : 0;
+		glycosidic[i].s[3] = -1;
 		resid[i] = static_cast<int>(p.getResId());
 		const auto inserted = chainindex.emplace(p.getChainName(), static_cast<int>(chainindex.size()));
 		chain[i] = inserted.first->second;
@@ -3035,6 +3041,7 @@ void SpringNetworkOpenCL::_uploadHydrogenBondTopology()
 	upload(_hbond.donorslotbuffer, donorslot.data(), sizeof(int) * donorslot.size(), CL_MEM_READ_WRITE);
 	upload(_hbond.acceptorslotbuffer, acceptorslot.data(), sizeof(int) * acceptorslot.size(), CL_MEM_READ_WRITE);
 	upload(_hbond.antecedentbuffer, antecedent.data(), sizeof(cl_int4) * antecedent.size(), CL_MEM_READ_ONLY);
+	upload(_hbond.glycosidicbuffer, glycosidic.data(), sizeof(cl_int4) * glycosidic.size(), CL_MEM_READ_ONLY);
 	upload(_hbond.residbuffer, resid.data(), sizeof(int) * resid.size(), CL_MEM_READ_ONLY);
 	upload(_hbond.chainbuffer, chain.data(), sizeof(int) * chain.size(), CL_MEM_READ_ONLY);
 
@@ -3094,6 +3101,14 @@ void SpringNetworkOpenCL::_assignHydrogenBondPairsOnDevice()
 		_kernelhbondscore.setArg(a++, _hbond.acceptoroffsetbuffer);
 		_kernelhbondscore.setArg(a++, _hbond.acceptorslotbuffer);
 		_kernelhbondscore.setArg(a++, _hbond.antecedentbuffer);
+		_kernelhbondscore.setArg(a++, _hbond.glycosidicbuffer);
+		_kernelhbondscore.setArg(a++, static_cast<int>(_config.hbond.isostericity));
+		_kernelhbondscore.setArg(a++, static_cast<int>(_config.hbond.isostericitytwosided));
+		_kernelhbondscore.setArg(a++, static_cast<float>(_config.hbond.isostericitydistance));
+		_kernelhbondscore.setArg(a++, static_cast<float>(_config.hbond.isostericitylambda));
+		_kernelhbondscore.setArg(a++, static_cast<float>(_config.hbond.isostericitydistancewidth));
+		_kernelhbondscore.setArg(a++, static_cast<float>(_config.hbond.isostericitylambdawidth));
+		_kernelhbondscore.setArg(a++, ISOSTERICITY_FLOOR);
 		_kernelhbondscore.setArg(a++, _hbond.residbuffer);
 		_kernelhbondscore.setArg(a++, _hbond.chainbuffer);
 		_kernelhbondscore.setArg(a++, _hydrogenbondlist.offsetsbuffer);

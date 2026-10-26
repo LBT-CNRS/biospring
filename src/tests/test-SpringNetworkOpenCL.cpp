@@ -1552,6 +1552,320 @@ TEST(SpringNetworkOpenCL, HydrogenBondsMatchTheCPUInEveryDirectionalForm)
         << " kJ/mol agree, so the two lobe geometries are the same code path";
 }
 
+// The ISOSTERICITY REDUCTION on the device, against the CPU.
+//
+// The factor multiplies a hydrogen bond by a Gaussian in the C1'-C1' distance
+// and in the glycosidic angle at each end, so its gradient lands on FOUR atoms
+// that are not in the bond -- the same shape as the angular factors' antecedent
+// forces, and the same hazard: this project has already paid for one silent
+// CPU/GPU divergence on exactly that path, where hbondForce read the antecedent
+// buffer at half the stride the host uploads it at and every energy stayed
+// correct while the angular gradients landed on the wrong particles.
+//
+// The division of labour between this test and the CPU's own:
+// test-HydrogenBondIsostericity.cpp checks the factor and its gradient against
+// finite differences, so the shape is established there; what is established
+// HERE is that the device computes the same thing and deposits it on the same
+// atoms. Parity catches a misdeposited index, a dropped frame force and a
+// parameter that never reached the kernel; it cannot catch an error both
+// backends make, which is what the finite differences are for.
+namespace
+{
+// The ladder above with a glycosidic frame hung off each row: four more atoms
+// per rung, C1' and the glycosidic N on each side, pendant so the factor's
+// couple has something to turn. They carry no donor or acceptor capacity, so
+// they cannot enter the pairing themselves.
+//
+// `separation` is the C1'-C1' distance the frame is built at, which is what
+// selects the distance branch: under 10.46 A the Gaussian applies, over it the
+// one-sided form holds the factor at 1 and the two-sided form does not.
+void buildIsostericLadder(spn::SpringNetwork & network, configuration::Configuration & config,
+                          unsigned rungs, unsigned steps, float separation, float lambda,
+                          bool isostericity, bool twosided)
+{
+    const float RISE = 9.0f;
+    const float GAP = 3.4f;
+    const float BOND = 1.4f;   // C1'-N, a glycosidic bond
+    const float AWAY = 8.0f;   // how far below the rung the frame hangs, in y
+    const float c = std::cos(lambda * static_cast<float>(M_PI) / 180.0f);
+    const float s = std::sin(lambda * static_cast<float>(M_PI) / 180.0f);
+
+    const auto place = [&](unsigned r) {
+        const float z = r * RISE;
+        const float j = 0.12f * static_cast<float>((r * 2654435761u) % 7) - 0.36f;
+        const Vector3f ca(-1.4f, j - AWAY, z);
+        const Vector3f cb(-1.4f + separation, 0.3f - j - AWAY, z);
+        return std::array<Vector3f, 10>{{
+            Vector3f(-1.4f, j, z),                        // 0 heavy neighbour, row A
+            Vector3f(-1.9f, 1.3f + j, z + 0.1f),          // 1 plane atom, row A
+            Vector3f(0.0f, j, z),                         // 2 the donor
+            Vector3f(GAP + 1.4f, 0.3f - j, z),            // 3 heavy neighbour, row B
+            Vector3f(GAP + 1.9f, -1.3f - j, z - 0.1f),    // 4 plane atom, row B
+            Vector3f(GAP, 0.3f - j, z),                   // 5 the acceptor
+            ca,                                            // 6 C1' of row A
+            ca + Vector3f(BOND * c, BOND * s, 0.0f),      // 7 glycosidic N of row A
+            cb,                                            // 8 C1' of row B
+            cb - Vector3f(BOND * c, BOND * s, 0.0f),      // 9 glycosidic N of row B
+        }};
+    };
+    for (unsigned r = 0; r < rungs; ++r)
+    {
+        const std::array<Vector3f, 10> where = place(r);
+        for (unsigned k = 0; k < 10; ++k)
+        {
+            spn::Particle p;
+            p.setPosition(where[k]);
+            p.setMass(1.0f);
+            p.setCharge(0.0f);
+            p.setRadius(1.8f);
+            p.setEpsilon(0.5f);
+            p.setResId(static_cast<int>(10 * r + k));
+            // The bonded pair must pass the base-atom test, which is told from
+            // the NAME: no prime and no P. The frame atoms are named as what
+            // they are, primes included, and are never tested for it.
+            const char * names[10] = {"N9", "C4", "N1", "N9", "C4", "N3", "C1'", "N9", "C1'", "N9"};
+            p.setName(names[k]);
+            network.addParticle(p);
+        }
+    }
+    for (unsigned r = 0; r < rungs; ++r)
+    {
+        const std::array<Vector3f, 10> where = place(r);
+        const unsigned b = 10 * r;
+        network.getParticle(b + 2).setDonorCapacity(1);
+        network.getParticle(b + 2).setAntecedentIndex(static_cast<int>(b + 0));
+        network.getParticle(b + 2).setAntecedentIndex2(static_cast<int>(b + 1));
+        network.getParticle(b + 5).setAcceptorCapacity(1);
+        network.getParticle(b + 5).setAntecedentIndex(static_cast<int>(b + 3));
+        network.getParticle(b + 5).setAntecedentIndex2(static_cast<int>(b + 4));
+        // The frame, on the two bonded atoms. Distinct C1' indices, which is
+        // what the factor requires of a pair.
+        network.getParticle(b + 2).setGlycosidicFrame(static_cast<int>(b + 6), static_cast<int>(b + 7));
+        network.getParticle(b + 5).setGlycosidicFrame(static_cast<int>(b + 8), static_cast<int>(b + 9));
+
+        network.addSpring(b + 2, b + 0, (where[2] - where[0]).norm(), 100.0f);
+        network.addSpring(b + 2, b + 1, (where[2] - where[1]).norm(), 100.0f);
+        network.addSpring(b + 5, b + 3, (where[5] - where[3]).norm(), 100.0f);
+        network.addSpring(b + 5, b + 4, (where[5] - where[4]).norm(), 100.0f);
+        // The frame hangs off its own row and is free to turn, which is the
+        // degree of freedom the factor's couple acts on.
+        network.addSpring(b + 6, b + 0, (where[6] - where[0]).norm(), 100.0f);
+        network.addSpring(b + 7, b + 6, (where[7] - where[6]).norm(), 100.0f);
+        network.addSpring(b + 8, b + 3, (where[8] - where[3]).norm(), 100.0f);
+        network.addSpring(b + 9, b + 8, (where[9] - where[8]).norm(), 100.0f);
+    }
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = steps;
+    config.sim.timestep = 2.0;
+    config.spring.enable = true;
+    config.spring.scale = 1.0;
+    config.viscosity.enable = true;
+    config.viscosity.value = 0.3;
+    config.hbond.enable = true;
+    config.hbond.cutoff = 7.0;
+    config.hbond.scale = 1.0;
+    // The SHIPPED parameters, not ones chosen to suit the fixture: the frame
+    // separation and the glycosidic angle were picked so that the factor lands
+    // between 0.2 and 0.7 under this calibration, which is where it both does
+    // real work and has a real gradient in all three of its Gaussians.
+    config.hbond.isostericity = isostericity;
+    config.hbond.isostericitytwosided = twosided;
+    network.setup(config);
+}
+} // namespace
+
+TEST(SpringNetworkOpenCL, TheIsostericityReductionMatchesTheCPU)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned RUNGS = 24;
+    const unsigned STEPS = 200;
+
+    // Four passes. The first two share a geometry and differ only in the term,
+    // so their difference IS the term; the last two share a geometry beyond the
+    // distance centre and differ only in the one-sided floor, so their
+    // difference is that branch alone.
+    struct Pass { float separation; float lambda; bool iso; bool twosided; const char * name; };
+    const Pass passes[4] = {
+        {9.0f,  62.0f, false, false, "term off"},
+        {9.0f,  62.0f, true,  false, "on, inside the distance centre"},
+        {11.5f, 68.0f, true,  false, "on, beyond it: the one-sided floor"},
+        {11.5f, 68.0f, true,  true,  "on, beyond it: the two-sided Gaussian"},
+    };
+    float energy[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    std::vector<std::vector<Vector3f>> after(4);
+
+    for (int pass = 0; pass < 4; ++pass)
+    {
+        const Pass p = passes[pass];
+        const char * what = p.name;
+
+        spn::SpringNetwork cpu;
+        configuration::Configuration cpuconfig;
+        buildIsostericLadder(cpu, cpuconfig, RUNGS, STEPS, p.separation, p.lambda, p.iso, p.twosided);
+        std::vector<Vector3f> before(cpu.getNumberOfParticles());
+        for (unsigned i = 0; i < cpu.getNumberOfParticles(); ++i)
+            before[i] = cpu.getParticle(i).getPosition();
+        cpu.run();
+
+        SpringNetworkOpenCL gpu;
+        configuration::Configuration gpuconfig;
+        buildIsostericLadder(gpu, gpuconfig, RUNGS, STEPS, p.separation, p.lambda, p.iso, p.twosided);
+        gpu.run();
+
+        energy[pass] = cpu.getHydrogenBondEnergy();
+        after[pass].resize(cpu.getNumberOfParticles());
+        for (unsigned i = 0; i < cpu.getNumberOfParticles(); ++i)
+            after[pass][i] = cpu.getParticle(i).getPosition();
+
+        EXPECT_GT(cpu.getHydrogenBondCount(), RUNGS / 2)
+            << what << ": the CPU holds almost no bond, so this comparison proves nothing";
+        EXPECT_LT(cpu.getHydrogenBondEnergy(), -1.0f) << what << ": no energy at all";
+
+        EXPECT_NEAR(gpu.getHydrogenBondEnergy(), cpu.getHydrogenBondEnergy(),
+                    1e-4f * std::abs(cpu.getHydrogenBondEnergy()))
+            << what << ": CPU " << cpu.getHydrogenBondEnergy() << " vs GPU "
+            << gpu.getHydrogenBondEnergy() << " kJ/mol";
+
+        // The positions, which answer the FORCE. The frame atoms are in this
+        // sweep, so a frame gradient deposited on the wrong index moves the
+        // wrong particle on one backend and shows up here. Which atom the
+        // couple belongs on is isolated by the one-step test below; this one
+        // asks whether 200 steps of the whole term stay together.
+        float moved = 0.0f, worst = 0.0f;
+        for (unsigned i = 0; i < cpu.getNumberOfParticles(); ++i)
+        {
+            moved = std::max(moved, (cpu.getParticle(i).getPosition() - before[i]).norm());
+            worst = std::max(worst,
+                (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
+        }
+        EXPECT_GT(moved, 0.05f) << what << ": the ladder barely moved, so this proves nothing";
+        EXPECT_LT(moved, 3.0f) << what << ": the ladder came apart (" << moved << " A)";
+        EXPECT_LT(worst, 1.0e-3f) << what << ": the GPU is " << worst << " A from the CPU after "
+                                  << STEPS << " steps, while the ladder moved " << moved << " A";
+    }
+
+    // The term must REDUCE, and by more than a rounding: same geometry, one
+    // flag apart.
+    //
+    // The margin is small ON PURPOSE, and the reason is the term's own
+    // mechanics. The factor starts at 0.22-0.42 on this geometry, so at the
+    // FIRST step it cuts the well to a third -- which is what the one-step test
+    // below asserts. But it is a gradient, and the frame here is pendant and
+    // free to turn: over 200 steps its own couple rotates C1'-N into the
+    // Gaussian's peak and the factor climbs back towards 1. Measured: -400.6
+    // kJ/mol off against -366.5 on, a mean factor of 0.915 at the end of the
+    // run against 0.3 at its start. A reduction that LASTS is not what a
+    // multiplicative factor does to a degree of freedom it can move; what it
+    // does is move it. Asserting 20% here would be asserting that the term
+    // fails to relax its own frame.
+    EXPECT_LT(std::abs(energy[1]), 0.95f * std::abs(energy[0]))
+        << "off " << energy[0] << " and on " << energy[1]
+        << " kJ/mol are within 5% of each other, so the factor is not biting at all";
+
+    // And the one-sided floor must be the kernel's and not the host's: same
+    // geometry, beyond the centre, the flag alone.
+    EXPECT_GT(std::abs(energy[2] - energy[3]), 1.0f)
+        << "one-sided " << energy[2] << " and two-sided " << energy[3]
+        << " kJ/mol agree, so the twosided flag never reached the device";
+    EXPECT_LT(std::abs(energy[3]), std::abs(energy[2]))
+        << "the two-sided form must cost MORE than the floor beyond the centre: one-sided "
+        << energy[2] << ", two-sided " << energy[3] << " kJ/mol";
+
+    // The frame atoms must be in motion that the term influences, or the parity
+    // bound above is being met on four atoms nothing moved. This does NOT
+    // isolate the factor's own couple: the frame hangs off an antecedent, and
+    // the reduction also scales the bond force the antecedent feels, so part of
+    // this difference arrives through the anchor. The one-step test below is
+    // what isolates the couple.
+    float framediff = 0.0f;
+    for (unsigned r = 0; r < RUNGS; ++r)
+        for (unsigned k = 6; k < 10; ++k)
+            framediff = std::max(framediff, (after[0][10 * r + k] - after[1][10 * r + k]).norm());
+    EXPECT_GT(framediff, 1.0e-2f)
+        << "the frame atoms moved only " << framediff << " A differently with the term than "
+        << "without it, which is too little for the parity bound to mean anything";
+}
+
+// WHICH ATOMS the factor's couple lands on, isolated.
+//
+// One step, from a geometry whose springs are all at their rest length. The
+// frame atoms then feel exactly nothing with the term off -- no spring force,
+// no hydrogen bond force, they are pendant and no hydrogen bond touches them --
+// so they do not move at all. Turn the term on and the only force they can
+// possibly feel is the factor's own gradient. Their displacement after that one
+// step IS that gradient, atom by atom, and a kernel depositing it on the wrong
+// index moves a different particle than the CPU does.
+//
+// This is the test the antecedent stride bug would have failed: it moved the
+// angular gradients onto the wrong particles while leaving every energy exact,
+// and only a per-atom comparison of a force with a KNOWN support can see that.
+TEST(SpringNetworkOpenCL, TheIsostericityCoupleLandsOnTheSameFourAtomsAsOnTheCPU)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned RUNGS = 8;
+    const unsigned STEPS = 1;
+
+    // The control: term off, so nothing at all reaches the frame.
+    spn::SpringNetwork off;
+    configuration::Configuration offconfig;
+    buildIsostericLadder(off, offconfig, RUNGS, STEPS, 9.0f, 62.0f, false, false);
+    std::vector<Vector3f> start(off.getNumberOfParticles());
+    for (unsigned i = 0; i < off.getNumberOfParticles(); ++i)
+        start[i] = off.getParticle(i).getPosition();
+    off.run();
+
+    float idle = 0.0f;
+    for (unsigned r = 0; r < RUNGS; ++r)
+        for (unsigned k = 6; k < 10; ++k)
+            idle = std::max(idle, (off.getParticle(10 * r + k).getPosition() - start[10 * r + k]).norm());
+    ASSERT_LT(idle, 1.0e-9f)
+        << "a frame atom moved " << idle << " A in one step with the term OFF, so this fixture "
+        << "does not isolate the factor's couple and the comparison below means nothing";
+
+    spn::SpringNetwork cpu;
+    configuration::Configuration cpuconfig;
+    buildIsostericLadder(cpu, cpuconfig, RUNGS, STEPS, 9.0f, 62.0f, true, false);
+    cpu.run();
+
+    // The reduction's SIZE, measured here rather than after a long run: the
+    // factor is 0.22-0.42 on this geometry and nothing has yet moved, so this
+    // is the factor itself and not what the frame relaxed into.
+    EXPECT_LT(std::abs(cpu.getHydrogenBondEnergy()), 0.5f * std::abs(off.getHydrogenBondEnergy()))
+        << "one step, same geometry: off " << off.getHydrogenBondEnergy() << " and on "
+        << cpu.getHydrogenBondEnergy() << " kJ/mol -- the factor should be cutting the well to "
+        << "about a third here";
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration gpuconfig;
+    buildIsostericLadder(gpu, gpuconfig, RUNGS, STEPS, 9.0f, 62.0f, true, false);
+    gpu.run();
+
+    // Every one of the four frame atoms of every rung: it must have moved, and
+    // the device must have moved it to the same place. A relative bound, since
+    // the four displacements are not the same size -- the C1' carries three
+    // contributions and the N one.
+    float smallest = 1.0e30f, worst = 0.0f;
+    for (unsigned r = 0; r < RUNGS; ++r)
+        for (unsigned k = 6; k < 10; ++k)
+        {
+            const unsigned i = 10 * r + k;
+            const float d = (cpu.getParticle(i).getPosition() - start[i]).norm();
+            smallest = std::min(smallest, d);
+            worst = std::max(worst, (cpu.getParticle(i).getPosition() - gpu.getParticle(i).getPosition()).norm());
+        }
+    EXPECT_GT(smallest, 1.0e-6f)
+        << "a frame atom did not move at all with the term on (" << smallest << " A), so the "
+        << "couple is not reaching all four";
+    EXPECT_LT(worst, 1.0e-4f * smallest)
+        << "the device put a frame atom " << worst << " A from where the CPU put it, against a "
+        << "smallest displacement of " << smallest << " A -- the couple is landing on different atoms";
+}
+
 TEST(SpringNetworkOpenCL, AnInteractorsPullReachesTheDevice)
 {
     if (!hasOpenCLDevice())
