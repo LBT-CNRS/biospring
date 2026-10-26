@@ -379,19 +379,28 @@ void Particle::addHydrophobicityForce(std::vector<DeferredNonbondedContribution>
             if (p.isDynamic() && neighbor_index < static_cast<size_t>(getId()))
                 return;
 
-            apply = true;
-            if (_springnetwork->isSpringEnabled())
-                // getId() stays signed (used as an "unassigned" sentinel elsewhere,
-            // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
-            // where it is consumed as a spring-neighbor index (always >= 0
-            // once assigned by SpringNetwork).
-            apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
-
-            if (apply)
+            // THE CUTOFF TEST COMES FIRST, the hash probe second -- the same reordering
+            // as in addElectrostaticForce, where the reason is written out in full: the
+            // candidate list is built out to cutoff + skin, the spring-neighbour test is
+            // an unordered_map lookup, and the test that rejects those candidates is a
+            // subtraction and a norm. The two predicates are independent, so only the
+            // order in which they are asked moves, and the pairs that contribute are the
+            // same ones. Worth +0.3 %, measured as a paired interleaved A/B -- small, but
+            // it is a reordering no compiler will do for us: it will not speculate a hash
+            // lookup across a branch.
+            f = p.getPosition() - getPosition();
+            distance = f.norm();
+            if (distance < cutoff && distance != 0.0)
             {
-                f = p.getPosition() - getPosition();
-                distance = f.norm();
-                if (distance < cutoff && distance != 0.0)
+                apply = true;
+                if (_springnetwork->isSpringEnabled())
+                    // getId() stays signed (used as an "unassigned" sentinel
+                    // elsewhere, e.g. SpringNetwork::isProbeParticle), so cast
+                    // explicitly here where it is consumed as a spring-neighbor
+                    // index (always >= 0 once assigned by SpringNetwork).
+                    apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
+
+                if (apply)
                 {
                     const float pair_energy =
                         ff->computeHydrophobicityEnergy(p.getHydrophobicity(), getHydrophobicity(), distance);
@@ -462,26 +471,36 @@ void Particle::addHydrogenBondCoreRepulsion(std::vector<DeferredNonbondedContrib
             if (p.isDynamic() && neighbor_index < static_cast<size_t>(getId()))
                 return;
 
-            apply = true;
-            if (_springnetwork->isSpringEnabled())
-                apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
-
-            if (apply)
+            // THE CUTOFF TEST COMES FIRST, the hash probe second -- the same reordering
+            // as in addElectrostaticForce, where the reason is written out in full: the
+            // candidate list is built out to cutoff + skin, the spring-neighbour test is
+            // an unordered_map lookup, and what rejects those candidates is a subtraction
+            // and a norm. The two predicates are independent, so only the order in which
+            // they are asked moves, and the pairs that contribute are the same ones.
+            // This is the most selective of the four: the threshold is the pair's
+            // own equilibrium, about 2.9 A, on a list built to 7 A -- so most of
+            // what the list hands back is rejected here, and used to pay the hash
+            // probe first.
+            f = p.getPosition() - getPosition();
+            distance = f.norm();
+            // Repulsive-only regime: the true Morse force is already
+            // zero exactly at distance=equilibrium, so cutting off here
+            // introduces no discontinuity, and leaves the attractive
+            // range (distance > equilibrium) exclusively to whichever
+            // pair is actually engaged via _assignHydrogenBondPairs.
+            // The floor is the PAIR's own equilibrium, not the force
+            // field's. A couple carrying a group has its well at that
+            // group's distance -- for a peptide bond 1.33 A instead of
+            // 2.90 -- and holding it off at 2.90 would make the bond it
+            // is supposed to form unreachable.
+            const auto mp = _springnetwork->hydrogenBondParameters(static_cast<size_t>(getId()), neighbor_index);
+            if (distance < mp.equilibrium && distance != 0.0)
             {
-                f = p.getPosition() - getPosition();
-                distance = f.norm();
-                // Repulsive-only regime: the true Morse force is already
-                // zero exactly at distance=equilibrium, so cutting off here
-                // introduces no discontinuity, and leaves the attractive
-                // range (distance > equilibrium) exclusively to whichever
-                // pair is actually engaged via _assignHydrogenBondPairs.
-                // The floor is the PAIR's own equilibrium, not the force
-                // field's. A couple carrying a group has its well at that
-                // group's distance -- for a peptide bond 1.33 A instead of
-                // 2.90 -- and holding it off at 2.90 would make the bond it
-                // is supposed to form unreachable.
-                const auto mp = _springnetwork->hydrogenBondParameters(static_cast<size_t>(getId()), neighbor_index);
-                if (distance < mp.equilibrium && distance != 0.0)
+                apply = true;
+                if (_springnetwork->isSpringEnabled())
+                    apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
+
+                if (apply)
                 {
                     const float pair_energy =
                         ff->computeHydrogenBondEnergy(distance, mp.welldepth, mp.equilibrium, mp.width);
@@ -566,19 +585,29 @@ void Particle::addStericForce(std::vector<DeferredNonbondedContribution> & defer
         if (p.isDynamic() && neighbor_index < static_cast<size_t>(getId()))
             return;
 
-        apply = true;
-        if (_springnetwork->isSpringEnabled())
-            // getId() stays signed (used as an "unassigned" sentinel elsewhere,
-            // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
-            // where it is consumed as a spring-neighbor index (always >= 0
-            // once assigned by SpringNetwork).
-            apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
+        // THE CUTOFF TEST COMES FIRST, the hash probe second -- the same reordering
+        // as in addElectrostaticForce, where the reason is written out in full: the
+        // candidate list is built out to cutoff + skin, the spring-neighbour test is
+        // an unordered_map lookup, and what rejects those candidates is a subtraction
+        // and a norm. The two predicates are independent, so only the order in which
+        // they are asked moves, and the pairs that contribute are the same ones.
+        // The self test leads, being a single comparison.
+        if (p.getId() == getId())
+            return;
 
-        if (apply && p.getId() != getId())
+        f = p.getPosition() - getPosition();
+        distance = f.norm();
+        if (distance < cutoff)
         {
-            f = p.getPosition() - getPosition();
-            distance = f.norm();
-            if (distance < cutoff)
+            apply = true;
+            if (_springnetwork->isSpringEnabled())
+                // getId() stays signed (used as an "unassigned" sentinel elsewhere,
+                // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
+                // where it is consumed as a spring-neighbor index (always >= 0
+                // once assigned by SpringNetwork).
+                apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
+
+            if (apply)
             {
                 const float pair_energy =
                     ff->computeStericEnergy(p.getRadius(), getRadius(), p.getEpsilon(), getEpsilon(), distance);
