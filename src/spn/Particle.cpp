@@ -285,19 +285,30 @@ void Particle::addElectrostaticForce(std::vector<DeferredNonbondedContribution> 
         if (p.isDynamic() && neighbor_index < static_cast<size_t>(getId()))
             return;
 
-        apply = true;
-        if (_springnetwork->isSpringEnabled())
-            // getId() stays signed (used as an "unassigned" sentinel elsewhere,
-            // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
-            // where it is consumed as a spring-neighbor index (always >= 0
-            // once assigned by SpringNetwork).
-            apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
-
-        if (apply)
+        // THE CUTOFF TEST COMES FIRST, the hash probe second. The candidate list
+        // is built out to cutoff + skin (nsearch.hpp, _search_radius), so a
+        // fraction of what it hands us is beyond the cutoff and contributes
+        // nothing -- and the spring-neighbour probe is an unordered_map lookup,
+        // while the test that rejects those candidates is three subtractions and
+        // a norm. Asking the expensive question before the selective one paid
+        // the probe for every candidate in the skin shell.
+        //
+        // Nothing about the result changes: the two predicates are independent,
+        // the arithmetic and the comparisons are the same ones in the same form,
+        // and a pair contributes exactly when it is inside the cutoff AND not
+        // spring-bonded. Only the order in which the two are asked moves.
+        f = p.getPosition() - getPosition();
+        distance = f.norm();
+        if (distance < cutoff && distance != 0.0)
         {
-            f = p.getPosition() - getPosition();
-            distance = f.norm();
-            if (distance < cutoff && distance != 0.0)
+            apply = true;
+            if (_springnetwork->isSpringEnabled())
+                // getId() stays signed (used as an "unassigned" sentinel elsewhere,
+                // e.g. SpringNetwork::isProbeParticle), so cast explicitly here
+                // where it is consumed as a spring-neighbor index (always >= 0
+                // once assigned by SpringNetwork).
+                apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
+            if (apply)
             {
                 const float pair_energy = ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
                 f.normalize();
