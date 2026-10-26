@@ -311,7 +311,11 @@ void Particle::addElectrostaticForce(std::vector<DeferredNonbondedContribution> 
             if (apply)
             {
                 const float pair_energy = ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
-                f.normalize();
+                // `distance` IS f.norm(), computed just above: dividing by it here
+                // drops the SECOND square root normalize() would take, and its guard
+                // branches with it. Component-wise division by the same value is what
+                // normalize() does, so the result is bit-identical.
+                f = f / distance;
                 f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
                 addForce(f);
 
@@ -391,7 +395,11 @@ void Particle::addHydrophobicityForce(std::vector<DeferredNonbondedContribution>
                 {
                     const float pair_energy =
                         ff->computeHydrophobicityEnergy(p.getHydrophobicity(), getHydrophobicity(), distance);
-                    f.normalize();
+                    // `distance` IS f.norm(), computed just above: dividing by it here
+                    // drops the SECOND square root normalize() would take, and its guard
+                    // branches with it. Component-wise division by the same value is what
+                    // normalize() does, so the result is bit-identical.
+                    f = f / distance;
                     f = f * ff->computeHydrophobicityForceModule(p.getHydrophobicity(), getHydrophobicity(), distance);
                     addForce(f);
 
@@ -524,7 +532,11 @@ void Particle::addElectrostaticForceNoGrid(float cutoff)
             if (distance < cutoff && distance != 0.0f)
             {
                 _electrostaticenergy += ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
-                f.normalize();
+                // `distance` IS f.norm(), computed just above: dividing by it here
+                // drops the SECOND square root normalize() would take, and its guard
+                // branches with it. Component-wise division by the same value is what
+                // normalize() does, so the result is bit-identical.
+                f = f / distance;
                 f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
                 addForce(f);
             }
@@ -570,7 +582,11 @@ void Particle::addStericForce(std::vector<DeferredNonbondedContribution> & defer
             {
                 const float pair_energy =
                     ff->computeStericEnergy(p.getRadius(), getRadius(), p.getEpsilon(), getEpsilon(), distance);
-                f.normalize();
+                // `distance` IS f.norm(), computed just above: dividing by it here
+                // drops the SECOND square root normalize() would take, and its guard
+                // branches with it. Component-wise division by the same value is what
+                // normalize() does, so the result is bit-identical.
+                f = f / distance;
                 f = f *
                     ff->computeStericForceModule(p.getRadius(), getRadius(), p.getEpsilon(), getEpsilon(), distance);
                 addForce(f);
