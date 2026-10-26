@@ -58,11 +58,32 @@ class SelfSpringException : public std::exception
 
 // Specialization of `std::hash` for spring identifiers.
 // This allows us to use `sid_t` as keys in `std::unordered_map`.
+//
+// THE TWO IDS ARE MIXED, not xor-ed. `std::hash` of an integer is the identity
+// on libc++, so `first ^ second` was the hash -- and a spring joins particles
+// whose indices are NEIGHBOURS, for which `i ^ j` takes almost no distinct
+// values. Measured on 034.VirusCA's 288 480 springs: 11 834 distinct hashes,
+// the largest bucket holding 18 540 springs, about 4207 key comparisons per
+// insertion. unordered_map then degenerates to a linear scan of a huge bucket
+// and add_spring becomes quadratic in the number of springs -- 11 to 38 s of
+// NetCDFReader::read() on that example, against 0.28 s for its first 120 steps.
+// A sampling profile put 100 % of the startup in exists() and this insert.
+//
+// With the mix below the same 288 480 springs give 276 044 distinct hashes, a
+// largest bucket of 4, and about 1.1 comparisons per insertion.
+//
+// The mix is boost::hash_combine's: the golden-ratio constant plus the two
+// shifts spread neighbouring values across the whole word. Note it is NOT
+// symmetric, where the xor was: that changes nothing, because `exists` probes
+// both orders explicitly and it is operator== on the pair, not the hash, that
+// decides equality.
 struct sid_hash
 {
     std::size_t operator()(const std::pair<pid_t, pid_t> & uid) const
     {
-        return std::hash<pid_t>()(uid.first) ^ std::hash<pid_t>()(uid.second);
+        std::size_t h = std::hash<pid_t>()(uid.first);
+        h ^= std::hash<pid_t>()(uid.second) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        return h;
     }
 };
 
