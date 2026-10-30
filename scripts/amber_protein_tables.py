@@ -125,12 +125,18 @@ class _Residue:
 def _build_chain(residue_names, template_of, first_atom_index=0, first_residue_index=0):
     """One residue per name, linked C(i)-N(i+1) into a single chain.
 
-    template_of(name) -> the XML <Residue> element to take atoms/bonds from
-    (lets HIS be spelled HIS here while carrying HID's atoms, as before).
+    template_of(name, position) -> the XML <Residue> element to take
+    atoms/bonds from (lets HIS be spelled HIS here while carrying HID's atoms,
+    as before). The position is passed because a name is not enough to choose:
+    the terminal pairs below put an ALA spacer next to the residue of interest,
+    and when that residue is itself an alanine, selecting by name alone handed
+    the spacer the NALA/CALA template too -- which put H1/H2/H3 and OXT on an
+    interior residue, and so emitted interior torsion records naming atoms
+    only a free terminus has.
     """
     residues, bonds, counter = [], [], first_atom_index
     for i, name in enumerate(residue_names):
-        tpl = template_of(name)
+        tpl = template_of(name, i)
         res = _Residue(name, first_residue_index + i)
         names = [a.get("name") for a in tpl.findall("Atom")]
         for n in names:
@@ -203,32 +209,27 @@ CHAIN_RESIDUES = (["ACE"]
                   + [r for name in _INTERIOR for r in ("ALA", name, "ALA")]
                   + ["NME"])
 
-# A second, separate chain carrying the terminal variants: a free N-terminus
-# (H1/H2/H3 ammonium) and a free C-terminus (OXT carboxylate). Both exist in
-# AMBER for all 20 residues (NALA..NVAL, CALA..CVAL) but appear in no capped
-# chain, so their bonds and angles would otherwise never be emitted -- they
-# were previously picked up only because ubiquitin happens to have a free
-# terminus at each end.
-TERMINAL_RESIDUES = [t + r for t in ("N", "C") for r in _INTERIOR]
-
 _xml_residues = {r.get("name"): r for r in root.find("Residues").findall("Residue")}
-residues, bonds = _build_chain(CHAIN_RESIDUES, lambda n: _xml_residues[base_variant(n)])
+residues, bonds = _build_chain(CHAIN_RESIDUES, lambda n, _i: _xml_residues[base_variant(n)])
 _main_residues, _main_bonds = list(residues), list(bonds)
 
 # One free N-terminal and one free C-terminal instance of every amino acid,
 # each as its own two-residue chain so the terminal one really is at an end.
-# Their templates are AMBER's own NXXX/CXXX (NALA carries H1/H2/H3, CALA
-# carries OXT), so this is still tables-only -- it just stops the terminal
-# rules from depending on which residues a particular PDB happened to end
-# with.
+# Their templates are AMBER's own NXXX/CXXX (NALA carries H1/H2/H3 and types
+# its nitrogen N3, CALA carries OXT and types both oxygens O2), so this is
+# still tables-only -- it just stops the terminal rules from depending on
+# which residues a particular PDB happened to end with. Both exist in AMBER
+# for all 20 residues but appear in no capped chain, so without these pairs
+# their parameters would never be emitted at all.
 for _base in _INTERIOR:
     for _prefix, _nterm in (("N", True), ("C", False)):
         _tpl = _prefix + base_variant(_base)
         if _tpl not in _xml_residues:
             continue
         _pair = [_base, "ALA"] if _nterm else ["ALA", _base]
+        _which = 0 if _nterm else 1          # where the terminal residue sits
         _extra, _extra_bonds = _build_chain(
-            _pair, lambda n, t=_tpl, b=_base: _xml_residues[t if n == b else base_variant(n)],
+            _pair, lambda n, i, t=_tpl, w=_which: _xml_residues[t if i == w else base_variant(n)],
             first_atom_index=sum(len(r.atoms) for r in residues),
             first_residue_index=len(residues))
         _term = _extra[0] if _nterm else _extra[-1]
@@ -237,7 +238,7 @@ for _base in _INTERIOR:
         bonds.extend(_extra_bonds)
 _hie_residues, _hie_bonds = _build_chain(
     ["ACE", "ALA", "HIS", "ALA", "NME"],   # capped: OpenMM rejects a bare chain
-    lambda n: _xml_residues["HIE" if n == "HIS" else base_variant(n)],
+    lambda n, _i: _xml_residues["HIE" if n == "HIS" else base_variant(n)],
     first_atom_index=sum(len(r.atoms) for r in residues),
     first_residue_index=len(residues))
 _hie_top = _SyntheticTopology(_hie_residues, _hie_bonds)
