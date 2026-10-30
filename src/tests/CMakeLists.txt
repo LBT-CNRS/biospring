@@ -72,6 +72,7 @@ set(TEST_MODULES
     nsearch
     utils
 
+    BondedForceFieldReader
     Box
     Configuration
     ForceFieldReader

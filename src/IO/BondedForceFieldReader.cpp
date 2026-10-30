@@ -88,6 +88,38 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         if (_torsiontables.size() <= id)
             _torsiontables.resize(id + 1);
         TorsionTableEntry & tab = _torsiontables[id];
+        // A SECOND TORSIONTABLE WITH THE SAME ID IS NOT AN OVERRIDE, IT IS A
+        // CONCATENATION ACCIDENT, AND IT USED TO BE SILENT. Each generated
+        // file numbers its tables from 0 -- ProteinAtomTorsion.bi.ff has 32
+        // (0..31), RNAAtomTorsion.bi.ff 39, DNAAtomTorsion.bi.ff 42 -- so
+        // `cat` of any two of them collides on every id the smaller one uses,
+        // and the entry that happens to come last wins. Measured on
+        // 078.Ribosome70S's r70.bi.ff, which is protein + RNA concatenated:
+        // 71 TORSIONTABLE lines, 39 distinct ids, 32 collisions, and so ALL
+        // 894 protein records read a nucleic table instead of their own.
+        //
+        //   arginine's guanidinium chi, NE-CZ-NH1-HH11
+        //     amber99sb X-CA-N2-X   n=2, k = 10.0416 kJ.mol-1, phase 180
+        //     protein table 11      n=2, k = 10.0416, phase 180   correct
+        //     RNA table 11          n=2, k = 41.8399, phase 180   4.17x
+        //
+        // That axis carries 4 such paths, so it ended up 348.7 kJ.mol-1 deep
+        // where AMBER asks 168.2, and being both the stiffest torsion of the
+        // network and one acting on 1.008 Da hydrogens, it is what threw them
+        // out: 079's production run at 0.25 fs lost its arginine HH atoms
+        // between step 400 and 450 and a spring reached 5e8 A. The mis-tabled
+        // records are not even detectable from the energies -- the sum looks
+        // plausible, 23897.7 kJ.mol-1 against the correct 13613.1 on one
+        // 1476-torsion fragment.
+        //
+        // Refusing is the whole fix. Nothing legitimate redeclares a table:
+        // the generators emit each id once, and a union of two files has to
+        // renumber the second one's ids.
+        if (tab.bins != 0)
+            logging::die("BondedForceFieldReader: line %d: TORSIONTABLE %u is declared twice. Each generated "
+                         ".bi.ff numbers its tables from 0, so concatenating two of them collides -- renumber "
+                         "the second file's table ids (and its TORSION records' table column) instead",
+                         static_cast<int>(line_id), id);
         tab.bins = bins;
         tab.energy.resize(bins + 1);
         tab.torque.resize(bins + 1);
