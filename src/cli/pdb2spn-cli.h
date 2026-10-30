@@ -20,7 +20,12 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     std::string pathForceField;
     std::string pathGroup;
     std::string pathRigidBody;
-    std::string pathBondedInteraction;
+    // Several, because the generated .bi.ff files are per polymer type
+    // (protein, RNA, DNA) and a mixed system needs more than one. They must
+    // NOT be concatenated by hand: each numbers its tables from 0, so a
+    // `cat` silently collides and the later file's tables replace the
+    // earlier's. BondedForceFieldReader shifts each file's ids instead.
+    std::vector<std::string> pathsBondedInteraction;
     std::string pathStaticHydrogenBond;
     std::vector<std::string> pathOutputList;
 

@@ -65,6 +65,11 @@ class BondedForceFieldReader : public ReaderBase
     BondedForceFieldReader(const std::string & path) : ReaderBase(path) {}
     BondedForceFieldReader(const char * const path) : ReaderBase(path) {}
 
+    /// Reads the current file, APPENDING to whatever earlier calls read. Call
+    /// it once per .bi.ff, with setFileName() in between: the files are
+    /// per-polymer-type (protein, RNA, DNA) and a mixed system needs several,
+    /// but each numbers its tables from 0, so they must not be concatenated by
+    /// hand -- this shifts each file's ids instead. See `_tablebase`.
     void read();
 
     // Applies every dihedral parameter described by the file onto
@@ -106,6 +111,14 @@ class BondedForceFieldReader : public ReaderBase
   protected:
     std::vector<TorsionEntry> _torsion;
     std::vector<TorsionTableEntry> _torsiontables;
+
+    // What this file's table id 0 becomes, so several files can be read into
+    // one reader. Each generated .bi.ff numbers its own tables from 0 -- the
+    // protein, RNA and DNA files all do -- so reading a second one has to
+    // shift its ids past the first's, and shift its TORSION records' table
+    // column by the same amount. Set at the top of every read(); zero for the
+    // first file, so a single-file read is byte-identical to before.
+    size_t _tablebase = 0;
 
     using ResidueParticleIndices = std::vector<size_t>;
 

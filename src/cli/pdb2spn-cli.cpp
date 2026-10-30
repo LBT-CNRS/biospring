@@ -131,10 +131,17 @@ int main(int argc, char ** argv)
     // Parsed here rather than inside buildSprings so the file is read once,
     // before any spring exists.
     std::optional<biospring::rigidbodygroup::BondedForceFieldReader> bondedReader;
-    if (!args.pathBondedInteraction.empty())
+    if (!args.pathsBondedInteraction.empty())
     {
-        bondedReader.emplace(args.pathBondedInteraction);
-        bondedReader->read();
+        // One reader, read() once per file: it shifts each file's table ids
+        // past the previous file's, which is what the files cannot do for
+        // themselves since each numbers its own from 0.
+        bondedReader.emplace();
+        for (const std::string & path : args.pathsBondedInteraction)
+        {
+            bondedReader->setFileName(path);
+            bondedReader->read();
+        }
     }
 
     if (args.cutoff > 0)
@@ -170,11 +177,11 @@ int main(int argc, char ** argv)
         logging::info("Created %d spring(s).", topology.number_of_springs());
     }
 
-    if (!args.pathBondedInteraction.empty())
+    if (!args.pathsBondedInteraction.empty())
     {
-        logging::status("Applying bonded interaction parameters from %s (dihedralbackbone=%s, "
+        logging::status("Applying bonded interaction parameters from %zu file(s) (dihedralbackbone=%s, "
                         "dihedralsidechain=%s, dihedralplanarity=%s).",
-                         args.pathBondedInteraction.c_str(), args.dihedralBackbone ? "on" : "off",
+                         args.pathsBondedInteraction.size(), args.dihedralBackbone ? "on" : "off",
                          args.dihedralSidechain ? "on" : "off", args.dihedralPlanarity ? "on" : "off");
         // Already constructed and read() above (before any spring existed,
         // see that call site) -- reused here, not re-read.
@@ -218,7 +225,7 @@ int main(int argc, char ** argv)
 CommandLineArguments::CommandLineArguments(const std::string & name, const argparse::description_t & description,
                                            const std::string & version)
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
-      pathRigidBody(""), pathBondedInteraction(""), pathStaticHydrogenBond(""), pathOutputList(0), cutoff(-1.0),
+      pathRigidBody(""), pathsBondedInteraction(0), pathStaticHydrogenBond(""), pathOutputList(0), cutoff(-1.0),
       stiffness(1.0), charge(0.0), isStatic(false), addStaticDisulfide(false), ignoreDuplicates(false),
       ignoreMissing(false), writePdbConect(false), dihedral(false), dihedralBackbone(false),
       dihedralSidechain(false), dihedralPlanarity(false)
@@ -288,12 +295,16 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
         argparse::Argument()
             .name_short("-bondedinteraction")
             .name_long("--bondedinteraction")
-            .description("bonded interaction parameter file: AMBER's torsion terms, tabulated "
+            .description("bonded interaction parameter file(s): AMBER's torsion terms, tabulated "
                           "translated from a real force field (e.g. AMBER), a .bi.ff file. "
+                          "Takes SEVERAL files, because the generated ones are per polymer type -- a "
+                          "protein+RNA system passes both, and they must not be concatenated by hand since "
+                          "each numbers its tables from 0. "
                           "Applies none of it by itself -- see -dihedralbackbone/"
                           "-dihedralsidechain (or -dihedral, a shorthand for both dihedral flags), each an "
                           "independent opt-in; requires -rigidbody/--rigidbody")
             .metavar("INPUT_FILE")
+            .number_of_arguments("+")
             .argument_type(argparse::ArgumentType::PATH_INPUT);
 
     argparse::Argument dihedral_ = argparse::StoreTrueArgument(
@@ -410,7 +421,14 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     }
     pathGroup = _parser.get_option_value<std::string>("--grp");
     pathRigidBody = _parser.get_option_value<std::string>("--rigidbody");
-    pathBondedInteraction = _parser.get_option_value<std::string>("--bondedinteraction");
+    // Gated on option_was_provided, and empties dropped: an unset multi-value
+    // option does not come back as an empty vector, it comes back holding one
+    // empty string, which every "did the user ask for this?" test below would
+    // read as yes.
+    if (_parser.option_was_provided("--bondedinteraction"))
+        for (const std::string & path : _parser.get_option_values<std::string>("--bondedinteraction"))
+            if (!path.empty())
+                pathsBondedInteraction.push_back(path);
 
     try
     {
@@ -483,7 +501,7 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     // -bondedinteraction only retunes/extends -rigidbody's springs in place;
     // it does not build an independent spring network, so it cannot be used
     // without it.
-    if (!pathBondedInteraction.empty() && pathRigidBody.empty())
+    if (!pathsBondedInteraction.empty() && pathRigidBody.empty())
     {
         _parser.print_help();
         _parser.die("-bondedinteraction/--bondedinteraction requires -rigidbody/--rigidbody");
@@ -498,13 +516,13 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     dihedralSidechain = dihedralSidechain || dihedral;
     dihedralPlanarity = dihedralPlanarity || dihedral;
 
-    if ((dihedralBackbone || dihedralSidechain || dihedralPlanarity) && pathBondedInteraction.empty())
+    if ((dihedralBackbone || dihedralSidechain || dihedralPlanarity) && pathsBondedInteraction.empty())
     {
         _parser.print_help();
         _parser.die("-dihedral/-dihedralbackbone/-dihedralsidechain/-dihedralplanarity require "
                     "-bondedinteraction/--bondedinteraction");
     }
-    if (!pathBondedInteraction.empty() && !dihedralBackbone && !dihedralSidechain && !dihedralPlanarity)
+    if (!pathsBondedInteraction.empty() && !dihedralBackbone && !dihedralSidechain && !dihedralPlanarity)
         logging::warning("-bondedinteraction/--bondedinteraction given without -dihedral* -- "
                          "nothing from the .bi.ff file will actually be applied.");
 
@@ -560,10 +578,10 @@ void biospring::pdb2spn::CommandLineArguments::printArgumentValues() const
     if (!pathRigidBody.empty())
     {
         logging::info("    rigid-body groups: %s", pathRigidBody.c_str());
-        if (!pathBondedInteraction.empty())
+        if (!pathsBondedInteraction.empty())
         {
-            logging::info("    bonded interaction (tabulated torsions): %s",
-                          pathBondedInteraction.c_str());
+            for (const std::string & path : pathsBondedInteraction)
+                logging::info("    bonded interaction (tabulated torsions): %s", path.c_str());
             logging::info("        dihedral backbone: %s", dihedralBackbone ? "enabled" : "disabled");
             logging::info("        dihedral sidechain: %s", dihedralSidechain ? "enabled" : "disabled");
             logging::info("        dihedral planarity: %s", dihedralPlanarity ? "enabled" : "disabled");

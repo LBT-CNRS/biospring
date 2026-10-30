@@ -85,9 +85,10 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
                          "expected and %d found",
                          static_cast<int>(line_id), id, bins, static_cast<int>(2 * (bins + 1)),
                          static_cast<int>(tokens.size()) - 3);
-        if (_torsiontables.size() <= id)
-            _torsiontables.resize(id + 1);
-        TorsionTableEntry & tab = _torsiontables[id];
+        const size_t shifted = _tablebase + id;
+        if (_torsiontables.size() <= shifted)
+            _torsiontables.resize(shifted + 1);
+        TorsionTableEntry & tab = _torsiontables[shifted];
         // A SECOND TORSIONTABLE WITH THE SAME ID IS NOT AN OVERRIDE, IT IS A
         // CONCATENATION ACCIDENT, AND IT USED TO BE SILENT. Each generated
         // file numbers its tables from 0 -- ProteinAtomTorsion.bi.ff has 32
@@ -112,13 +113,15 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         // plausible, 23897.7 kJ.mol-1 against the correct 13613.1 on one
         // 1476-torsion fragment.
         //
-        // Refusing is the whole fix. Nothing legitimate redeclares a table:
-        // the generators emit each id once, and a union of two files has to
-        // renumber the second one's ids.
+        // Nothing legitimate redeclares a table: the generators emit each id
+        // once. A mixed system passes its files to -bondedinteraction
+        // SEPARATELY instead, and read() shifts each one's ids past the
+        // previous file's -- so this only ever fires within a single file,
+        // which is where it means a real mistake.
         if (tab.bins != 0)
             logging::die("BondedForceFieldReader: line %d: TORSIONTABLE %u is declared twice. Each generated "
-                         ".bi.ff numbers its tables from 0, so concatenating two of them collides -- renumber "
-                         "the second file's table ids (and its TORSION records' table column) instead",
+                         ".bi.ff numbers its tables from 0, so concatenating two of them collides -- pass them "
+                         "to -bondedinteraction as separate files instead",
                          static_cast<int>(line_id), id);
         tab.bins = bins;
         tab.energy.resize(bins + 1);
@@ -150,6 +153,9 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         if (!utils::string::from_string(entry.table, tokens[7]))
             logging::die("BondedForceFieldReader: line %d: invalid TORSION table index '%s'",
                          static_cast<int>(line_id), tokens[7].c_str());
+        // Same shift as the TORSIONTABLE above, so a record keeps naming its
+        // own file's table whichever position that file was read in.
+        entry.table += static_cast<unsigned>(_tablebase);
         _torsion.push_back(entry);
     }
     else
@@ -164,6 +170,9 @@ void BondedForceFieldReader::read()
 {
     safeOpen();
 
+    _tablebase = _torsiontables.size();
+    const size_t firsttorsion = _torsion.size();
+
     std::string buffer;
     size_t line_id = 0;
     while (_instream)
@@ -175,6 +184,19 @@ void BondedForceFieldReader::read()
             _parse_line(buffer, line_id);
     }
     close();
+
+    // A record pointing at a table this file never declared used to land on a
+    // default-constructed entry, which has no samples at all. With several
+    // files it would be worse than that: the index is shifted by _tablebase,
+    // so an id one past the end reaches into the NEXT file's tables and a
+    // negative-looking one into the previous file's. Checking here is what
+    // makes the shift safe.
+    for (size_t i = firsttorsion; i < _torsion.size(); ++i)
+        if (_torsion[i].table >= _torsiontables.size() || _torsiontables[_torsion[i].table].bins == 0)
+            logging::die("BondedForceFieldReader: %s: TORSION %s %s names table %zu, which the file never "
+                         "declares",
+                         getFileName().c_str(), _torsion[i].resname.c_str(), _torsion[i].atoms[0].c_str(),
+                         _torsion[i].table - _tablebase);
 
     logging::info("BondedForceFieldReader: read %zu torsion(s) over %zu table(s).", _torsion.size(),
                   _torsiontables.size());
