@@ -1,9 +1,11 @@
 
 #include "IO/PDBReader.h"
+#include "IO/hybrid36.hpp"
 #include "logging.h"
 #include "utils/string.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <iostream>
 
@@ -19,6 +21,34 @@ static bool sameParticles(const topology::Particle & left, const topology::Parti
     return (left.properties().name() == right.properties().name() &&
             left.properties().residue_name() == right.properties().residue_name() &&
             left.properties().residue_id() == right.properties().residue_id());
+}
+
+// One coordinate field, with the whole field required to be a number.
+//
+// The reason this is not a bare std::stof: that function parses as far as it
+// can and returns, so a line whose columns have shifted -- which a serial over
+// 99999 used to do -- yields a partial number instead of an error. Measured on
+// the real atom 100000 of 079.Ribosome70S_AllAtom: substr(38, 8) is "6 336.58"
+// and std::stof returns 6 for a true 336.581. Nothing was logged.
+static float _coordinate(const std::string & line, const size_t offset)
+{
+    const std::string field = line.substr(offset, 8);
+    try
+    {
+        size_t used = 0;
+        const float value = std::stof(field, &used);
+        while (used < field.size() && std::isspace(static_cast<unsigned char>(field[used])))
+            ++used;
+        if (used == field.size())
+            return value;
+    }
+    catch (const std::exception &)
+    {
+    }
+    logging::die("PDB coordinate field \"%s\" is not a number -- the record's columns "
+                 "are shifted, which a serial over 99999 or a residue over 9999 used to do",
+                 field.c_str());
+    return 0.0f;
 }
 
 //
@@ -41,14 +71,21 @@ topology::Particle PDBReader::parseAtomLine(const std::string & line)
         logging::error("PDB format requires a line that is at least 47 characters long");
         logging::die("line too short: '%s'", line.c_str());
     }
-    int id = std::stoi(line.substr(6, 5));
+    // Hybrid-36 on the serial and the residue number, which reads a decimal
+    // field exactly as std::stoi did and additionally reads the base-36 form
+    // the writer now emits past 99999 atoms or 9999 residues. See
+    // IO/hybrid36.hpp for why the plain %5d could not be kept.
+    int id = static_cast<int>(biospring::io::hybrid36::decode(5, line.substr(6, 5)));
     std::string name = biospring::utils::string::trim(line.substr(12, 4));
     std::string resname = biospring::utils::string::trim(line.substr(17, 3));
     std::string chain = biospring::utils::string::trim(line.substr(21, 1));
-    int resid = std::stoi(line.substr(22, 4));
-    float x = std::stof(line.substr(30, 8));
-    float y = std::stof(line.substr(38, 8));
-    float z = std::stof(line.substr(46, 8));
+    int resid = static_cast<int>(biospring::io::hybrid36::decode(4, line.substr(22, 4)));
+    // std::stof stops at the first character it cannot use and does NOT throw,
+    // so a shifted line gave 6 for "6 336.58" and placed the atom 560 A away
+    // in silence. Require the whole field to be consumed.
+    float x = _coordinate(line, 30);
+    float y = _coordinate(line, 38);
+    float z = _coordinate(line, 46);
     float occupancy = line.size() >= 60 && !biospring::utils::string::trim(line.substr(54, 6)).empty()
                            ? std::stof(line.substr(54, 6))
                            : 1.0f;
@@ -85,7 +122,7 @@ std::vector<std::pair<size_t, size_t>> PDBReader::parseConectLine(const std::str
     size_t serial = 0;
     try
     {
-        serial = static_cast<size_t>(std::stoi(line.substr(6, 5)));
+        serial = static_cast<size_t>(biospring::io::hybrid36::decode(5, line.substr(6, 5)));
     }
     catch (const std::exception &)
     {
@@ -96,7 +133,16 @@ std::vector<std::pair<size_t, size_t>> PDBReader::parseConectLine(const std::str
     // Helper function to try parsing and add to vector if successful
     auto try_add_pair = [&](size_t start_index) {
         try {
-            size_t connected_serial = static_cast<size_t>(std::stoi(line.substr(start_index, 5)));
+            // A CONECT record carries one to four serials and stops. The
+            // absent ones are blank columns or no columns at all, and
+            // hybrid36::decode reads a blank field as 0 -- which an ATOM
+            // record needs and this one must not take for a serial, or every
+            // two-serial CONECT would claim a bond to a nonexistent atom 0.
+            if (start_index >= line.size() ||
+                biospring::utils::string::trim(line.substr(start_index, 5)).empty())
+                return;
+            size_t connected_serial =
+                static_cast<size_t>(biospring::io::hybrid36::decode(5, line.substr(start_index, 5)));
             pairs_indexes.emplace_back(serial, connected_serial);
         } catch (const std::exception&) {
             // Catches std::invalid_argument and std::out_of_range

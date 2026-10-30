@@ -90,6 +90,7 @@ set(TEST_MODULES
     PeptideSite
     StaticBondBuilder
     Vector3f
+    hybrid36
 )
 
 # Creates the test executables for each module.

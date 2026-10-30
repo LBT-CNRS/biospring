@@ -1,5 +1,6 @@
 #include "IO/PDBWriter.h"
 
+#include "IO/hybrid36.hpp"
 #include "Particle.h"
 #include "SpringNetwork.h"
 #include "utils/string.hpp"
@@ -18,7 +19,18 @@ static std::string model_footer() { return biospring::utils::string::format("END
 
 static std::string atom_record(const biospring::spn::Particle & p)
 {
-    static const std::string fmt = "%-6s%5d %4s%1s%3s %1s%4d%1s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2s%2s";
+    static const std::string fmt = "%-6s%5s %4s%1s%3s %1s%4s%1s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2s%2s";
+
+    // Hybrid-36 on the serial and the residue number: identical to %5d and
+    // %4d everywhere they fit, and the only thing that keeps the columns
+    // aligned past 99999 atoms or 9999 residues. See IO/hybrid36.hpp.
+    const std::string serial = biospring::io::hybrid36::encode(5, static_cast<long>(p.getId()) + 1);
+    // getResId() is UNSIGNED, and a negative residue number -- 079 has -9 --
+    // reaches it as 2^32 - 9. The old "%4d" printed it correctly only by
+    // accident: varargs let printf reinterpret those bits as an int. Widening
+    // straight to long keeps 4294967287 instead, so the int cast is what
+    // actually reproduces the old behaviour.
+    const std::string resid = biospring::io::hybrid36::encode(4, static_cast<long>(static_cast<int>(p.getResId())));
 
     // Particle name formatting.
     // If the name has less than 4 letters, it is left aligned on column 14, else it's left align on column 13.
@@ -41,16 +53,18 @@ static std::string atom_record(const biospring::spn::Particle & p)
     else if (p.getElectronCharge() < 0)
         charge = biospring::utils::string::format("%d", p.getElectronCharge());
 
-    return biospring::utils::string::format(fmt, "ATOM", p.getId() + 1, name.c_str(), " ", p.getResName().c_str(),
-                                            p.getChainName().c_str(), p.getResId(), " ", p.getPosition().getX(),
+    return biospring::utils::string::format(fmt, "ATOM", serial.c_str(), name.c_str(), " ", p.getResName().c_str(),
+                                            p.getChainName().c_str(), resid.c_str(), " ", p.getPosition().getX(),
                                             p.getPosition().getY(), p.getPosition().getZ(), p.getOccupancy(),
                                             p.getTempFactor(), p.getElementName().c_str(), charge.c_str());
 }
 
 static std::string conect_record(const biospring::spn::Spring & s)
 {
-    static const std::string fmt = "CONECT%5d%5d";
-    return biospring::utils::string::format(fmt, s.getParticle1().getId() + 1, s.getParticle2().getId() + 1);
+    static const std::string fmt = "CONECT%5s%5s";
+    return biospring::utils::string::format(
+        fmt, biospring::io::hybrid36::encode(5, static_cast<long>(s.getParticle1().getId()) + 1).c_str(),
+        biospring::io::hybrid36::encode(5, static_cast<long>(s.getParticle2().getId()) + 1).c_str());
 }
 
 void PDBWriter::writeModel(size_t modelid)
