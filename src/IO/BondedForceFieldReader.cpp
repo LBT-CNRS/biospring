@@ -92,7 +92,7 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         // A SECOND TORSIONTABLE WITH THE SAME ID IS NOT AN OVERRIDE, IT IS A
         // CONCATENATION ACCIDENT, AND IT USED TO BE SILENT. Each generated
         // file numbers its tables from 0 -- ProteinAtomTorsion.bi.ff has 32
-        // (0..31), RNAAtomTorsion.bi.ff 39, DNAAtomTorsion.bi.ff 42 -- so
+        // (0..31), RNAAtomTorsion.bi.ff 39, DNAAtomTorsion.bi.ff 44 -- so
         // `cat` of any two of them collides on every id the smaller one uses,
         // and the entry that happens to come last wins. Measured on
         // 078.Ribosome70S's r70.bi.ff, which is protein + RNA concatenated:
