@@ -171,7 +171,9 @@ keeps the same behaviour.
 chi1-4 dihedral (the SIDECHAIN family in the `.bi.ff`).
 * **dihedralplanarity.enable = 1** *(boolean)* Same as `dihedralphi.enable`, for the PLANARITY
 impropers.
-* **dihedralnucleicbackbone.enable = 1** *(boolean)* Same, for a nucleotide's alpha..zeta.
+* **dihedralnucleicbackbone.enable = 1** *(boolean)* Same, for a nucleotide's alpha..zeta,
+and for the 5'-OH and 3'-OH rotors of a chain end: those turn about the beta and epsilon axes
+themselves, so they belong here rather than with the 2'-OH, which turns about C2'-O2'.
 * **dihedralnucleicchi.enable = 1** *(boolean)* Same, for the glycosidic torsion and RNA's
 2'-OH rotor.
 * **dihedralnucleicsugar.enable = 1** *(boolean)* Same, for the four furanose ring bonds. A

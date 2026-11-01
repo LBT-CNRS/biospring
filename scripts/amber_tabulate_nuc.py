@@ -46,6 +46,13 @@ def family_of(n2, n3, same_residue):
     # The 2'-OH rotor hangs off the sugar, not the chain.
     if b == frozenset(("C2'", "O2'")):
         return "NUCLEIC_CHI"
+    # The two TERMINAL hydroxyl rotors are not given that exception, and the
+    # difference is the axis rather than the hydrogen: HO5' turns about O5'-C5'
+    # and HO3' about C3'-O3', which are the beta and epsilon axes themselves,
+    # where the 2'-OH turns about C2'-O2', a bond the chain never passes
+    # through. So they fall through to the test below and come out
+    # NUCLEIC_BACKBONE -- which also means -dihedralbackbone alone holds them,
+    # and no run can enable the backbone and leave a chain end spinning.
     backbone = {"P", "O5'", "C5'", "C4'", "C3'", "O3'", "OP1", "OP2"}
     if n2 in backbone and n3 in backbone:
         return "NUCLEIC_BACKBONE"
@@ -70,61 +77,127 @@ def lookup(cls):
     return None
 
 
-tables, table_of, records, seen = [], {}, [], set()
-per_family = defaultdict(int)
+# AMBER's terminal variants of a residue -- A5/A3/AN beside A, DA5/DA3/DAN
+# beside DA -- and they are not spelling variants: the 5' template drops the
+# phosphate and caps O5' with HO5', the 3' template caps O3' with HO3'.
+# Enumerating the interior template alone is what left both terminal hydroxyl
+# rotors with no torsion at all, measured on 075's hairpin against
+# amber14/RNA.OL3: 6 quadruplets short, 6.2133 kJ/mol, the 5' and 3' hydroxyl
+# hydrogens free to spin while the mesh held their bond and their angle.
+#
+# The records go out under the INTERIOR name all the same. The .bi.ff reader
+# matches a record on the PDB residue name, and a PDB calls its terminal
+# guanosine "G", never "G3" -- and it skips any record whose atoms it cannot
+# resolve, so the two hydroxyl rules cost an interior residue nothing.
+TERMINAL_SUFFIXES = ("5", "3", "N")
 
-for resname in RESIDUES:
-    classes = tables_ff.atoms_of(resname)
-    internal, _external = tables_ff.bonds_of(resname)
-    if not classes:
-        print(f"  {resname}: absent du fichier, ignore")
-        continue
 
-    # Three residues of the same kind, linked O3'(i) - P(i+1): enough for every
-    # torsion the central one owns, including the two that cross a link.
-    atoms = {}       # (offset, name) -> class
-    for off in (-1, 0, 1):
+def templates_of(resname):
+    """The interior template, then whichever terminal variants the file has.
+
+    Interior first, so it is what assigns the table ids and what wins a
+    disagreement -- see the conflict check in the enumeration below, which is
+    fatal rather than silent.
+    """
+    return [resname] + [resname + s for s in TERMINAL_SUFFIXES
+                        if tables_ff.atoms_of(resname + s)]
+
+
+def chain_of(template, interior):
+    """Three residues linked O3'(i) - P(i+1), the middle one `template`.
+
+    The two neighbours are always the INTERIOR template, whatever the middle
+    one is: no quadruplet crossing a link can reach a terminal hydroxyl, since
+    a residue that HAS a neighbour on that side carries a phosphate there and
+    no -OH at all.
+
+    The links themselves are read off the template's own ExternalBond list
+    rather than assumed. A 5' template has no P, so nothing joins it to the
+    residue before it; a 3' template's O3' bonds to no next P. Adding a link
+    the template denies would invent quadruplets AMBER never parameterised.
+    """
+    mid, (mid_internal, external) = tables_ff.atoms_of(template), tables_ff.bonds_of(template)
+    nei, (nei_internal, _) = tables_ff.atoms_of(interior), tables_ff.bonds_of(interior)
+    atoms, adj = {}, defaultdict(list)
+    for off, classes, internal in ((-1, nei, nei_internal), (0, mid, mid_internal),
+                                   (1, nei, nei_internal)):
         for n, c in classes.items():
             atoms[(off, n)] = c
-    adj = defaultdict(list)
-    for off in (-1, 0, 1):
         for a, b in internal:
             adj[(off, a)].append((off, b))
             adj[(off, b)].append((off, a))
-    for off in (-1, 0):
-        adj[(off, "O3'")].append((off + 1, "P"))
-        adj[(off + 1, "P")].append((off, "O3'"))
+    if "P" in external:
+        adj[(-1, "O3'")].append((0, "P"))
+        adj[(0, "P")].append((-1, "O3'"))
+    if "O3'" in external:
+        adj[(0, "O3'")].append((1, "P"))
+        adj[(1, "P")].append((0, "O3'"))
+    return atoms, adj
 
-    def spell(k):
-        off, n = k
-        return ("+" if off > 0 else "-") * abs(off) + n
 
-    for a2 in [(0, n) for n in classes]:
-        for a3 in adj[a2]:
-            if (a3, a2) < (a2, a3):
-                continue
-            for a1 in adj[a2]:
-                if a1 == a3:
+def spell(k):
+    """The .bi.ff spelling of an atom, relative to the central residue."""
+    off, n = k
+    return ("+" if off > 0 else "-") * abs(off) + n
+
+
+tables, table_of, records, seen = [], {}, [], {}
+per_family = defaultdict(int)
+
+
+def remember(key, tkey, template, names):
+    """True the first time a quadruplet is met, False when it repeats.
+
+    Nearly every quadruplet of a terminal template is one the interior
+    template already carried, so repeats are the rule here and not a mistake.
+    A repeat carrying DIFFERENT parameters would be one, and an unanswerable
+    one: a record names its residue the way a PDB does, so there is no way to
+    say "this one, but only at a 3' end". Neither amber14 nucleic file does
+    it -- the terminal O5'/O3' is retyped OS -> OH, but every quadruplet it
+    sits in resolves through the same wildcard key either way -- so this fires
+    on a force field that has changed under the generator, not on these two.
+    """
+    if key in seen:
+        if seen[key] != tkey:
+            sys.exit(f"  {template} : {' '.join(names)} serait emis sous {key[0]} avec des "
+                     f"parametres que le gabarit interieur ne partage pas -- le format .bi.ff "
+                     f"n'a pas de quoi distinguer un terminus")
+        return False
+    seen[key] = tkey
+    return True
+
+
+for resname in RESIDUES:
+    if not tables_ff.atoms_of(resname):
+        print(f"  {resname}: absent du fichier, ignore")
+        continue
+
+    for template in templates_of(resname):
+        atoms, adj = chain_of(template, resname)
+        for a2 in [(0, n) for n in tables_ff.atoms_of(template)]:
+            for a3 in adj[a2]:
+                if (a3, a2) < (a2, a3):
                     continue
-                for a4 in adj[a3]:
-                    if a4 == a2 or a4 == a1:
+                for a1 in adj[a2]:
+                    if a1 == a3:
                         continue
-                    cls = tuple(atoms[k] for k in (a1, a2, a3, a4))
-                    terms = lookup(cls)
-                    if not terms:
-                        continue
-                    names = tuple(spell(k) for k in (a1, a2, a3, a4))
-                    key = (resname,) + names
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    tkey = tuple(sorted((int(n), round(float(k), 6), round(float(p), 6)) for (n, k, p) in terms))
-                    if tkey not in table_of:
-                        table_of[tkey] = len(tables)
-                        tables.append(tabulate(terms))
-                    fam = family_of(a2[1], a3[1], a2[0] == a3[0])
-                    records.append(f"TORSION\t{resname}\t{fam}\t" + "\t".join(names) + f"\t{table_of[tkey]}")
-                    per_family[fam] += 1
+                    for a4 in adj[a3]:
+                        if a4 == a2 or a4 == a1:
+                            continue
+                        cls = tuple(atoms[k] for k in (a1, a2, a3, a4))
+                        terms = lookup(cls)
+                        if not terms:
+                            continue
+                        names = tuple(spell(k) for k in (a1, a2, a3, a4))
+                        tkey = tuple(sorted((int(n), round(float(k), 6), round(float(p), 6)) for (n, k, p) in terms))
+                        if not remember((resname,) + names, tkey, template, names):
+                            continue
+                        if tkey not in table_of:
+                            table_of[tkey] = len(tables)
+                            tables.append(tabulate(terms))
+                        fam = family_of(a2[1], a3[1], a2[0] == a3[0])
+                        records.append(f"TORSION\t{resname}\t{fam}\t" + "\t".join(names) + f"\t{table_of[tkey]}")
+                        per_family[fam] += 1
 
 # ---- impropers -------------------------------------------------------------
 #
@@ -147,59 +220,48 @@ for _e in tables_ff.root.find("PeriodicTorsionForce").findall("Improper"):
 import itertools
 
 for resname in RESIDUES:
-    classes = tables_ff.atoms_of(resname)
-    internal, _ext = tables_ff.bonds_of(resname)
-    if not classes:
+    if not tables_ff.atoms_of(resname):
         continue
-    atoms, adj = {}, defaultdict(list)
-    for off in (-1, 0, 1):
-        for n, c in classes.items():
-            atoms[(off, n)] = c
-        for a, b in internal:
-            adj[(off, a)].append((off, b))
-            adj[(off, b)].append((off, a))
-    for off in (-1, 0):
-        adj[(off, "O3'")].append((off + 1, "P"))
-        adj[(off + 1, "P")].append((off, "O3'"))
-
-    def spell(k):
-        off, n = k
-        return ("+" if off > 0 else "-") * abs(off) + n
-
-    for hub in [(0, n) for n in classes]:
-        subs = adj[hub]
-        if len(subs) != 3:
-            continue
-        best = None
-        for (key, terms, nwild) in improper_entries:
-            if key[0] not in ("", atoms[hub]):
+    # Over the terminal templates too, for the same reason as the propers, even
+    # though neither hydroxyl adds one: a hub needs exactly three substituents
+    # and a capped O5'/O3' has two, just as the interior one does. Enumerating
+    # them anyway is what makes that a measurement rather than an assumption.
+    for template in templates_of(resname):
+        atoms, adj = chain_of(template, resname)
+        for hub in [(0, n) for n in tables_ff.atoms_of(template)]:
+            subs = adj[hub]
+            if len(subs) != 3:
                 continue
-            for perm in itertools.permutations(subs):
-                pc = [atoms[k] for k in perm]
-                if all(key[j] in ("", pc[k]) for j, k in ((1, 0), (2, 1), (3, 2))):
-                    if best is None or nwild < best[0]:
-                        best = (nwild, perm, terms)
-                    break
-        if best is None:
-            continue
-        _, perm, terms = best
-        names = tuple(spell(k) for k in (perm[0], perm[1], hub, perm[2]))
-        key2 = (resname, "IMP") + names
-        if key2 in seen:
-            continue
-        seen.add(key2)
-        tkey = tuple(sorted((int(n), round(float(k), 6), round(float(p), 6)) for (n, k, p) in terms))
-        if tkey not in table_of:
-            table_of[tkey] = len(tables)
-            tables.append(tabulate(terms))
-        # Impropers share the PLANARITY family with the protein side: it is
-        # what the enum calls an improper, whatever the chemistry.
-        records.append(f"TORSION\t{resname}\tPLANARITY\t" + "\t".join(names) + f"\t{table_of[tkey]}")
-        per_family["PLANARITY"] += 1
+            best = None
+            for (key, terms, nwild) in improper_entries:
+                if key[0] not in ("", atoms[hub]):
+                    continue
+                for perm in itertools.permutations(subs):
+                    pc = [atoms[k] for k in perm]
+                    if all(key[j] in ("", pc[k]) for j, k in ((1, 0), (2, 1), (3, 2))):
+                        if best is None or nwild < best[0]:
+                            best = (nwild, perm, terms)
+                        break
+            if best is None:
+                continue
+            _, perm, terms = best
+            names = tuple(spell(k) for k in (perm[0], perm[1], hub, perm[2]))
+            tkey = tuple(sorted((int(n), round(float(k), 6), round(float(p), 6)) for (n, k, p) in terms))
+            if not remember((resname, "IMP") + names, tkey, template, names):
+                continue
+            if tkey not in table_of:
+                table_of[tkey] = len(tables)
+                tables.append(tabulate(terms))
+            # Impropers share the PLANARITY family with the protein side: it is
+            # what the enum calls an improper, whatever the chemistry.
+            records.append(f"TORSION\t{resname}\tPLANARITY\t" + "\t".join(names) + f"\t{table_of[tkey]}")
+            per_family["PLANARITY"] += 1
 
 out = [
     f"# AMBER's {KIND} torsion terms, tabulated, one record per four-atom",
-    "# quadruplet enumerated from the residue topology.",
+    "# quadruplet enumerated from the residue topology -- the interior templates",
+    "# and AMBER's 5'/3' terminal ones, whose records are written under the",
+    "# interior name because that is what a PDB calls a terminal residue.",
     "#",
     "# TORSIONTABLE <id> <bins> <E_0> <T_0> ... over phi in [-180, 180]",
     "# TORSION <res> <FAMILY> <a1> <a2> <a3> <a4> <table>",
