@@ -6,6 +6,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "topology/TerminalPosition.hpp"
+
 class Reduce;
 
 namespace biospring
@@ -16,8 +18,9 @@ namespace reduce
 class ReduceRule
 {
   public:
-    ReduceRule(const std::string & name, const std::string & resname)
-        : _name(name), _residue_name(resname), _atomnames(), _isallatom(false)
+    ReduceRule(const std::string & name, const std::string & resname,
+               topology::TerminalPosition position = topology::POSITION_INTERIOR)
+        : _name(name), _residue_name(resname), _position(position), _atomnames(), _isallatom(false)
     {
     }
 
@@ -30,6 +33,33 @@ class ReduceRule
     void setResidueName(const std::string & resname) { _residue_name = resname; };
     const std::string & getResidueName() const { return _residue_name; }
     const std::string & residue_name() const { return _residue_name; }
+
+    // Where in its chain the residue has to sit for this rule to apply, from
+    // the ":NTER"/":CTER" qualifier on its residue name. A residue takes the
+    // rules matching its own position INSTEAD of the unqualified ones -- see
+    // topology/TerminalPosition.hpp and ReduceRuleContainer::get_rules_for_residue.
+    void setPosition(topology::TerminalPosition position) { _position = position; }
+    topology::TerminalPosition position() const { return _position; }
+
+    // The force-field type this rule's grain is parameterised from.
+    //
+    // A positional rule keeps the grain NAME of the interior rule it replaces
+    // -- a terminal alanine's nitrogen is still "AN" -- because that name is
+    // the particle's identity for every file keyed on it: the .hbond donor and
+    // acceptor tables, the .psite peptide sites, and the reverse lookup that
+    // resolves a .rbody or .bi.ff atom name onto a renamed particle
+    // (RigidBodyBuilder::_translate). Renaming the terminal grains would drop
+    // every terminal residue out of all four, silently.
+    //
+    // What the position changes is the PARAMETERS, so it is the force-field key
+    // that carries the qualifier: "AN:NTER" holds AMBER's ammonium charge
+    // (+0.1414 e) where "AN" holds the amide's (-0.4157 e). Same spelling as
+    // the .grp's own qualifier, so amber.nbi.ff reads as a variant table.
+    std::string forcefield_key() const
+    {
+        const std::string qualifier = topology::terminal_qualifier(_position);
+        return qualifier.empty() ? _name : _name + ":" + qualifier;
+    }
 
     const std::unordered_set<std::string> & getAtomNames() const { return _atomnames; }
 
@@ -64,6 +94,7 @@ class ReduceRule
     std::string _name;
     std::string _canonicalatom;
     std::string _residue_name;
+    topology::TerminalPosition _position;
     std::unordered_set<std::string> _atomnames;
 
     bool _isallatom;

@@ -139,3 +139,103 @@ TEST_F(TestReduceRuleReader, file_name_not_set_failure)
 
 // ======================================================================================
 //
+
+// ======================================================================================
+// Terminal qualifier
+// ======================================================================================
+//
+// The residue column may carry ":NTER" or ":CTER", the same qualifier the
+// .bi.ff carries on the same column, read by the same helper
+// (topology::parse_residue_field) so the two files cannot drift apart. Here:
+// that the reader keeps AMBER's own residue name while recording the position,
+// and refuses anything else.
+
+TEST_F(TestReduceRuleReader, a_residue_name_without_a_qualifier_is_interior)
+{
+    writeGRP();
+    reader.read();
+
+    EXPECT_EQ(biospring::topology::POSITION_INTERIOR, reader.rules()["ACA"].position());
+}
+
+TEST_F(TestReduceRuleReader, a_qualifier_sets_the_position_and_leaves_the_residue_name_alone)
+{
+    content = "AN ALA:NTER N\n"
+              "AOXT ALA:CTER OXT\n";
+    writeGRP();
+    reader.read();
+
+    const auto & rules = reader.rules();
+    ASSERT_EQ(2, rules.size());
+
+    EXPECT_EQ("AN", rules[0].getName());
+    EXPECT_EQ("ALA", rules[0].getResidueName());
+    EXPECT_EQ(biospring::topology::POSITION_NTER, rules[0].position());
+    EXPECT_TRUE(rules[0].hasAtomNamed("N"));
+
+    EXPECT_EQ("AOXT", rules[1].getName());
+    EXPECT_EQ("ALA", rules[1].getResidueName());
+    EXPECT_EQ(biospring::topology::POSITION_CTER, rules[1].position());
+}
+
+// The grain name is deliberately the same as the interior rule's: it is the
+// particle's identity for the .hbond, .psite and .rbody lookups, and only the
+// PARAMETERS change at a terminus. So the two rules must coexist, and be told
+// apart by position rather than by name.
+TEST_F(TestReduceRuleReader, a_terminal_rule_may_reuse_the_interior_rule_s_name)
+{
+    content = "AN ALA N\n"
+              "AN ALA:NTER N\n";
+    writeGRP();
+    reader.read();
+
+    const auto & rules = reader.rules();
+    ASSERT_EQ(2, rules.size());
+    EXPECT_EQ(1, rules.get_rules_for_residue("ALA", biospring::topology::POSITION_INTERIOR).size());
+    EXPECT_EQ(1, rules.get_rules_for_residue("ALA", biospring::topology::POSITION_NTER).size());
+    EXPECT_EQ(0, rules.get_rules_for_residue("ALA", biospring::topology::POSITION_CTER).size());
+    // And the position-blind overload, which is what resolves a .rbody or
+    // .bi.ff atom name onto a renamed particle, still sees both.
+    EXPECT_EQ(2, rules.get_rules_for_residue("ALA").size());
+}
+
+// The force-field key is where the qualifier shows up, because that is what the
+// position actually changes.
+TEST_F(TestReduceRuleReader, the_force_field_key_carries_the_qualifier)
+{
+    content = "AN ALA N\n"
+              "AN ALA:NTER N\n"
+              "AOXT ALA:CTER OXT\n";
+    writeGRP();
+    reader.read();
+
+    const auto & rules = reader.rules();
+    EXPECT_EQ("AN", rules[0].forcefield_key());
+    EXPECT_EQ("AN:NTER", rules[1].forcefield_key());
+    EXPECT_EQ("AOXT:CTER", rules[2].forcefield_key());
+}
+
+TEST_F(TestReduceRuleReader, an_unknown_qualifier_is_refused)
+{
+    content = "AN ALA:MIDDLE N\n";
+    writeGRP();
+
+    EXPECT_DEATH(reader.read(),
+                 "ReduceRuleReader: line 1: 'ALA:MIDDLE' is not a residue name with at most one terminal qualifier");
+}
+
+TEST_F(TestReduceRuleReader, two_qualifiers_are_refused)
+{
+    content = "AN ALA:NTER:CTER N\n";
+    writeGRP();
+
+    EXPECT_DEATH(reader.read(), "at most one terminal qualifier");
+}
+
+TEST_F(TestReduceRuleReader, a_qualifier_with_no_residue_name_is_refused)
+{
+    content = "AN :NTER N\n";
+    writeGRP();
+
+    EXPECT_DEATH(reader.read(), "at most one terminal qualifier");
+}

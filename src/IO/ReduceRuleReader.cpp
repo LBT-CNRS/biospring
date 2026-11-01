@@ -22,16 +22,29 @@ ReduceRule ReduceRuleReader::parse_rule(const std::string & line, size_t line_id
     }
 
     std::string rule_name = tokens[0];
-    std::string residue_name = tokens[1];
+
+    // "<resname>" or "<resname>:NTER|CTER", the same qualifier the .bi.ff
+    // carries on the same column with the same meaning. The residue name stays
+    // AMBER's own in both cases -- "ALA", never "NALA".
+    std::string residue_name;
+    topology::TerminalPosition position;
+    if (!topology::parse_residue_field(tokens[1], residue_name, position))
+    {
+        logging::die("ReduceRuleReader: line %d: '%s' is not a residue name with at most one terminal qualifier "
+                     "(expected '<resname>', '<resname>:NTER' or '<resname>:CTER')",
+                     line_id, tokens[1].c_str());
+    }
 
     // Rule names are not required to be globally unique: the same grain name
     // (e.g. the nucleic acid backbone beads in CGZaccharias.grp) can
     // legitimately be reused across different residues that reduce to the
-    // same physical bead type. Rules are always looked up by residue name
-    // (see ReduceRuleContainer::get_rules_for_residue), never by name alone.
+    // same physical bead type, and a terminal rule deliberately reuses the name
+    // of the interior rule it replaces (see ReduceRule::forcefield_key). Rules
+    // are always looked up by residue name and chain position (see
+    // ReduceRuleContainer::get_rules_for_residue), never by name alone.
 
-    // Initializes the rule using its name and residue name.
-    ReduceRule rule(rule_name, residue_name);
+    // Initializes the rule using its name, residue name and chain position.
+    ReduceRule rule(rule_name, residue_name, position);
 
     // Iterates over the atom names composing the grain in the line.
     for (size_t i = 2; i < tokens.size(); i++)

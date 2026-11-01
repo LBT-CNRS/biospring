@@ -199,21 +199,25 @@ size_t place(topology::Topology & top, const std::string & name, const std::stri
     return top.number_of_particles() - 1;
 }
 
-// `nresidues` alanines in one chain, numbered from 1, in particle order. The
-// first carries the ammonium's H1 and the last the carboxylate's OXT, so the
-// terminal records above have atoms to resolve; every residue carries
-// N/CA/C/O.
-void chain(topology::Topology & top, const std::string & name, int nresidues)
+// `nresidues` alanines in one chain, numbered from 1, in particle order. Every
+// residue carries N/CA/C/O; `capped` adds the ammonium's H1 to the first and
+// the carboxylate's OXT to the last.
+//
+// Those two atoms do more than give the terminal records something to resolve:
+// they are what makes each end a FREE terminus at all. A chain end carrying
+// neither is a carved-out fragment, whose backbone is the interior one, and it
+// keeps the interior records -- see topology::is_nterminal_only_atom.
+void chain(topology::Topology & top, const std::string & name, int nresidues, bool capped = true)
 {
     for (int r = 1; r <= nresidues; ++r)
     {
         place(top, "N", name, r);
-        if (r == 1)
+        if (r == 1 && capped)
             place(top, "H1", name, r);
         place(top, "CA", name, r);
         place(top, "C", name, r);
         place(top, "O", name, r);
-        if (r == nresidues)
+        if (r == nresidues && capped)
             place(top, "OXT", name, r);
     }
 }
@@ -251,7 +255,9 @@ TEST(BondedForceFieldReaderTerminal, AnUnknownQualifierIsRefused)
 {
     const std::string content = std::string(TERMINAL_TABLES) + "TORSION\tALA:MIDDLE\tPSI\tN\tCA\tC\t+N\t0\n";
     BondedForceFieldReader reader(write(content));
-    EXPECT_DEATH(reader.read(), "unknown terminal qualifier 'MIDDLE'");
+    // The message names the whole field, so it shows the offending qualifier
+    // and what it was written on.
+    EXPECT_DEATH(reader.read(), "'ALA:MIDDLE' is not a residue name with at most one terminal qualifier");
 }
 
 TEST(BondedForceFieldReaderTerminal, TwoQualifiersAreRefused)
@@ -372,7 +378,7 @@ TEST(BondedForceFieldReaderTerminal, TheFallbackIsPerResidueName)
 }
 
 // A lone residue is both ends at once. AMBER has no template for one, so it
-// takes the N-terminal set -- see _wanted_position.
+// takes the N-terminal set -- see topology::wanted_position.
 TEST(BondedForceFieldReaderTerminal, ALoneResidueTakesTheNTerminalSet)
 {
     BondedForceFieldReader reader(write(std::string(TERMINAL_TABLES) + NTER_ROTOR + CTER_CARBOXYLATE));
@@ -385,4 +391,68 @@ TEST(BondedForceFieldReaderTerminal, ALoneResidueTakesTheNTerminalSet)
     ASSERT_EQ(top.torsions().size(), 1u);
     EXPECT_EQ(top.torsions()[0].family, static_cast<unsigned>(spn::SpringNetwork::DIHEDRAL_PHI));
     EXPECT_EQ(top.torsions()[0].table, 1u);
+}
+
+// A chain end with neither the ammonium nor the carboxylate is a FRAGMENT of a
+// larger chain, not a free terminus, and its backbone torsions are the interior
+// ones. Measured on the examples: 056's lone methionine and 4 of 077's chain
+// ends are cuts of exactly this kind, and reading the position off the chain
+// alone gave them the terminal parameters -- a psi suppressed where amber99sb
+// really does assign one, and, through the .grp qualifier that shares this rule,
+// a charge of +0.60 e on a residue the structure says is neutral.
+TEST(BondedForceFieldReaderTerminal, ACarvedOutChainEndKeepsTheInteriorSet)
+{
+    BondedForceFieldReader reader(write(std::string(TERMINAL_TABLES) + INTERIOR_PSI + NTER_ROTOR));
+    reader.read();
+
+    topology::Topology top;
+    chain(top, "A", 3, /* capped */ false);
+    reader.buildSprings(top, nullptr, true, true, true);
+
+    // Residue 1 now keeps its interior psi -- which it could not when the
+    // position came from the chain alone -- and residue 2 keeps its own.
+    // Residue 3 has no following residue, so its psi does not exist. The rotor
+    // has no H1 to resolve either way, so what this measures is the psi.
+    ASSERT_EQ(top.torsions().size(), 2u);
+    std::set<int> residues;
+    for (const auto & t : top.torsions())
+    {
+        EXPECT_EQ(t.family, static_cast<unsigned>(spn::SpringNetwork::DIHEDRAL_PSI));
+        EXPECT_EQ(t.table, 0u);
+        residues.insert(first_residue_of(top, t));
+    }
+    EXPECT_EQ(residues, (std::set<int>{1, 2}));
+}
+
+// The position is read from the ORIGINAL atom names, because a reduction has
+// renamed them by the time this reader runs: amber.grp turns a terminal
+// alanine's H1 into AH1, and the marker would be invisible under the new name.
+TEST(BondedForceFieldReaderTerminal, ARenamedTerminalAtomIsStillRecognised)
+{
+    BondedForceFieldReader reader(write(std::string(TERMINAL_TABLES) + INTERIOR_PSI + NTER_ROTOR));
+    reader.read();
+
+    topology::Topology top;
+    chain(top, "A", 3);
+    for (size_t i = 0; i < top.number_of_particles(); ++i)
+    {
+        auto & properties = top.get_particle(i).properties();
+        properties.set_original_name(properties.name());
+        properties.set_name("A" + properties.name());
+    }
+
+    // The .grp that did the renaming, so the records can resolve the new names.
+    reduce::ReduceRuleContainer translation;
+    for (const std::string & atom : {"N", "H1", "CA", "C", "O", "OXT"})
+    {
+        reduce::ReduceRule rule("A" + atom, "ALA");
+        rule.addAtom(atom);
+        translation.append(rule);
+    }
+    reader.buildSprings(top, &translation, true, true, true);
+
+    // Same answer as on the unrenamed chain: the rotor on residue 1, the
+    // interior psi on residue 2 only.
+    const std::vector<unsigned> expected{spn::SpringNetwork::DIHEDRAL_PHI, spn::SpringNetwork::DIHEDRAL_PSI};
+    EXPECT_EQ(families(top), expected);
 }

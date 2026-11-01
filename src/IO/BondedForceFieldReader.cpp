@@ -140,25 +140,12 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
                          "atom1 atom2 atom3 atom4 table), found %d",
                          static_cast<int>(line_id), static_cast<int>(tokens.size()));
         TorsionEntry entry;
-        // "<resname>" or "<resname>:<qualifier>". The residue name stays
-        // AMBER's own in both cases (see TerminalPosition).
-        const auto residue_field = utils::string::split(tokens[1], ":");
-        entry.resname = residue_field[0];
-        if (residue_field.size() > 2 || entry.resname.empty())
+        // "<resname>" or "<resname>:NTER|CTER". The residue name stays AMBER's
+        // own in both cases (see TerminalPosition).
+        if (!topology::parse_residue_field(tokens[1], entry.resname, entry.position))
             logging::die("BondedForceFieldReader: line %d: '%s' is not a residue name with at most one terminal "
-                         "qualifier",
+                         "qualifier (expected '<resname>', '<resname>:NTER' or '<resname>:CTER')",
                          static_cast<int>(line_id), tokens[1].c_str());
-        if (residue_field.size() == 2)
-        {
-            if (residue_field[1] == "NTER")
-                entry.position = POSITION_NTER;
-            else if (residue_field[1] == "CTER")
-                entry.position = POSITION_CTER;
-            else
-                logging::die("BondedForceFieldReader: line %d: unknown terminal qualifier '%s' on residue '%s' "
-                             "(expected NTER or CTER)",
-                             static_cast<int>(line_id), residue_field[1].c_str(), entry.resname.c_str());
-        }
         unsigned family_id = spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT;
         for (unsigned f = 0; f < spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++f)
             if (tokens[2] == DIHEDRAL_FAMILY_KEYWORDS[f])
@@ -328,18 +315,6 @@ void BondedForceFieldReader::_check_translation_is_one_atom_per_rule(
                          rule.getName().c_str(), rule.getResidueName().c_str(), rule.number_of_atoms());
 }
 
-TerminalPosition BondedForceFieldReader::_wanted_position(
-    const std::string & resname, bool is_nterm, bool is_cterm,
-    const std::set<std::pair<std::string, TerminalPosition>> & declared) const
-{
-    // N before C, so a lone residue takes the N-terminal set (see the header).
-    if (is_nterm && declared.count({resname, POSITION_NTER}) != 0)
-        return POSITION_NTER;
-    if (is_cterm && declared.count({resname, POSITION_CTER}) != 0)
-        return POSITION_CTER;
-    return POSITION_INTERIOR;
-}
-
 void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                                           const reduce::ReduceRuleContainer * translation,
                                           bool enableDihedralBackbone, bool enableDihedralSidechain,
@@ -381,11 +356,14 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
     for (const TorsionEntry & entry : _torsion)
         declared.insert({entry.resname, entry.position});
 
-    // Chain ends that took the interior records for want of terminal ones,
-    // reported once rather than per residue: on a .bi.ff with no qualifier at
-    // all this is every chain end, which is the previous behaviour and not
-    // worth a line each.
-    unsigned nb_terminal_fallback = 0;
+    // Chain ends that took the interior records, reported once rather than per
+    // residue, and split by cause -- the two mean very different things. On a
+    // .bi.ff with no qualifier at all, every chain end is undeclared, which is
+    // the previous behaviour and not worth a line each. A chain end that IS
+    // declared and still falls back is a carved-out fragment, which is a fact
+    // about the structure the reader is the only place to notice.
+    unsigned nb_undeclared = 0;
+    unsigned nb_carved = 0;
 
     for (size_t index = 0; index < residues.size(); index++)
     {
@@ -395,9 +373,40 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             index == 0 || topology.get_particle(residues[index - 1][0]).properties().chain_name() != chain;
         const bool is_cterm = index + 1 == residues.size() ||
                               topology.get_particle(residues[index + 1][0]).properties().chain_name() != chain;
-        const TerminalPosition position = _wanted_position(resname, is_nterm, is_cterm, declared);
+
+        // And being at the end of a chain is not the same as being a free
+        // terminus: a carved-out fragment -- 056's lone methionine, 4 of 077's
+        // chain ends -- has neither the ammonium nor the carboxylate, and its
+        // backbone torsions are the interior ones. The residue's own atoms say
+        // which it is; see topology::is_nterminal_only_atom. A reduction has
+        // renamed them by now (H1 -> AH1), so the ORIGINAL name is the one to
+        // ask, and it is set by exactly the reductions this reader accepts --
+        // one atom per rule, hence one original per grain.
+        bool has_nterminal_atom = false;
+        bool has_cterminal_atom = false;
+        for (size_t particle_index : residues[index])
+        {
+            const auto & properties = topology.get_particle(particle_index).properties();
+            const std::string atom =
+                properties.original_name().empty() ? properties.name() : properties.original_name();
+            has_nterminal_atom |= topology::is_nterminal_only_atom(atom);
+            has_cterminal_atom |= topology::is_cterminal_only_atom(atom);
+        }
+
+        const TerminalPosition position = topology::wanted_position(resname, is_nterm, is_cterm, has_nterminal_atom,
+                                                                    has_cterminal_atom, declared);
         if ((is_nterm || is_cterm) && position == POSITION_INTERIOR)
-            nb_terminal_fallback++;
+        {
+            // Reaching the interior set at a declared end can only mean the
+            // atom test said fragment: wanted_position would have returned the
+            // terminal one otherwise.
+            const bool declared_here = (is_nterm && declared.count({resname, POSITION_NTER}) != 0) ||
+                                       (is_cterm && declared.count({resname, POSITION_CTER}) != 0);
+            if (declared_here)
+                nb_carved++;
+            else
+                nb_undeclared++;
+        }
 
         for (const TorsionEntry & entry : _torsion)
         {
@@ -431,10 +440,15 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
 
     logging::info("BondedForceFieldReader: applied %u torsion(s) over %zu table(s).", nb_torsions_applied,
                   _torsiontables.size());
-    if (nb_terminal_fallback != 0)
+    if (nb_undeclared != 0)
         logging::info("BondedForceFieldReader: %u chain end(s) kept the interior torsion parameters -- the file "
                       "declares no :NTER/:CTER records for them.",
-                      nb_terminal_fallback);
+                      nb_undeclared);
+    if (nb_carved != 0)
+        logging::info("BondedForceFieldReader: %u chain end(s) kept the interior torsion parameters although the "
+                      "file does declare them -- those residues carry neither the ammonium hydrogens nor OXT, so "
+                      "they are cuts through a longer chain, not free ends.",
+                      nb_carved);
 }
 
 } // namespace rigidbodygroup

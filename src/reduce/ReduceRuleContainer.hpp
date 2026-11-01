@@ -1,8 +1,10 @@
 #ifndef __REDUCE_RULE_CONTAINER_HPP__
 #define __REDUCE_RULE_CONTAINER_HPP__
 
+#include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 // ReduceRule used to arrive here through reduce/Reduce.h, which was legacy and
@@ -89,8 +91,15 @@ class ReduceRuleContainer
     // Returns true if the rule name exists.
     bool contains(const std::string & name) const { return _name_to_position.find(name) != _name_to_position.end(); }
 
-    // Returns the rules for a given residue name.
+    // Returns the rules for a given residue name, whatever chain position they
+    // are qualified for.
     // If the residue name is not found, returns an empty container.
+    //
+    // This is the right overload for the reverse lookup that resolves an
+    // original atom name onto a renamed particle (RigidBodyBuilder::_translate,
+    // BondedForceFieldReader::_translate): a positional rule keeps the grain
+    // name of the interior rule it replaces, so the answer does not depend on
+    // the position, and the caller does not have to know one.
     ReduceRuleContainer get_rules_for_residue(const std::string & residue_name) const
     {
         std::vector<ReduceRule> output;
@@ -100,6 +109,39 @@ class ReduceRuleContainer
                 output.push_back(rule);
 
         return output;
+    }
+
+    // Returns the rules that parameterise a residue sitting at `position`.
+    //
+    // A residue takes the rules qualified for its own position INSTEAD of the
+    // unqualified ones -- an N-terminal alanine is AMBER's NALA, not ALA with
+    // three hydrogens bolted on, and every one of its atoms is retyped (see
+    // topology/TerminalPosition.hpp). So pass POSITION_INTERIOR, or the result
+    // of topology::wanted_position, which applies the fallback that keeps a
+    // file declaring no qualifier at all behaving exactly as before.
+    ReduceRuleContainer get_rules_for_residue(const std::string & residue_name,
+                                              topology::TerminalPosition position) const
+    {
+        std::vector<ReduceRule> output;
+
+        for (const ReduceRule & rule : _rules)
+            if (rule.getResidueName() == residue_name && rule.position() == position)
+                output.push_back(rule);
+
+        return output;
+    }
+
+    // The (residue, position) pairs the file carries, which is what
+    // topology::wanted_position needs to fall back on the interior rules for a
+    // position the file says nothing about.
+    std::set<std::pair<std::string, topology::TerminalPosition>> declared_positions() const
+    {
+        std::set<std::pair<std::string, topology::TerminalPosition>> declared;
+
+        for (const ReduceRule & rule : _rules)
+            declared.insert({rule.getResidueName(), rule.position()});
+
+        return declared;
     }
 };
 

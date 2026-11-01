@@ -1,11 +1,13 @@
 #include <gtest/gtest.h>
 
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "IO/io.h"
 #include "IO/ReduceRuleReader.h"
@@ -261,4 +263,205 @@ TEST_F(TestReducer, the_count_is_per_residue_not_per_grain_name)
     reducer.reduce();
 
     EXPECT_EQ(reducer.grains_never_built(), 1u);
+}
+
+// ===========================================================================
+// Terminal rules
+// ===========================================================================
+//
+// A free chain end is AMBER's own residue -- NALA, not ALA with three hydrogens
+// bolted on -- and the retyping reaches every atom: 9 of the 10 atoms NALA
+// shares with ALA carry a different charge. So the rules qualified for a
+// position REPLACE the unqualified ones, and what the qualifier changes is the
+// force-field type the grain is parameterised from, not the grain's name (see
+// ReduceRule::forcefield_key).
+//
+// Which residue is at a free terminus is read off its own atoms, not just off
+// its place in the chain: a carved-out fragment has neither the ammonium nor
+// the carboxylate, and must keep the interior parameters (see
+// topology::is_nterminal_only_atom). These tests are built on a three-residue
+// alanine chain written here, with and without those atoms, rather than on
+// model.pdb -- whose own chain ends are fragments, which is the point.
+
+struct TestTerminalRules : public ::testing::Test
+{
+    // ALA 1-2-3, chain A. The ammonium hydrogens and the second carboxylate
+    // oxygen are present only when asked for; without them the two ends are
+    // carved-out fragments.
+    static std::string write_chain(bool nterminal, bool cterminal)
+    {
+        const std::string path = biospring::tests::temp_path(".pdb");
+        std::ofstream out(path);
+        int serial = 0;
+        for (int residue = 1; residue <= 3; residue++)
+        {
+            std::vector<std::string> atoms = {"N", "CA", "CB", "C", "O"};
+            if (residue == 1 && nterminal)
+                atoms.insert(atoms.begin() + 1, {"H1", "H2", "H3"});
+            if (residue == 3 && cterminal)
+                atoms.push_back("OXT");
+
+            for (size_t i = 0; i < atoms.size(); i++)
+            {
+                char line[82];
+                std::snprintf(line, sizeof(line), "ATOM  %5d %-4s ALA A%4d    %8.3f%8.3f%8.3f", ++serial,
+                              atoms[i].c_str(), residue, 3.8 * residue, 0.5 * i, 0.0);
+                out << line << "\n";
+            }
+        }
+        return path;
+    }
+
+    // One rule per atom, interior and both ends, exactly as amber.grp carries
+    // them: the terminal rules reuse the interior grain names.
+    static std::string write_rules()
+    {
+        const std::string path = biospring::tests::temp_path(".grp");
+        std::ofstream(path) << "AN ALA N\nAH ALA H\nACA ALA CA\nACB ALA CB\nAC ALA C\nAO ALA O\n"
+                               "AN ALA:NTER N\nAH1 ALA:NTER H1\nAH2 ALA:NTER H2\nAH3 ALA:NTER H3\n"
+                               "ACA ALA:NTER CA\nACB ALA:NTER CB\nAC ALA:NTER C\nAO ALA:NTER O\n"
+                               "AN ALA:CTER N\nACA ALA:CTER CA\nACB ALA:CTER CB\nAC ALA:CTER C\n"
+                               "AO ALA:CTER O\nAOXT ALA:CTER OXT\n";
+        return path;
+    }
+
+    // Charges chosen so that a grain's own value says which rule built it: the
+    // interior types are 0, the N-terminal ones +1 and the C-terminal ones -1.
+    // `qualified` false leaves the qualified types out, which is the force field
+    // an old .ff pairs with a new .grp.
+    static std::string write_forcefield(bool qualified)
+    {
+        const std::string path = biospring::tests::temp_path(".ff");
+        std::ofstream out(path);
+        out << "#type\tcharge\tradius\tepsilon\tmass\ttransfer\thydrophobicity\n";
+        for (const std::string & name : {"AN", "AH", "ACA", "ACB", "AC", "AO", "AH1", "AH2", "AH3", "AOXT"})
+            out << name << "\t0.0\t1.908\t0.457730\t12.01\t0.0\t0.0\n";
+        if (qualified)
+        {
+            for (const std::string & name : {"AN", "AH1", "AH2", "AH3", "ACA", "ACB", "AC", "AO"})
+                out << name << ":NTER\t1.0\t1.908\t0.457730\t12.01\t0.0\t0.0\n";
+            for (const std::string & name : {"AN", "ACA", "ACB", "AC", "AO", "AOXT"})
+                out << name << ":CTER\t-1.0\t1.908\t0.457730\t12.01\t0.0\t0.0\n";
+        }
+        return path;
+    }
+
+    // Reduces `pdb` and returns the net charge of each residue, in order.
+    static std::vector<float> net_charges(const std::string & pdb, const std::string & grp, const std::string & ff)
+    {
+        biospring::topology::Topology topology = biospring::io::readTopology(pdb);
+        biospring::reduce::Reducer reducer(topology);
+        reducer.initialize_forcefield(ff);
+        reducer.initialize_rules(grp);
+        reducer.reduce();
+
+        const auto & reduced = reducer.target_topology();
+        std::vector<float> net(3, 0.0f);
+        for (size_t i = 0; i < reduced.number_of_particles(); i++)
+        {
+            const auto & properties = reduced.get_particle(i).properties();
+            net.at(properties.residue_id() - 1) += properties.charge();
+        }
+        return net;
+    }
+};
+
+TEST_F(TestTerminalRules, a_free_terminus_takes_the_qualified_rules_and_their_parameters)
+{
+    const std::vector<float> net =
+        net_charges(write_chain(true, true), write_rules(), write_forcefield(true));
+
+    // The N-terminal residue is built from 8 N-terminal types at +1 each, the
+    // interior one from 5 interior types at 0, the C-terminal one from 6
+    // C-terminal types at -1.
+    EXPECT_NEAR(net[0], 8.0, 1e-5);
+    EXPECT_NEAR(net[1], 0.0, 1e-5);
+    EXPECT_NEAR(net[2], -6.0, 1e-5);
+}
+
+// What tells the position apart from the chemistry: the same chain, the same
+// rules, only the terminal atoms removed.
+TEST_F(TestTerminalRules, a_carved_out_fragment_keeps_the_interior_rules)
+{
+    const std::vector<float> net =
+        net_charges(write_chain(false, false), write_rules(), write_forcefield(true));
+
+    EXPECT_NEAR(net[0], 0.0, 1e-5);
+    EXPECT_NEAR(net[1], 0.0, 1e-5);
+    EXPECT_NEAR(net[2], 0.0, 1e-5);
+}
+
+// One end free and the other carved: each is decided on its own.
+TEST_F(TestTerminalRules, the_two_ends_are_decided_separately)
+{
+    const std::vector<float> net =
+        net_charges(write_chain(true, false), write_rules(), write_forcefield(true));
+
+    EXPECT_NEAR(net[0], 8.0, 1e-5);
+    EXPECT_NEAR(net[2], 0.0, 1e-5);
+}
+
+// The grain NAME must not change at a terminus: it is what the .hbond, .psite
+// and .rbody lookups are keyed on, and renaming the terminal grains would drop
+// every terminal residue out of all three, silently.
+TEST_F(TestTerminalRules, the_grain_names_are_the_interior_ones)
+{
+    const std::string pdb = write_chain(true, true);
+    biospring::topology::Topology topology = biospring::io::readTopology(pdb);
+    biospring::reduce::Reducer reducer(topology);
+    reducer.initialize_forcefield(write_forcefield(true));
+    reducer.initialize_rules(write_rules());
+    reducer.reduce();
+
+    const auto & reduced = reducer.target_topology();
+    std::set<std::string> nterminal, cterminal;
+    for (size_t i = 0; i < reduced.number_of_particles(); i++)
+    {
+        const auto & properties = reduced.get_particle(i).properties();
+        if (properties.residue_id() == 1)
+            nterminal.insert(properties.name());
+        if (properties.residue_id() == 3)
+            cterminal.insert(properties.name());
+    }
+
+    EXPECT_EQ(nterminal, (std::set<std::string>{"AN", "AH1", "AH2", "AH3", "ACA", "ACB", "AC", "AO"}));
+    EXPECT_EQ(cterminal, (std::set<std::string>{"AN", "ACA", "ACB", "AC", "AO", "AOXT"}));
+}
+
+// A .grp whose terminal rules are newer than the force field it is paired with
+// must degrade to the interior parameters, not to particles with no mass --
+// which is what a force-field type nobody declares gives.
+TEST_F(TestTerminalRules, a_missing_qualified_force_field_type_keeps_the_interior_parameters)
+{
+    const std::string pdb = write_chain(true, true);
+    biospring::topology::Topology topology = biospring::io::readTopology(pdb);
+    biospring::reduce::Reducer reducer(topology);
+    reducer.initialize_forcefield(write_forcefield(false));
+    reducer.initialize_rules(write_rules());
+    reducer.reduce();
+
+    const auto & reduced = reducer.target_topology();
+    ASSERT_EQ(reduced.number_of_particles(), 8u + 5u + 6u);
+    for (size_t i = 0; i < reduced.number_of_particles(); i++)
+    {
+        EXPECT_NEAR(reduced.get_particle(i).properties().charge(), 0.0, 1e-5);
+        EXPECT_NEAR(reduced.get_particle(i).properties().mass(), 12.01, 1e-5);
+    }
+}
+
+// And a .grp that declares no qualifier at all -- every .grp here but amber.grp
+// -- behaves exactly as before, free terminus or not.
+TEST_F(TestReducer, a_terminal_rule_for_a_type_that_sits_nowhere_terminal_changes_nothing)
+{
+    // No ALA sits at either end of model.pdb's chain, so this rule can never
+    // apply -- which is the normal case for a positional rule, and is counted
+    // rather than warned about (see _report_grains_never_built).
+    const std::string grp = grp_plus(path_reduce_rules, "ACA ALA:NTER N CA C O CB\n");
+
+    biospring::reduce::Reducer reducer(topology);
+    reducer.initialize_forcefield(path_forcefield);
+    reducer.initialize_rules(grp);
+    reducer.reduce();
+
+    EXPECT_EQ(reducer.target_topology().number_of_particles(), 183);
 }

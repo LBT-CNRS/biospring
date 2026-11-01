@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "Particle.h"
@@ -19,6 +20,8 @@
 #include "logging.h"
 #include "measure.hpp"
 #include "topology.hpp"
+#include "topology/TerminalPosition.hpp"
+#include "utils/string.hpp"
 
 namespace biospring
 {
@@ -75,13 +78,15 @@ class GrainBuilder
     bool _warn_when_empty;
     // Set from _check_not_empty, which is const.
     mutable bool _was_empty;
+    // Set from _create_grain, which is const.
+    mutable std::string _forcefield_fallback;
 
   public:
     GrainBuilder(const ParticleContainer & input_particles, const ReduceRule & rule,
                  const forcefield::ForceField & forcefield)
         : _input_particles(input_particles), _rule(rule), _forcefield(forcefield), _ignore_duplicate_particles(false),
           _ignore_missing_particles(false), _grain(), _member_uids(), _grain_built(false), _warn_when_empty(true),
-          _was_empty(false)
+          _was_empty(false), _forcefield_fallback()
     {
     }
 
@@ -105,6 +110,12 @@ class GrainBuilder
     // Whether build() failed because no atom matched, as opposed to matching
     // the wrong number of them.
     bool was_empty(void) const { return _was_empty; }
+
+    // The force-field key this grain asked for and did not get, having been
+    // parameterised from the unqualified one instead; empty when nothing fell
+    // back. Reported by the caller across the whole model -- see
+    // Reducer::_report_forcefield_fallbacks.
+    const std::string & forcefield_fallback(void) const { return _forcefield_fallback; }
 
     const Grain & grain(void)
     {
@@ -188,9 +199,10 @@ class GrainBuilder
         grain.properties().set_position(measure::centroid(grain_particles));
 
         // Set properties from forcefield.
-        if (_forcefield.hasProperty(_grain_name()))
+        const std::string key = _forcefield_key();
+        if (_forcefield.hasProperty(key))
         {
-            const spn::ParticleProperty & pp = _forcefield.getPropertiesFromName(_grain_name());
+            const spn::ParticleProperty & pp = _forcefield.getPropertiesFromName(key);
             grain.properties().set_charge(pp.getCharge());
             grain.properties().set_radius(pp.getRadius());
             grain.properties().set_mass(pp.getMass());
@@ -207,10 +219,28 @@ class GrainBuilder
         }
         else
         {
-            logging::warning("No Forcefield found for '%s'!", _grain_name().c_str());
+            logging::warning("No Forcefield found for '%s'!", key.c_str());
         }
 
         return grain;
+    }
+
+    // Which force-field type this grain is parameterised from.
+    //
+    // A terminal rule asks for the qualified type (see
+    // ReduceRule::forcefield_key), and a force field that does not carry it
+    // falls back on the unqualified one. That keeps a .grp whose terminal rules
+    // are newer than the .ff it is paired with at today's behaviour -- slightly
+    // wrong charges -- rather than at a particle with no mass, which is what a
+    // missing type gives. It is reported, once per key, by the caller.
+    std::string _forcefield_key() const
+    {
+        const std::string key = _rule.forcefield_key();
+        if (key == _rule.name() || _forcefield.hasProperty(key))
+            return key;
+
+        _forcefield_fallback = key;
+        return _rule.name();
     }
 
     // Checks if a grain is empty.
@@ -307,6 +337,10 @@ class ResidueReducer
     std::set<std::string> _built;
     std::set<std::string> _empty;
 
+    // Force-field keys the rules asked for and the force field did not carry,
+    // also reported by the caller -- see GrainBuilder::_forcefield_key.
+    std::set<std::string> _forcefield_fallbacks;
+
   public:
     ResidueReducer(const ParticleContainer & particles, const ReduceRuleContainer & rules,
                    const forcefield::ForceField & forcefield)
@@ -328,6 +362,10 @@ class ResidueReducer
     // rules found no atom for.
     const std::set<std::string> & grains_built(void) const { return _built; }
     const std::set<std::string> & grains_left_empty(void) const { return _empty; }
+
+    // Valid after build(): the qualified force-field keys this residue's rules
+    // asked for in vain.
+    const std::set<std::string> & forcefield_fallbacks(void) const { return _forcefield_fallbacks; }
 
     // =============================================================================
     // Main methods.
@@ -351,6 +389,7 @@ class ResidueReducer
         std::set<std::string> & empty = _empty;
         built.clear();
         empty.clear();
+        _forcefield_fallbacks.clear();
 
         for (const auto & rule : _rules)
         {
@@ -369,6 +408,9 @@ class ResidueReducer
             {
                 empty.insert(rule.name());
             }
+
+            if (!grain_builder.forcefield_fallback().empty())
+                _forcefield_fallbacks.insert(grain_builder.forcefield_fallback());
         }
 
         // Nothing is reported here. A grain whose rules found no atom in THIS
@@ -435,6 +477,10 @@ class Reducer
     std::set<std::string> _grains_built;
     std::set<std::string> _grains_empty;
 
+    // Likewise for the qualified force-field types a terminal rule asked for
+    // and the force field did not carry -- see _report_forcefield_fallbacks.
+    std::set<std::string> _forcefield_fallbacks;
+
   public:
     Reducer(const topology::Topology & source_topology)
         : _source_topology(source_topology), _forcefield(), _forcefield_initialized(false), _rules(),
@@ -489,13 +535,45 @@ class Reducer
 
         ParticleGroups residues = _group_particles_by_residue(_source_topology.particles().data());
 
+        // Which (residue, position) pairs the .grp carries, so a position it
+        // says nothing about falls back to the interior rules -- which is every
+        // position of every .grp but amber.grp, hence unchanged behaviour
+        // there. See topology::wanted_position.
+        const auto declared = _rules.declared_positions();
+
         // Where each source particle ended up. Built as the grains are added
         // so the target index is simply the collection's size at that point.
         std::unordered_map<topology::pid_t, size_t> source_to_target;
 
-        for (const ParticleContainer & residue : residues)
+        for (size_t index = 0; index < residues.size(); index++)
         {
-            for (const ReducedGrain & reduced : _reduce_residue(residue))
+            const ParticleContainer & residue = residues[index];
+
+            // Read off the chain the same way RigidBodyBuilder and
+            // BondedForceFieldReader read "+"/"-": a residue is a terminus when
+            // the neighbouring group in particle order belongs to another
+            // chain, or does not exist. So a chain BROKEN in the middle -- a
+            // gap in the numbering, a missing loop -- is not seen as a
+            // terminus, exactly as a "+N" there still resolves to the next
+            // residue present.
+            const std::string & chain = residue[0].properties().chain_name();
+            const bool is_nterm = index == 0 || residues[index - 1][0].properties().chain_name() != chain;
+            const bool is_cterm =
+                index + 1 == residues.size() || residues[index + 1][0].properties().chain_name() != chain;
+
+            // And being at the end of a chain is not the same as being a free
+            // terminus: a carved-out fragment has neither the ammonium nor the
+            // carboxylate. See topology::is_nterminal_only_atom.
+            bool has_nterminal_atom = false;
+            bool has_cterminal_atom = false;
+            for (const topology::Particle & p : residue)
+            {
+                has_nterminal_atom |= topology::is_nterminal_only_atom(p.properties().name());
+                has_cterminal_atom |= topology::is_cterminal_only_atom(p.properties().name());
+            }
+
+            for (const ReducedGrain & reduced :
+                 _reduce_residue(residue, is_nterm, is_cterm, has_nterminal_atom, has_cterminal_atom, declared))
             {
                 const size_t target_index = _target_topology.number_of_particles();
                 _target_topology.add_particle(reduced.grain);
@@ -509,6 +587,7 @@ class Reducer
         }
 
         _report_grains_never_built();
+        _report_forcefield_fallbacks();
         _carry_springs_over(source_to_target);
     }
 
@@ -582,9 +661,22 @@ class Reducer
                       _target_topology.number_of_springs(), _source_topology.number_of_springs());
     }
 
-    std::vector<ReducedGrain> _reduce_residue(const ParticleContainer & residue)
+    std::vector<ReducedGrain>
+    _reduce_residue(const ParticleContainer & residue, bool is_nterm, bool is_cterm, bool has_nterminal_atom,
+                    bool has_cterminal_atom,
+                    const std::set<std::pair<std::string, topology::TerminalPosition>> & declared)
     {
-        const auto & rules = _rules.get_rules_for_residue(residue[0].properties().residue_name());
+        const std::string & residue_name = residue[0].properties().residue_name();
+
+        // A free chain end is AMBER's own residue: NALA, not ALA with three
+        // hydrogens bolted on. The rules qualified for this position replace
+        // the unqualified ones rather than adding to them, and a position the
+        // .grp says nothing about falls back to them -- see
+        // topology::wanted_position.
+        const topology::TerminalPosition position = topology::wanted_position(
+            residue_name, is_nterm, is_cterm, has_nterminal_atom, has_cterminal_atom, declared);
+
+        const auto & rules = _rules.get_rules_for_residue(residue_name, position);
 
         // Returns an empty vector if found no rule for this residue.
         if (rules.empty())
@@ -609,6 +701,9 @@ class Reducer
             _grains_built.insert(resname + ":" + name);
         for (const std::string & name : residue_builder.grains_left_empty())
             _grains_empty.insert(resname + ":" + name);
+
+        for (const std::string & key : residue_builder.forcefield_fallbacks())
+            _forcefield_fallbacks.insert(key);
 
         return grains;
     }
@@ -635,6 +730,30 @@ class Reducer
             logging::info("%zu reduce-rule grain(s) matched no atom anywhere, which is expected of a rule "
                           "that only applies at a chain end; an atom no rule claims is reported separately",
                           never);
+    }
+
+    // Which qualified force-field types the .grp asked for in vain -- one line,
+    // naming them, because this one IS a mismatch worth seeing.
+    //
+    // It means the .grp's terminal rules are newer than the .ff paired with it:
+    // the grains were parameterised from the interior types instead, so a
+    // terminal residue carries the interior net charge (-1.2719 e at an
+    // N-terminus, +1.0000 e at a C-terminus, where AMBER has +1 and -1) rather
+    // than no mass at all, which is what a missing type would give.
+    void _report_forcefield_fallbacks(void) const
+    {
+        if (_forcefield_fallbacks.empty())
+            return;
+
+        logging::warning("%zu terminal force-field type(s) are missing from the force field, so those grains kept "
+                         "the interior parameters -- the terminal residues' net charge is AMBER's interior one. "
+                         "Pair the .grp with a force field that declares them (amber.nbi.ff does).",
+                         _forcefield_fallbacks.size());
+        logging::info("Missing terminal force-field type(s): %s",
+                      utils::string::join(std::vector<std::string>(_forcefield_fallbacks.begin(),
+                                                                   _forcefield_fallbacks.end()),
+                                          " ")
+                          .c_str());
     }
 
     static bool __still_same_residue(const ParticleContainer & current_residue, const topology::Particle & p)
