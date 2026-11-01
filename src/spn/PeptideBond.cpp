@@ -2,6 +2,7 @@
 
 #include "IO/PeptideSiteRuleReader.h"
 
+#include <array>
 #include <map>
 #include <vector>
 
@@ -204,6 +205,32 @@ bool referenceGeometry(const std::vector<Vector3f> & position, const std::vector
 unsigned long long pairKey(unsigned a, unsigned b)
 {
     return (static_cast<unsigned long long>(a) << 32) | static_cast<unsigned long long>(b);
+}
+
+// Whether two table indices name the same curve. A merged network may hold the
+// same curve under many indices -- Topology interns them now, but a .nc
+// assembled by hand or written before that still can -- so the pattern this
+// term learns has to be told apart by what a table CONTAINS, never by where it
+// sits.
+bool sameCurve(const std::vector<SpringNetwork::TorsionTable> & tables, unsigned i, unsigned j)
+{
+    if (i == j)
+        return true;
+    if (i >= tables.size() || j >= tables.size())
+        return false;
+    const SpringNetwork::TorsionTable & a = tables[i];
+    const SpringNetwork::TorsionTable & b = tables[j];
+    return a.bins == b.bins && a.energy == b.energy && a.torque == b.torque;
+}
+
+// The deepest well a curve describes, for saying how far apart two that
+// disagree actually are.
+float curveSpan(const std::vector<SpringNetwork::TorsionTable> & tables, unsigned i)
+{
+    if (i >= tables.size() || tables[i].energy.empty())
+        return 0.0f;
+    const auto bounds = std::minmax_element(tables[i].energy.begin(), tables[i].energy.end());
+    return *bounds.second - *bounds.first;
 }
 
 } // namespace
@@ -428,6 +455,11 @@ PeptideBondFormation::Site PeptideBondFormation::_siteInputs(const SpringNetwork
 void PeptideBondFormation::_learnTorsionPattern(const SpringNetwork & network)
 {
     _torsionpattern.clear();
+    const std::vector<SpringNetwork::TorsionTable> & tables = network.getTorsionTables();
+    // Parallel to _torsionpattern: whether this pattern has already been
+    // reported as described by two disagreeing curves, so a network holding
+    // fifty-five copies of the disagreement says it once.
+    std::vector<bool> conflicting;
     for (const SpringNetwork::Torsion & t : network.getTorsions())
     {
         // The bond is the middle pair, by the .bi.ff's own convention
@@ -446,12 +478,48 @@ void PeptideBondFormation::_learnTorsionPattern(const SpringNetwork & network)
         p.after = _original(network, t.atoms[3]);
         p.family = t.family;
         p.table = t.table;
-        const bool known = std::any_of(_torsionpattern.begin(), _torsionpattern.end(),
-                                       [&](const TorsionPattern & q) {
-                                           return q.before == p.before && q.after == p.after && q.table == p.table;
-                                       });
-        if (!known)
+        // A PATTERN IS A FAMILY AND A PAIR OF OUTER ATOM NAMES, not a table
+        // index: those three are what _addTorsions resolves against the two
+        // residues, so two candidates agreeing on them would place the very
+        // same quadruplet twice.
+        //
+        // Keyed on the index instead, as it was, a network carrying one curve
+        // under many indices read as many patterns and _addTorsions fired all
+        // of them -- 55 copies of each omega on a 70S merged from 135
+        // fragments, 220 torsions on 4 quadruplets for 5108.6 kJ/mol of
+        // barrier against AMBER's 40 to 120. Topology now interns identical
+        // curves as it merges, which is where that came from; this is the
+        // guard that holds whatever a .nc turns out to carry.
+        const auto known = std::find_if(_torsionpattern.begin(), _torsionpattern.end(),
+                                        [&](const TorsionPattern & q) {
+                                            return q.family == p.family && q.before == p.before &&
+                                                   q.after == p.after;
+                                        });
+        if (known == _torsionpattern.end())
+        {
             _torsionpattern.push_back(p);
+            conflicting.push_back(false);
+            continue;
+        }
+        // Same pattern, same curve: the duplicate is dropped, which is the
+        // whole point. Same pattern, DIFFERENT curve, and the network is
+        // telling us two incompatible things about one bond -- one of them
+        // will be silently preferred, so say so rather than pick in the dark.
+        if (sameCurve(tables, known->table, p.table))
+            continue;
+        const size_t which = static_cast<size_t>(known - _torsionpattern.begin());
+        if (!conflicting[which])
+        {
+            conflicting[which] = true;
+            logging::warning("Peptide bond formation: this network describes the %s-%s torsion %s-%s-%s-%s with "
+                             "two different curves (tables %u and %u, spanning %.3f and %.3f kJ/mol). The first "
+                             "is the one a new bond will get. Two residue types whose parameters genuinely "
+                             "differ -- proline's omega against anyone else's -- cannot both be honoured by a "
+                             "pattern learned once for the whole network.",
+                             _electrophilename.c_str(), _nucleophilename.c_str(), p.before.c_str(),
+                             _electrophilename.c_str(), _nucleophilename.c_str(), p.after.c_str(), known->table,
+                             p.table, curveSpan(tables, known->table), curveSpan(tables, p.table));
+        }
     }
     if (_torsionpattern.empty())
         logging::warning("Peptide bond formation: this network carries no torsion across an existing %s-%s bond, so "
@@ -460,8 +528,9 @@ void PeptideBondFormation::_learnTorsionPattern(const SpringNetwork & network)
                          "-dihedralbackbone, on a structure that already contains one such bond.",
                          _electrophilename.c_str(), _nucleophilename.c_str());
     else
-        logging::info("Peptide bond formation: %zu torsion(s) will be created per bond, copied from this network's "
-                      "own %s-%s torsions.",
+        logging::info("Peptide bond formation: %zu torsion pattern(s) learned from this network's own %s-%s "
+                      "torsions. A new bond gets those whose two outer atoms both exist in the pair of residues "
+                      "at hand, so a proline's and anyone else's are both carried and only one set fires.",
                       _torsionpattern.size(), _electrophilename.c_str(), _nucleophilename.c_str());
 }
 
@@ -469,15 +538,25 @@ void PeptideBondFormation::_addTorsions(SpringNetwork & network, unsigned electr
 {
     const unsigned own = _residueof[electrophile];
     const unsigned next = _residueof[nucleophile];
+    // Belt and braces over the pattern list's own dedupe: what must not happen
+    // twice is a QUADRUPLET, and two patterns can still land on one -- a
+    // family apart, or two names the translation sends to the same atom. Four
+    // entries at most, so a linear scan is the whole cost.
+    std::vector<std::array<unsigned, 4>> placed;
     for (const TorsionPattern & p : _torsionpattern)
     {
         const int a = _atomInResidue(network, own, p.before);
         const int d = _atomInResidue(network, next, p.after);
         if (a < 0 || d < 0)
             continue;
-        network.addTorsion(p.family, static_cast<unsigned>(a), electrophile, nucleophile,
-                           static_cast<unsigned>(d), p.table);
+        const std::array<unsigned, 4> quad = {static_cast<unsigned>(a), electrophile, nucleophile,
+                                              static_cast<unsigned>(d)};
+        if (std::find(placed.begin(), placed.end(), quad) != placed.end())
+            continue;
+        placed.push_back(quad);
+        network.addTorsion(p.family, quad[0], quad[1], quad[2], quad[3], p.table);
     }
+    logging::info("    omega: %zu torsion(s) placed across the new bond.", placed.size());
 }
 
 std::string PeptideBondFormation::_translate(const std::string & resname, const std::string & name) const
