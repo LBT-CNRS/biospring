@@ -62,6 +62,17 @@ const biospring::argparse::description_t PROGRAM_DESCRIPTION = {
     "every family. The rigid mesh keeps bonds and angles at the uniform",
     "-stiffness value; the torsion wells are what -bondedinteraction adds",
     "on top.",
+    "",
+    "A .bi.ff record may qualify its residue name :NTER or :CTER, and then",
+    "applies only to a residue at a free chain end -- the first or last of",
+    "its chain, read the same way a \"+\"/\"-\" atom name is. A terminus takes",
+    "those records INSTEAD of the unqualified ones, because AMBER types it",
+    "from its own residue template: the N-terminal nitrogen is an ammonium",
+    "N3 and the C-terminal carbonyl oxygen a carboxylate O2, which leaves",
+    "some interior torsions with no parameters at all and adds others. A",
+    "file carrying no qualifier for a residue keeps its interior records at",
+    "a terminus, as the DNA and RNA files still do; the run says how many",
+    "chain ends that was.",
     "",};
 
 namespace biospring

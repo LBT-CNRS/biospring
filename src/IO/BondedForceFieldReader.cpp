@@ -5,6 +5,7 @@
 #include <cmath>
 #include <set>
 #include <stdexcept>
+#include <utility>
 
 #include "logging.h"
 #include "utils/string.hpp"
@@ -139,7 +140,25 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
                          "atom1 atom2 atom3 atom4 table), found %d",
                          static_cast<int>(line_id), static_cast<int>(tokens.size()));
         TorsionEntry entry;
-        entry.resname = tokens[1];
+        // "<resname>" or "<resname>:<qualifier>". The residue name stays
+        // AMBER's own in both cases (see TerminalPosition).
+        const auto residue_field = utils::string::split(tokens[1], ":");
+        entry.resname = residue_field[0];
+        if (residue_field.size() > 2 || entry.resname.empty())
+            logging::die("BondedForceFieldReader: line %d: '%s' is not a residue name with at most one terminal "
+                         "qualifier",
+                         static_cast<int>(line_id), tokens[1].c_str());
+        if (residue_field.size() == 2)
+        {
+            if (residue_field[1] == "NTER")
+                entry.position = POSITION_NTER;
+            else if (residue_field[1] == "CTER")
+                entry.position = POSITION_CTER;
+            else
+                logging::die("BondedForceFieldReader: line %d: unknown terminal qualifier '%s' on residue '%s' "
+                             "(expected NTER or CTER)",
+                             static_cast<int>(line_id), residue_field[1].c_str(), entry.resname.c_str());
+        }
         unsigned family_id = spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT;
         for (unsigned f = 0; f < spn::SpringNetwork::DIHEDRAL_FAMILY_COUNT; ++f)
             if (tokens[2] == DIHEDRAL_FAMILY_KEYWORDS[f])
@@ -309,6 +328,18 @@ void BondedForceFieldReader::_check_translation_is_one_atom_per_rule(
                          rule.getName().c_str(), rule.getResidueName().c_str(), rule.number_of_atoms());
 }
 
+TerminalPosition BondedForceFieldReader::_wanted_position(
+    const std::string & resname, bool is_nterm, bool is_cterm,
+    const std::set<std::pair<std::string, TerminalPosition>> & declared) const
+{
+    // N before C, so a lone residue takes the N-terminal set (see the header).
+    if (is_nterm && declared.count({resname, POSITION_NTER}) != 0)
+        return POSITION_NTER;
+    if (is_cterm && declared.count({resname, POSITION_CTER}) != 0)
+        return POSITION_CTER;
+    return POSITION_INTERIOR;
+}
+
 void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                                           const reduce::ReduceRuleContainer * translation,
                                           bool enableDihedralBackbone, bool enableDihedralSidechain,
@@ -344,13 +375,33 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
     // being one torsion.
     std::set<std::array<size_t, 4>> seen_torsions;
 
+    // Which (residue, position) pairs the file actually carries, so a position
+    // it says nothing about can fall back to the interior records.
+    std::set<std::pair<std::string, TerminalPosition>> declared;
+    for (const TorsionEntry & entry : _torsion)
+        declared.insert({entry.resname, entry.position});
+
+    // Chain ends that took the interior records for want of terminal ones,
+    // reported once rather than per residue: on a .bi.ff with no qualifier at
+    // all this is every chain end, which is the previous behaviour and not
+    // worth a line each.
+    unsigned nb_terminal_fallback = 0;
+
     for (size_t index = 0; index < residues.size(); index++)
     {
         const std::string resname = topology.get_particle(residues[index][0]).properties().residue_name();
+        const std::string & chain = topology.get_particle(residues[index][0]).properties().chain_name();
+        const bool is_nterm =
+            index == 0 || topology.get_particle(residues[index - 1][0]).properties().chain_name() != chain;
+        const bool is_cterm = index + 1 == residues.size() ||
+                              topology.get_particle(residues[index + 1][0]).properties().chain_name() != chain;
+        const TerminalPosition position = _wanted_position(resname, is_nterm, is_cterm, declared);
+        if ((is_nterm || is_cterm) && position == POSITION_INTERIOR)
+            nb_terminal_fallback++;
 
         for (const TorsionEntry & entry : _torsion)
         {
-            if (entry.resname != resname)
+            if (entry.resname != resname || entry.position != position)
                 continue;
             const bool gates[GATE_COUNT] = {enableDihedralBackbone, enableDihedralSidechain, enableDihedralPlanarity};
             if (!gates[DIHEDRAL_FAMILY_GATES[entry.family]])
@@ -380,6 +431,10 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
 
     logging::info("BondedForceFieldReader: applied %u torsion(s) over %zu table(s).", nb_torsions_applied,
                   _torsiontables.size());
+    if (nb_terminal_fallback != 0)
+        logging::info("BondedForceFieldReader: %u chain end(s) kept the interior torsion parameters -- the file "
+                      "declares no :NTER/:CTER records for them.",
+                      nb_terminal_fallback);
 }
 
 } // namespace rigidbodygroup

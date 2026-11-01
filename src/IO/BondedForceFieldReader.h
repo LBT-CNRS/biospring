@@ -1,7 +1,9 @@
 #ifndef __IO_BONDEDFORCEFIELDREADER_H__
 #define __IO_BONDEDFORCEFIELDREADER_H__
 
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "IO/ReaderBase.h"
@@ -19,6 +21,32 @@ namespace rigidbodygroup
 // settings). Aliases spn::SpringNetwork::DihedralFamilyIndex.
 using DihedralFamily = spn::SpringNetwork::DihedralFamilyIndex;
 
+// Where in its chain a residue has to sit for a record to apply to it.
+//
+// AMBER types a free chain end from its own residue template (NALA/CALA, not
+// ALA), and the retyping is not cosmetic: the N-terminal nitrogen is an
+// ammonium N3 rather than an amide N, and the C-terminal carbonyl oxygen is a
+// delocalised carboxylate O2 rather than O. amber99sb then assigns NO torsion
+// at all to N3-CT-C-N, HP-CT-C-O or H1-CT-C-O2, while assigning one to the
+// identical interior quadruplets -- so a record carrying the interior
+// parameters invents a term where the force field has none (measured on
+// 071: a psi well 17.8 kJ.mol-1 deep and 20.3 kJ.mol-1.rad-1 of torque, on a
+// residue whose psi AMBER leaves free), and the terms AMBER does add there,
+// the ammonium rotor and the carboxylate improper, are missing.
+//
+// So the residue column of a TORSION record may carry a terminal qualifier,
+// "ALA:NTER" or "ALA:CTER", and a residue is parameterised from the records
+// matching its own position: the interior set is NOT also applied at a
+// terminus. Which is why the generator has to make every terminal-sensitive
+// torsion belong to the residue whose end it is -- see the note on
+// `_wanted_position`.
+enum TerminalPosition
+{
+    POSITION_INTERIOR = 0, // no qualifier: a residue with neighbours on both sides
+    POSITION_NTER,         // ":NTER", a free N-terminus (NH3+), AMBER's NXXX
+    POSITION_CTER          // ":CTER", a free C-terminus (COO-), AMBER's CXXX
+};
+
 // One AMBER torsion ("TORSION" line): the four atoms it acts on and the table
 // that holds its energy and torque. Nothing is summed over substituent pairs,
 // so no phase origin is chosen and no sign convention is guessed -- the record
@@ -26,6 +54,7 @@ using DihedralFamily = spn::SpringNetwork::DihedralFamilyIndex;
 struct TorsionEntry
 {
     std::string resname;
+    TerminalPosition position = POSITION_INTERIOR;
     DihedralFamily family;
     std::string atoms[4];
     unsigned table;
@@ -48,10 +77,13 @@ struct TorsionTableEntry
 //
 //   TORSIONTABLE <id> <bins> <E_0> <T_0> ...   over phi in [-180, 180],
 //       E in kJ.mol-1 and T = -dV/dphi in kJ.mol-1.rad-1
-//   TORSION <resname> <FAMILY> <a1> <a2> <a3> <a4> <table>
+//   TORSION <resname>[:NTER|:CTER] <FAMILY> <a1> <a2> <a3> <a4> <table>
 //
 // Atom names may carry a "+"/"-" prefix (CHARMM-style: next/previous
-// residue), same convention as .rbody.
+// residue), same convention as .rbody. The residue name may carry a terminal
+// qualifier (see TerminalPosition): the residue name itself stays AMBER's
+// own, like every other data file here -- amber.grp and .rbody both spell a
+// terminal alanine "ALA" too.
 //
 // RigidBodyBuilder must have already created a spring for every real bond and
 // valence angle. Those keep --rigidbody's uniform --stiffness; this reader
@@ -144,6 +176,32 @@ class BondedForceFieldReader : public ReaderBase
     // Dies if `translation` contains a rule with more than one atom -- must
     // be an all-atom identity mapping, never a real coarse-grain reduction.
     void _check_translation_is_one_atom_per_rule(const reduce::ReduceRuleContainer & translation) const;
+
+    // Which records a residue is entitled to, from where it sits in its chain
+    // and what the file actually declares.
+    //
+    // The position is read off the chain the same way `_resolve_atom` reads
+    // "+"/"-": a residue is a terminus when the neighbouring group in particle
+    // order belongs to another chain, or does not exist. So a chain BROKEN in
+    // the middle -- a gap in the numbering, a missing loop -- is not seen as a
+    // terminus, exactly as a "+N" there still resolves to the next residue
+    // present. That is a property of the whole file format, not of this
+    // function.
+    //
+    // `declared` is the set of (resname, position) pairs the file carries, and
+    // a position the file says nothing about falls back to the interior
+    // records. Without that fallback a .bi.ff generated before the qualifier
+    // existed -- the DNA and RNA files still are -- would silently lose every
+    // torsion at every chain end instead of keeping today's behaviour.
+    //
+    // A residue that is both the first and the last of its chain (a free amino
+    // acid) is treated as an N-terminus: AMBER has no template for one, so
+    // there is nothing to generate the real combination from. The ammonium
+    // rotor is then right, and so are both suppressions, since HP-CT-C-O and
+    // H1-CT-C-O2 are equally absent from the force field; only the
+    // carboxylate's own improper is missed.
+    TerminalPosition _wanted_position(const std::string & resname, bool is_nterm, bool is_cterm,
+                                      const std::set<std::pair<std::string, TerminalPosition>> & declared) const;
 
 };
 
