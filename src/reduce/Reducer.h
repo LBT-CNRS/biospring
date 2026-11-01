@@ -302,6 +302,11 @@ class ResidueReducer
     bool _ignore_missing_particles;
     bool _ignore_duplicate_particles;
 
+    // Which grain names this residue produced and which its rules left empty.
+    // Reported by the caller across the WHOLE model, not here -- see build().
+    std::set<std::string> _built;
+    std::set<std::string> _empty;
+
   public:
     ResidueReducer(const ParticleContainer & particles, const ReduceRuleContainer & rules,
                    const forcefield::ForceField & forcefield)
@@ -319,13 +324,18 @@ class ResidueReducer
     void set_ignore_duplicate_particles(bool value) { _ignore_duplicate_particles = value; }
     bool get_ignore_duplicate_particles(void) const { return _ignore_duplicate_particles; }
 
+    // Valid after build(): the grain names this residue produced, and those its
+    // rules found no atom for.
+    const std::set<std::string> & grains_built(void) const { return _built; }
+    const std::set<std::string> & grains_left_empty(void) const { return _empty; }
+
     // =============================================================================
     // Main methods.
     // =============================================================================
 
     // Returns a vector of grains representing the residue, each carrying the
     // source particles it was built from.
-    std::vector<ReducedGrain> build(void) const
+    std::vector<ReducedGrain> build(void)
     {
         // Displays warnings if some particles are present in the residue but not in the rule.
         _check_unknown_particles();
@@ -337,8 +347,10 @@ class ResidueReducer
         // for dH5). Only one spelling can be present, so the others necessarily
         // find nothing -- which is not a missing grain and must not be reported
         // as one. Decide per grain NAME, after every rule has had its turn.
-        std::set<std::string> built;
-        std::set<std::string> empty;
+        std::set<std::string> & built = _built;
+        std::set<std::string> & empty = _empty;
+        built.clear();
+        empty.clear();
 
         for (const auto & rule : _rules)
         {
@@ -359,14 +371,21 @@ class ResidueReducer
             }
         }
 
-        if (!_particles.empty())
-        {
-            const auto & residue = _particles.front().properties();
-            for (const std::string & name : empty)
-                if (built.find(name) == built.end())
-                    logging::warning("Residue %s:%d: no atom matches any accepted spelling for grain %s, skipping it",
-                                     residue.residue_name().c_str(), residue.residue_id(), name.c_str());
-        }
+        // Nothing is reported here. A grain whose rules found no atom in THIS
+        // residue is the normal case for a rule that only applies at one end of
+        // a chain: amber.grp declares the N-terminal ammonium hydrogens and the
+        // C-terminal second oxygen for all 20 residues, so every interior
+        // residue leaves four of them empty. Reported per residue, that was 42%
+        // of the whole example suite's build output -- 10334 of 076's 10434
+        // lines -- which buried the four warnings that mattered there.
+        //
+        // What a per-residue report cannot distinguish, and a model-wide one
+        // can, is a rule that matches NOWHERE: a typo in a .grp entry. So the
+        // two sets are handed to the caller, which reports the names left empty
+        // across the whole model and built in none of it. See
+        // Reducer::_report_grains_never_built.
+        for (const std::string & name : built)
+            empty.erase(name);
 
         return grains;
     }
@@ -410,6 +429,12 @@ class Reducer
     bool _ignore_duplicate_particles;
     bool _ignore_missing_particles;
 
+    // Accumulated over every residue of the model, so that a grain name can be
+    // reported once if no residue anywhere produced it -- see
+    // _report_grains_never_built.
+    std::set<std::string> _grains_built;
+    std::set<std::string> _grains_empty;
+
   public:
     Reducer(const topology::Topology & source_topology)
         : _source_topology(source_topology), _forcefield(), _forcefield_initialized(false), _rules(),
@@ -431,6 +456,19 @@ class Reducer
 
     void set_ignore_missing_particles(bool value) { _ignore_missing_particles = value; }
     bool get_ignore_missing_particles(void) const { return _ignore_missing_particles; }
+
+    // Valid after reduce(): how many (residue, grain) rules found no atom in
+    // any residue of the whole model. Expected to be nonzero as soon as the
+    // rules carry position-dependent grains, and not a defect -- see
+    // _report_grains_never_built for why, and for what is one.
+    size_t grains_never_built(void) const
+    {
+        size_t never = 0;
+        for (const std::string & key : _grains_empty)
+            if (_grains_built.find(key) == _grains_built.end())
+                never++;
+        return never;
+    }
 
     // =============================================================================
     // Main methods.
@@ -470,6 +508,7 @@ class Reducer
             }
         }
 
+        _report_grains_never_built();
         _carry_springs_over(source_to_target);
     }
 
@@ -543,7 +582,7 @@ class Reducer
                       _target_topology.number_of_springs(), _source_topology.number_of_springs());
     }
 
-    std::vector<ReducedGrain> _reduce_residue(const ParticleContainer & residue) const
+    std::vector<ReducedGrain> _reduce_residue(const ParticleContainer & residue)
     {
         const auto & rules = _rules.get_rules_for_residue(residue[0].properties().residue_name());
 
@@ -559,7 +598,43 @@ class Reducer
         residue_builder.set_ignore_duplicate_particles(_ignore_duplicate_particles);
         residue_builder.set_ignore_missing_particles(_ignore_missing_particles);
 
-        return residue_builder.build();
+        std::vector<ReducedGrain> grains = residue_builder.build();
+
+        // A grain name is keyed by residue as well: ALA's AOXT and GLY's GOXT
+        // are different rules, and one being built says nothing about the
+        // other. Without the residue name, one terminal alanine in a model
+        // would silence every other residue's terminal grains.
+        const std::string & resname = residue[0].properties().residue_name();
+        for (const std::string & name : residue_builder.grains_built())
+            _grains_built.insert(resname + ":" + name);
+        for (const std::string & name : residue_builder.grains_left_empty())
+            _grains_empty.insert(resname + ":" + name);
+
+        return grains;
+    }
+
+    // How many rule grains the model never produced -- one line, not a warning.
+    //
+    // It is not a defect, and that is the whole point of counting it here
+    // instead of reporting it per residue. A positional rule only matches if
+    // the model happens to put that residue type at that position: amber.grp
+    // declares the N-terminal ammonium and the C-terminal OXT for all 20
+    // residues, so a four-chain protein can satisfy at most four of each and
+    // the other sixteen types necessarily match nothing. There is nothing to
+    // check and nothing is lost.
+    //
+    // What IS a defect is the dual, and it is already reported, per atom, by
+    // _check_unknown_particles: an atom no rule claims is silently dropped from
+    // the network (072 lost a third of its protein that way). That check also
+    // covers the typo this one looks like it covers -- misspell ALA's AH1 rule
+    // and the real H1 of a terminal alanine goes unclaimed, which it reports.
+    void _report_grains_never_built(void) const
+    {
+        const size_t never = grains_never_built();
+        if (never)
+            logging::info("%zu reduce-rule grain(s) matched no atom anywhere, which is expected of a rule "
+                          "that only applies at a chain end; an atom no rule claims is reported separately",
+                          never);
     }
 
     static bool __still_same_residue(const ParticleContainer & current_residue, const topology::Particle & p)

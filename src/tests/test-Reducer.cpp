@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <set>
 #include <string>
 #include <utility>
@@ -8,6 +10,7 @@
 #include "IO/io.h"
 #include "IO/ReduceRuleReader.h"
 #include "reduce/Reducer.h"
+#include "TempPath.h"
 #include "measure.hpp"
 #include "topology.hpp"
 
@@ -191,4 +194,71 @@ int main(int argc, char * argv[])
 {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
+}
+
+// ===========================================================================
+// Rules that match nothing
+// ===========================================================================
+//
+// amber.grp declares the N-terminal ammonium hydrogens and the C-terminal OXT
+// for all 20 residues, so most of those rules necessarily match nothing in any
+// given model. Reported per residue, as it was, that came to 42% of the whole
+// example suite's build output and 10334 of 076's 10434 lines, which buried the
+// four warnings that example actually had. These two tests pin down the shape of
+// the replacement: a rule matching nowhere is COUNTED, costs no grain, and a
+// rule matching somewhere is not counted at all.
+
+static std::string grp_plus(const std::string & path, const std::string & extra)
+{
+    std::ifstream in(path);
+    std::string out((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    out += extra;
+    const std::string tmp = biospring::tests::temp_path(".grp");
+    std::ofstream(tmp) << out;
+    return tmp;
+}
+
+TEST_F(TestReducer, a_rule_matching_no_atom_anywhere_is_counted_and_costs_no_grain)
+{
+    // "ZZZ" is in no residue of model.pdb, so this rule can never build.
+    const std::string grp = grp_plus(path_reduce_rules, "AOXT ALA ZZZ\n");
+
+    biospring::reduce::Reducer reducer(topology);
+    reducer.initialize_forcefield(path_forcefield);
+    reducer.initialize_rules(grp);
+    reducer.reduce();
+
+    EXPECT_EQ(reducer.grains_never_built(), 1u);
+    // The same model as without the rule: an unmatched rule removes nothing.
+    EXPECT_EQ(reducer.target_topology().number_of_particles(), 183);
+}
+
+TEST_F(TestReducer, a_rule_matching_somewhere_is_not_counted_however_many_residues_skip_it)
+{
+    // CB exists in every residue of model.pdb but glycine, so this rule builds
+    // for one residue name and is skipped by none of ITS OWN -- what must not
+    // happen is for it to be reported as never built.
+    const std::string grp = grp_plus(path_reduce_rules, "AXTRA ALA CB\n");
+
+    biospring::reduce::Reducer reducer(topology);
+    reducer.initialize_forcefield(path_forcefield);
+    reducer.initialize_rules(grp);
+    reducer.reduce();
+
+    EXPECT_EQ(reducer.grains_never_built(), 0u);
+}
+
+// A grain name is keyed by residue: one residue type satisfying its own
+// terminal rule must not silence another type's. ALA's extra rule matches, ARG's
+// cannot, and the count has to be exactly one.
+TEST_F(TestReducer, the_count_is_per_residue_not_per_grain_name)
+{
+    const std::string grp = grp_plus(path_reduce_rules, "XX ALA CB\nXX ARG ZZZ\n");
+
+    biospring::reduce::Reducer reducer(topology);
+    reducer.initialize_forcefield(path_forcefield);
+    reducer.initialize_rules(grp);
+    reducer.reduce();
+
+    EXPECT_EQ(reducer.grains_never_built(), 1u);
 }
