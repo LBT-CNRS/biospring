@@ -3,6 +3,8 @@
 
 #include <functional>
 #include <array>
+#include <cstdint>
+#include <cstring>
 #include <unordered_map>
 #include <utility>
 
@@ -518,8 +520,20 @@ class Topology
                          "topology being merged; they cannot share one table array.",
                          _torsiontables.front().energy.size(), other._torsiontables.front().energy.size());
 
-        const size_t table_offset = _torsiontables.size();
-        _torsiontables.insert(_torsiontables.end(), other._torsiontables.begin(), other._torsiontables.end());
+        // The index is rebuilt here from what the array already holds rather
+        // than kept as a member: set_torsion_tables() and operator= replace
+        // that array wholesale, and an index allowed to fall out of step with
+        // it would point a torsion at someone else's curve. Interning keeps the
+        // array at the number of distinct curves -- 66 for a 70S -- so there is
+        // never much to re-hash, and the repeated merge an assembly performs
+        // gets cheaper rather than dearer as fragments accumulate.
+        std::unordered_map<size_t, std::vector<unsigned>> index;
+        for (size_t i = 0; i < _torsiontables.size(); ++i)
+            index[_torsion_table_hash(_torsiontables[i])].push_back(static_cast<unsigned>(i));
+
+        std::vector<unsigned> remap(other._torsiontables.size(), 0u);
+        for (size_t i = 0; i < other._torsiontables.size(); ++i)
+            remap[i] = _intern_torsion_table(other._torsiontables[i], index);
 
         const auto & src_by_uid = other._particles.by_uid();
         for (const Torsion & source : other._torsions)
@@ -535,9 +549,85 @@ class Topology
             }
             if (!resolved)
                 continue;
-            t.table = static_cast<unsigned>(table_offset + source.table);
+            if (source.table >= remap.size())
+                logging::die("Topology::merge: a torsion indexes torsion table %u of a topology that carries "
+                             "only %zu.",
+                             source.table, remap.size());
+            t.table = remap[source.table];
             _torsions.push_back(t);
         }
+    }
+
+    // Two tables holding the same curve are one table.
+    //
+    // A merge used to append every input's whole table array unseen, so the
+    // count grew with the number of fragments instead of with the number of
+    // distinct curves: the 70S of 079, assembled from 135 of them, carried
+    // 4615 tables for 66 distinct curves, and 18.9 of its 74.6 MB were those
+    // 66 curves written seventy times over.
+    //
+    // The waste was the lesser half. The peptide bond term learns what a C-N
+    // bond looks like from the torsions the network already carries across
+    // one, and tells two candidate patterns apart by their TABLE INDEX -- so
+    // 55 indices holding one curve read as 55 distinct patterns, and
+    // _addTorsions fired every one of them. A bond formed at run time in that
+    // 70S received 220 omega torsions on 4 quadruplets instead of 4, worth
+    // 5108.6 kJ/mol of barrier where AMBER puts 40 to 120: a 55-fold
+    // over-stiff omega on the one bond the example exists to make. Interning
+    // the curves is what makes an index mean a curve again.
+    //
+    // Identity is bitwise. These curves are tabulated by one reader out of one
+    // .bi.ff, so genuine duplicates agree to the bit; two that differ in their
+    // last digit stay apart, which costs one table and never fuses curves that
+    // are not the same one.
+    unsigned _intern_torsion_table(const TorsionTable & table,
+                                   std::unordered_map<size_t, std::vector<unsigned>> & index)
+    {
+        std::vector<unsigned> & bucket = index[_torsion_table_hash(table)];
+        for (const unsigned candidate : bucket)
+            if (_torsion_table_same(_torsiontables[candidate], table))
+                return candidate;
+        const unsigned fresh = static_cast<unsigned>(_torsiontables.size());
+        _torsiontables.push_back(table);
+        bucket.push_back(fresh);
+        return fresh;
+    }
+
+    // FNV-1a over the raw bytes of both curves. Hashing the bit patterns and
+    // not the values is deliberate, and matches _torsion_table_same: a hash
+    // that called 0.0f and -0.0f equal while memcmp called them different
+    // would send one of them to a bucket where its twin is never looked for.
+    static size_t _torsion_table_hash(const TorsionTable & table)
+    {
+        size_t hash = 1469598103934665603ull;
+        const auto mix = [&hash](const void * bytes, size_t count) {
+            const unsigned char * p = static_cast<const unsigned char *>(bytes);
+            for (size_t i = 0; i < count; ++i)
+            {
+                hash ^= p[i];
+                hash *= 1099511628211ull;
+            }
+        };
+        const uint32_t bins = table.bins;
+        mix(&bins, sizeof(bins));
+        if (!table.energy.empty())
+            mix(table.energy.data(), table.energy.size() * sizeof(float));
+        if (!table.torque.empty())
+            mix(table.torque.data(), table.torque.size() * sizeof(float));
+        return hash;
+    }
+
+    static bool _torsion_table_same(const TorsionTable & a, const TorsionTable & b)
+    {
+        if (a.bins != b.bins || a.energy.size() != b.energy.size() || a.torque.size() != b.torque.size())
+            return false;
+        if (!a.energy.empty() &&
+            std::memcmp(a.energy.data(), b.energy.data(), a.energy.size() * sizeof(float)) != 0)
+            return false;
+        if (!a.torque.empty() &&
+            std::memcmp(a.torque.data(), b.torque.data(), a.torque.size() * sizeof(float)) != 0)
+            return false;
+        return true;
     }
 
 };

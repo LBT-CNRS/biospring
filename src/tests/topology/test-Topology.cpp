@@ -174,6 +174,102 @@ TEST(Topology, merge_keeps_torsions_and_points_them_at_the_right_atoms)
     EXPECT_FLOAT_EQ(merged.torsion_tables()[2].energy[1], 3.0f);
 }
 
+// A merge used to append every input's whole table array unseen, so the count
+// grew with the number of FRAGMENTS and not with the number of distinct curves.
+// On the 70S of 079, merged from 135 of them, that was 4615 tables for 66
+// curves -- 18.9 MB of one curve written seventy times over.
+//
+// And the peptide bond term tells two candidate patterns apart by their table
+// INDEX, so 55 indices holding one curve read as 55 patterns and every one
+// fired: 220 omega torsions on 4 quadruplets, 5108.6 kJ/mol of barrier where
+// AMBER puts 40 to 120.
+TEST(Topology, merge_interns_identical_torsion_tables)
+{
+    topology::Topology top1, top2;
+    top1.add_particles(generate_random_particles(10));
+    top2.add_particles(generate_random_particles(8));
+
+    // top2's first table is top1's second, to the bit.
+    top1.set_torsion_tables({sample_table(1.0f), sample_table(2.0f)});
+    top2.set_torsion_tables({sample_table(2.0f), sample_table(3.0f)});
+
+    top1.add_torsion(7, top1.get_particle(0), top1.get_particle(1), top1.get_particle(2),
+                     top1.get_particle(3), 1);
+    top2.add_torsion(9, top2.get_particle(4), top2.get_particle(5), top2.get_particle(6),
+                     top2.get_particle(7), 0);
+    top2.add_torsion(9, top2.get_particle(0), top2.get_particle(1), top2.get_particle(2),
+                     top2.get_particle(3), 1);
+
+    const topology::Topology merged = top1.merge(top2);
+
+    // Three curves among the four tables given, so three tables.
+    ASSERT_EQ(merged.torsion_tables().size(), 3u);
+    EXPECT_FLOAT_EQ(merged.torsion_tables()[0].energy[1], 1.0f);
+    EXPECT_FLOAT_EQ(merged.torsion_tables()[1].energy[1], 2.0f);
+    EXPECT_FLOAT_EQ(merged.torsion_tables()[2].energy[1], 3.0f);
+
+    // The shared curve is ONE index, and both torsions name it.
+    ASSERT_EQ(merged.torsions().size(), 3u);
+    EXPECT_EQ(merged.torsions()[0].table, 1u);
+    EXPECT_EQ(merged.torsions()[1].table, 1u);
+    // top2's own second table was new, so it lands after what was already here.
+    EXPECT_EQ(merged.torsions()[2].table, 2u);
+
+    // Interning must not disturb the atoms.
+    expect_torsion_on_positions(merged, 0, {0, 1, 2, 3});
+    expect_torsion_on_positions(merged, 1, {10 + 4, 10 + 5, 10 + 6, 10 + 7});
+}
+
+// The duplicates are not only across fragments: a single protein fragment of
+// that 70S carries 71 tables for 66 curves, because the .bi.ff declares the
+// same parameters under more than one torsion type. Interning on the way in
+// collapses those too.
+TEST(Topology, copy_interns_duplicate_torsion_tables_within_one_topology)
+{
+    topology::Topology top;
+    top.add_particles(generate_random_particles(6));
+    top.set_torsion_tables({sample_table(5.0f), sample_table(5.0f), sample_table(6.0f)});
+    top.add_torsion(3, top.get_particle(1), top.get_particle(2), top.get_particle(3),
+                    top.get_particle(4), 1);
+    top.add_torsion(3, top.get_particle(0), top.get_particle(1), top.get_particle(2),
+                    top.get_particle(3), 2);
+
+    const topology::Topology copied(top);
+    ASSERT_EQ(copied.torsion_tables().size(), 2u);
+    EXPECT_FLOAT_EQ(copied.torsion_tables()[0].energy[1], 5.0f);
+    EXPECT_FLOAT_EQ(copied.torsion_tables()[1].energy[1], 6.0f);
+    ASSERT_EQ(copied.torsions().size(), 2u);
+    EXPECT_EQ(copied.torsions()[0].table, 0u);
+    EXPECT_EQ(copied.torsions()[1].table, 1u);
+    expect_torsion_on_positions(copied, 0, {1, 2, 3, 4});
+}
+
+// Two curves that differ, however slightly, are two curves. Interning is a
+// bitwise question on purpose: fusing them would quietly give one bond the
+// other's barrier.
+TEST(Topology, merge_keeps_torsion_tables_that_differ)
+{
+    topology::Topology top1, top2;
+    top1.add_particles(generate_random_particles(4));
+    top2.add_particles(generate_random_particles(4));
+
+    topology::Topology::TorsionTable nudged = sample_table(1.0f);
+    nudged.energy.back() += 1e-6f;
+
+    top1.set_torsion_tables({sample_table(1.0f)});
+    top2.set_torsion_tables({nudged});
+    top1.add_torsion(2, top1.get_particle(0), top1.get_particle(1), top1.get_particle(2),
+                     top1.get_particle(3), 0);
+    top2.add_torsion(2, top2.get_particle(0), top2.get_particle(1), top2.get_particle(2),
+                     top2.get_particle(3), 0);
+
+    const topology::Topology merged = top1.merge(top2);
+    EXPECT_EQ(merged.torsion_tables().size(), 2u);
+    ASSERT_EQ(merged.torsions().size(), 2u);
+    EXPECT_EQ(merged.torsions()[0].table, 0u);
+    EXPECT_EQ(merged.torsions()[1].table, 1u);
+}
+
 // readTopology returns by value, so the torsions were already gone before
 // merge() ever ran: a single-file round trip lost them too.
 TEST(Topology, copy_and_assignment_keep_torsions)
