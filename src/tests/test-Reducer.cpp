@@ -465,3 +465,42 @@ TEST_F(TestReducer, a_terminal_rule_for_a_type_that_sits_nowhere_terminal_change
 
     EXPECT_EQ(reducer.target_topology().number_of_particles(), 183);
 }
+
+// A genuine free amino acid is both ends at once, and AMBER has no template for
+// one, so it takes the N-terminal set (topology::wanted_position). Its OXT is
+// then claimed by no rule -- which is a real loss, and the point of pinning it
+// here is that it is REPORTED, per atom, rather than passed over.
+TEST_F(TestTerminalRules, a_free_amino_acid_takes_the_n_terminal_set_and_loses_its_oxt)
+{
+    const std::string path = biospring::tests::temp_path(".pdb");
+    {
+        std::ofstream out(path);
+        int serial = 0;
+        for (const std::string & atom : {"N", "H1", "H2", "H3", "CA", "CB", "C", "O", "OXT"})
+        {
+            char line[82];
+            std::snprintf(line, sizeof(line), "ATOM  %5d %-4s ALA A%4d    %8.3f%8.3f%8.3f", ++serial, atom.c_str(), 1,
+                          1.0 * serial, 0.0, 0.0);
+            out << line << "\n";
+        }
+    }
+
+    biospring::topology::Topology topology = biospring::io::readTopology(path);
+    ASSERT_EQ(topology.number_of_particles(), 9u);
+
+    biospring::reduce::Reducer reducer(topology);
+    reducer.initialize_forcefield(write_forcefield(true));
+    reducer.initialize_rules(write_rules());
+    reducer.reduce();
+
+    // The 8 atoms the N-terminal set names, all at +1; the OXT is gone.
+    const auto & reduced = reducer.target_topology();
+    EXPECT_EQ(reduced.number_of_particles(), 8u);
+    float net = 0.0f;
+    for (size_t i = 0; i < reduced.number_of_particles(); i++)
+    {
+        EXPECT_NE(reduced.get_particle(i).properties().name(), "AOXT");
+        net += reduced.get_particle(i).properties().charge();
+    }
+    EXPECT_NEAR(net, 8.0, 1e-5);
+}
