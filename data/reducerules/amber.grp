@@ -8,6 +8,37 @@ AHB2 ALA HB2
 AHB3 ALA HB3
 AC ALA C
 AO ALA O
+#
+# FREE CHAIN ENDS. The three hydrogens of an N-terminal ammonium and the
+# second oxygen of a C-terminal carboxylate exist in AMBER for all 20
+# residues (templates NALA..NVAL, CALA..CVAL) and had no rule here at all,
+# so pdb2spn dropped them WITHOUT LOGGING IT: 071's 377-atom input built a
+# 374-particle network, and the .rbody's _NTER/_CTER groups and the
+# .bi.ff's ammonium rotor and carboxylate improper had nothing to resolve.
+#
+# One type per atom even though the three ammonium hydrogens share a charge:
+# two atoms of ONE residue sharing a type both resolve to the first, and the
+# second then gets no spring at all.
+#
+# WHAT THIS DOES NOT FIX. A .grp rule is keyed on (residue, atom) only, so
+# the atoms a terminal residue SHARES with the interior one keep the interior
+# charge -- AMBER retypes those too (NALA's N is N3 at -0.3821 e, not N at
+# -0.4157). Net charge against AMBER's own template, in e:
+#     N-terminus   -1.2719 before, -0.59 to -0.78 after (-0.3760 for proline)
+#     C-terminus   +1.0000 before, +0.18 to +0.23 after
+# Getting that to zero needs the format to carry the chain position, as
+# .bi.ff now does with :NTER/:CTER -- but here the position would have to
+# change the TYPE of every shared atom, so it is a far larger change.
+#
+# The first ammonium hydrogen is also spelled H by OpenMM, and both all-atom
+# protein inputs here are OpenMM-written. That atom already resolves, to the
+# INTERIOR amide type: 0.0722 e too positive. A second rule for the same
+# (residue, atom) cannot say otherwise.
+#
+AH1 ALA H1
+AH2 ALA H2
+AH3 ALA H3
+AOXT ALA OXT
 RN ARG N
 RH ARG H
 RCA ARG CA
@@ -32,6 +63,10 @@ RHH21 ARG HH21
 RHH22 ARG HH22
 RC ARG C
 RO ARG O
+RH1 ARG H1
+RH2 ARG H2
+RH3 ARG H3
+ROXT ARG OXT
 NN ASN N
 NH ASN H
 NCA ASN CA
@@ -46,6 +81,10 @@ NHD21 ASN HD21
 NHD22 ASN HD22
 NC ASN C
 NO ASN O
+NH1 ASN H1
+NH2 ASN H2
+NH3 ASN H3
+NOXT ASN OXT
 DN ASP N
 DH ASP H
 DCA ASP CA
@@ -58,6 +97,10 @@ DOD1 ASP OD1
 DOD2 ASP OD2
 DC ASP C
 DO ASP O
+DH1 ASP H1
+DH2 ASP H2
+DH3 ASP H3
+DOXT ASP OXT
 CN CYS N
 CH CYS H
 CCA CYS CA
@@ -69,6 +112,10 @@ CSG CYS SG
 CHG CYS HG
 CC CYS C
 CO CYS O
+CH1 CYS H1
+CH2 CYS H2
+CH3 CYS H3
+COXT CYS OXT
 QN GLN N
 QH GLN H
 QCA GLN CA
@@ -86,6 +133,10 @@ QHE21 GLN HE21
 QHE22 GLN HE22
 QC GLN C
 QO GLN O
+QH1 GLN H1
+QH2 GLN H2
+QH3 GLN H3
+QOXT GLN OXT
 EN GLU N
 EH GLU H
 ECA GLU CA
@@ -101,6 +152,10 @@ EOE1 GLU OE1
 EOE2 GLU OE2
 EC GLU C
 EO GLU O
+EH1 GLU H1
+EH2 GLU H2
+EH3 GLU H3
+EOXT GLU OXT
 GN GLY N
 GH GLY H
 GCA GLY CA
@@ -108,6 +163,10 @@ GHA2 GLY HA2
 GHA3 GLY HA3
 GC GLY C
 GO GLY O
+GH1 GLY H1
+GH2 GLY H2
+GH3 GLY H3
+GOXT GLY OXT
 HN HIS N
 HH HIS H
 HCA HIS CA
@@ -125,6 +184,10 @@ HCD2 HIS CD2
 HHD2 HIS HD2
 HC HIS C
 HO HIS O
+HH1 HIS H1
+HH2 HIS H2
+HH3 HIS H3
+HOXT HIS OXT
 IN ILE N
 IH ILE H
 ICA ILE CA
@@ -144,6 +207,10 @@ IHD12 ILE HD12
 IHD13 ILE HD13
 IC ILE C
 IO ILE O
+IH1 ILE H1
+IH2 ILE H2
+IH3 ILE H3
+IOXT ILE OXT
 LN LEU N
 LH LEU H
 LCA LEU CA
@@ -163,6 +230,10 @@ LHD22 LEU HD22
 LHD23 LEU HD23
 LC LEU C
 LO LEU O
+LH1 LEU H1
+LH2 LEU H2
+LH3 LEU H3
+LOXT LEU OXT
 KN LYS N
 KH LYS H
 KCA LYS CA
@@ -185,6 +256,10 @@ KHZ2 LYS HZ2
 KHZ3 LYS HZ3
 KC LYS C
 KO LYS O
+KH1 LYS H1
+KH2 LYS H2
+KH3 LYS H3
+KOXT LYS OXT
 MN MET N
 MH MET H
 MCA MET CA
@@ -202,6 +277,10 @@ MHE2 MET HE2
 MHE3 MET HE3
 MC MET C
 MO MET O
+MH1 MET H1
+MH2 MET H2
+MH3 MET H3
+MOXT MET OXT
 FN PHE N
 FH PHE H
 FCA PHE CA
@@ -222,6 +301,10 @@ FCD2 PHE CD2
 FHD2 PHE HD2
 FC PHE C
 FO PHE O
+FH1 PHE H1
+FH2 PHE H2
+FH3 PHE H3
+FOXT PHE OXT
 PN PRO N
 PCD PRO CD
 PHD2 PRO HD2
@@ -236,6 +319,9 @@ PCA PRO CA
 PHA PRO HA
 PC PRO C
 PO PRO O
+PH2 PRO H2
+PH3 PRO H3
+POXT PRO OXT
 SN SER N
 SH SER H
 SCA SER CA
@@ -247,6 +333,10 @@ SOG SER OG
 SHG SER HG
 SC SER C
 SO SER O
+SH1 SER H1
+SH2 SER H2
+SH3 SER H3
+SOXT SER OXT
 TN THR N
 TH THR H
 TCA THR CA
@@ -261,6 +351,10 @@ TOG1 THR OG1
 THG1 THR HG1
 TC THR C
 TO THR O
+TH1 THR H1
+TH2 THR H2
+TH3 THR H3
+TOXT THR OXT
 WN TRP N
 WH TRP H
 WCA TRP CA
@@ -285,6 +379,10 @@ WHE3 TRP HE3
 WCD2 TRP CD2
 WC TRP C
 WO TRP O
+WH1 TRP H1
+WH2 TRP H2
+WH3 TRP H3
+WOXT TRP OXT
 YN TYR N
 YH TYR H
 YCA TYR CA
@@ -306,6 +404,10 @@ YCD2 TYR CD2
 YHD2 TYR HD2
 YC TYR C
 YO TYR O
+YH1 TYR H1
+YH2 TYR H2
+YH3 TYR H3
+YOXT TYR OXT
 VN VAL N
 VH VAL H
 VCA VAL CA
@@ -322,6 +424,10 @@ VHG22 VAL HG22
 VHG23 VAL HG23
 VC VAL C
 VO VAL O
+VH1 VAL H1
+VH2 VAL H2
+VH3 VAL H3
+VOXT VAL OXT
 XC ACE C
 XO ACE O
 XCH3 ACE CH3
