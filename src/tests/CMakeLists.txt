@@ -90,6 +90,7 @@ set(TEST_MODULES
     PeptideSite
     StaticBondBuilder
     Vector3f
+    XTCTrajectoryWriter
     hybrid36
 )
 

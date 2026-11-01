@@ -33,10 +33,10 @@ void XTCTrajectoryWriter::write_step()
     _current_frame++;
 }
 
-void XTCTrajectoryWriter::safe_open()
+void XTCTrajectoryWriter::_open_xdr()
 {
     if (_path.empty())
-        biospring::logging::die("Cannot open empty path");
+        biospring::logging::die("xtctrajectory.enable is set but xtctrajectory.path is empty.");
 
     if (!_xdr)
     {
