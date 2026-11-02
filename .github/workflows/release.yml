@@ -1,0 +1,156 @@
+name: Release (executables)
+
+# Builds relocatable BioSpring distributions (MDDriver + FreeSASA + OpenMP, all non-system
+# libraries bundled) for macOS (Apple Silicon, Intel) and Linux (x86_64, aarch64), and attaches
+# them to the GitHub release on a v* tag. The build logic lives in .github/scripts/release-macos.sh
+# and release-linux.sh so it can be run and debugged locally.
+#
+# Optional macOS Developer ID signing and notarization run only if these repository secrets exist:
+#   MACOS_CERT_P12, MACOS_CERT_PASSWORD, MACOS_SIGN_IDENTITY   (Developer ID Application cert)
+#   NOTARY_KEY_P8, NOTARY_KEY_ID, NOTARY_ISSUER_ID             (App Store Connect API key)
+# Without them the binaries get an ad-hoc signature: they run, but a browser download is
+# blocked by Gatekeeper until the user clears the quarantine flag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/scripts/release-macos.sh
+      - .github/scripts/release-linux.sh
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The binaries need at least the runner's macOS (Homebrew bottles carry it as their
+          # minimum), so build on the oldest listed runner of each architecture.
+          - os: macos-14
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
+    env:
+      HAVE_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' && secrets.MACOS_SIGN_IDENTITY != '' }}
+      HAVE_NOTARY: ${{ secrets.NOTARY_KEY_P8 != '' && secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: brew install netcdf netcdf-cxx libomp automake autoconf libtool dylibbundler
+
+      - name: Import signing certificate
+        if: env.HAVE_SIGNING == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          rm "$RUNNER_TEMP/cert.p12"
+
+      - name: Build, bundle, sign and verify
+        env:
+          MACOS_SIGN_IDENTITY: ${{ env.HAVE_SIGNING == 'true' && secrets.MACOS_SIGN_IDENTITY || '' }}
+        run: .github/scripts/release-macos.sh
+
+      - name: Notarize
+        if: env.HAVE_SIGNING == 'true' && env.HAVE_NOTARY == 'true'
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          echo "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          stage="$(ls -d build-release/biospring-*-macos-*)"
+          ditto -c -k --keepParent "$stage" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
+            --wait
+          rm "$RUNNER_TEMP/notary.p8"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: biospring-macos-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  build-linux:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # glibc of the build machine is the minimum glibc of the result: build on the oldest
+          # listed Ubuntu runner of each architecture.
+          - os: ubuntu-22.04
+            arch: x86_64
+          - os: ubuntu-22.04-arm
+            arch: aarch64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake autoconf automake libtool pkg-config \
+            libnetcdf-dev libnetcdf-c++4-dev patchelf file
+
+      - name: Build, bundle and verify
+        run: .github/scripts/release-linux.sh
+
+      - name: Run in a bare container
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" ubuntu:22.04 sh -c \
+            'tar -xzf /dist/*.tar.gz -C /tmp && /tmp/biospring-*/bin/biospring --version'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: biospring-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Attach to release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-macos, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release if needed and upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+                 --title "$GITHUB_REF_NAME" --notes-file .github/release-notes.md --generate-notes
+          gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber

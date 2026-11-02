@@ -8,3 +8,9 @@ build
 build-*
 html
 CMakeFiles
+# macOS release build (.github/scripts/build-macos-release.sh)
+/dist/
+/build-release/
+
+# macOS release tarballs (.github/scripts/release-macos.sh)
+/dist/
