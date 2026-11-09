@@ -59,6 +59,18 @@ into it with fixed particle indices. Generating under one residue is therefore
 correct and the carve does not disturb it -- while a record written as if the
 gamma were a separate residue would resolve against nothing at build time.
 
+AND IT DOES NOT FIX THE OUT-OF-PLANE HYDROGENS, which the commit that added
+this file claimed it would. Measured after the rebuild: the guanine's own H8 went
+from 1.02 to 0.93 A off the ring plane over 10 ps of cold relaxation, and HN22
+got WORSE, 0.61 to 0.68. The reason is that the mesh already determines those
+positions -- H8 carries 15 springs at k = 650 kJ/mol/A2, among them C8 at
+1.165 A, N7 at 1.773 and N9 at 1.917, and three distances to three non-collinear
+atoms fix a point already. A torsion worth 80 kJ/mol cannot move a point fifteen
+stiff springs hold. So an aromatic hydrogen's planarity is set when the mesh is
+BUILT, in the geometry pdb2spn is handed, and no relaxation afterwards will
+recover it. What the table does buy is listed above: a real profile on gamma,
+chi and the hydroxyl rotors.
+
     python amber_tabulate_gtp.py [out.bi.ff]
 """
 import os
