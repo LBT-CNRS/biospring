@@ -46,7 +46,9 @@ using biospring::spn::SpringNetwork;
 SpringNetworkOpenCL::SpringNetworkOpenCL()
     : SpringNetwork(), _springparticlesindexes(nullptr), _nbparticlesocl(0), _nbspringsocl(0),
       _particlepositions(nullptr), _particlevelocities(nullptr), _particleforces(nullptr),
-      _particleexternalforces(nullptr), _particlemasses(nullptr), _particledynamic(nullptr), _particletospringindexes(nullptr), _particlespringspan(nullptr), _springsocl(nullptr),
+      _particleexternalforces(nullptr), _particlemasses(nullptr), _particledynamic(nullptr), _particletospringindexes(nullptr), _particlespringspan(nullptr),
+      _onefourids(nullptr), _onefouroffsets(nullptr), _onefourspan(nullptr), _nbonefourocl(0),
+      _springsocl(nullptr),
       _err(CL_SUCCESS), _contextproperties(nullptr)
     {
     getOpenCLRessources();
@@ -341,6 +343,35 @@ void SpringNetworkOpenCL::createBuffer()
 								 &_err);
 		checkErr( "Buffer::Buffer() spring span");
 
+		// The 1-4 CSR, same layout. The ids buffer is only created when there
+		// are 1-4 pairs to scale: with scale14 off the list is empty, the
+		// kernels get a null pointer there and biospring_scale14_factor
+		// returns 1.0f without reading anything.
+		if (_nbonefourocl > 0)
+			{
+			_inOneFourBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(unsigned)*_nbonefourocl,
+								 _onefourids,
+								 &_err);
+			checkErr( "Buffer::Buffer() 1-4 ids");
+			_inOneFourIndexesBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(int)*(_nbparticlesocl+1),
+								 _onefouroffsets,
+								 &_err);
+			checkErr( "Buffer::Buffer() 1-4 offsets");
+			_inOneFourSpanBuffer=cl::Buffer(
+								 _context,
+								 CL_MEM_READ_ONLY| CL_MEM_USE_HOST_PTR,
+								 sizeof(unsigned)*_nbparticlesocl,
+								 _onefourspan,
+								 &_err);
+			checkErr( "Buffer::Buffer() 1-4 span");
+			}
+
 
 
 		checkErr( "Buffer::Buffer() 5");
@@ -610,6 +641,7 @@ void SpringNetworkOpenCL::wrappingOcl()
 	computeOpenCLDynamicState();
 	computeOpenCLSprings();
 	computeParticleToSpringIndexes();
+	computeOneFourCSR();
 	}
 
 double springtime=0.0;
@@ -833,6 +865,21 @@ void SpringNetworkOpenCL::idleRun()
         _kernelsteric.setArg(a++, _inSpringIndexesBuffer);
         _kernelsteric.setArg(a++, _inSpringSpanBuffer);
         _kernelsteric.setArg(a++, springsenabled);
+        // AMBER's scnb on the pairs three bonds apart. Null buffers when there
+        // is nothing to scale, which the kernel reads as "off".
+        if (_nbonefourocl > 0)
+            {
+            _kernelsteric.setArg(a++, _inOneFourBuffer);
+            _kernelsteric.setArg(a++, _inOneFourIndexesBuffer);
+            _kernelsteric.setArg(a++, _inOneFourSpanBuffer);
+            }
+        else
+            {
+            _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
+            _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
+            _kernelsteric.setArg(a++, sizeof(cl_mem), NULL);
+            }
+        _kernelsteric.setArg(a++, getScale14Steric());
         _kernelsteric.setArg(a++, _stericMode());
         _kernelsteric.setArg(a++, getForceField()->getRadiusRule());
         _kernelsteric.setArg(a++, getStericCutoff());
@@ -905,6 +952,21 @@ void SpringNetworkOpenCL::idleRun()
         _kernelelectrostatic.setArg(a++, _inSpringIndexesBuffer);
         _kernelelectrostatic.setArg(a++, _inSpringSpanBuffer);
         _kernelelectrostatic.setArg(a++, springsenabled);
+        // AMBER's scee on the pairs three bonds apart; see the steric kernel
+        // above for why the buffers may be null.
+        if (_nbonefourocl > 0)
+            {
+            _kernelelectrostatic.setArg(a++, _inOneFourBuffer);
+            _kernelelectrostatic.setArg(a++, _inOneFourIndexesBuffer);
+            _kernelelectrostatic.setArg(a++, _inOneFourSpanBuffer);
+            }
+        else
+            {
+            _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
+            _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
+            _kernelelectrostatic.setArg(a++, sizeof(cl_mem), NULL);
+            }
+        _kernelelectrostatic.setArg(a++, getScale14Coulomb());
         _kernelelectrostatic.setArg(a++, getElectrostaticCutoff());
         _kernelelectrostatic.setArg(a++, getForceField()->getDielectric());
         _kernelelectrostatic.setArg(a++, static_cast<float>(
@@ -2966,6 +3028,8 @@ void SpringNetworkOpenCL::_reuploadSprings()
 	{
 	computeOpenCLSprings();
 	computeParticleToSpringIndexes();
+	// The bonded topology may have changed, so the 1-4 set with it.
+	computeOneFourCSR();
 
 	if (_nbspringsocl > 0)
 		{
@@ -3339,6 +3403,9 @@ void SpringNetworkOpenCL::computeParticleToSpringIndexes()
     // nothing, and the last particle fell back to the PARTICLE count used as
     // a SPRING index. Offsets remove both cases rather than guarding them.
     delete[] _particletospringindexes;
+    delete[] _onefourids;
+    delete[] _onefouroffsets;
+    delete[] _onefourspan;
     delete[] _particlespringspan;
     _particletospringindexes = new int[_nbparticlesocl + 1];
     _particlespringspan = new unsigned[_nbparticlesocl];
@@ -3359,6 +3426,57 @@ void SpringNetworkOpenCL::computeParticleToSpringIndexes()
         _particlespringspan[particleId] = span;
         }
     _particletospringindexes[_nbparticlesocl] = static_cast<int>(springIndex);
+    }
+
+void SpringNetworkOpenCL::computeOneFourCSR()
+    {
+    // Laid out exactly like the spring CSR above, and for the same reason: the
+    // kernels scan it with the same per-particle index-span bound. The pairs
+    // themselves come from SpringNetwork::rebuildOneFourPairs, which derives
+    // them from the mesh and leaves every set empty unless scale14.enable is
+    // set -- so this ends with a one-entry offset array and no ids, and
+    // biospring_scale14_factor returns 1.0f on a null buffer.
+    delete[] _onefourids;
+    delete[] _onefouroffsets;
+    delete[] _onefourspan;
+    _onefourids = nullptr;
+    _onefouroffsets = new int[_nbparticlesocl + 1];
+    _onefourspan = new unsigned[_nbparticlesocl ? _nbparticlesocl : 1];
+    _nbonefourocl = 0;
+
+    size_t total = 0;
+    for (unsigned i = 0; i < _nbparticlesocl; ++i)
+        total += getParticle(i).getNumberOfOneFourPairs();
+    if (total == 0)
+        {
+        for (unsigned i = 0; i <= _nbparticlesocl; ++i)
+            _onefouroffsets[i] = 0;
+        for (unsigned i = 0; i < _nbparticlesocl; ++i)
+            _onefourspan[i] = 0;
+        return;
+        }
+
+    _onefourids = new unsigned[total];
+    unsigned at = 0;
+    for (unsigned i = 0; i < _nbparticlesocl; ++i)
+        {
+        _onefouroffsets[i] = static_cast<int>(at);
+        unsigned span = 0;
+        // Walked over the particle's OWN set, not over every particle: on the
+        // all-atom 70S that is 15 entries instead of 279678, and the kernels
+        // do not care about the order -- the scan is linear, not binary. The
+        // span has to see every entry, so it is taken in the same pass.
+        for (const unsigned j : getParticle(i).getOneFourNeighbors())
+            {
+            _onefourids[at++] = j;
+            const unsigned gap = j > i ? j - i : i - j;
+            if (gap > span)
+                span = gap;
+            }
+        _onefourspan[i] = span;
+        }
+    _onefouroffsets[_nbparticlesocl] = static_cast<int>(at);
+    _nbonefourocl = at;
     }
 
 float SpringNetworkOpenCL::distance (const float4 p1,const float4 p2)

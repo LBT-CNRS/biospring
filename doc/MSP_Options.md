@@ -354,6 +354,44 @@ calculation
 * **coulomb.dielectric = 1.0** *(dimensionless, float)* Relative dielectric constant used in
 Coulomb's equation.
 ---
+* **scale14.enable = 0** *(boolean)* Applies AMBER's 1-4 scale factors -- `scnb` on the
+Lennard-Jones, `scee` on the Coulomb -- to the pairs three covalent bonds apart.
+
+  BioSpring excludes only SPRUNG pairs from the non-bonded terms and scales nothing, so without
+this its 1-4 pairs are live at full strength. AMBER's are not, and its bonded parameters were
+fitted with those factors in place. Measured on 075.RNAHairpin, the 983 1-4 pairs carry +891
+kJ.mol-1 of Lennard-Jones unscaled against AMBER's own +449 on the same pairs -- the error is
+exactly the missing factor of two -- and on 073's ubiquitin +3069 against +1536. With the factor
+on, the model's 1-4 Lennard-Jones lands within 0.7 % of AMBER's on the RNA and 0.1 % on the
+protein, in absolute kJ.mol-1.
+
+  Off by default, because enabling it changes the energy of every network already built. No `.nc`
+has to be rebuilt: the 1-4 pairs are derived at setup from the spring mesh itself, by perceiving
+which of its springs are covalent bonds. That perception needs the mesh to BE a bond-and-angle
+graph -- which a `--rigidbody` mesh is and a `--cutoff` mesh is not -- and it says so: a perceived
+bond or angle pair that carries no spring is counted and reported as a warning. Measured against
+the force fields the generators read, the derivation is exact: 419 of 419 bonds, 1165 of 1165
+1-2/1-3 pairs and 983 of 983 1-4 pairs on 075 (amber14/RNA.OL3), 1236 of 1236 bonds and 3261 of
+3261 1-4 pairs on 073 (amber99sb), with nothing invented and nothing missed.
+
+  It costs a second scan per candidate pair, over its own CSR, next to the spring exclusion's.
+Measured over 3000 steps:
+
+  | | 072.GK | 073.ubiquitin | 034.VirusCA |
+  |---|---:|---:|---:|
+  | CPU, steps/s off then on | 223.2 / 205.2 | 477.9 / 442.2 | 453.8 / 451.1 |
+  | GPU, steps/s off then on | 404.5 / 329.3 | 488.0 / 395.7 | 1748 / 1762 |
+
+  8 % on a core and 19 % on the device for an all-atom network, and nothing at all on a
+coarse-grain one, which has no covalent bond to perceive: the list is empty, the kernels get a
+null pointer and the test is one comparison.
+
+* **scale14.steric = 0.5** *(dimensionless factor, float)* AMBER's `1/scnb`. Used only when
+`scale14.enable` is set.
+
+* **scale14.coulomb = 0.8333** *(dimensionless factor, float)* AMBER's `1/scee`, i.e. 1/1.2. Used
+only when `scale14.enable` is set.
+---
 * **electrostaticgrid.enable = 0** *(boolean)* Enable the APBS electrostatic potential grid.
 Renamed from `potentialgrid`, which said only that it was a grid: `densitygrid` below is one
 too. An .msp still using the old name keeps working and prints one deprecation warning per

@@ -827,6 +827,9 @@ void PeptideBondFormation::_form(SpringNetwork & network, unsigned electrophile,
                          chosen.getName().c_str());
 
     _addTorsions(network, electrophile, nucleophile);
+    // The bonded topology just changed, so the 1-4 set derived from it is stale.
+    // A no-op unless scale14.enable is set.
+    network.rebuildOneFourPairs();
     const unsigned going = _markLeavingGroup(network, electrophile, bond);
     if (going > 0)
         logging::info("Peptide bond formation: %u spring(s) of the leaving group will be drawn out and broken.",

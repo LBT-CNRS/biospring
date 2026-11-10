@@ -308,6 +308,16 @@ class SpringNetworkOpenCL : public SpringNetwork
 		// cost of those kernels was going.
 		unsigned * _particlespringspan;
 
+		// The 1-4 CSR: AMBER's pairs three covalent bonds apart, laid out like
+		// the spring CSR above (offsets of N+1 entries, ids sorted by owner,
+		// one index span per particle) because the kernels scan it the same
+		// way. Null and empty unless scale14.enable is set, which is what
+		// makes the factor cost nothing in a run that does not ask for it.
+		unsigned * _onefourids;
+		int * _onefouroffsets;
+		unsigned * _onefourspan;
+		unsigned _nbonefourocl;
+
 
 
 		Springocl * _springsocl;
@@ -340,6 +350,9 @@ class SpringNetworkOpenCL : public SpringNetwork
 		cl::Buffer _inSpringBuffer;
 		cl::Buffer _inSpringIndexesBuffer;
 		cl::Buffer _inSpringSpanBuffer;
+		cl::Buffer _inOneFourBuffer;
+		cl::Buffer _inOneFourIndexesBuffer;
+		cl::Buffer _inOneFourSpanBuffer;
 
 		cl::Buffer _inExternalForceBuffer;
 
@@ -751,6 +764,10 @@ class SpringNetworkOpenCL : public SpringNetwork
 		void computeOpenCLForces();
 
 		void computeParticleToSpringIndexes();
+
+		/// Flattens each particle's 1-4 neighbour set into the CSR the kernels
+		/// scan. A no-op leaving an empty list when scale14.enable is unset.
+		void computeOneFourCSR();
 		void _syncParticlesFromDevice();
 
 		// The kernels replace computeForces(), which is where the CPU fills

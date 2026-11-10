@@ -520,6 +520,38 @@ inline bool biospring_sprung_together(const __global Springocl * springs,
 	}
 
 
+// The factor AMBER puts on a pair three covalent bonds apart -- scnb on the
+// Lennard-Jones, scee on the Coulomb -- which the CPU applies in
+// Particle::addStericForce and addElectrostaticForce. The device must do it
+// too: a term the CPU scales and the device does not is a CPU/GPU
+// disagreement, and the pairwise energies have to agree to the digit.
+//
+// The 1-4 pairs come as their own CSR, built on the host from the mesh (see
+// SpringNetwork::rebuildOneFourPairs) and laid out exactly like the spring
+// one, with the same per-particle INDEX span bound: a candidate further than
+// `span` in index cannot be in the list, so the scan is skipped outright.
+// `scale` is 1.0f when the setting is off, which makes this a single
+// comparison against a null buffer and changes nothing.
+inline float biospring_scale14_factor(const __global uint * onefour,
+                                      const __global int * onefouroffsets,
+                                      const __global uint * onefourspan,
+                                      const uint self, const uint other,
+                                      const float scale)
+	{
+	if (onefour == 0 || onefouroffsets == 0)
+		return 1.0f;
+	const uint gap = other > self ? other - self : self - other;
+	if (onefourspan != 0 && gap > onefourspan[self])
+		return 1.0f;
+	const int begin = onefouroffsets[self];
+	const int end = onefouroffsets[self + 1];
+	for (int i = begin; i < end; i++)
+		if (onefour[i] == other)
+			return scale;
+	return 1.0f;
+	}
+
+
 // Coulomb, gathered over the cell list.
 //
 // Work item tid owns particle tid and is the only writer of forces[tid], so no
@@ -547,6 +579,12 @@ __kernel void electrostatic(const __global float4 * positions,
                             const __global int * springoffsets,
                             const __global uint * springspan,
                             const int springsenabled,
+                            // AMBER's scee on the pairs three bonds apart; see
+                            // biospring_scale14_factor. A null list means off.
+                            const __global uint * onefour,
+                            const __global int * onefouroffsets,
+                            const __global uint * onefourspan,
+                            const float scale14,
                             const float cutoff, const float dielectric, const float mindistance,
                             const float fourpi, const float convert,
                             // GLOBAL_ELECTROSTATIC_ENERGY_CONVERT, the 1389.35
@@ -606,10 +644,11 @@ __kernel void electrostatic(const __global float4 * positions,
 		if (springsenabled && biospring_sprung_together(springs, springoffsets, springspan, tid, p))
 			continue;
 		const float dist = sqrt(distsq);
+		const float s14 = biospring_scale14_factor(onefour, onefouroffsets, onefourspan, tid, p, scale14);
 		const float module = biospring_electrostatic_force_module(
 		    charges[p], q, dist, dielectric, mindistance, fourpi, convert);
-		sum += (axis / dist) * (coulombscale * module);
-		const float pair = biospring_electrostatic_energy(charges[p], q, dist, dielectric, mindistance,
+		sum += (axis / dist) * (coulombscale * s14 * module);
+		const float pair = s14 * biospring_electrostatic_energy(charges[p], q, dist, dielectric, mindistance,
 		                                               energyconvert);
 		esum += (targets == 0 || targets[p] != 0) ? 0.5f * pair : pair;
 	)
@@ -643,6 +682,12 @@ __kernel void steric(const __global float4 * positions,
                      const __global int * springoffsets,
                      const __global uint * springspan,
                      const int springsenabled,
+                     // AMBER's scnb on the pairs three bonds apart; see
+                     // biospring_scale14_factor. A null list means off.
+                     const __global uint * onefour,
+                     const __global int * onefouroffsets,
+                     const __global uint * onefourspan,
+                     const float scale14,
                      const int mode,
                      // How two radii combine, as one of BIOSPRING_RADIUS_* in
                      // steric_shared.h. A kernel argument rather than a compile
@@ -709,11 +754,12 @@ __kernel void steric(const __global float4 * positions,
 		/* Neighbour first, self second, as Particle::addStericForce calls it. Every */
 		/* combination rule is symmetric, so this is for the reader. */
 		const float dist = sqrt(distsq);
+		const float s14 = biospring_scale14_factor(onefour, onefouroffsets, onefourspan, tid, p, scale14);
 		const float module = biospring_steric_force_module(
 		    mode, radii[p], radius, epsilons[p], epsilon, dist,
 		    linearstiffness, mindistance, convert, radiusrule);
-		sum += (axis / dist) * (stericscale * module);
-		const float pair = biospring_steric_energy(mode, radii[p], radius, epsilons[p], epsilon, dist,
+		sum += (axis / dist) * (stericscale * s14 * module);
+		const float pair = s14 * biospring_steric_energy(mode, radii[p], radius, epsilons[p], epsilon, dist,
 		                                        linearstiffness, mindistance, radiusrule);
 		esum += (targets == 0 || targets[p] != 0) ? 0.5f * pair : pair;
 	)

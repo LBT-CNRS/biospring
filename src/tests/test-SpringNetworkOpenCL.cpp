@@ -246,6 +246,57 @@ TEST(SpringNetworkOpenCL, HoldsStaticParticlesTheWayTheCPUDoes)
 // where the atomic exchange in binParticles earns its keep.
 namespace
 {
+// A meshed chain: a spring on every bond and on every valence angle, which is
+// the spring set a --rigidbody mesh produces and the only one the 1-4
+// derivation can read. Zig-zagged at 120 degrees so the 1-3 pairs sit at
+// 2.60 A and the 1-4 pairs at 3.90, well apart in the only way that matters.
+// Alternating charges so Coulomb has something to scale too.
+void buildMeshedChain(spn::SpringNetwork & network, configuration::Configuration & config,
+                      unsigned n, bool scale14)
+{
+    for (unsigned i = 0; i < n; ++i)
+    {
+        spn::Particle p;
+        // 1.5 A bonds zig-zagging at 120 degrees: this puts the 1-3 pairs at
+        // 2.598 A and the 1-4 pairs at 3.97, which is what the springs below
+        // are given as their REST lengths. Getting that wrong leaves every
+        // angle spring compressed by a whole angstrom, and one step of a chain
+        // under that is enough to send the coordinates to infinity and the
+        // cell grid with them.
+        //
+        // The zig-zag plane is TILTED out of z, which changes no distance and
+        // keeps the bounding box three-dimensional: a system flat in one axis
+        // gives the cell grid a zero extent there, and the stencil walk does
+        // not come back from that.
+        const float y = (i % 2) ? 0.75f : 0.0f;
+        p.setPosition(Vector3f(1.299f * static_cast<float>(i), 0.866f * y, 0.5f * y));
+        p.setMass(12.011f);
+        p.setRadius(1.9f);
+        p.setEpsilon(0.1f);
+        p.setCharge((i % 2) ? 0.4f : -0.4f);
+        network.addParticle(p);
+    }
+    for (unsigned i = 0; i + 1 < n; ++i)
+        network.addSpring(i, i + 1, 1.5f, 100.0f); // the bonds
+    for (unsigned i = 0; i + 2 < n; ++i)
+        network.addSpring(i, i + 2, 2.598f, 100.0f); // the valence angles
+
+    config = configuration::defaultConfiguration();
+    config.sim.nbsteps = 1;
+    config.sim.timestep = 0.1;
+    config.spring.enable = true;
+    config.scale14.enable = scale14;
+    config.steric.enable = true;
+    config.steric.mode = "lennard-jones-12-6Amber";
+    config.steric.cutoff = 8.0;
+    config.electrostatic.enable = true;
+    config.electrostatic.cutoff = 14.0;
+    config.viscosity.enable = true;
+    config.viscosity.value = 1.0;
+
+    network.setup(config);
+}
+
 void buildParticleCloud(spn::SpringNetwork & network, configuration::Configuration & config,
                         unsigned n, float extent)
 {
@@ -2306,4 +2357,59 @@ TEST(SpringNetworkOpenCL, TheDeviceKnowsWhenTheListsHaveDrifted)
     gpu.uploadPositionsForTesting();
     EXPECT_TRUE(gpu._listsNeedRebuildingOnDevice())
         << "past half a skin the stored lists can be missing a pair";
+}
+
+// AMBER's 1-4 factor, on both backends.
+//
+// A factor the CPU applies and the device does not is a CPU/GPU disagreement
+// of exactly the kind this file exists to catch, and it would be invisible in
+// a total: the pairs are a few percent of the candidates and the error hides
+// in the sum. So the device's answer is compared against the CPU's WITH the
+// factor, and against the CPU's WITHOUT it -- it has to match the first and
+// differ from the second. A device that silently ignored the new buffers
+// would match the second.
+//
+// ONE device network, three in all: constructing two SpringNetworkOpenCL in
+// one process is not what this test is about, and the CPU runs are free.
+TEST(SpringNetworkOpenCL, TheOneFourFactorMatchesTheCPU)
+{
+    if (!hasOpenCLDevice())
+        GTEST_SKIP() << "no OpenCL device available on this machine";
+
+    const unsigned N = 40;
+    float offsteric = 0.0f, offcoulomb = 0.0f;
+    {
+        spn::SpringNetwork cpu;
+        configuration::Configuration c;
+        buildMeshedChain(cpu, c, N, /*scale14=*/false);
+        cpu.run();
+        offsteric = cpu.getStericEnergy();
+        offcoulomb = cpu.getElectrostaticEnergy();
+    }
+    float onsteric = 0.0f, oncoulomb = 0.0f;
+    {
+        spn::SpringNetwork cpu;
+        configuration::Configuration c;
+        buildMeshedChain(cpu, c, N, /*scale14=*/true);
+        cpu.run();
+        onsteric = cpu.getStericEnergy();
+        oncoulomb = cpu.getElectrostaticEnergy();
+    }
+    // The factor has to CHANGE something, or the comparison below is vacuous.
+    ASSERT_NE(offsteric, onsteric) << "the 1-4 factor changed no steric energy at all";
+    ASSERT_NE(offcoulomb, oncoulomb) << "the 1-4 factor changed no Coulomb energy at all";
+
+    SpringNetworkOpenCL gpu;
+    configuration::Configuration cg;
+    buildMeshedChain(gpu, cg, N, /*scale14=*/true);
+    gpu.run();
+
+    const float ssteric = std::max(std::abs(onsteric), 1.0f);
+    const float scoulomb = std::max(std::abs(oncoulomb), 1.0f);
+    EXPECT_NEAR(gpu.getStericEnergy(), onsteric, 0.01f * ssteric)
+        << "steric: CPU " << onsteric << ", device " << gpu.getStericEnergy()
+        << " (unscaled would be " << offsteric << ")";
+    EXPECT_NEAR(gpu.getElectrostaticEnergy(), oncoulomb, 0.01f * scoulomb)
+        << "coulomb: CPU " << oncoulomb << ", device " << gpu.getElectrostaticEnergy()
+        << " (unscaled would be " << offcoulomb << ")";
 }

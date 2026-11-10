@@ -87,6 +87,7 @@ set(TEST_MODULES
     HydrogenBondIsostericity
     HydrogenBondAssignment
     PeptideBond
+    Scale14
     PeptideSite
     StaticBondBuilder
     Vector3f

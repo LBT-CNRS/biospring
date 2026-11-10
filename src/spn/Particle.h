@@ -1,6 +1,7 @@
 #ifndef __PARTICLE_H__
 #define __PARTICLE_H__
 
+#include <unordered_set>
 #include <vector>
 
 #include "forcefield/ForceField.h"
@@ -36,7 +37,7 @@ class Particle : public ParticleProperty
     Particle()
         : ParticleProperty(), _force(), _previousForce(), _position(), _previousposition(), _velocity(),
           _isstatic(false), _name(""), _cgname(""), _resid(0), _resname(""), _chainname(""), _elementname(""),
-          _internalstructid(0), _rigidbodyid(0), _isrigid(false), _springneighbors(), _kineticenergy(0.0f),
+          _internalstructid(0), _rigidbodyid(0), _isrigid(false), _springneighbors(), _onefourneighbors(), _kineticenergy(0.0f),
           _electrostaticenergy(0.0f), _stericenergy(0.0f), _impenergy(0.0f), _hydrophobicityenergy(0.0f),
           _hydrogenbondcorerepulsionenergy(0.0f), _extid(static_cast<unsigned>(-1)), _id(-1), _springnetwork(nullptr)
     {
@@ -135,6 +136,21 @@ class Particle : public ParticleProperty
     unsigned getNumberOfSprings() const { return _springneighbors.size(); }
 
     bool isInSpringNeighbors(unsigned index) const { return _springneighbors.find(index) != _springneighbors.end(); }
+
+    // The pairs three covalent bonds apart, which AMBER scales rather than
+    // excludes (see Scale14Setting and SpringNetwork::_buildOneFourPairs).
+    // Kept apart from _springneighbors because they are not sprung: a 1-4 pair
+    // carries no spring, and the non-bonded terms must see it at a reduced
+    // strength rather than not at all. Only filled when scale14.enable is set,
+    // so the probe below costs nothing in a run that does not ask for it.
+    void addToOneFourNeighbors(unsigned index) { _onefourneighbors.insert(index); }
+    const std::unordered_set<unsigned> & getOneFourNeighbors() const { return _onefourneighbors; }
+    void clearOneFourNeighbors() { _onefourneighbors.clear(); }
+    unsigned getNumberOfOneFourPairs() const { return _onefourneighbors.size(); }
+    bool isInOneFourNeighbors(unsigned index) const
+    {
+        return _onefourneighbors.find(index) != _onefourneighbors.end();
+    }
 
     void addElectrostaticFieldForce();
     void addDensityFieldForce();
@@ -246,6 +262,7 @@ class Particle : public ParticleProperty
     bool _isrigid;
 
     std::unordered_map<unsigned, Spring *> _springneighbors;
+    std::unordered_set<unsigned> _onefourneighbors;
 
     float _kineticenergy;
     float _electrostaticenergy;

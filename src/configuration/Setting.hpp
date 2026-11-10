@@ -312,6 +312,53 @@ class ThermostatSetting : public SettingBase
     }
 };
 
+// AMBER's 1-4 scale factors, scnb and scee, for the pairs three bonds apart.
+//
+// BioSpring excludes only SPRUNG pairs from the non-bonded terms and scales
+// nothing, so its 1-4 pairs are live at full strength. AMBER's are not: it
+// divides their Lennard-Jones by 2 and their Coulomb by 1.2, and its bonded
+// parameters were fitted with those factors in place. Measured on 075's
+// hairpin, the 293 1-4 pairs inside the nucleobases carry +578 kJ/mol of
+// Lennard-Jones where AMBER charges +289 on the same pairs -- exactly the
+// missing factor of two -- which opens every base ring by 14 pm and drags the
+// glycosidic torsion 91 degrees off its start.
+//
+// Off by default, because turning it on changes the energy of every network
+// already built. The 1-4 pairs are derived at setup from the spring mesh
+// itself (see SpringNetwork::_buildOneFourPairs), so no .nc has to be rebuilt.
+class Scale14Setting : public SettingBase
+{
+  public:
+    bool enable;
+    double steric;      // AMBER's 1/scnb
+    double coulomb;     // AMBER's 1/scee
+
+    Scale14Setting(const std::string & name)
+        : SettingBase(name), enable(false), steric(0.5), coulomb(1.0 / 1.2)
+    {
+        _parameterNames = {"enable", "steric", "coulomb"};
+    }
+
+    void setFromString(const std::string & param, const std::string & s) override
+    {
+        if (param == "enable")
+            _parse_bool(enable, s, param);
+        else if (param == "steric")
+            utils::string::from_string<decltype(steric)>(steric, s);
+        else if (param == "coulomb")
+            utils::string::from_string<decltype(coulomb)>(coulomb, s);
+        else
+            logging::die("%s: unknown parameter '%s'", name.c_str(), param.c_str());
+    }
+
+    void print(std::ostream & os = std::cout) const override
+    {
+        _mspFormatter.print("enable", enable, os);
+        _mspFormatter.print("steric", steric, os);
+        _mspFormatter.print("coulomb", coulomb, os);
+    }
+};
+
 class SimulationSetting : public SettingBase
 {
   public:

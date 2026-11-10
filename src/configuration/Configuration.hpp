@@ -33,6 +33,8 @@ class Configuration
     InsertionVectorSetting ivector;
     ViscositySetting viscosity;
     ThermostatSetting thermostat;
+    // AMBER's 1-4 scale factors; off by default, see Scale14Setting.
+    Scale14Setting scale14;
     TrajectorySetting pdbtraj;
     TrajectorySetting xtctraj;
     TrajectorySetting csvsample;
@@ -78,7 +80,7 @@ class Configuration
 
     Configuration()
         : sim("simulation"), steric("steric"), spring("spring"), hydrophobicity("hydrophobicity"), hbond("hbond"),
-          peptidebond("peptidebond"), electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"), thermostat("thermostat"),
+          peptidebond("peptidebond"), electrostatic("coulomb"), imp("impala"), ivector("insertionvector"), viscosity("viscosity"), thermostat("thermostat"), scale14("scale14"),
           pdbtraj("pdbtrajectory"), xtctraj("xtctrajectory"), csvsample("csvsampling"),
           electrostaticgrid("electrostaticgrid"), densitygrid("densitygrid"), probe("probe"),
           rigidbody("rigidbody"), dihedralphi("dihedralphi"), dihedralpsi("dihedralpsi"),
@@ -97,6 +99,7 @@ class Configuration
         _register(ivector);
         _register(viscosity);
         _register(thermostat);
+        _register(scale14);
         _register(pdbtraj);
         _register(xtctraj);
         _register(csvsample);
@@ -136,6 +139,7 @@ class Configuration
         os << "\n";
         viscosity.print();
         thermostat.print();
+        scale14.print();
         os << "\n";
         pdbtraj.print();
         os << "\n";
@@ -242,6 +246,8 @@ class Configuration
             viscosity.setFromString(name, value);
         else if (group == thermostat.name)
             thermostat.setFromString(name, value);
+        else if (group == scale14.name)
+            scale14.setFromString(name, value);
         else if (group == pdbtraj.name)
             pdbtraj.setFromString(name, value);
         else if (group == xtctraj.name)

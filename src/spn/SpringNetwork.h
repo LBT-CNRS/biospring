@@ -510,6 +510,18 @@ class SpringNetwork
     }
 
     bool isSpringEnabled() const { return _config.spring.enable; }
+
+    // AMBER's 1-4 scale factors (see configuration::Scale14Setting). Off by
+    // default: enabling it changes the energy of every network already built.
+    bool isScale14Enabled() const { return _config.scale14.enable; }
+    float getScale14Steric() const { return static_cast<float>(_config.scale14.steric); }
+    float getScale14Coulomb() const { return static_cast<float>(_config.scale14.coulomb); }
+
+    /// Derives the pairs three covalent bonds apart from the spring mesh and
+    /// records them on their two particles. Idempotent, and a no-op when
+    /// scale14.enable is unset. Called from setup(), and again whenever the
+    /// bonded topology is rewritten (PeptideBond).
+    void rebuildOneFourPairs();
     // Per-family runtime toggles for the torsions that -dihedral* already
     // decided, at build time, to apply. All eight default to enabled (see
     // defaultConfiguration()): an opt-OUT knob for isolating one family's
@@ -851,6 +863,7 @@ class SpringNetwork
     void _markNeighborSearchesDirty();
     void _syncProbeParticle();
     void _rebuildSpringNeighbors();
+    void _setupScale14();
     /// Springs that releaseSpring has broken. Kept because
     /// _rebuildSpringNeighbors runs whenever the spring vector reallocates and
     /// would otherwise restore, from _springs, exactly the neighbour entries a

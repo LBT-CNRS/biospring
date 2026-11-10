@@ -1,5 +1,7 @@
 #include "SpringNetwork.h"
 
+#include <cmath>
+#include <vector>
 #include <fstream>
 #include "logging.h"
 #include "measure.hpp"
@@ -1721,6 +1723,8 @@ void SpringNetwork::setup(const configuration::Configuration & conf)
     _config = conf;
 
     _setupForceField();
+    // After the force field: the perception reads each particle's MASS.
+    _setupScale14();
     _setupProbe();
     _setupSteric();
     _setupElectrostatic();
@@ -2334,6 +2338,176 @@ void SpringNetwork::_applyNonbondedPairScratch(
         }
     }
 }
+
+// ======================================================================================
+// AMBER's 1-4 pairs, derived from the mesh
+
+namespace
+{
+// Covalent radius in A -- Cordero et al. 2008 -- keyed by MASS, because that is
+// what a .nc carries: it has no atomic number, and getElementName() is empty
+// for a particle whose PDB left columns 77-78 blank.
+//
+// Only the elements that form covalent bonds in an all-atom biomolecular
+// network are listed. Anything else -- a counter-ion, a coarse-grain bead --
+// returns 0, which makes every pair through it a non-bond. That is the
+// conservative answer and the right one: an ion has no AMBER 1-4 pair to
+// scale, and giving it a radius would invent bonds to its coordination shell.
+float covalentRadiusFromMass(float mass)
+{
+    static constexpr struct
+    {
+        float mass;
+        float radius;
+    } TABLE[] = {
+        {1.008f, 0.31f},   // H
+        {12.011f, 0.76f},  // C
+        {14.007f, 0.71f},  // N
+        {15.999f, 0.66f},  // O
+        {18.998f, 0.57f},  // F
+        {30.974f, 1.07f},  // P
+        {32.06f, 1.05f},   // S
+        {35.45f, 1.02f},   // Cl
+    };
+    // The force field files spell the same element several ways -- C is 12.01
+    // and 12.011, O is 15.999, 16.0 and 16.000 -- so the match is a tolerance,
+    // wide enough for those and far narrower than the gap to the next element.
+    for (const auto & e : TABLE)
+        if (std::fabs(mass - e.mass) < 0.5f)
+            return e.radius;
+    return 0.0f;
+}
+
+// How much longer than the two radii a pair may be and still be a bond.
+//
+// It has to separate every real bond from every 1-3 pair of the same elements.
+// The tightest pair of cases in a nucleic acid is O-P: the bond is 1.48 to 1.61
+// A and the O-P-O 1-3 pair 2.42, against a threshold of 2.18. For carbon the
+// bond is 1.53 and the C-C-C 1-3 pair in a furanose 2.38, against 1.97.
+constexpr float COVALENT_TOLERANCE = 0.45f;
+} // namespace
+
+void SpringNetwork::rebuildOneFourPairs()
+{
+    for (Particle & particle : _particles)
+        particle.clearOneFourNeighbors();
+
+    if (!isScale14Enabled())
+        return;
+
+    const size_t n = _particles.size();
+    std::vector<float> radius(n);
+    for (size_t i = 0; i < n; i++)
+        radius[i] = covalentRadiusFromMass(_particles[i].getMass());
+
+    // WHY THE BONDS HAVE TO BE PERCEIVED. The mesh holds AMBER's bonds and its
+    // valence angles in one undifferentiated spring set, and the two overlap in
+    // length: an amine H...H 1-3 pair sits at 1.6 A where a C-C bond sits at
+    // 1.53, so no distance threshold alone can tell them apart. Knowing the
+    // elements is enough -- two hydrogens are never bonded to each other, and
+    // the tolerance above separates the rest with margin.
+    //
+    // Measured against the force fields the generators read: on 075's hairpin
+    // (amber14/RNA.OL3) 419 of 419 bonds, 1165 of 1165 1-2/1-3 pairs and 983 of
+    // 983 1-4 pairs, with nothing invented and nothing missed -- on the base
+    // CLIQUE mesh as well as the per-vertex one, so the surplus springs of a
+    // clique do not fool it. On 073's ubiquitin (amber99sb), 1236 of 1236
+    // bonds and 3261 of 3261 1-4 pairs.
+    std::vector<std::vector<unsigned>> bonded(n);
+    size_t nbond = 0;
+    for (unsigned id = 0; id < _springs.size(); id++)
+    {
+        if (_releasedsprings.count(id))
+            continue; // broken: it holds nothing and bonds nothing
+        const Spring & spring = _springs[id];
+        const unsigned i = static_cast<unsigned>(spring.getParticle1().getId());
+        const unsigned j = static_cast<unsigned>(spring.getParticle2().getId());
+        if (radius[i] <= 0.0f || radius[j] <= 0.0f)
+            continue;
+        if (_particles[i].getMass() < 2.0f && _particles[j].getMass() < 2.0f)
+            continue; // two hydrogens: a 1-3 pair of a methyl or an amine
+        // The REST length, not the current distance: the perception must not
+        // depend on where the structure happens to be in a trajectory. A bond
+        // still being drawn in by PeptideBond is therefore not yet perceived,
+        // which leaves its 1-4 pairs unscaled -- the behaviour without this
+        // setting at all, so nothing regresses.
+        // A spring may carry the -1 sentinel for "whatever length it was born
+        // at", which spn::Spring stores verbatim instead of resolving; falling
+        // back on the length it measured at construction keeps that from being
+        // read as an impossibly short bond.
+        const float rest = spring.getEquilibrium() > 0.0f ? spring.getEquilibrium() : spring.getLength();
+        if (rest >= radius[i] + radius[j] + COVALENT_TOLERANCE)
+            continue;
+        bonded[i].push_back(j);
+        bonded[j].push_back(i);
+        nbond++;
+    }
+
+    // 1-2 and 1-3 first, because a pair that is BOTH 1-4 and 1-3 -- which
+    // happens in any ring of five or six -- is excluded outright by AMBER and
+    // must not be scaled. Those are already sprung, so isInSpringNeighbors
+    // would catch them, but the set is built explicitly rather than relying on
+    // a mesh being exactly AMBER's: that is what the audit below checks, not
+    // what this assumes.
+    std::set<std::pair<unsigned, unsigned>> close;
+    auto key = [](unsigned a, unsigned b) { return std::make_pair(std::min(a, b), std::max(a, b)); };
+    for (unsigned v = 0; v < n; v++)
+    {
+        for (const unsigned u : bonded[v])
+            close.insert(key(u, v));
+        for (size_t a = 0; a < bonded[v].size(); a++)
+            for (size_t b = a + 1; b < bonded[v].size(); b++)
+                close.insert(key(bonded[v][a], bonded[v][b]));
+    }
+
+    size_t npair = 0, nunsprung = 0;
+    for (unsigned b = 0; b < n; b++)
+    {
+        for (const unsigned c : bonded[b])
+        {
+            if (c < b)
+                continue; // each bond once
+            for (const unsigned u : bonded[b])
+            {
+                if (u == c)
+                    continue;
+                for (const unsigned v : bonded[c])
+                {
+                    if (v == b || v == u)
+                        continue;
+                    if (close.count(key(u, v)))
+                        continue; // also 1-2 or 1-3: excluded, never scaled
+                    if (_particles[u].isInOneFourNeighbors(v))
+                        continue;
+                    _particles[u].addToOneFourNeighbors(v);
+                    _particles[v].addToOneFourNeighbors(u);
+                    npair++;
+                }
+            }
+        }
+    }
+
+    // THE AUDIT. The derivation assumes the mesh is AMBER's bond-and-angle
+    // graph, which is true of a --rigidbody mesh built from per-vertex groups
+    // and false of a mesh built from a distance cutoff, where "short spring"
+    // means "close contact" and perceiving bonds in it is meaningless. A
+    // perceived 1-3 pair that carries no spring is the signature of the second
+    // case, so it is counted and reported rather than assumed away.
+    for (const auto & pair : close)
+        if (!_particles[pair.first].isInSpringNeighbors(pair.second))
+            nunsprung++;
+
+    logging::info("1-4 scaling: %zu bond(s) perceived, %zu 1-4 pair(s) scaled by %.4f (steric) and %.4f (coulomb).",
+                  nbond, npair, _config.scale14.steric, _config.scale14.coulomb);
+    if (nunsprung)
+        logging::warning("1-4 scaling: %zu perceived bond/angle pair(s) carry no spring. The 1-4 set is derived from "
+                         "the mesh, so this means the mesh is not a bond-and-angle graph -- a cutoff-built network, "
+                         "most likely -- and the pairs being scaled are not AMBER's. Check the model before trusting "
+                         "the non-bonded energies.",
+                         nunsprung);
+}
+
+void SpringNetwork::_setupScale14() { rebuildOneFourPairs(); }
 
 void SpringNetwork::_syncProbeParticle()
 {

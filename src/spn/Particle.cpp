@@ -308,15 +308,23 @@ void Particle::addElectrostaticForce(std::vector<DeferredNonbondedContribution> 
                 // where it is consumed as a spring-neighbor index (always >= 0
                 // once assigned by SpringNetwork).
                 apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
+            // A 1-4 pair is not sprung, so it survives the test above -- but
+            // AMBER divides its Coulomb by scee, and the bonded parameters were
+            // fitted with that factor in place. See Scale14Setting.
+            const float scale14 = (apply && _springnetwork->isScale14Enabled() &&
+                                   isInOneFourNeighbors(static_cast<unsigned>(p.getId())))
+                                      ? _springnetwork->getScale14Coulomb()
+                                      : 1.0f;
             if (apply)
             {
-                const float pair_energy = ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
+                const float pair_energy =
+                    scale14 * ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
                 // `distance` IS f.norm(), computed just above: dividing by it here
                 // drops the SECOND square root normalize() would take, and its guard
                 // branches with it. Component-wise division by the same value is what
                 // normalize() does, so the result is bit-identical.
                 f = f / distance;
-                f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
+                f = f * (scale14 * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance));
                 addForce(f);
 
                 if (p.isDynamic())
@@ -544,19 +552,26 @@ void Particle::addElectrostaticForceNoGrid(float cutoff)
             apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
         }
 
+        // Same 1-4 factor as the gridded path above; see Scale14Setting.
+        const float scale14 = (apply && _springnetwork->isScale14Enabled() &&
+                               isInOneFourNeighbors(static_cast<unsigned>(p.getId())))
+                                  ? _springnetwork->getScale14Coulomb()
+                                  : 1.0f;
+
         if (apply && p.getId() != getId())
         {
             f = p.getPosition() - getPosition();
             distance = f.norm();
             if (distance < cutoff && distance != 0.0f)
             {
-                _electrostaticenergy += ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
+                _electrostaticenergy +=
+                    scale14 * ff->computeElectrostaticEnergy(p.getCharge(), getCharge(), distance);
                 // `distance` IS f.norm(), computed just above: dividing by it here
                 // drops the SECOND square root normalize() would take, and its guard
                 // branches with it. Component-wise division by the same value is what
                 // normalize() does, so the result is bit-identical.
                 f = f / distance;
-                f = f * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance);
+                f = f * (scale14 * ff->computeElectrostaticForceModule(p.getCharge(), getCharge(), distance));
                 addForce(f);
             }
         }
@@ -607,17 +622,25 @@ void Particle::addStericForce(std::vector<DeferredNonbondedContribution> & defer
                 // once assigned by SpringNetwork).
                 apply = !isInSpringNeighbors(static_cast<unsigned>(p.getId()));
 
+            // A 1-4 pair is not sprung, so it survives the test above -- but
+            // AMBER divides its Lennard-Jones by scnb. See Scale14Setting.
+            const float scale14 = (apply && _springnetwork->isScale14Enabled() &&
+                                   isInOneFourNeighbors(static_cast<unsigned>(p.getId())))
+                                      ? _springnetwork->getScale14Steric()
+                                      : 1.0f;
+
             if (apply)
             {
                 const float pair_energy =
+                    scale14 *
                     ff->computeStericEnergy(p.getRadius(), getRadius(), p.getEpsilon(), getEpsilon(), distance);
                 // `distance` IS f.norm(), computed just above: dividing by it here
                 // drops the SECOND square root normalize() would take, and its guard
                 // branches with it. Component-wise division by the same value is what
                 // normalize() does, so the result is bit-identical.
                 f = f / distance;
-                f = f *
-                    ff->computeStericForceModule(p.getRadius(), getRadius(), p.getEpsilon(), getEpsilon(), distance);
+                f = f * (scale14 * ff->computeStericForceModule(p.getRadius(), getRadius(), p.getEpsilon(),
+                                                                getEpsilon(), distance));
                 addForce(f);
 
                 if (p.isDynamic())
