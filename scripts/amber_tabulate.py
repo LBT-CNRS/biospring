@@ -373,6 +373,45 @@ for (e, _t), tkey in zip(tables, table_of):
         ef += k * (1.0 + np.cos(n * fine - p))
     worst = max(worst, float(np.abs(np.interp(fine, PHI, e) - ef).max()))
 
+# ---- bond stiffnesses ------------------------------------------------------
+#
+# NOT A NEW TERM. The --rigidbody mesh already carries a spring for every one
+# of AMBER's bonds and for every one of its valence angles -- measured on 075's
+# hairpin, 419 of 419 and 746 of 746, with no surplus pair -- so there is
+# nothing to add. What the mesh does NOT have is the VALUE: every spring
+# carries pdb2spn's uniform --stiffness, 500 kJ.mol-1.A-2 where AMBER's bonds
+# run from 1925 to 4770. These records say what each bond's constant is, and
+# the reader only ever retunes a spring that already exists.
+#
+# The angles are deliberately left out. A 1-3 distance spring is not an angle
+# spring and converting one into the other does not reproduce the same soft
+# modes (see 7660b34); measured at the uniform value it already delivers 0.60
+# of AMBER's angular stiffness and the binned deformability test says the
+# middle of the spectrum is right. It is the stiff end, the bond stretches,
+# that is 0.18 to 0.38 of AMBER.
+STIFF_CONVERT = 0.01  # kJ.mol-1.nm-2 -> kJ.mol-1.A-2
+
+stiffness_records, stiff_seen, stiff_missing = [], set(), 0
+for _a, _b in G.bonds:
+    cls = (G.resolved_class(_a.residue.name, _a.name, _a.residue.is_nterm, _a.residue.is_cterm),
+           G.resolved_class(_b.residue.name, _b.name, _b.residue.is_nterm, _b.residue.is_cterm))
+    par = G.bond_params.get(frozenset(cls))
+    if par is None:
+        stiff_missing += 1
+        continue
+    k = par[1] * STIFF_CONVERT
+    owners, _ = owners_for((_a, _b))
+    for owner, names in owners:
+        for spelled in spell(names, owner):
+            key = (qualified(owner),) + spelled
+            if key in stiff_seen:
+                continue
+            stiff_seen.add(key)
+            stiffness_records.append(f"STIFFNESS\t{qualified(owner)}\t" + "\t".join(spelled) +
+                                     f"\t{k:.6g}")
+if stiff_missing:
+    print(f"  {stiff_missing} liaison(s) sans parametre AMBER, ignoree(s)")
+
 out = [
     "# AMBER's torsion terms, tabulated, one record per four-atom quadruplet",
     "# enumerated from the residue topology. Nothing is summed over pairs, so no",
@@ -380,7 +419,14 @@ out = [
     "#",
     "# TORSIONTABLE <id> <bins> <E_0> <T_0> ... over phi in [-180, 180]",
     "# TORSION <res>[:NTER|:CTER] <FAMILY> <a1> <a2> <a3> <a4> <table>",
+    "# STIFFNESS <res>[:NTER|:CTER] <a1> <a2> <k>   k in kJ.mol-1.A-2",
     "# E in kJ/mol, T = -dV/dphi in kJ.mol-1.rad-1.",
+    "#",
+    "# A STIFFNESS record adds NOTHING: the rigid-body mesh already springs every",
+    "# bond and every valence angle, and this only says what AMBER's constant is",
+    "# for the bond it names, so -bondstiffness can retune the spring that is",
+    "# already there. The angles are left out on purpose -- a 1-3 distance spring",
+    "# is not an angle spring.",
     "#",
     "# A record qualified :NTER or :CTER applies ONLY to a free chain end, and",
     "# an unqualified one only to a residue with neighbours on both sides: a",
@@ -393,9 +439,11 @@ out = [
 for i, (e, t) in enumerate(tables):
     out.append(f"TORSIONTABLE {i} {BINS} " + " ".join(f"{a:.5g} {b:.5g}" for a, b in zip(e, t)))
 out += records
+out += stiffness_records
 open(OUT, "w").write("\n".join(out) + "\n")
 
 print(f"\n  {len(records)} torsions, {len(tables)} tables de {BINS} intervalles")
+print(f"  {len(stiffness_records)} raideurs de liaison")
 for fam, n in sorted(per_family.items()):
     print(f"    {fam:<12s} {n:5d}")
 print()

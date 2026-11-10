@@ -44,6 +44,49 @@ struct TorsionEntry
     unsigned table;
 };
 
+// One AMBER bond force constant ("STIFFNESS" line): the two atoms it belongs
+// to and the constant, in kJ.mol-1.A-2.
+//
+// IT ADDS NOTHING. RigidBodyBuilder has already created a spring for every one
+// of AMBER's bonds and every one of its valence angles -- measured on 075's
+// hairpin against amber14/RNA.OL3, 419 of 419 and 746 of 746, with no surplus
+// pair -- so there is no bond term to apply and no spring to create. What the
+// mesh lacks is the VALUE: every spring carries --rigidbody's uniform
+// --stiffness, 500 kJ.mol-1.A-2 where AMBER's bonds run from 1925 to 5489. A
+// record here says what one bond's constant is, and buildSprings only ever
+// RETUNES the spring that already joins those two atoms; a record whose pair
+// carries no spring is counted and reported, never turned into a new spring.
+//
+// The valence angles are deliberately absent. A 1-3 distance spring is not an
+// angle spring: both give the same minimum but not the same soft modes, since
+// dtheta/dr is perpendicular to the bond where dd/dr lies along the 1-3 line
+// (measured on an isolated furanose, +73 % on the softest ring mode). At the
+// uniform value the 1-3 springs already deliver 0.60 of AMBER's angular
+// stiffness and the middle of the deformation spectrum comes out right; it is
+// the bond stretches, at 0.18 to 0.38 of AMBER, that are wrong.
+struct StiffnessEntry
+{
+    std::string resname;
+    TerminalPosition position = POSITION_INTERIOR;
+    std::string atoms[2];
+    float stiffness = 0.0f;
+};
+
+// Which springs -bondstiffness retunes.
+//
+// Stiffness and timestep are one choice: a harmonic pair's period is
+// 628.3 / sqrt(k/mu) fs with k in kJ.mol-1.A-2 and mu in Da. Measured on 075,
+// the shortest period in the mesh is the amine's H...H 1-3 pair at 19.9 fs,
+// which is what sets its 2 fs timestep; retuning only the bonds between HEAVY
+// atoms leaves that pair alone and the timestep with it, while retuning every
+// bond brings the hydroxyl O-H to 9.0 fs and forces dt below 0.9 fs.
+enum class BondStiffness
+{
+    NONE = 0, // leave every spring at --stiffness
+    HEAVY,    // AMBER's constant on the bonds between heavy atoms only
+    ALL,      // AMBER's constant on every bond it names
+};
+
 // One tabulated parameter set ("TORSIONTABLE" line): energy in kJ.mol-1 and
 // torque (-dV/dphi) in kJ.mol-1.rad-1, sampled at bins + 1 points over
 // [-pi, pi]. Torsions sharing a parameter set share a table -- the protein
@@ -62,6 +105,7 @@ struct TorsionTableEntry
 //   TORSIONTABLE <id> <bins> <E_0> <T_0> ...   over phi in [-180, 180],
 //       E in kJ.mol-1 and T = -dV/dphi in kJ.mol-1.rad-1
 //   TORSION <resname>[:NTER|:CTER] <FAMILY> <a1> <a2> <a3> <a4> <table>
+//   STIFFNESS <resname>[:NTER|:CTER] <a1> <a2> <k>   k in kJ.mol-1.A-2
 //
 // Atom names may carry a "+"/"-" prefix (CHARMM-style: next/previous
 // residue), same convention as .rbody. The residue name may carry a terminal
@@ -120,13 +164,20 @@ class BondedForceFieldReader : public ReaderBase
     // aromatic rings' rigid cliques were split into per-vertex hinge
     // groups; see -dihedralplanarity in pdb2spn-cli.cpp, folded into the
     // -dihedral convenience alias like the other dihedral families).
+    //
+    // `bondStiffness` chooses which of the STIFFNESS records are applied (see
+    // BondStiffness and -bondstiffness in pdb2spn-cli.cpp). It creates nothing
+    // and removes nothing: it only replaces the uniform --stiffness of a
+    // spring that RigidBodyBuilder already made.
     void buildSprings(topology::Topology & topology, const reduce::ReduceRuleContainer * translation,
                       bool enableDihedralBackbone, bool enableDihedralSidechain,
-                      bool enableDihedralPlanarity) const;
+                      bool enableDihedralPlanarity,
+                      BondStiffness bondStiffness = BondStiffness::NONE) const;
 
   protected:
     std::vector<TorsionEntry> _torsion;
     std::vector<TorsionTableEntry> _torsiontables;
+    std::vector<StiffnessEntry> _stiffness;
 
     // What this file's table id 0 becomes, so several files can be read into
     // one reader. Each generated .bi.ff numbers its own tables from 0 -- the

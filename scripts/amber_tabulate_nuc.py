@@ -257,6 +257,62 @@ for resname in RESIDUES:
             records.append(f"TORSION\t{resname}\tPLANARITY\t" + "\t".join(names) + f"\t{table_of[tkey]}")
             per_family["PLANARITY"] += 1
 
+# ---- bond stiffnesses ------------------------------------------------------
+#
+# NOT A NEW TERM. The --rigidbody mesh already springs every one of AMBER's
+# bonds and every one of its valence angles -- measured on 075's hairpin, 419
+# of 419 and 746 of 746, with no surplus pair. What it lacks is the VALUE:
+# every spring carries pdb2spn's uniform --stiffness where AMBER's bonds run
+# from 1925 to 4770 kJ.mol-1.A-2. These records say what each bond's constant
+# is, and the reader only ever retunes a spring that already exists.
+#
+# The angles are left out on purpose: a 1-3 distance spring is not an angle
+# spring, converting one into the other gets the soft modes wrong (see
+# 7660b34), and at the uniform value it already delivers 0.60 of AMBER's
+# angular stiffness.
+#
+# TERMINAL TEMPLATES DISAGREE HERE, unlike for the torsions. A 5' end retypes
+# O5' from OS to OH and a 3' end does the same to O3', so the C5'-O5' bond
+# genuinely has a different constant at a free end -- and the nucleic .bi.ff
+# writes every record under the interior residue name, because that is what a
+# PDB calls a terminal nucleotide, so there is nowhere to put the variant. The
+# interior value is emitted and the disagreement is REPORTED rather than
+# silently dropped.
+STIFF_CONVERT = 0.01  # kJ.mol-1.nm-2 -> kJ.mol-1.A-2
+
+stiffness_records, stiff_seen, stiff_missing, stiff_clash = [], {}, 0, []
+for resname in RESIDUES:
+    if not tables_ff.atoms_of(resname):
+        continue
+    for template in templates_of(resname):
+        atoms, adj = chain_of(template, resname)
+        for a in list(adj):
+            for b in adj[a]:
+                if (b, a) < (a, b):
+                    continue
+                if a[0] != 0 and b[0] != 0:
+                    continue  # neither end is in the residue the record belongs to
+                if abs(a[0]) > 1 or abs(b[0]) > 1:
+                    continue
+                par = tables_ff.bond_params.get(frozenset((atoms[a], atoms[b])))
+                if par is None:
+                    stiff_missing += 1
+                    continue
+                k = par[1] * STIFF_CONVERT
+                names = (spell(a), spell(b))
+                key = (resname,) + names
+                if key in stiff_seen:
+                    if abs(stiff_seen[key] - k) > 1e-3:
+                        stiff_clash.append((resname, template, names, stiff_seen[key], k))
+                    continue
+                stiff_seen[key] = k
+                stiffness_records.append(f"STIFFNESS\t{resname}\t" + "\t".join(names) + f"\t{k:.6g}")
+if stiff_missing:
+    print(f"  {stiff_missing} liaison(s) sans parametre AMBER, ignoree(s)")
+for resname, template, names, k0, k1 in stiff_clash:
+    print(f"  {resname} {' '.join(names)} : {template} donne {k1:.1f} contre {k0:.1f} kJ/mol/A2 "
+          f"a l'interieur ({100.0 * abs(k1 - k0) / k0:.1f} %) -- l'interieur est emis")
+
 out = [
     f"# AMBER's {KIND} torsion terms, tabulated, one record per four-atom",
     "# quadruplet enumerated from the residue topology -- the interior templates",
@@ -265,13 +321,23 @@ out = [
     "#",
     "# TORSIONTABLE <id> <bins> <E_0> <T_0> ... over phi in [-180, 180]",
     "# TORSION <res> <FAMILY> <a1> <a2> <a3> <a4> <table>",
+    "# STIFFNESS <res> <a1> <a2> <k>   k in kJ.mol-1.A-2",
+    "#",
+    "# A STIFFNESS record adds NOTHING: the rigid-body mesh already springs every",
+    "# bond and every valence angle, and this only says what AMBER's constant is",
+    "# for the bond it names, so -bondstiffness can retune the spring that is",
+    "# already there. The angles are left out on purpose -- a 1-3 distance spring",
+    "# is not an angle spring. The value is the INTERIOR template's: a 5'/3' end",
+    "# retypes its own O5'/O3' and the format has no terminal qualifier here.",
 ]
 for i, (e, t) in enumerate(tables):
     out.append(f"TORSIONTABLE {i} {BINS} " + " ".join(f"{a:.5g} {b:.5g}" for a, b in zip(e, t)))
 out += records
+out += stiffness_records
 open(OUT, "w").write("\n".join(out) + "\n")
 
 print(f"\n  {KIND} : {len(records)} torsions, {len(tables)} tables de {BINS} intervalles")
+print(f"  {len(stiffness_records)} raideurs de liaison")
 for fam, n in sorted(per_family.items()):
     print(f"    {fam:<20s} {n:5d}")
 print(f"  -> {OUT}")

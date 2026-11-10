@@ -191,9 +191,10 @@ int main(int argc, char ** argv)
     if (!args.pathsBondedInteraction.empty())
     {
         logging::status("Applying bonded interaction parameters from %zu file(s) (dihedralbackbone=%s, "
-                        "dihedralsidechain=%s, dihedralplanarity=%s).",
+                        "dihedralsidechain=%s, dihedralplanarity=%s, bondstiffness=%s).",
                          args.pathsBondedInteraction.size(), args.dihedralBackbone ? "on" : "off",
-                         args.dihedralSidechain ? "on" : "off", args.dihedralPlanarity ? "on" : "off");
+                         args.dihedralSidechain ? "on" : "off", args.dihedralPlanarity ? "on" : "off",
+                         args.bondStiffness.empty() ? "off" : args.bondStiffness.c_str());
         // Already constructed and read() above (before any spring existed,
         // see that call site) -- reused here, not re-read.
 
@@ -209,8 +210,12 @@ int main(int argc, char ** argv)
             naming_reader_ptr = &naming_reader;
         }
 
+        using biospring::rigidbodygroup::BondStiffness;
+        const BondStiffness mode = args.bondStiffness == "all"    ? BondStiffness::ALL
+                                   : args.bondStiffness == "heavy" ? BondStiffness::HEAVY
+                                                                   : BondStiffness::NONE;
         bondedReader->buildSprings(topology, naming_reader_ptr != nullptr ? &naming_reader_ptr->rules() : nullptr,
-                                  args.dihedralBackbone, args.dihedralSidechain, args.dihedralPlanarity);
+                                  args.dihedralBackbone, args.dihedralSidechain, args.dihedralPlanarity, mode);
     }
 
     // Sets the particle charge to user-defined value.
@@ -238,7 +243,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     : CommandLineArgumentsBase(name, description, version), pathTopology(""), pathForceField(""), pathGroup(""),
       pathRigidBody(""), pathsBondedInteraction(0), pathStaticHydrogenBond(""), pathOutputList(0), cutoff(-1.0),
       stiffness(1.0), charge(0.0), isStatic(false), addStaticDisulfide(false), ignoreDuplicates(false),
-      ignoreMissing(false), writePdbConect(false), dihedral(false), dihedralBackbone(false),
+      ignoreMissing(false), writePdbConect(false), bondStiffness(), dihedral(false), dihedralBackbone(false),
       dihedralSidechain(false), dihedralPlanarity(false)
 {
     argparse::Argument topology = argparse::Argument()
@@ -342,6 +347,20 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
         "with -bondedinteraction, apply the PLANARITY impropers only; "
         "has no effect without -bondedinteraction");
 
+    argparse::Argument bondstiffness_ =
+        argparse::Argument()
+            .name_short("-bondstiffness")
+            .name_long("--bondstiffness")
+            .description("with -bondedinteraction, give the springs AMBER's own bond force constants instead "
+                         "of the uniform -stiffness. Creates NO spring: -rigidbody's mesh already carries "
+                         "every bond and every valence angle, and this only replaces the stiffness of the "
+                         "spring that is already there. 'heavy' retunes the bonds between heavy atoms only, "
+                         "which leaves the timestep alone (the shortest period in the mesh is an amine's "
+                         "H...H 1-3 pair, untouched); 'all' retunes every bond it names and needs a timestep "
+                         "about 2.2x shorter. Default: off")
+            .argument_type(argparse::ArgumentType::STRING)
+            .default_value("");
+
     argparse::Argument stiffness = argparse::Argument()
                                        .name_short("-stiffness")
                                        .name_long("--stiffness")
@@ -382,6 +401,7 @@ CommandLineArguments::CommandLineArguments(const std::string & name, const argpa
     _parser.add_argument(dihedralbackbone_);
     _parser.add_argument(dihedralsidechain_);
     _parser.add_argument(dihedralplanarity_);
+    _parser.add_argument(bondstiffness_);
     _parser.add_argument(stiffness);
     _parser.add_argument(charge);
     _parser.add_argument(static_);
@@ -500,6 +520,7 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
     dihedralBackbone = _parser.get_option("--dihedralbackbone").is_set();
     dihedralSidechain = _parser.get_option("--dihedralsidechain").is_set();
     dihedralPlanarity = _parser.get_option("--dihedralplanarity").is_set();
+    bondStiffness = _parser.get_option_value<std::string>("--bondstiffness");
 
     // --rigidbody and --cutoff are two incompatible strategies for building
     // the spring network: dies if both are given.
@@ -532,6 +553,15 @@ void CommandLineArguments::parseCommandLine(int argc, const char * const argv[])
         _parser.print_help();
         _parser.die("-dihedral/-dihedralbackbone/-dihedralsidechain/-dihedralplanarity require "
                     "-bondedinteraction/--bondedinteraction");
+    }
+
+    if (!bondStiffness.empty())
+    {
+        if (bondStiffness != "heavy" && bondStiffness != "all")
+            _parser.die("-bondstiffness takes 'heavy' or 'all' (got '" + bondStiffness + "')");
+        if (pathsBondedInteraction.empty())
+            _parser.die("-bondstiffness/--bondstiffness requires -bondedinteraction/--bondedinteraction: the "
+                        "bond force constants are STIFFNESS records of the .bi.ff file");
     }
     if (!pathsBondedInteraction.empty() && !dihedralBackbone && !dihedralSidechain && !dihedralPlanarity)
         logging::warning("-bondedinteraction/--bondedinteraction given without -dihedral* -- "

@@ -43,6 +43,9 @@ class CommandLineArguments : argparse::CommandLineArgumentsBase
     bool dihedralBackbone;
     bool dihedralSidechain;
     bool dihedralPlanarity;
+    // Which STIFFNESS records of the .bi.ff are applied: "" (none), "heavy" or
+    // "all". It creates no spring -- see BondStiffness.
+    std::string bondStiffness;
 
     // Constructor (inherited from argparse::CommandLineArgumentsBase).
     CommandLineArguments(const std::string & name, const argparse::description_t & description,

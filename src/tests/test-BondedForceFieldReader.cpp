@@ -456,3 +456,130 @@ TEST(BondedForceFieldReaderTerminal, ARenamedTerminalAtomIsStillRecognised)
     const std::vector<unsigned> expected{spn::SpringNetwork::DIHEDRAL_PHI, spn::SpringNetwork::DIHEDRAL_PSI};
     EXPECT_EQ(families(top), expected);
 }
+
+// ======================================================================================
+// STIFFNESS: it RETUNES a spring, it never makes one
+
+namespace
+{
+// Two records on the alanine backbone, one of them to a hydrogen so the
+// heavy-only mode has something to leave alone.
+constexpr const char * STIFFNESS_RECORDS = "STIFFNESS\tALA\tN\tCA\t2820\n"
+                                           "STIFFNESS\tALA\tN\tH1\t3631.7\n";
+
+// The spring the mesh would already carry for that pair, at the uniform value.
+void mesh(topology::Topology & top, const std::string & a, const std::string & b, int resid,
+          double stiffness = 500.0)
+{
+    size_t ia = top.number_of_particles(), ib = ia;
+    for (size_t i = 0; i < top.number_of_particles(); ++i)
+    {
+        const auto & props = top.get_particle(i).properties();
+        if (props.residue_id() != resid)
+            continue;
+        if (props.name() == a)
+            ia = i;
+        if (props.name() == b)
+            ib = i;
+    }
+    ASSERT_LT(ia, top.number_of_particles());
+    ASSERT_LT(ib, top.number_of_particles());
+    top.add_spring(top.get_particle(ia), top.get_particle(ib), -1.0, stiffness);
+}
+
+double stiffness_of(const topology::Topology & top, const std::string & a, const std::string & b, int resid)
+{
+    for (const auto & spring : top.springs())
+    {
+        const auto & p1 = spring.first().properties();
+        const auto & p2 = spring.second().properties();
+        if (p1.residue_id() != resid || p2.residue_id() != resid)
+            continue;
+        if ((p1.name() == a && p2.name() == b) || (p1.name() == b && p2.name() == a))
+            return spring.stiffness();
+    }
+    return -1.0;
+}
+} // namespace
+
+// Off by default: the records are read and nothing is touched.
+TEST(BondedForceFieldStiffness, NothingHappensWithoutTheFlag)
+{
+    BondedForceFieldReader reader(write(STIFFNESS_RECORDS));
+    reader.read();
+
+    topology::Topology top;
+    chain(top, "A", 2);
+    mesh(top, "N", "CA", 2);
+    const size_t before = top.number_of_springs();
+    reader.buildSprings(top, nullptr, true, true, true);
+
+    EXPECT_EQ(top.number_of_springs(), before);
+    EXPECT_DOUBLE_EQ(stiffness_of(top, "N", "CA", 2), 500.0);
+}
+
+// With the flag, the existing spring takes AMBER's value -- and no spring is
+// created for the record whose pair the mesh does not carry.
+TEST(BondedForceFieldStiffness, RetunesTheSpringAndCreatesNone)
+{
+    BondedForceFieldReader reader(write(STIFFNESS_RECORDS));
+    reader.read();
+
+    topology::Topology top;
+    chain(top, "A", 2);
+    mesh(top, "N", "CA", 2); // the interior residue's N-CA, meshed
+    // Residue 2's N-H1 is NOT meshed, and H1 does not even exist there: the
+    // record must leave the topology alone rather than invent the bond.
+    const size_t before = top.number_of_springs();
+    reader.buildSprings(top, nullptr, true, true, true, rigidbodygroup::BondStiffness::ALL);
+
+    EXPECT_EQ(top.number_of_springs(), before) << "a STIFFNESS record created a spring";
+    EXPECT_DOUBLE_EQ(stiffness_of(top, "N", "CA", 2), 2820.0);
+}
+
+// A record whose pair exists but carries no spring is left alone too -- that
+// is the case the reader warns about, and it must not be fixed by adding one.
+TEST(BondedForceFieldStiffness, AnUnsprungPairIsNotGivenASpring)
+{
+    BondedForceFieldReader reader(write(STIFFNESS_RECORDS));
+    reader.read();
+
+    topology::Topology top;
+    chain(top, "A", 2); // residue 1 carries H1, so N-H1 resolves...
+    // ...but nothing meshes it.
+    const size_t before = top.number_of_springs();
+    reader.buildSprings(top, nullptr, true, true, true, rigidbodygroup::BondStiffness::ALL);
+
+    EXPECT_EQ(top.number_of_springs(), before);
+}
+
+// 'heavy' is the timestep-preserving mode: it leaves every bond to a hydrogen
+// at the uniform value, because those are the shortest periods in the mesh.
+TEST(BondedForceFieldStiffness, HeavyLeavesTheHydrogenBondsAlone)
+{
+    BondedForceFieldReader reader(write(STIFFNESS_RECORDS));
+    reader.read();
+
+    topology::Topology top;
+    chain(top, "A", 2);
+    // Masses are what tells a hydrogen from a heavy atom, so they have to be
+    // set: a topology built without them would make every bond "heavy".
+    for (size_t i = 0; i < top.number_of_particles(); ++i)
+    {
+        auto & props = top.get_particle(i).properties();
+        props.set_mass(props.name() == "H1" ? 1.008f : 12.011f);
+    }
+    mesh(top, "N", "CA", 2);
+    mesh(top, "N", "H1", 1);
+    reader.buildSprings(top, nullptr, true, true, true, rigidbodygroup::BondStiffness::HEAVY);
+
+    EXPECT_DOUBLE_EQ(stiffness_of(top, "N", "CA", 2), 2820.0) << "a heavy-heavy bond was not retuned";
+    EXPECT_DOUBLE_EQ(stiffness_of(top, "N", "H1", 1), 500.0) << "a bond to a hydrogen was retuned";
+}
+
+// A malformed record is a fatal error, not a silently skipped line.
+TEST(BondedForceFieldStiffness, ANegativeConstantIsRefused)
+{
+    BondedForceFieldReader reader(write("STIFFNESS\tALA\tN\tCA\t-10\n"));
+    EXPECT_DEATH(reader.read(), "invalid STIFFNESS constant");
+}

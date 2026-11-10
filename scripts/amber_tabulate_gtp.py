@@ -266,6 +266,23 @@ def main():
                     per_family[fam] += 1
                     per_axis[frozenset((a2, a3))].append(sum(k for (_, k, _) in terms))
 
+    # ---- bond stiffnesses --------------------------------------------------
+    #
+    # NOT A NEW TERM: the mesh already springs every bond, this only says what
+    # AMBER's constant is so -bondstiffness can retune the spring already
+    # there. Same caveat as the torsions and worth repeating here, because a
+    # bond constant is a harder analogy than a torsion profile: the nine atoms
+    # AMBER's guanosine does not have are typed by the role they play, so the
+    # three P-O-P bridges take the generic phosphoester bond. The angles are
+    # left out on purpose -- a 1-3 distance spring is not an angle spring.
+    stiff, stiff_missing = [], set()
+    for a, b in sorted(bonds):
+        par = tables_ff.bond_params.get(frozenset((atoms[a], atoms[b])))
+        if par is None:
+            stiff_missing.add((atoms[a], atoms[b]))
+            continue
+        stiff.append("STIFFNESS\tGTP\t%s\t%s\t%.6g" % (a, b, par[1] * 0.01))
+
     with open(OUT, "w") as fh:
         fh.write("# AMBER's GTP torsion terms, tabulated, one record per four-atom\n"
                  "# quadruplet enumerated from the topology in amber_tabulate_gtp.py.\n"
@@ -280,12 +297,16 @@ def main():
                  "# 0.544 kJ/mol; it was read as a magnitude check and not used.\n"
                  "#\n"
                  "# TORSIONTABLE <id> <bins> <E_0> <T_0> ... over phi in [-180, 180]\n"
-                 "# TORSION <res> <FAMILY> <a1> <a2> <a3> <a4> <table>\n")
+                 "# TORSION <res> <FAMILY> <a1> <a2> <a3> <a4> <table>\n"
+                 "# STIFFNESS <res> <a1> <a2> <k>   k in kJ.mol-1.A-2\n")
         for i, (e, t) in enumerate(tables):
             fh.write("TORSIONTABLE %d %d %s\n"
                      % (i, BINS, " ".join("%.5g %.5g" % (ee, tt) for ee, tt in zip(e, t))))
-        fh.write("\n".join(records) + "\n")
+        fh.write("\n".join(records + stiff) + "\n")
 
+    print("  %d raideurs de liaison%s"
+          % (len(stiff), "" if not stiff_missing
+             else ", %d sans parametre AMBER : %s" % (len(stiff_missing), sorted(stiff_missing))))
     print("  %d quadruplets, %d tables distinctes -> %s"
           % (len(records), len(tables), os.path.relpath(OUT, REPO_ROOT)))
     for fam, n in sorted(per_family.items()):

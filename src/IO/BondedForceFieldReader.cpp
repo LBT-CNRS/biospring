@@ -164,10 +164,29 @@ void BondedForceFieldReader::_parse_line(const std::string & line, size_t line_i
         entry.table += static_cast<unsigned>(_tablebase);
         _torsion.push_back(entry);
     }
+    else if (type == "STIFFNESS")
+    {
+        if (tokens.size() != 5)
+            logging::die("BondedForceFieldReader: line %d: STIFFNESS expects 5 tokens (type resname "
+                         "atom1 atom2 k), found %d",
+                         static_cast<int>(line_id), static_cast<int>(tokens.size()));
+        StiffnessEntry entry;
+        if (!topology::parse_residue_field(tokens[1], entry.resname, entry.position))
+            logging::die("BondedForceFieldReader: line %d: '%s' is not a residue name with at most one terminal "
+                         "qualifier (expected '<resname>', '<resname>:NTER' or '<resname>:CTER')",
+                         static_cast<int>(line_id), tokens[1].c_str());
+        entry.atoms[0] = tokens[2];
+        entry.atoms[1] = tokens[3];
+        if (!utils::string::from_string(entry.stiffness, tokens[4]) || entry.stiffness <= 0.0f)
+            logging::die("BondedForceFieldReader: line %d: invalid STIFFNESS constant '%s' (expected a positive "
+                         "number of kJ.mol-1.A-2)",
+                         static_cast<int>(line_id), tokens[4].c_str());
+        _stiffness.push_back(entry);
+    }
     else
     {
         logging::die("BondedForceFieldReader: line %d: unknown entry type '%s' (expected "
-                     "TORSION or TORSIONTABLE)",
+                     "TORSION, TORSIONTABLE or STIFFNESS)",
                      static_cast<int>(line_id), type.c_str());
     }
 }
@@ -318,7 +337,7 @@ void BondedForceFieldReader::_check_translation_is_one_atom_per_rule(
 void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                                           const reduce::ReduceRuleContainer * translation,
                                           bool enableDihedralBackbone, bool enableDihedralSidechain,
-                                          bool enableDihedralPlanarity) const
+                                          bool enableDihedralPlanarity, BondStiffness bondStiffness) const
 {
     if (translation != nullptr)
         _check_translation_is_one_atom_per_rule(*translation);
@@ -326,6 +345,15 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
     std::vector<ResidueParticleIndices> residues = _group_particles_by_residue(topology);
 
     unsigned nb_torsions_applied = 0;
+    // STIFFNESS retunes, it does not create: these count what it found and
+    // what it did not, so a record set that does not match the mesh is
+    // reported rather than silently half-applied.
+    unsigned nb_stiffness_applied = 0;
+    unsigned nb_stiffness_unsprung = 0;
+    unsigned nb_stiffness_skipped_hydrogen = 0;
+    std::set<size_t> retuned;
+    double stiffness_min = 0.0;
+    double stiffness_max = 0.0;
 
     // The tables travel with the torsions and are given once, before any of
     // them: a torsion is useless without the curve it indexes.
@@ -354,6 +382,8 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
     // it says nothing about can fall back to the interior records.
     std::set<std::pair<std::string, TerminalPosition>> declared;
     for (const TorsionEntry & entry : _torsion)
+        declared.insert({entry.resname, entry.position});
+    for (const StiffnessEntry & entry : _stiffness)
         declared.insert({entry.resname, entry.position});
 
     // Chain ends that took the interior records, reported once rather than per
@@ -436,6 +466,55 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
             topology.add_torsion(entry.family, *p[0], *p[1], *p[2], *p[3], entry.table);
             nb_torsions_applied++;
         }
+
+        // The bond force constants. Nothing is created: the spring is already
+        // there, and this replaces the uniform value with AMBER's own. A pair
+        // with no spring means the mesh and these records disagree about the
+        // topology, which is worth reporting and never worth fixing by adding
+        // a bond RigidBodyBuilder chose not to make.
+        if (bondStiffness == BondStiffness::NONE)
+            continue;
+        for (const StiffnessEntry & entry : _stiffness)
+        {
+            if (entry.resname != resname || entry.position != position)
+                continue;
+            topology::Particle * p1 = _resolve_atom(entry.atoms[0], residues, index, topology, translation);
+            topology::Particle * p2 = _resolve_atom(entry.atoms[1], residues, index, topology, translation);
+            if (p1 == nullptr || p2 == nullptr)
+                continue; // a chain end: that bond does not exist here
+            // A hydrogen's bond is the shortest period in the mesh, so
+            // retuning it is what forces the timestep down; HEAVY leaves it
+            // at --stiffness on purpose. See BondStiffness.
+            if (bondStiffness == BondStiffness::HEAVY &&
+                (p1->properties().mass() < 2.0f || p2->properties().mass() < 2.0f))
+            {
+                nb_stiffness_skipped_hydrogen++;
+                continue;
+            }
+            // Either order: a spring is stored under whichever pair created
+            // it, and the record names the bond the way the force field does.
+            auto & by_uid = topology.springs().by_uid();
+            auto it = by_uid.find(topology::Spring::generate_uid(*p1, *p2));
+            if (it == by_uid.end())
+                it = by_uid.find(topology::Spring::generate_uid(*p2, *p1));
+            if (it == by_uid.end())
+            {
+                nb_stiffness_unsprung++;
+                continue;
+            }
+            // A bond across the chain link is written under both residues, so
+            // the same spring arrives twice with the same constant. Counting
+            // SPRINGS rather than records is what makes the reported number
+            // mean "this many springs now carry AMBER's value".
+            if (!retuned.insert(it->second).second)
+                continue;
+            if (nb_stiffness_applied == 0 || entry.stiffness < stiffness_min)
+                stiffness_min = entry.stiffness;
+            if (nb_stiffness_applied == 0 || entry.stiffness > stiffness_max)
+                stiffness_max = entry.stiffness;
+            topology.springs()[it->second].set_stiffness(entry.stiffness);
+            nb_stiffness_applied++;
+        }
     }
 
     logging::info("BondedForceFieldReader: applied %u torsion(s) over %zu table(s).", nb_torsions_applied,
@@ -449,6 +528,23 @@ void BondedForceFieldReader::buildSprings(topology::Topology & topology,
                       "file does declare them -- those residues carry neither the ammonium hydrogens nor OXT, so "
                       "they are cuts through a longer chain, not free ends.",
                       nb_carved);
+    if (bondStiffness != BondStiffness::NONE)
+    {
+        logging::info("BondedForceFieldReader: retuned %u spring(s) to AMBER's own bond stiffness, %.1f to %.1f "
+                      "kJ.mol-1.A-2. No spring was created: the mesh already carries every bond.",
+                      nb_stiffness_applied, stiffness_min, stiffness_max);
+        if (nb_stiffness_skipped_hydrogen != 0)
+            logging::info("BondedForceFieldReader: %u bond(s) to a hydrogen left at the uniform stiffness "
+                          "(-bondstiffness heavy). Those are the shortest periods in the mesh, so retuning them "
+                          "is what would force the timestep down.",
+                          nb_stiffness_skipped_hydrogen);
+        if (nb_stiffness_unsprung != 0)
+            logging::warning("BondedForceFieldReader: %u bond(s) named by a STIFFNESS record carry no spring, so "
+                             "their constant was not applied. The mesh and the bonded force field disagree about "
+                             "the topology -- check that -rigidbody and -bondedinteraction describe the same "
+                             "chemistry.",
+                             nb_stiffness_unsprung);
+    }
 }
 
 } // namespace rigidbodygroup
