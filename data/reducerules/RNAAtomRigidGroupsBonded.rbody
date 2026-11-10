@@ -1,0 +1,260 @@
+#Rigid-group definitions for RNA, for use WITH the bonded force field: the
+#same articulated backbone as RNAAtomRigidGroups.rbody, but the nucleobase is
+#one group per atom instead of one rigid clique.
+#
+#REQUIRES -bondedinteraction with RNAAtomTorsion.bi.ff and -dihedralplanarity
+#(or -dihedral). Without them the split base has nothing holding its plane and
+#folds; RNAAtomRigidGroups.rbody is the springs-only file and stays as it is,
+#because 078 builds the 70S from it with no bonded term at all.
+#
+#WHY SPLIT IT. A rigid group springs every pair it lists, so a 15-atom adenine
+#base clique creates 105 springs where AMBER has 16 bonds and 24 valence
+#angles. Measured on 075's hairpin, the 65 surplus springs per base -- 735 of
+#the network's 1909 -- cost:
+#  - the exocyclic amine's rotation: a full-turn barrier of 2838 kJ/mol against
+#    AMBER's own 77, i.e. 36.6x, with its minimum displaced by 165 deg. That is
+#    the whole of the "amine hydrogens 90 deg out of their base plane" defect:
+#    the right table is there and the mesh outvotes it.
+#  - global deformability: for the deformations AMBER prices under 1000 kJ/mol
+#    the clique asks 1.7 to 4.1 times AMBER's energy, the split base 0.74 to
+#    0.89 (0.25 A RMSD, rest lengths re-zeroed, bonded terms only).
+#and buy nothing: at 310 K the base's own ring stays as flat with the split as
+#with the clique -- RMS deviation from its best-fit plane 0.041 A against
+#0.041, where AMBER's own trajectory gives 0.043. The PLANARITY impropers and
+#the ring-bond torsions of RNAAtomTorsion.bi.ff do that job, and they are
+#exactly what the DNA file's header said to wait for before splitting.
+#
+#The split makes the spring set EQUAL to AMBER's exclusion set, exactly.
+#Measured against amber14/RNA.OL3 on 075: AMBER excludes 1165 pairs (its 1-2
+#and 1-3) and SCALES 983 1-4 pairs. The split mesh springs 1165 of those 1165
+#and none of the 983. The clique springs the same 1165 -- and 293 of the 983
+#as well, a third of AMBER's 1-4 pairs, all of them inside the bases.
+#
+#That matters because BioSpring excludes only SPRUNG pairs from steric and
+#Coulomb, and scales nothing: its 1-4 pairs are live at full strength
+#everywhere. The clique was quietly exempting the bases from that, so the
+#split does not create the 1-4 problem -- it stops hiding it. The cost of
+#what it stops hiding, on this hairpin: +289 kJ/mol of Lennard-Jones (AMBER
+#charges +289 on the same 293 pairs, so the error is exactly the missing
+#factor of two), every base ring 14 pm wider than AMBER's (1.384 A against
+#1.371) and the glycosidic torsion dragged 91 deg off its start against
+#AMBER's own 27. Give the heavy-atom bonds AMBER's own stiffness and the ring
+#error falls to 3 pm, since the uniform 500 kJ/mol/A2 is 5.7 times too soft to
+#hold a ring against that pressure -- the two defects are coupled.
+#
+#So the examples do not switch to this file yet: a 1-4 scale factor in the
+#non-bonded terms is the prerequisite, and it is worth having for the whole
+#model, not just for the bases.
+#
+#Companion file for DNA: DNAAtomRigidGroups.rbody, whose header carries the
+#full derivation of the group/hinge layout. Only what differs for RNA is
+#repeated here.
+#
+#SINGLE STRAND. Nothing in this file couples two chains -- the format has no
+#notion of chain, +/- only walk the sequence. That is the natural fit for RNA,
+#which is normally one strand; its own secondary structure (hairpins, stems)
+#is base pairing, so it must come from the hydrogen-bond mechanism
+#(biospring's hbond.* settings and a .hbond donor/acceptor table), never from
+#a rigid-body rule. A stem-loop built with this file and no hbond term will
+#simply unfold into an open strand.
+#
+#EVERY RULE IS WRITTEN TWICE, once under amber99sb.xml's residue names
+#(RA/RC/RG/RU) and once under A/C/G/U. Both spellings are in real use:
+#amber99sb.xml says RA, while RNA.OL3.xml -- the reference RNA force field,
+#and the one these parameters should come from -- says A, as does any modern
+#PDB file. A rule knowing only one spelling matches NOTHING on a file
+#written in the other, with no error: measured, 0 springs out of 963
+#particles on a real rRNA fragment. Same silent-mismatch class as the sugar
+#hydrogen names below. Keep both copies in step when editing.
+#
+#TWO DIFFERENCES FROM DNA, both on C2':
+#  - the 2'-OH replaces one of the two 2' hydrogens, so _C2 lists O2' where
+#    the DNA file lists H2'2. Atom names follow amber99sb.xml: O2' and HO'2
+#    (the hydroxyl hydrogen is HO'2, not H2'2 -- easy to misread).
+#  - that hydroxyl is a real rotor, so it gets its own _O2 group overlapping
+#    _C2 on exactly {C2', O2'}. This is the same construction as Ser/Thr/Tyr
+#    hydroxyls in ProteinAtomRigidGroups.rbody.
+#
+#The 2'-OH is also why RNA sits overwhelmingly in the C3'-endo (North)
+#pucker where B-DNA sits in C2'-endo: the substituent disfavours the South
+#basin sterically and electronically. This file does not encode that
+#preference, and it does not leave the pucker free either: see the DNA
+#file's header for why a five-membered ring cannot be freed by per-vertex
+#groups (measured 10/10 -- fixing bonds and angles rigidifies a 5-ring).
+#The sugar is therefore rigid here too, frozen at the input structure's
+#pucker. Reproducing a genuine bimodal North/South distribution is the job
+#of the bonded parameters, and for RNA it is the single most important
+#thing to validate once they exist.
+
+#Adenine ------------------------------------------------------------------
+A_P    RA  -O3' P O1P OP1 O2P OP2 O5'
+A_P    A   -O3' P O1P OP1 O2P OP2 O5'
+A_O5   RA  P O5' C5'
+A_O5   A   P O5' C5'
+A_C5   RA  O5' C5' H5'1 H5' H5'2 H5'' C4'
+A_C5   A   O5' C5' H5'1 H5' H5'2 H5'' C4'
+A_C4   RA  C5' C4' H4' O4' C3'
+A_C4   A   C5' C4' H4' O4' C3'
+A_O4   RA  C4' O4' C1'
+A_O4   A   C4' O4' C1'
+A_C1   RA  O4' C1' H1' C2' N9
+A_C1   A   O4' C1' H1' C2' N9
+A_C2   RA  C1' C2' H2'1 H2' O2' C3'
+A_C2   A   C1' C2' H2'1 H2' O2' C3'
+A_O2   RA  C2' O2' HO'2 HO2'
+A_O2   A   C2' O2' HO'2 HO2'
+A_C3   RA  C2' C3' H3' C4' O3'
+A_C3   A   C2' C3' H3' C4' O3'
+A_O3   RA  C3' O3' +P
+A_O3   A   C3' O3' +P
+A_BN9   RA  N9 C1' C4 C8
+A_BC8   RA  C8 H8 N7 N9
+A_BN7   RA  N7 C5 C8
+A_BC5   RA  C5 C4 C6 N7
+A_BC6   RA  C6 C5 N1 N6
+A_BN6   RA  N6 C6 H61 H62
+A_BN1   RA  N1 C2 C6
+A_BC2   RA  C2 H2 N1 N3
+A_BN3   RA  N3 C2 C4
+A_BC4   RA  C4 C5 N3 N9
+A_BN9   A   N9 C1' C4 C8
+A_BC8   A   C8 H8 N7 N9
+A_BN7   A   N7 C5 C8
+A_BC5   A   C5 C4 C6 N7
+A_BC6   A   C6 C5 N1 N6
+A_BN6   A   N6 C6 H61 H62
+A_BN1   A   N1 C2 C6
+A_BC2   A   C2 H2 N1 N3
+A_BN3   A   N3 C2 C4
+A_BC4   A   C4 C5 N3 N9
+A_5TER RA  H5T HO5' O5' C5'
+A_5TER A   H5T HO5' O5' C5'
+A_3TER RA  C3' O3' H3T HO3'
+A_3TER A   C3' O3' H3T HO3'
+
+#Cytosine -----------------------------------------------------------------
+C_P    RC  -O3' P O1P OP1 O2P OP2 O5'
+C_P    C   -O3' P O1P OP1 O2P OP2 O5'
+C_O5   RC  P O5' C5'
+C_O5   C   P O5' C5'
+C_C5   RC  O5' C5' H5'1 H5' H5'2 H5'' C4'
+C_C5   C   O5' C5' H5'1 H5' H5'2 H5'' C4'
+C_C4   RC  C5' C4' H4' O4' C3'
+C_C4   C   C5' C4' H4' O4' C3'
+C_O4   RC  C4' O4' C1'
+C_O4   C   C4' O4' C1'
+C_C1   RC  O4' C1' H1' C2' N1
+C_C1   C   O4' C1' H1' C2' N1
+C_C2   RC  C1' C2' H2'1 H2' O2' C3'
+C_C2   C   C1' C2' H2'1 H2' O2' C3'
+C_O2   RC  C2' O2' HO'2 HO2'
+C_O2   C   C2' O2' HO'2 HO2'
+C_C3   RC  C2' C3' H3' C4' O3'
+C_C3   C   C2' C3' H3' C4' O3'
+C_O3   RC  C3' O3' +P
+C_O3   C   C3' O3' +P
+C_BN1   RC  N1 C1' C2 C6
+C_BC6   RC  C6 C5 H6 N1
+C_BC5   RC  C5 C4 C6 H5
+C_BC4   RC  C4 C5 N3 N4
+C_BN4   RC  N4 C4 H41 H42
+C_BN3   RC  N3 C2 C4
+C_BC2   RC  C2 N1 N3 O2
+C_BN1   C   N1 C1' C2 C6
+C_BC6   C   C6 C5 H6 N1
+C_BC5   C   C5 C4 C6 H5
+C_BC4   C   C4 C5 N3 N4
+C_BN4   C   N4 C4 H41 H42
+C_BN3   C   N3 C2 C4
+C_BC2   C   C2 N1 N3 O2
+C_5TER RC  H5T HO5' O5' C5'
+C_5TER C   H5T HO5' O5' C5'
+C_3TER RC  C3' O3' H3T HO3'
+C_3TER C   C3' O3' H3T HO3'
+
+#Guanine ------------------------------------------------------------------
+G_P    RG  -O3' P O1P OP1 O2P OP2 O5'
+G_P    G   -O3' P O1P OP1 O2P OP2 O5'
+G_O5   RG  P O5' C5'
+G_O5   G   P O5' C5'
+G_C5   RG  O5' C5' H5'1 H5' H5'2 H5'' C4'
+G_C5   G   O5' C5' H5'1 H5' H5'2 H5'' C4'
+G_C4   RG  C5' C4' H4' O4' C3'
+G_C4   G   C5' C4' H4' O4' C3'
+G_O4   RG  C4' O4' C1'
+G_O4   G   C4' O4' C1'
+G_C1   RG  O4' C1' H1' C2' N9
+G_C1   G   O4' C1' H1' C2' N9
+G_C2   RG  C1' C2' H2'1 H2' O2' C3'
+G_C2   G   C1' C2' H2'1 H2' O2' C3'
+G_O2   RG  C2' O2' HO'2 HO2'
+G_O2   G   C2' O2' HO'2 HO2'
+G_C3   RG  C2' C3' H3' C4' O3'
+G_C3   G   C2' C3' H3' C4' O3'
+G_O3   RG  C3' O3' +P
+G_O3   G   C3' O3' +P
+G_BN9   RG  N9 C1' C4 C8
+G_BC8   RG  C8 H8 N7 N9
+G_BN7   RG  N7 C5 C8
+G_BC5   RG  C5 C4 C6 N7
+G_BC6   RG  C6 C5 N1 O6
+G_BN1   RG  N1 C2 C6 H1
+G_BC2   RG  C2 N1 N2 N3
+G_BN2   RG  N2 C2 H21 H22
+G_BN3   RG  N3 C2 C4
+G_BC4   RG  C4 C5 N3 N9
+G_BN9   G   N9 C1' C4 C8
+G_BC8   G   C8 H8 N7 N9
+G_BN7   G   N7 C5 C8
+G_BC5   G   C5 C4 C6 N7
+G_BC6   G   C6 C5 N1 O6
+G_BN1   G   N1 C2 C6 H1
+G_BC2   G   C2 N1 N2 N3
+G_BN2   G   N2 C2 H21 H22
+G_BN3   G   N3 C2 C4
+G_BC4   G   C4 C5 N3 N9
+G_5TER RG  H5T HO5' O5' C5'
+G_5TER G   H5T HO5' O5' C5'
+G_3TER RG  C3' O3' H3T HO3'
+G_3TER G   C3' O3' H3T HO3'
+
+#Uracil -------------------------------------------------------------------
+#Uracil is thymine without the 5-methyl: it carries H5 where DT has C7 and
+#its three hydrogens. Nothing else differs, so no methyl rotor is needed
+#here (see the DNA file's thymine note).
+U_P    RU  -O3' P O1P OP1 O2P OP2 O5'
+U_P    U   -O3' P O1P OP1 O2P OP2 O5'
+U_O5   RU  P O5' C5'
+U_O5   U   P O5' C5'
+U_C5   RU  O5' C5' H5'1 H5' H5'2 H5'' C4'
+U_C5   U   O5' C5' H5'1 H5' H5'2 H5'' C4'
+U_C4   RU  C5' C4' H4' O4' C3'
+U_C4   U   C5' C4' H4' O4' C3'
+U_O4   RU  C4' O4' C1'
+U_O4   U   C4' O4' C1'
+U_C1   RU  O4' C1' H1' C2' N1
+U_C1   U   O4' C1' H1' C2' N1
+U_C2   RU  C1' C2' H2'1 H2' O2' C3'
+U_C2   U   C1' C2' H2'1 H2' O2' C3'
+U_O2   RU  C2' O2' HO'2 HO2'
+U_O2   U   C2' O2' HO'2 HO2'
+U_C3   RU  C2' C3' H3' C4' O3'
+U_C3   U   C2' C3' H3' C4' O3'
+U_O3   RU  C3' O3' +P
+U_O3   U   C3' O3' +P
+U_BN1   RU  N1 C1' C2 C6
+U_BC6   RU  C6 C5 H6 N1
+U_BC5   RU  C5 C4 C6 H5
+U_BC4   RU  C4 C5 N3 O4
+U_BN3   RU  N3 C2 C4 H3
+U_BC2   RU  C2 N1 N3 O2
+U_BN1   U   N1 C1' C2 C6
+U_BC6   U   C6 C5 H6 N1
+U_BC5   U   C5 C4 C6 H5
+U_BC4   U   C4 C5 N3 O4
+U_BN3   U   N3 C2 C4 H3
+U_BC2   U   C2 N1 N3 O2
+U_5TER RU  H5T HO5' O5' C5'
+U_5TER U   H5T HO5' O5' C5'
+U_3TER RU  C3' O3' H3T HO3'
+U_3TER U   C3' O3' H3T HO3'
