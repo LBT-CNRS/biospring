@@ -8,7 +8,7 @@
 - André Lanrezac (Laboratoire de biochimie théorique [Paris])
 - Benoist Laurent (Laboratoire de biochimie théorique, Paris)
 - Hubert Santuz (Laboratoire de biochimie théorique, Paris)
-- Alex Tek
+- Alex Tek (Laboratoire de biochimie théorique [Paris])
 
 Affiliations are those at the time of the contribution.
 

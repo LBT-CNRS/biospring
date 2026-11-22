@@ -63,7 +63,11 @@
     {
       "@type": "Person",
       "givenName": "Alex",
-      "familyName": "Tek"
+      "familyName": "Tek",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Laboratoire de biochimie théorique [Paris]"
+      }
     }
   ],
   "programmingLanguage": [
