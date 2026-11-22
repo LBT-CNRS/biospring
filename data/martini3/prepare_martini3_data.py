@@ -107,7 +107,7 @@ TYPE = {
 
 # Backbone bead type, from aminoacids.ff. Everything else uses the macro
 # prot_default_bb_type, which that file sets to P2.
-BB_TYPE = {"GLY": "SP1", "ALA": "SP2", "PRO": "SP2a", "HYP": "P1"}
+BB_TYPE = {"GLY": "SP1", "ALA": "SP2", "VAL": "SP2", "PRO": "SP2a", "HYP": "P1"}
 BB_TYPE_DEFAULT = "P2"
 
 # Terminal backbone, from modifications.ff: N-ter and C-ter both replace the
@@ -673,6 +673,358 @@ _RBODY_NOTES = [
 
 
 
+# =====================================================================
+# BONDED FORCE CONSTANTS -- Martini's own, where Martini states any.
+#
+# A STIFFNESS record RETUNES an existing spring and creates none, so every
+# record below names a pair that reducerules/martini3.rbody already springs.
+# It is read only when -bondstiffness is given; without it the whole mesh
+# stays at the run's uniform -stiffness.
+#
+# All of Martini's values are converted out of GROMACS units here: a bond
+# force constant in kJ.mol-1.nm-2 divided by 100 is kJ.mol-1.A-2, and both
+# engines write the bond as 0.5 * k * (r - r0)^2 (GROMACS funct 1;
+# biospring_spring_energy in forcefield/shared/spring_shared.h), so there is
+# no factor of two to put in.
+# =====================================================================
+
+# The backbone, for a COIL residue. Martini's backbone terms are chosen by
+# DSSP and this file carries the coil set, because BioSpring assigns no
+# secondary structure. The helix and extended values are in the header.
+BB_BB_LENGTH = 3.50          # A, from "BB +BB 1 0.350 4000"
+BB_BB_STIFFNESS = 40.0       # kJ.mol-1.A-2, the same record's 4000 / 100
+BBB_ANGLE = (10, 127.0, 20.0)   # funct, theta0 in deg, k in kJ.mol-1
+BBS_ANGLE = (2, 100.0, 25.0)    # "-BB BB SC1", BBS angles regular martini
+SBB_ANGLE = (2, 100.0, 25.0)    # "SC1 BB +BB", First SBB regular martini
+
+SC_BOND = {
+    ('ARG', 'BB', 'SC1'):        (3.300, 50.000),
+    ('ARG', 'SC1', 'SC2'):       (3.800, 50.000),
+    ('ASH', 'BB', 'SC1'):        (3.520, 75.000),
+    ('ASN', 'BB', 'SC1'):        (3.520, 50.000),
+    ('ASP', 'BB', 'SC1'):        (3.520, 75.000),
+    ('CYS', 'BB', 'SC1'):        (3.410, 75.000),
+    ('GLH', 'BB', 'SC1'):        (4.000, 50.000),
+    ('GLN', 'BB', 'SC1'):        (4.000, 50.000),
+    ('GLU', 'BB', 'SC1'):        (4.000, 50.000),
+    ('HIE', 'BB', 'SC1'):        (3.360, 75.000),
+    ('HIP', 'BB', 'SC1'):        (3.360, 75.000),
+    ('HIS', 'BB', 'SC1'):        (3.360, 75.000),
+    ('HYP', 'BB', 'SC1'):        (3.000, 75.000),
+    ('LEU', 'BB', 'SC1'):        (3.630, 75.000),
+    ('LYN', 'BB', 'SC1'):        (3.300, 50.000),
+    ('LYN', 'SC1', 'SC2'):       (3.600, 50.000),
+    ('LYS', 'BB', 'SC1'):        (3.300, 50.000),
+    ('LYS', 'SC1', 'SC2'):       (3.600, 50.000),
+    ('MET', 'BB', 'SC1'):        (4.000, 25.000),
+    ('PHE', 'BB', 'SC1'):        (3.250, 75.000),
+    ('PRO', 'BB', 'SC1'):        (3.300, 75.000),
+    ('SER', 'BB', 'SC1'):        (2.870, 75.000),
+    ('TRP', 'BB', 'SC1'):        (3.150, 50.000),
+    ('TYR', 'BB', 'SC1'):        (3.250, 50.000),
+}
+
+SC_CONSTRAINT = {
+    ('ALA', 'BB', 'SC1'):        2.700,
+    ('HIE', 'SC1', 'SC2'):       3.200,
+    ('HIE', 'SC1', 'SC3'):       3.000,
+    ('HIE', 'SC2', 'SC3'):       2.700,
+    ('HIP', 'SC1', 'SC2'):       3.200,
+    ('HIP', 'SC1', 'SC3'):       3.200,
+    ('HIP', 'SC2', 'SC3'):       2.700,
+    ('HIS', 'SC1', 'SC2'):       3.200,
+    ('HIS', 'SC1', 'SC3'):       3.000,
+    ('HIS', 'SC2', 'SC3'):       2.700,
+    ('ILE', 'BB', 'SC1'):        3.410,
+    ('PHE', 'SC1', 'SC2'):       3.400,
+    ('PHE', 'SC1', 'SC3'):       3.400,
+    ('PHE', 'SC2', 'SC3'):       2.900,
+    ('THR', 'BB', 'SC1'):        3.050,
+    ('TRP', 'SC1', 'SC2'):       3.350,
+    ('TRP', 'SC1', 'SC4'):       4.040,
+    ('TRP', 'SC2', 'SC4'):       4.700,
+    ('TRP', 'SC2', 'SC5'):       4.120,
+    ('TRP', 'SC4', 'SC5'):       2.930,
+    ('TYR', 'SC1', 'SC2'):       3.000,
+    ('TYR', 'SC1', 'SC3'):       3.000,
+    ('TYR', 'SC2', 'SC3'):       3.000,
+    ('TYR', 'SC2', 'SC4'):       2.850,
+    ('TYR', 'SC3', 'SC4'):       2.850,
+    ('VAL', 'BB', 'SC1'):        2.920,
+}
+
+SC_ANGLE = {
+    ('ARG', 'BB', 'SC1', 'SC2'): (2, 180.0, 25.0),
+    ('HIE', 'BB', 'SC1', 'SC2'): (2, 120.0, 50.0),
+    ('HIE', 'BB', 'SC1', 'SC3'): (2, 120.0, 50.0),
+    ('HIP', 'BB', 'SC1', 'SC2'): (2, 120.0, 50.0),
+    ('HIP', 'BB', 'SC1', 'SC3'): (2, 120.0, 50.0),
+    ('HIS', 'BB', 'SC1', 'SC2'): (2, 120.0, 50.0),
+    ('HIS', 'BB', 'SC1', 'SC3'): (2, 120.0, 50.0),
+    ('LYN', 'BB', 'SC1', 'SC2'): (2, 180.0, 25.0),
+    ('LYS', 'BB', 'SC1', 'SC2'): (2, 180.0, 25.0),
+    ('PHE', 'BB', 'SC1', 'SC2'): (2, 120.0, 50.0),
+    ('PHE', 'BB', 'SC1', 'SC3'): (2, 120.0, 50.0),
+    ('TRP', 'BB', 'SC1', 'SC2'): (2, 120.0, 60.0),
+    ('TRP', 'BB', 'SC1', 'SC4'): (2, 130.0, 60.0),
+    ('TYR', 'BB', 'SC1', 'SC2'): (2, 120.0, 60.0),
+    ('TYR', 'BB', 'SC1', 'SC3'): (2, 120.0, 60.0),
+}
+
+# GROMACS improper harmonic (dihedral funct 2): 0.5 * k * (xi - xi0)^2, with
+# k in kJ.mol-1.rad-2. These two hold the aromatic rings flat and are the only
+# dihedrals Martini 3 applies to a protein without -scfix or a DSSP string.
+SC_IMPROPER = {
+    "TRP": ("SC5", "SC4", "SC2", "SC1", 180.0, 100.0),
+    "TYR": ("SC4", "SC2", "SC3", "SC1", 180.0,  50.0),
+}
+
+IMPROPER_BINS = 512          # as in data/reducerules/ProteinAtomTorsion.bi.ff
+KT300 = 2.494                # kJ.mol-1, k_B T at 300 K
+
+
+def sc_length(resname, a, b):
+    """Martini's equilibrium distance for a side-chain pair, bond or constraint."""
+    for key in ((resname, a, b), (resname, b, a)):
+        if key in SC_BOND:
+            return SC_BOND[key][0]
+        if key in SC_CONSTRAINT:
+            return SC_CONSTRAINT[key]
+    return None
+
+
+def angle_to_distance(funct, theta0, r12, r23):
+    """Turn an angle force constant into a 1-3 distance one.
+
+    Returns (factor, r13_at_equilibrium): multiply Martini's k by the factor.
+
+    DERIVATION. The law of cosines gives r13^2 = r12^2 + r23^2
+    - 2 r12 r23 cos(theta), so with the two bonds held at their own
+    equilibrium, dr13/dtheta = r12 r23 sin(theta) / r13. Matching the second
+    derivative at the minimum, k_dist = V''(theta0) / (dr13/dtheta)^2.
+
+    V''(theta0) is k sin^2(theta0) for the cosine-harmonic form (GROMACS
+    funct 2, V = k/2 (cos theta - cos theta0)^2) and exactly k for the
+    restricted bending form (funct 10, the same over sin^2 theta), which is
+    why the sine cancels in one case and not the other:
+
+        funct  2:  k_dist = k * (r13 / (r12 r23))^2
+        funct 10:  k_dist = k * (r13 / (r12 r23))^2 / sin^2(theta0)
+
+    At theta0 = 180 deg -- arginine's and lysine's BB-SC1-SC2 -- both
+    V''(theta0) and dr13/dtheta vanish and the ratio is a 0/0 whose limit the
+    funct-2 formula already is: expanding in delta = pi - theta gives
+    V = k delta^4 / 8 and r13_0 - r13 = r12 r23 delta^2 / (2 r13_0), so the
+    quartic in the angle is EXACTLY quadratic in the distance, with that same
+    constant. No special case is needed.
+    """
+    t = math.radians(theta0)
+    r13 = math.sqrt(r12 * r12 + r23 * r23 - 2.0 * r12 * r23 * math.cos(t))
+    factor = (r13 / (r12 * r23)) ** 2
+    if funct == 10:
+        factor /= math.sin(t) ** 2
+    return factor, r13
+
+
+def angle_energy(theta_deg, funct, theta0, k):
+    """Martini's own angle energy in kJ/mol, exactly as GROMACS writes it."""
+    c, c0 = math.cos(math.radians(theta_deg)), math.cos(math.radians(theta0))
+    if funct == 2:
+        return 0.5 * k * (c - c0) ** 2
+    s = math.sin(math.radians(theta_deg))
+    return 0.5 * k * (c - c0) ** 2 / (s * s)
+
+
+def conversion_error(funct, theta0, k, r12, r23):
+    """(k_dist, Boltzmann-weighted RMS energy error at 300 K in kJ/mol).
+
+    The two curves cannot be made equal by any choice of constant -- a 1-3
+    distance spring is not an angle spring -- so what matters is how far
+    apart they are where the model actually sits. Sampled over the angle,
+    weighted by exp(-V/kT) sin(theta) out to 8 kT.
+    """
+    factor, r0 = angle_to_distance(funct, theta0, r12, r23)
+    kd = k * factor
+    num = den = 0.0
+    for i in range(1, 1800):
+        theta = i * 0.1
+        if funct == 10 and not 2.0 <= theta <= 178.0:
+            continue
+        energy = angle_energy(theta, funct, theta0, k)
+        if energy > 8.0 * KT300:
+            continue
+        t = math.radians(theta)
+        r = math.sqrt(r12 * r12 + r23 * r23 - 2.0 * r12 * r23 * math.cos(t))
+        weight = math.exp(-energy / KT300) * math.sin(t)
+        num += weight * (0.5 * kd * (r - r0) ** 2 - energy) ** 2
+        den += weight
+    return kd, math.sqrt(num / den)
+
+
+def bi_ff_records():
+    """Every STIFFNESS record, as (residue, atom1, atom2, k, source, rms)."""
+    out = []
+    for resname in sorted(SIDECHAIN, key=lambda r: CODE[r]):
+        out.append((resname, "BB", "+BB", BB_BB_STIFFNESS, "bond 3.500 A", None))
+
+        funct, theta0, k = BBB_ANGLE
+        kd, rms = conversion_error(funct, theta0, k, BB_BB_LENGTH, BB_BB_LENGTH)
+        out.append((resname, "-BB", "+BB", kd,
+                    "angle -BB-BB-+BB funct %d %.1f deg %.1f kJ.mol-1" % BBB_ANGLE, rms))
+
+        side = sc_length(resname, "BB", "SC1")
+        if side is not None:
+            for atoms, angle in ((("-BB", "SC1"), BBS_ANGLE), (("SC1", "+BB"), SBB_ANGLE)):
+                funct, theta0, k = angle
+                r12, r23 = (BB_BB_LENGTH, side) if atoms[0] == "-BB" else (side, BB_BB_LENGTH)
+                kd, rms = conversion_error(funct, theta0, k, r12, r23)
+                name = "-BB-BB-SC1" if atoms[0] == "-BB" else "SC1-BB-+BB"
+                out.append((resname, atoms[0], atoms[1], kd,
+                            "angle %s funct %d %.1f deg %.1f kJ.mol-1" % (name, funct, theta0, k), rms))
+
+        for (res, a, b), (r0, k) in sorted(SC_BOND.items()):
+            if res == resname:
+                out.append((resname, a, b, k, "bond %.3f A" % r0, None))
+
+        for (res, a, b, c), (funct, theta0, k) in sorted(SC_ANGLE.items()):
+            if res != resname:
+                continue
+            r12, r23 = sc_length(res, a, b), sc_length(res, b, c)
+            kd, rms = conversion_error(funct, theta0, k, r12, r23)
+            out.append((resname, a, c, kd,
+                        "angle %s-%s-%s funct %d %.1f deg %.1f kJ.mol-1" % (a, b, c, funct, theta0, k), rms))
+    return out
+
+
+def improper_table(xi0, k):
+    """(energy, torque) over xi in [-180, 180], 0.5 k (xi - xi0)^2 wrapped."""
+    energy, torque = [], []
+    for i in range(IMPROPER_BINS + 1):
+        xi = -180.0 + 360.0 * i / IMPROPER_BINS
+        delta = math.radians((xi - xi0 + 180.0) % 360.0 - 180.0)
+        energy.append(0.5 * k * delta * delta)
+        torque.append(-k * delta)
+    return energy, torque
+
+
+BI_FF_PREAMBLE = """\
+Martini 3.0.0's own bonded force constants for proteins. Generated by
+data/martini3/prepare_martini3_data.py -- do not edit by hand. It is read
+only when -bondstiffness is given, alongside
+-rigidbody reducerules/martini3.rbody, whose springs it retunes.
+
+STIFFNESS <res> <a1> <a2> <k>, k in kJ.mol-1.A-2. TORSIONTABLE <id> <bins>
+<E_0> <T_0> ... over xi in [-180, 180], E in kJ/mol and T = -dV/dxi in
+kJ.mol-1.rad-1. TORSION <res> PLANARITY <a1> <a2> <a3> <a4> <table>.
+
+A STIFFNESS RECORD RETUNES AND CREATES NOTHING, so every record here names a
+pair that martini3.rbody already springs: 141 records over 141 of its 171
+groups, and not one record naming a pair with no spring. Of the 30 groups
+left, 26 are Martini [constraints] -- rigid, carrying NO force constant --
+and 4 are the pairs tying in tryptophan's SC3, which is Martini's massless
+virtual site and ours alone. Martini's "#ifdef FLEXIBLE" fallback of 1000000
+kJ.mol-1.nm-2 is a workaround for engines without constraints, not a
+force-field value, so nothing is written for any of them: they keep the run's
+uniform -stiffness.
+
+Every number is converted out of GROMACS units here. A force constant in
+kJ.mol-1.nm-2 divided by 100 is kJ.mol-1.A-2, and both engines write a bond
+as 0.5 k (r - r0)^2 -- GROMACS funct 1, and biospring_spring_energy in
+forcefield/shared/spring_shared.h -- so there is no factor of two to put in.
+
+WHY THE ANGLES ARE CONVERTED HERE WHEN ProteinAtomTorsion.bi.ff LEAVES THEM
+OUT. That file says, correctly, that a 1-3 distance spring is not an angle
+spring, and for AMBER that settles it: the mesh already holds valence angles
+far stiffer than anything a retune would give them. Martini is the opposite
+case. Its angle constants are 20 to 60 kJ.mol-1 and convert to 4.2 to 18.5
+kJ.mol-1.A-2, against the 650 kJ.mol-1.A-2 that -rigidbody defaults to -- a
+factor of 35 to 154. Leaving them at the default does not approximate
+Martini; it replaces a flexible chain with a rigid one. So the conversion is
+not a refinement here, it is the only way this file says anything at all.
+
+THE CONVERSION IS DERIVED, AND WHAT IT COSTS IS MEASURED. See
+angle_to_distance in the generator for the derivation, including why the
+sine cancels for GROMACS funct 2 and not for funct 10, and why theta0 = 180
+deg -- arginine's and lysine's BB-SC1-SC2 -- needs no special case even
+though both V''(theta0) and dr13/dtheta vanish there. The cost is listed
+term by term below: the Boltzmann-weighted RMS energy difference between
+Martini's own angle curve and the distance spring, at 300 K, over the range
+the term explores out to 8 kT. It runs from 0.271 to 1.685 kJ.mol-1 over the
+91 converted records, worst on the backbone BBB angle, which is 0.68 of kT.
+Fitting the constant by least squares instead of matching the curvature was
+measured and rejected: it brings the worst case to 0.668 kJ.mol-1 but bakes
+300 K into a force-field file and gives up the exact curvature, which is
+what sets the small-amplitude fluctuation.
+
+THE BACKBONE IS THE COIL SET. Martini picks its backbone terms by DSSP and
+BioSpring assigns no secondary structure, so this file carries the
+unconditional link -- bond 0.350 nm at 4000 kJ.mol-1.nm-2, hence 40
+kJ.mol-1.A-2 -- and the coil angle, funct 10 at 127 deg and 20 kJ.mol-1.
+Martini's alternatives, for anyone who wants to edit the generator: helix is
+a 0.310 nm constraint with a funct 2 angle at 96 deg and 700 kJ.mol-1;
+extended is 0.365 nm with funct 2 at 119.2 deg and 150; sheet is funct 10 at
+134 deg and 25, bend 130 and 20, turn 100 and 20.
+
+NOT WRITTEN, each for its own reason. Martini's EQUILIBRIUM LENGTHS: a
+BioSpring spring equilibrates where the input put it, so the lengths in the
+generator serve only to convert the angles. The -scfix terms, angles
+SC1-BB-+BB and BB-+BB-+SC1 at funct 10, 100 deg and 15 kJ.mol-1 plus the
+SC-BB-BB-SC dihedrals at 75 kJ.mol-1: optional in martinize2 and off unless
+-scfix is passed. The elastic bonds BB-++BB and BB-+++BB of extended regions
+(0.640 and 0.970 nm at 2500 kJ.mol-1.nm-2): RigidBodyBuilder moves exactly
+one residue, so those pairs have no spring to retune. The CYS SC1->SC1
+disulfide constraint at 0.240 nm: use -static-disulfide. And everything
+behind cgidr, with every DSSP-conditional backbone dihedral.\
+"""
+
+
+def write_bi_ff(path):
+    records = bi_ff_records()
+    with open(path, "w") as out:
+        for paragraph in BI_FF_PREAMBLE.split("\n\n"):
+            out.write(wrap(paragraph) + "\n#\n")
+
+        # One line per Martini angle term, not per record: the same term gives a
+        # different constant in every residue, because the constant carries that
+        # residue's own bond lengths. The spread is the range over the residues.
+        out.write("# MEASURED CONVERSION ERROR, Boltzmann-weighted RMS energy difference\n"
+                  "# from Martini's own angle curve at 300 K, where kT = 2.494 kJ.mol-1.\n"
+                  "# One line per angle term, over the residues that carry it:\n#\n")
+        out.write("#   %-34s %4s %17s %17s\n"
+                  % ("Martini angle term", "n", "k (kJ.mol-1.A-2)", "rms (kJ.mol-1)"))
+        groups = {}
+        for res, a, b, k, source, rms in records:
+            if rms is None:
+                continue
+            shape = source[len("angle "):]
+            key = shape.split(" funct")[0]
+            label = "%s %s" % (key, shape.split(" ", 1)[1])
+            entry = groups.setdefault(label, [0, k, k, rms, rms])
+            entry[0] += 1
+            entry[1], entry[2] = min(entry[1], k), max(entry[2], k)
+            entry[3], entry[4] = min(entry[3], rms), max(entry[4], rms)
+        for label, (n, klo, khi, rlo, rhi) in sorted(groups.items(), key=lambda kv: -kv[1][4]):
+            krange = "%.3f" % klo if khi - klo < 5e-4 else "%.3f-%.3f" % (klo, khi)
+            rrange = "%.3f" % rlo if rhi - rlo < 5e-4 else "%.3f-%.3f" % (rlo, rhi)
+            out.write("#   %-34s %4d %17s %17s\n" % (label, n, krange, rrange))
+        out.write("#\n")
+
+        for index, resname in enumerate(sorted(SC_IMPROPER)):
+            _a, _b, _c, _d, xi0, k = SC_IMPROPER[resname]
+            energy, torque = improper_table(xi0, k)
+            values = " ".join("%.6g %.6g" % pair for pair in zip(energy, torque))
+            out.write("TORSIONTABLE %d %d %s\n" % (index, IMPROPER_BINS, values))
+
+        for index, resname in enumerate(sorted(SC_IMPROPER)):
+            a, b, c, d, _xi0, _k = SC_IMPROPER[resname]
+            out.write("TORSION\t%s\tPLANARITY\t%s\t%s\t%s\t%s\t%d\n" % (resname, a, b, c, d, index))
+
+        for res, a, b, k, _source, _rms in records:
+            out.write("STIFFNESS\t%s\t%s\t%s\t%.3f\n" % (res, a, b, k))
+    return path
+
+
+
 NAMES_HEADER = """\
 Naming-translation table for use with -rigidbody: it maps a bead's Martini
 label ("BB", "SC1") to the grain name the reduction gave it, which is the
@@ -728,6 +1080,7 @@ if __name__ == "__main__":
     grp = write_grp(os.path.join(here, "reducerules", "martini3.grp"), GRP_HEADER)
     rbody = write_rbody(os.path.join(here, "reducerules", "martini3.rbody"))
     names = write_names_grp(os.path.join(here, "reducerules", "martini3.names.grp"))
+    biff = write_bi_ff(os.path.join(here, "forcefield", "martini3.bi.ff"))
     ff = write_ff(os.path.join(here, "forcefield", "martini3.nbi.ff"))
     # .ff and .nbi.ff are the same file under two names, as everywhere else
     # in data/forcefield. Keep them in sync: pdb2spn's --ff reads one and
@@ -735,5 +1088,5 @@ if __name__ == "__main__":
     plain = os.path.join(here, "forcefield", "martini3.ff")
     with open(ff) as src, open(plain, "w") as dst:
         dst.write(src.read())
-    for path in (grp, rbody, names, ff, plain):
+    for path in (grp, rbody, names, biff, ff, plain):
         print("wrote %s" % path)

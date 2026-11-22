@@ -25,12 +25,12 @@ of that same line, 39 commits back, and neither feature exists there: a
 | `reducerules/martini3.grp` | atom → bead grouping rules, AMBER atom names, heavy atoms | 0.028 Å from Martini's beads in the median |
 | `reducerules/martini3.rbody` | bonded topology: which springs exist, 171 groups of two atoms | Martini's graph exactly, minus the ±2/±3 terms |
 | `reducerules/martini3.names.grp` | naming table for `-rigidbody`, one atom per rule | required, see below |
+| `forcefield/martini3.bi.ff` | bonded force constants: 141 `STIFFNESS` + 2 ring impropers |
 | `forcefield/martini3.nbi.ff` | per-type charge / radius / epsilon / mass, 90 keys | charge, radius, mass, termini exact; **epsilon cannot be** |
 | `forcefield/martini3.ff` | byte-identical copy of the above | keep the two in sync |
 | `prepare_martini3_data.py` | generator; every number's provenance is in its docstring | — |
 
-Not written yet: the `.bi.ff` carrying Martini's own force constants, and a
-`.msp`.
+Not written yet: a `.msp`.
 
 ## Provenance
 
@@ -249,17 +249,102 @@ term at all. Here it is a real bead, so with no spring it would be held by
 nothing but the non-bonded terms and would drift out of the ring. It is tied
 to the four beads its virtual-site definition uses.
 
-### Still to write: the `.bi.ff`
+### The force constants: `forcefield/martini3.bi.ff`
 
-Martini states a force constant for only **19 of the 59 side-chain pairs** —
-25, 50 or 75 kJ·mol⁻¹·Å⁻² — and 40 kJ·mol⁻¹·Å⁻² for the backbone bond. The
-other 40 pairs are `[constraints]`, which are rigid and carry **no constant at
-all**; Martini's `#ifdef FLEXIBLE` fallback of 10000 kJ·mol⁻¹·Å⁻² is a
-workaround for engines without constraints, not a force-field value, so
-nothing should be written for them — they take the run's `-stiffness`. The
-angles need one more step: Martini's is the cosine-harmonic form (GROMACS
-type 2 or the restricted type 10) and BioSpring's is a 1-3 distance spring, so
-the conversion has to be derived and measured, not assumed.
+Read only when `-bondstiffness` is given. **A `STIFFNESS` record retunes and
+creates nothing**, so every record names a pair `martini3.rbody` already
+springs: **141 records over 141 of its 171 groups, and not one record naming a
+pair with no spring.** Measured on `example/001_GKinase/model.pdb`: 982
+springs created, **869 retuned, 4.2 to 75.0 kJ·mol⁻¹·Å⁻²**, and the 113 left
+at the uniform 650 are exactly the 105 Martini `[constraints]` of that
+sequence plus the 8 pairs tying in tryptophan's SC3.
+
+Of the 30 uncovered groups, **26 are `[constraints]`** — rigid, carrying no
+force constant — and 4 are the TRP SC3 pairs that are ours. Martini's
+`#ifdef FLEXIBLE` fallback of 1 000 000 kJ·mol⁻¹·nm⁻² is a workaround for
+engines without constraints, not a force-field value, so nothing is written
+for any of them.
+
+Units: a GROMACS constant in kJ·mol⁻¹·nm⁻² divided by 100 is kJ·mol⁻¹·Å⁻²,
+and **both engines write a bond as ½k(r−r₀)²** — GROMACS `funct 1`, and
+`biospring_spring_energy` in `forcefield/shared/spring_shared.h` — so there is
+no factor of two.
+
+#### Why the angles are converted here, when `ProteinAtomTorsion.bi.ff` leaves them out
+
+That file says, correctly, that a 1-3 distance spring is not an angle spring,
+and for AMBER that settles it: the mesh already holds valence angles far
+stiffer than any retune would make them. Martini is the opposite case. Its
+angle constants are 20 to 60 kJ·mol⁻¹ and convert to **4.2 to 18.5
+kJ·mol⁻¹·Å⁻², against the 650 kJ·mol⁻¹·Å⁻² that `-rigidbody` defaults to — a
+factor of 35 to 154.** Leaving them at the default does not approximate
+Martini; it replaces a flexible chain with a rigid one.
+
+#### The conversion is derived, and what it costs is measured
+
+With the two bonds held at their own equilibrium, the law of cosines gives
+`dr₁₃/dθ = r₁₂r₂₃sin θ / r₁₃`, and matching the second derivative at the
+minimum gives
+
+| GROMACS form | V(θ) | V″(θ₀) | k for the 1-3 spring |
+|---|---|---|---|
+| `funct 2`, cosine-harmonic | ½k(cos θ − cos θ₀)² | k sin²θ₀ | k·(r₁₃/(r₁₂r₂₃))² |
+| `funct 10`, restricted bending | the same, over sin²θ | k | k·(r₁₃/(r₁₂r₂₃))² / sin²θ₀ |
+
+which is why the sine cancels in one case and not the other. At **θ₀ = 180°**
+— arginine's and lysine's BB–SC1–SC2 — both `V″(θ₀)` and `dr₁₃/dθ` vanish, and
+the limit needs no special case: expanding in δ = π − θ gives V = kδ⁴/8 and
+r₁₃,₀ − r₁₃ = r₁₂r₂₃δ²/(2r₁₃,₀), so **a quartic in the angle is exactly
+quadratic in the distance**, with that same constant.
+
+No constant makes the two curves equal, so the file states the gap term by
+term: the Boltzmann-weighted RMS energy difference from Martini's own curve at
+300 K, out to 8 kT.
+
+| Martini angle term | n | k (kJ·mol⁻¹·Å⁻²) | RMS (kJ·mol⁻¹) |
+|---|---|---|---|
+| −BB–BB–+BB, `funct 10`, 127°, 20 kJ·mol⁻¹ | 26 | 8.200 | **1.685** |
+| −BB–BB–SC1 and SC1–BB–+BB, `funct 2`, 100°, 25 | 50 | 4.223–6.389 | 0.892–0.967 |
+| BB–SC1–SC2, `funct 2`, 180°, 25 | 3 | 8.014–8.433 | 0.511–0.513 |
+| BB–SC1–SC2/SC3, `funct 2`, 120°, 50 | 8 | 13.584–14.945 | 0.359–0.361 |
+| BB–SC1–SC2/SC3, `funct 2`, 120°, 60 | 3 | 17.079–18.501 | 0.326 |
+| BB–SC1–SC4, `funct 2`, 130°, 60 | 1 | 15.784 | 0.271 |
+
+The worst is the backbone BBB angle at **0.68 of kT**. Fitting the constant by
+least squares instead of matching the curvature was measured and **rejected**:
+it brings the worst case to 0.668 kJ·mol⁻¹, but it bakes 300 K into a
+force-field file and gives up the exact curvature, which is what sets the
+small-amplitude fluctuation.
+
+#### The backbone is the coil set
+
+Martini picks its backbone terms by DSSP; BioSpring assigns no secondary
+structure. So the file carries the **unconditional** `[ link ]` — bond 0.350 nm
+at 4000 kJ·mol⁻¹·nm⁻², hence 40 kJ·mol⁻¹·Å⁻² — and the **coil** angle,
+`funct 10` at 127° and 20 kJ·mol⁻¹. Martini's alternatives, for anyone editing
+the generator: helix is a 0.310 nm constraint with a `funct 2` angle at 96° and
+700 kJ·mol⁻¹; extended is 0.365 nm with `funct 2` at 119.2° and 150; sheet is
+`funct 10` at 134° and 25, bend 130° and 20, turn 100° and 20.
+
+#### The two ring impropers
+
+`TRP SC5–SC4–SC2–SC1` at 180° and 100 kJ·mol⁻¹·rad⁻², and
+`TYR SC4–SC2–SC3–SC1` at 180° and 50, are the **only dihedrals Martini 3
+applies to a protein** without `-scfix` or a DSSP string. They are written as
+`TORSION … PLANARITY` records over 512-bin tables of ½k(ξ−ξ₀)², and need
+`-dihedralplanarity`. Verified: 3 applied on 001_GKinase, which has two
+tryptophans and one tyrosine.
+
+#### Also not written
+
+The `-scfix` terms (angles SC1–BB–+BB and BB–+BB–+SC1 at `funct 10`, 100° and
+15 kJ·mol⁻¹, plus the SC–BB–BB–SC dihedrals at 75), because they are optional
+in martinize2 and off unless `-scfix` is passed. The elastic bonds BB–++BB and
+BB–+++BB of extended regions (0.640 and 0.970 nm at 2500 kJ·mol⁻¹·nm⁻²),
+because `RigidBodyBuilder` moves exactly ±1 residue and those pairs have no
+spring to retune. The CYS SC1→SC1 disulfide constraint at 0.240 nm, which
+`-static-disulfide` covers. And everything behind `cgidr`, with every
+DSSP-conditional backbone dihedral.
 
 ## Two upstream inconsistencies, and why they stopped mattering
 
@@ -358,6 +443,18 @@ pdb2spn -s beads.nc -o model.nc --rigidbody data/martini3/reducerules/martini3.r
 `--ff` is mandatory whenever `--grp` is given, even in the second run where it
 is ignored. `--rigidbody` raises the default `-stiffness` to 650
 kJ·mol⁻¹·Å⁻²; pass `-stiffness` explicitly to choose otherwise.
+
+**With Martini's own force constants**, add the `.bi.ff` to the second run.
+`-bondstiffness` takes `heavy` or `all`; with no hydrogens in a coarse-grain
+model the two are the same, and `all` says so:
+
+```
+pdb2spn -s beads.nc -o model.nc --rigidbody data/martini3/reducerules/martini3.rbody --grp data/martini3/reducerules/martini3.names.grp --ff data/martini3/forcefield/martini3.nbi.ff --bondedinteraction data/martini3/forcefield/martini3.bi.ff --bondstiffness all --dihedralplanarity
+```
+
+Without `-bondstiffness` the whole mesh stays at the uniform `-stiffness` and
+the `.bi.ff` contributes only its two ring impropers; without
+`-dihedralplanarity` it contributes nothing at all.
 
 `impala.enable` must stay 0: the `transferIMP` column is 0.0 on every line,
 because no oil/water partition dataset was published with Martini 3.0.0. The
