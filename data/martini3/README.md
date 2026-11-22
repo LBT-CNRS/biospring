@@ -25,7 +25,7 @@ of that same line, 39 commits back, and neither feature exists there: a
 | `reducerules/martini3.grp` | atom → bead grouping rules, AMBER atom names, heavy atoms | 0.028 Å from Martini's beads in the median |
 | `reducerules/martini3.rbody` | bonded topology: which springs exist, 171 groups of two atoms | Martini's graph exactly, minus the ±2/±3 terms |
 | `reducerules/martini3.names.grp` | naming table for `-rigidbody`, one atom per rule | required, see below |
-| `forcefield/martini3.nbi.ff` | per-type charge / radius / epsilon / mass | charge, radius, mass, termini exact; **epsilon cannot be** |
+| `forcefield/martini3.nbi.ff` | per-type charge / radius / epsilon / mass, 90 keys | charge, radius, mass, termini exact; **epsilon cannot be** |
 | `forcefield/martini3.ff` | byte-identical copy of the above | keep the two in sync |
 | `prepare_martini3_data.py` | generator; every number's provenance is in its docstring | — |
 
@@ -281,6 +281,52 @@ because that is what both local authorities carry under the name:
 `example/001_GKinase/model.pdb` does the same. `HIE` and `HIP` are declared
 separately, and they differ from `HIS` in their bead TYPES, not in their atoms.
 
+## Grain names are Martini's bead types
+
+`SP2 ALA N CA C O` says alanine's backbone bead is of type SP2. A grain name
+*is* the force-field key — `ReduceRule::forcefield_key` returns the name, and a
+`.ff` has one key column and no residue column — so naming the grain after its
+Martini type makes `martini3.nbi.ff` Martini's own type table: **90 keys for
+207 reduce rules**, where a residue-prefixed naming (`ABB`, `ASC1`) needs 207.
+In a viewer, `name TC5` then selects every aromatic ring vertex and `name SQ3p`
+every arginine charge.
+
+Two spellings are forced by the engine, and each was measured on
+`example/001_GKinase/model.pdb` (183 residues, 401 beads, 982 springs) rather
+than assumed.
+
+**A repeat inside one residue takes a `_2` suffix.** A grain name is an
+address: `RigidBodyBuilder::_resolve_atom` returns the *first* particle bearing
+it. Six residues hold two beads of one type — PHE and TYR (TC5 twice), TRP
+(TC5 three times), HIP (TP1dq twice), GLH (P2 on both BB and SC1), HYP (P1
+likewise) — and under bare type names **10 beads of 401 ended up with zero
+springs**: the ring vertices of every PHE, TRP and TYR, free particles in the
+non-bonded field. Hence `TC5_2`, `TC5_3`, `TP1dq_2`, `P2_2`, `P1_2`.
+
+**The name does not change at a chain end.** Martini's terminal backbone bead
+is Q5 where the interior one is P2/SP1/SP2/SP2a/P1. But the `.rbody` reverse
+lookup goes through `martini3.names.grp`, and the engine fetches that table by
+residue name alone — `get_rules_for_residue` ignores the position and
+`_translate` returns the first match — so a terminal bead renamed Q5 drops out
+of the lookup. Measured: **6 of the 982 springs lost, silently, all at the two
+chain ends.** `ReduceRule`'s own comment states this invariant. The name here
+is therefore always the interior type and the terminal change rides on the
+*key*: `P2:NTER` carries Q5's +1 e, 72 Da and ε 6.450 kJ·mol⁻¹, exactly as
+`amber.grp` does with `AN`.
+
+**Enumerating a neighbour cannot replace the naming table.** Writing
+`+P1 +P2 +SP1 +SP2 +SP2a +Q5` in place of `+BB` built **1021 springs where 982
+are right**, because four side-chain beads carry a backbone type — THR SC1 is
+SP1, ASH SC1 SP2, GLH SC1 P2, HYP SC1 P1 — so the neighbour answers twice and
+`_apply_rule` springs every pair it resolves.
+
+The cost of all this is that a grain name no longer says which residue it
+belongs to, and that at a free chain end it names the interior type while
+carrying Martini's terminal parameters. Nothing outside the tests reads a
+reduce rule by name alone, and the resulting model is identical to the
+residue-prefixed naming: same 401 beads, the same 982-spring **set**, and zero
+difference in charge, radius, epsilon, mass or position.
+
 ## Usage
 
 **Non-bonded only**, springs from a distance cutoff:
@@ -297,7 +343,7 @@ needs a naming table with exactly one atom per rule
 (`_check_translation_is_one_atom_per_rule` kills pdb2spn otherwise), so
 `martini3.grp` cannot serve as that table and `martini3.names.grp` exists for
 it. Passing the names table to a run that would REDUCE destroys the model —
-`ABB ALA BB` looks for an atom named `BB`, which no all-atom structure has —
+`SP2 ALA BB` looks for an atom named `BB`, which no all-atom structure has —
 so the reduction happens first, and the second run takes the `.nc` it wrote,
 where pdb2spn skips reduction and uses the table only for naming:
 
