@@ -1,0 +1,79 @@
+{
+  "@context": "https://w3id.org/codemeta/3.0",
+  "type": "SoftwareSourceCode",
+  "name": "BioSpring",
+  "description": "BioSpring is a molecular simulation software based on a spring network, especially designed for interactive simulations. The main goal of BioSpring is to allow user to interactively explore the biomechanical properties biomolecule using spring network model at different scales (all atom, coarsed grain, Carbon-Alpha, ...).",
+  "codeRepository": "https://github.com/LBT-CNRS/biospring",
+  "license": "https://spdx.org/licenses/CECILL-C.html",
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Marc",
+      "familyName": "Baaden",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Laboratoire de biochimie théorique [Paris]"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Nicolas",
+      "familyName": "Ferey",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Laboratoire Interdisciplinaire des Sciences du Numérique"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Olivier",
+      "familyName": "Delalande",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Laboratoire de biochimie théorique [Paris]"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "André",
+      "familyName": "Lanrezac",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Laboratoire de biochimie théorique [Paris]"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Benoist",
+      "familyName": "Laurent",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Laboratoire de biochimie théorique [Paris]"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Hubert",
+      "familyName": "Santuz",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Laboratoire de biochimie théorique [Paris]"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Alex",
+      "familyName": "Tek"
+    }
+  ],
+  "programmingLanguage": [
+    "C++",
+    "C",
+    "CMake",
+    "Python",
+    "Tcl",
+    "Shell"
+  ],
+  "version": "1.1.2",
+  "keywords": []
+}
