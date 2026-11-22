@@ -404,9 +404,241 @@ def write_ff(path):
     return path
 
 
+
+# =====================================================================
+# BONDED TOPOLOGY -- which springs exist, and nothing about how stiff.
+#
+# A .rbody line creates every pairwise spring between the atoms it names
+# and leaves the particles distinct, so a TWO-ATOM group is exactly one
+# spring. Every group below has two atoms: the network is then Martini's
+# bonded graph and not a distance cutoff's guess at it.
+#
+# No force constant appears in this file, and none belongs here. A spring's
+# stiffness is a CONSTRUCTION input: pdb2spn's -stiffness sets it, the .nc
+# stores it per spring, the .msp's spring group cannot change it, and the
+# only option that reads per-pair constants from a .bi.ff
+# (-bondstiffness) is off by default. Martini's own constants, where it
+# states any, go in the companion .bi.ff.
+#
+# WHAT IS IN HERE, from martini3001's aminoacids.ff:
+#   - every side-chain [bonds] and [constraints] pair, deduplicated: the
+#     two sections declare the SAME pair twice for most side chains, once
+#     under "ifndef FLEXIBLE" and once under "ifdef FLEXIBLE";
+#   - the 1-3 pair of every side-chain [angles] entry, which is how
+#     BioSpring holds an angle;
+#   - from the 39 [link] blocks, the backbone bond BB-+BB and the 1-3
+#     pairs of the backbone angles.
+#
+# WHAT CANNOT BE IN HERE, and why:
+#   - "BB ++BB" and "BB +++BB", the elastic bonds that stabilise extended
+#     regions and helices. RigidBodyBuilder strips ONE +/- prefix
+#     (name.substr(1)) and moves exactly one residue, so a two- or
+#     three-residue offset resolves to an atom named "+BB" in the next
+#     residue, which does not exist. Four bond patterns and two of the five
+#     dihedral patterns are lost this way.
+#   - "SC1 >SC1", the disulfide bridge, which is not between neighbours at
+#     all. BioSpring has -static-disulfide for that.
+#   - the secondary-structure choice. Martini declares three alternative
+#     BB-+BB bonds (0.350 / 0.3375 / 0.365 nm) and three constraints
+#     (0.310 / 0.33 / 0.3375 nm), and martinize2 picks by DSSP. A .rbody
+#     keys on residue name and chain position, never on secondary
+#     structure. It costs nothing here: a BioSpring spring equilibrates at
+#     the distance found in the INPUT structure, which in a helix already
+#     IS 0.310 nm -- the same measurement Martini's own table came from.
+#     The force constant is 4000 kJ.mol-1.nm-2 on all three bond variants
+#     anyway, so only the bond-or-constraint distinction varies, and that
+#     is the construction choice above.
+#
+# TRP SC3 GETS SPRINGS MARTINI DOES NOT GIVE IT. There, SC3 is a virtual
+# site placed from SC1/SC2/SC4/SC5 and carries no bonded term at all. Here
+# it is a real bead (BioSpring has no virtual sites), so without springs it
+# would be held by nothing but the non-bonded terms and would drift out of
+# the ring. It is tied to the four beads its virtual-site definition uses.
+
+# resname -> the side-chain pairs, bonds/constraints and angle 1-3 pairs
+# together, since in this file they are the same thing: a spring.
+SIDECHAIN_PAIRS = {
+    "GLY": [],
+    "ALA": [("BB", "SC1")],
+    "CYS": [("BB", "SC1")],
+    "VAL": [("BB", "SC1")],
+    "LEU": [("BB", "SC1")],
+    "ILE": [("BB", "SC1")],
+    "MET": [("BB", "SC1")],
+    "PRO": [("BB", "SC1")],
+    "HYP": [("BB", "SC1")],
+    "ASN": [("BB", "SC1")],
+    "GLN": [("BB", "SC1")],
+    "ASP": [("BB", "SC1")],
+    "ASH": [("BB", "SC1")],
+    "GLU": [("BB", "SC1")],
+    "GLH": [("BB", "SC1")],
+    "THR": [("BB", "SC1")],
+    "SER": [("BB", "SC1")],
+    "LYS": [("BB", "SC1"), ("BB", "SC2"), ("SC1", "SC2")],
+    "LYN": [("BB", "SC1"), ("BB", "SC2"), ("SC1", "SC2")],
+    "ARG": [("BB", "SC1"), ("BB", "SC2"), ("SC1", "SC2")],
+    "HIS": [("BB", "SC1"), ("BB", "SC2"), ("BB", "SC3"),
+            ("SC1", "SC2"), ("SC1", "SC3"), ("SC2", "SC3")],
+    "PHE": [("BB", "SC1"), ("BB", "SC2"), ("BB", "SC3"),
+            ("SC1", "SC2"), ("SC1", "SC3"), ("SC2", "SC3")],
+    "TYR": [("BB", "SC1"), ("BB", "SC2"), ("BB", "SC3"),
+            ("SC1", "SC2"), ("SC1", "SC3"), ("SC2", "SC3"),
+            ("SC2", "SC4"), ("SC3", "SC4")],
+    # SC3 is Martini's virtual site; the four pairs tying it in are ours.
+    "TRP": [("BB", "SC1"), ("BB", "SC2"), ("BB", "SC4"),
+            ("SC1", "SC2"), ("SC1", "SC4"), ("SC2", "SC4"),
+            ("SC2", "SC5"), ("SC4", "SC5"),
+            ("SC1", "SC3"), ("SC2", "SC3"), ("SC4", "SC3"), ("SC5", "SC3")],
+}
+SIDECHAIN_PAIRS["HIE"] = SIDECHAIN_PAIRS["HIS"]
+SIDECHAIN_PAIRS["HIP"] = SIDECHAIN_PAIRS["HIS"]
+
+# The backbone pairs every residue carries, from the [link] blocks.
+# "BB +BB" is the bond; the rest are the 1-3 pairs of the backbone angles
+# -BB/BB/+BB, -BB/BB/SC1 and SC1/BB/+BB. "BB +SC1" is deliberately absent:
+# it is the same pair as the next residue's "-BB SC1".
+BACKBONE_PAIRS = [("BB", "+BB"), ("-BB", "+BB")]
+BACKBONE_PAIRS_WITH_SC = [("-BB", "SC1"), ("SC1", "+BB")]
+
+
+def _group_name(code, a, b):
+    sign = {"+": "p", "-": "m"}
+    def tag(x):
+        return sign.get(x[0], "") + x.lstrip("+-")
+    return "M3_%s_%s_%s" % (code, tag(a), tag(b))
+
+
+def rbody_lines():
+    """Every .rbody line, as (group name, residue, [atom1, atom2])."""
+    out = []
+    for resname in sorted(SIDECHAIN_PAIRS, key=lambda r: CODE[r]):
+        code = CODE[resname]
+        has_sc = bool(SIDECHAIN[resname])
+        pairs = list(BACKBONE_PAIRS)
+        if has_sc:
+            pairs += BACKBONE_PAIRS_WITH_SC
+        pairs += SIDECHAIN_PAIRS[resname]
+        for a, b in pairs:
+            out.append((_group_name(code, a, b), resname, [a, b]))
+    return out
+
+
+RBODY_HEADER = """\
+Bonded topology for the Martini 3.0.0 coarse-grain protein model: which
+springs exist. Generated by data/martini3/prepare_martini3_data.py -- do not
+edit by hand. Use it with -rigidbody, which is exclusive with -cutoff:
+a distance cutoff would invent a network, and the point of this file is that
+Martini's own bonded graph is used instead.
+
+Every group here has exactly TWO atoms, so every group is exactly one
+spring. Pair it with reducerules/martini3.grp, whose bead names these are.
+
+NO FORCE CONSTANT APPEARS IN THIS FILE and none belongs here: a spring's
+stiffness is a construction input (pdb2spn's -stiffness, stored per spring
+in the .nc, unreachable from the .msp). Martini's own constants, where it
+states any, are in the companion .bi.ff and are read only if
+-bondstiffness is given.\
+"""
+
+
+def write_rbody(path):
+    with open(path, "w") as out:
+        for paragraph in RBODY_HEADER.split("\n\n"):
+            out.write(wrap(paragraph) + "\n#\n")
+        for paragraph in _RBODY_NOTES:
+            out.write(wrap(paragraph) + "\n#\n")
+        current = None
+        for name, resname, atoms in rbody_lines():
+            if resname != current:
+                out.write("#\n")
+                current = resname
+            out.write("%s %s %s\n" % (name, resname, " ".join(atoms)))
+    return path
+
+
+_RBODY_NOTES = [
+    "WHAT IS HERE, from martini3001's aminoacids.ff: every side-chain "
+    "[bonds] and [constraints] pair, deduplicated because the two sections "
+    "declare the same pair twice for most side chains (once under 'ifndef "
+    "FLEXIBLE' and once under 'ifdef FLEXIBLE'); the 1-3 pair of every "
+    "side-chain [angles] entry, which is how BioSpring holds an angle; and "
+    "from the 39 [link] blocks, the backbone bond BB-+BB plus the 1-3 pairs "
+    "of the backbone angles.",
+
+    "WHAT CANNOT BE HERE: 'BB ++BB' and 'BB +++BB', the elastic bonds that "
+    "stabilise extended regions and helices, because RigidBodyBuilder strips "
+    "ONE +/- prefix and moves exactly one residue -- a two-residue offset "
+    "resolves to an atom named '+BB' in the next residue, which does not "
+    "exist. Four of the backbone bond patterns and two of the five dihedral "
+    "patterns are lost that way. Nor is 'SC1 >SC1', the disulfide bridge, "
+    "which is not between neighbours at all: -static-disulfide covers it.",
+
+    "THE SECONDARY-STRUCTURE CHOICE IS ALSO ABSENT, and costs nothing. "
+    "Martini declares three alternative BB-+BB bonds (0.350 / 0.3375 / "
+    "0.365 nm) and three constraints (0.310 / 0.33 / 0.3375 nm), picked by "
+    "DSSP; a .rbody keys on residue name and chain position, never on "
+    "secondary structure. But a BioSpring spring equilibrates at the "
+    "distance in the INPUT structure, which in a helix already IS 0.310 nm "
+    "-- the same measurement Martini's table came from. And the force "
+    "constant is 4000 kJ.mol-1.nm-2 on all three bond variants, so only the "
+    "bond-or-constraint distinction varies, which is the construction "
+    "choice above.",
+
+    "TRP SC3 GETS FOUR SPRINGS MARTINI DOES NOT GIVE IT. There it is a "
+    "virtual site placed from SC1/SC2/SC4/SC5 and carries no bonded term at "
+    "all. Here it is a real bead, so with no spring it would be held by "
+    "nothing but the non-bonded terms and would drift out of the ring. It is "
+    "tied to the four beads its virtual-site definition uses.",
+]
+
+
+
+NAMES_HEADER = """\
+Naming-translation table for use with -rigidbody: it maps a bead's canonical
+label ("BB", "SC1") to the grain name the reduction gave it ("ABB", "ASC1").
+Generated by data/martini3/prepare_martini3_data.py -- do not edit by hand.
+
+WHY THIS FILE EXISTS. A grain name must be unique per residue, because the
+force-field key IS the grain name (ReduceRule::forcefield_key) and the
+backbone types differ by residue: GLY is SP1, ALA SP2, PRO SP2a, every other
+P2. So the reduction names alanine's backbone bead "ABB". But a .rbody rule
+has to say "+BB" to reach the NEXT residue's backbone, and it cannot know
+what that residue is, so it cannot say "+ABB".
+
+RigidBodyBuilder resolves exactly this: when an atom is not found under the
+name the .rbody wrote, it translates that name through a table, IN THE TARGET
+RESIDUE'S CONTEXT (RigidBodyBuilder::_translate takes target_resname). So
+"+BB" on an alanine followed by a glycine resolves to "GBB". The table it
+accepts must have EXACTLY ONE ATOM PER RULE --
+_check_translation_is_one_atom_per_rule kills pdb2spn otherwise -- which is
+why reducerules/martini3.grp cannot serve as the table and this file has to
+exist.
+
+It is therefore NOT a reduction. Passing it to a run that would reduce would
+destroy the model: the rule "ABB ALA BB" looks for an atom named BB, and an
+all-atom structure has none. Use it only with an input that is already
+coarse-grained, where pdb2spn skips the reduction -- see the two-step recipe
+in README.md.\
+"""
+
+
+def write_names_grp(path):
+    with open(path, "w") as out:
+        for paragraph in NAMES_HEADER.split("\n\n"):
+            out.write(wrap(paragraph) + "\n#\n")
+        for resname in sorted(SIDECHAIN, key=lambda r: CODE[r]):
+            for name, _t, _c, _h, _hy in beads(resname, INTERIOR):
+                label = name[len(CODE[resname]):]
+                out.write("%s %s %s\n" % (name, resname, label))
+    return path
+
+
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     grp = write_grp(os.path.join(here, "reducerules", "martini3.grp"), GRP_HEADER)
+    rbody = write_rbody(os.path.join(here, "reducerules", "martini3.rbody"))
+    names = write_names_grp(os.path.join(here, "reducerules", "martini3.names.grp"))
     ff = write_ff(os.path.join(here, "forcefield", "martini3.nbi.ff"))
     # .ff and .nbi.ff are the same file under two names, as everywhere else
     # in data/forcefield. Keep them in sync: pdb2spn's --ff reads one and
@@ -414,5 +646,5 @@ if __name__ == "__main__":
     plain = os.path.join(here, "forcefield", "martini3.ff")
     with open(ff) as src, open(plain, "w") as dst:
         dst.write(src.read())
-    for path in (grp, ff, plain):
+    for path in (grp, rbody, names, ff, plain):
         print("wrote %s" % path)

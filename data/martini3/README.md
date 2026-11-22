@@ -23,12 +23,14 @@ of that same line, 39 commits back, and neither feature exists there: a
 | file | what it is | status |
 |---|---|---|
 | `reducerules/martini3.grp` | atom → bead grouping rules, AMBER atom names, heavy atoms | 0.028 Å from Martini's beads in the median |
+| `reducerules/martini3.rbody` | bonded topology: which springs exist, 171 groups of two atoms | Martini's graph exactly, minus the ±2/±3 terms |
+| `reducerules/martini3.names.grp` | naming table for `-rigidbody`, one atom per rule | required, see below |
 | `forcefield/martini3.nbi.ff` | per-type charge / radius / epsilon / mass | charge, radius, mass, termini exact; **epsilon cannot be** |
 | `forcefield/martini3.ff` | byte-identical copy of the above | keep the two in sync |
 | `prepare_martini3_data.py` | generator; every number's provenance is in its docstring | — |
 
-Not written yet: the bonded set (`.rbody` + `.bi.ff`) and a `.msp`. What it
-would take is in **The bonded terms** below.
+Not written yet: the `.bi.ff` carrying Martini's own force constants, and a
+`.msp`.
 
 ## Provenance
 
@@ -177,40 +179,87 @@ Martini does not give it.
 
 ## The bonded terms
 
-Not written yet. Martini 3's bonded set for the 22 standard residues is
-small — 45 `bonds`, 26 `constraints`, 14 `angles`, 2 `dihedrals`, 1 virtual
-site and 21 `exclusions`, with bond constants from 2500 to 7500
-kJ·mol⁻¹·nm⁻² (25 to 75 kJ·mol⁻¹·Å⁻²), angles from 25 to 60 kJ·mol⁻¹ and the
-two dihedrals at 50 and 100. The backbone terms are separate, in the 39
-`[ link ]` blocks of `aminoacids.ff`. On this base the route is:
+`reducerules/martini3.rbody` carries Martini's bonded **topology** — which
+springs exist. It carries no force constant, and none belongs in it: a
+spring's stiffness is a construction input (`pdb2spn -stiffness`, stored per
+spring in the `.nc`, unreachable from the `.msp`), and the only option that
+reads per-pair constants from a `.bi.ff`, `-bondstiffness`, is off by default.
 
-* **Which springs exist** comes from `--cutoff` or from a `.rbody` group
-  file. A `.rbody` line creates every pairwise spring between the atoms it
-  lists and leaves the particles distinct, so a two-atom group is exactly one
-  spring — which is the control a faithful bonded topology needs, rather than
-  letting a distance cutoff invent the network. Cross-residue `+`/`−` atom
-  prefixes work there too (`RigidBodyBuilder.cpp`), so BB(i)–BB(i+1) is
-  addressable as `+BB`.
-* **Force constants: expressible, per pair.**
-  `STIFFNESS <resname>[:NTER|CTER] <atom1> <atom2> <k>` takes k in
-  kJ·mol⁻¹·Å⁻² and accepts the same `+`/`−` prefixes. Martini's constants are
-  in kJ·mol⁻¹·nm⁻²: divide by 100.
-* **Bond equilibrium lengths: not expressible.** `STIFFNESS` retunes springs
-  that already exist; a spring's equilibrium is the distance in the input
-  structure. Martini's fixed lengths (0.270, 0.315, 0.350 nm …) would not be
-  imposed; the input geometry's would stand. Nor is there anything to express
-  a `[ constraints ]` entry, which Martini uses for most ring side chains and
-  which is rigid rather than stiff — though Martini itself offers a
-  `#ifdef FLEXIBLE` alternative for every one of them, at `$stiff_fc` =
-  1000000 kJ·mol⁻¹·nm⁻², i.e. 10000 kJ·mol⁻¹·Å⁻². That is fifteen times the
-  650 this project settled on for a rigid-body mesh, so adopting it is a
-  timestep decision as much as a stiffness one.
-* **Angles.** Martini uses the cosine-harmonic form (GROMACS angle type 2).
-  BioSpring holds an angle as a 1-3 distance spring, so each one needs a
-  stiffness conversion that depends on the equilibrium geometry. That
-  conversion has to be calibrated and measured, not assumed.
-* **Dihedrals: expressible** as `TORSION` / `TORSIONTABLE` records, the same
-  way `data/reducerules/ProteinAtomTorsion.bi.ff` tabulates AMBER's.
+A `.rbody` line creates every pairwise spring between the atoms it names and
+leaves the particles distinct, so a **two-atom group is exactly one spring**.
+All 171 groups have two atoms, which is what makes the network Martini's graph
+rather than a distance cutoff's guess at it.
+
+What is in it, from `martini3001`: every side-chain `[bonds]` and
+`[constraints]` pair, deduplicated — the two sections declare the same pair
+twice for most side chains, once under `ifndef FLEXIBLE` and once under
+`ifdef FLEXIBLE`; the 1-3 pair of every side-chain `[angles]` entry, which is
+how BioSpring holds an angle; and from the 39 `[ link ]` blocks, the backbone
+bond BB–+BB plus the 1-3 pairs of the backbone angles.
+
+### Verified
+
+Two-step build on `example/001_GKinase/model.pdb`, 183 residues:
+
+* **982 springs created, 982 expected** from an independent count over the
+  sequence.
+* The graph, read back from the output's CONECT records:
+
+  | class | n | median length |
+  |---|---|---|
+  | BB(i)–BB(i+1) | 182 | 3.23 Å |
+  | BB(i)–BB(i+2) | 181 | 5.09 Å |
+  | BB–SC1 intra | 168 | 2.73 Å |
+  | SC1(i)–BB(i+1) | 168 | 5.24 Å |
+  | BB(i)–SC1(i+1) | 167 | 4.80 Å |
+
+  182 is every consecutive pair of the 183 residues, 181 every 1-3 pair, and
+  168 is 183 minus the 15 glycines. The ring side chains account for the rest.
+
+* The BB–BB bonds run from **2.84 to 3.78 Å**. Martini declares three
+  alternatives — 3.10 Å (helix), 3.375 and 3.50 Å — and picks between them by
+  DSSP. The input's own distances already span that range, which is the
+  measurement behind the next paragraph.
+
+### What cannot be in it
+
+* **The secondary-structure choice**, and it costs nothing. A `.rbody` keys on
+  residue name and chain position, never on secondary structure. But a
+  BioSpring spring equilibrates at the distance in the INPUT structure, which
+  in a helix already *is* 3.10 Å — the same measurement Martini's table came
+  from, as the 2.84–3.78 Å spread above shows. The force constant is 4000
+  kJ·mol⁻¹·nm⁻² on all three bond variants anyway, so only the
+  bond-or-constraint distinction varies, and that is the construction choice.
+* **`BB ++BB` and `BB +++BB`**, the elastic bonds that stabilise extended
+  regions and helices. `RigidBodyBuilder` strips ONE `+`/`−` prefix
+  (`name.substr(1)`) and moves exactly one residue, so a two-residue offset
+  resolves to an atom named `+BB` in the next residue, which does not exist.
+  Four of the backbone bond patterns and two of the five dihedral patterns are
+  lost this way.
+* **`SC1 >SC1`**, the disulfide bridge, which is not between neighbours at
+  all. `-static-disulfide` covers it, at 1389.1 kJ·mol⁻¹·Å⁻².
+* **Martini's equilibrium lengths.** A spring equilibrates where the input
+  puts it. For the backbone that is a feature, as above; for a side chain it
+  means 0.270 / 0.315 / 0.341 nm are not imposed.
+
+### TRP SC3 gets four springs Martini does not give it
+
+There, SC3 is a virtual site placed from SC1/SC2/SC4/SC5 and carries no bonded
+term at all. Here it is a real bead, so with no spring it would be held by
+nothing but the non-bonded terms and would drift out of the ring. It is tied
+to the four beads its virtual-site definition uses.
+
+### Still to write: the `.bi.ff`
+
+Martini states a force constant for only **19 of the 59 side-chain pairs** —
+25, 50 or 75 kJ·mol⁻¹·Å⁻² — and 40 kJ·mol⁻¹·Å⁻² for the backbone bond. The
+other 40 pairs are `[constraints]`, which are rigid and carry **no constant at
+all**; Martini's `#ifdef FLEXIBLE` fallback of 10000 kJ·mol⁻¹·Å⁻² is a
+workaround for engines without constraints, not a force-field value, so
+nothing should be written for them — they take the run's `-stiffness`. The
+angles need one more step: Martini's is the cosine-harmonic form (GROMACS
+type 2 or the restricted type 10) and BioSpring's is a 1-3 distance spring, so
+the conversion has to be derived and measured, not assumed.
 
 ## Two upstream inconsistencies, and why they stopped mattering
 
@@ -234,12 +283,35 @@ separately, and they differ from `HIS` in their bead TYPES, not in their atoms.
 
 ## Usage
 
+**Non-bonded only**, springs from a distance cutoff:
+
 ```
 pdb2spn -s protein.pdb -o model.nc \
         --grp data/martini3/reducerules/martini3.grp \
         --ff  data/martini3/forcefield/martini3.nbi.ff \
         --cutoff 6.0
 ```
+
+**With Martini's bonded topology**, which takes two steps. `--rigidbody`
+needs a naming table with exactly one atom per rule
+(`_check_translation_is_one_atom_per_rule` kills pdb2spn otherwise), so
+`martini3.grp` cannot serve as that table and `martini3.names.grp` exists for
+it. Passing the names table to a run that would REDUCE destroys the model —
+`ABB ALA BB` looks for an atom named `BB`, which no all-atom structure has —
+so the reduction happens first, and the second run takes the `.nc` it wrote,
+where pdb2spn skips reduction and uses the table only for naming:
+
+```
+pdb2spn -s protein.pdb -o beads.nc --grp data/martini3/reducerules/martini3.grp --ff data/martini3/forcefield/martini3.nbi.ff
+```
+
+```
+pdb2spn -s beads.nc -o model.nc --rigidbody data/martini3/reducerules/martini3.rbody --grp data/martini3/reducerules/martini3.names.grp --ff data/martini3/forcefield/martini3.nbi.ff
+```
+
+`--ff` is mandatory whenever `--grp` is given, even in the second run where it
+is ignored. `--rigidbody` raises the default `-stiffness` to 650
+kJ·mol⁻¹·Å⁻²; pass `-stiffness` explicitly to choose otherwise.
 
 `impala.enable` must stay 0: the `transferIMP` column is 0.0 on every line,
 because no oil/water partition dataset was published with Martini 3.0.0. The
