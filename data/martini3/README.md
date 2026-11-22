@@ -30,7 +30,10 @@ of that same line, 39 commits back, and neither feature exists there: a
 | `forcefield/martini3.ff` | byte-identical copy of the above | keep the two in sync |
 | `prepare_martini3_data.py` | generator; every number's provenance is in its docstring | — |
 
-Not written yet: a `.msp`.
+Run settings live in the examples, as everywhere else in this repository —
+`data/` ships no `.msp`. The reference one is
+**`082.GK_Martini3/model.msp`** on the examples repository, which builds this
+force field on guanylate kinase and carries every measurement below.
 
 ## Provenance
 
@@ -411,6 +414,62 @@ carrying Martini's terminal parameters. Nothing outside the tests reads a
 reduce rule by name alone, and the resulting model is identical to the
 residue-prefixed naming: same 401 beads, the same 982-spring **set**, and zero
 difference in charge, radius, epsilon, mass or position.
+
+## Running it: measured
+
+On `082.GK_Martini3` (guanylate kinase, 401 beads, 982 springs).
+
+**`steric.mode` must be set, and the default is wrong here.** It defaults to
+`linear`, whose soft wall does not hold Martini's large beads apart. Measured
+with the default: Coulomb on at 11 Å drove the protein to **1377 K** and pushed
+two *uncharged, unsprung* beads — PHE120 and LYS163 — from 7.69 Å to **0.91 Å**.
+With `lennard-jones-12-6Amber`, which is the law the radius column is written
+for, the same run holds **301.3 K**. Set it explicitly.
+
+**The timestep is 5 fs, derived then measured.** The stiffest spring is the
+uniform 650 kJ·mol⁻¹·Å⁻² that the 30 groups with no Martini constant keep;
+between two 36 Da tiny beads (reduced mass 18 Da) its period is **104.6 fs**,
+so 20 steps per period — the same ratio that gives 3 fs for an all-atom mesh at
+the same stiffness — asks for 5.2 fs. Martini's own constants, 4.2 to 75
+kJ·mol⁻¹·Å⁻², have periods of 355 to 1839 fs and are never the limit.
+
+| dt (fs) | 1 | 2 | 5 | 10 | 15 | 20 |
+|---|---|---|---|---|---|---|
+| T held (K) | 297.3 | 299.0 | **301.1** | 296.6 | 296.2 | 289.8 |
+| spring energy (kJ·mol⁻¹) | 1015 | 1015 | 1016 | 1034 | 1022 | 1018 |
+
+Nothing diverges up to 20 fs, where the temperature starts to fall — but the
+thermostat absorbs integration error, so 5 fs is the derived value and the best
+measured one, not a threshold.
+
+**`spring.scale` must be 1.0.** It multiplies every stiffness, so the 10.0 the
+older examples carry would divide every period by √10 and make the constants in
+the `.bi.ff` something else.
+
+**Viscosity 0.054 Da·fs⁻¹.** It is a true friction coefficient — the Langevin
+decay is `exp(−γ·dt/m)`, so the *rate* is γ/m and one value cannot be one rate
+for every bead. 0.054 puts a 54 Da small bead at exactly **1 ps⁻¹** (GROMACS's
+`tau_t = 1 ps` for Martini with `sd`, and OpenMM's usual friction), leaving a
+36 Da tiny bead at 1.5 and a 72 Da regular one at 0.75. Per 5 fs step that
+removes 0.33 to 0.75 % of the velocity. The thermostat was checked **alone**,
+every force off: 298.8 K against 300 requested.
+
+**`coulomb.dielectric = 15`** is Martini 3's own relative permittivity, not a
+choice made here, and it is applied exactly: the same conformation gives
+−4026.9 kJ·mol⁻¹ at ε_r = 1 and −268.46 at 15.
+
+**Over 1 ns** (200 000 steps of 5 fs): mean **299.7 K**, sd 12.4, and 299.8 K
+over the second half. But the radius of gyration falls from **16.98 Å to 13.55 Å
+in the first 50 ps** and then plateaus at 13.09–13.31 Å for the remaining
+950 ps, while the steric energy settles from −3237 to −7286 kJ·mol⁻¹. A
+one-time 22 % compaction, then stable — because **there is no water**, and
+Martini's Lennard-Jones is calibrated with explicit water beads. This
+reproduces Martini's *force field*, not Martini's *ensemble*.
+
+**The input must carry no CONECT records.** Every CONECT becomes a spring and
+there is no option to turn that off: built from `072`'s `gkinase.pdb`, which
+carries 129 of them for its own hydrogen-bond model, the same pipeline gives
+**1099 springs instead of 982**.
 
 ## Usage
 
