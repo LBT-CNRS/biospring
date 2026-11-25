@@ -20,6 +20,11 @@ parameter has a default value.
 
 You can comment a line using the # character.
 
+Two mistakes are fatal rather than ignored, each reported with its line number: a parameter name
+that does not exist (`SafeConfigurationReader: line N: invalid parameter "..."`) and the same
+parameter given twice. A typo therefore never silently runs a different simulation -- and a group
+this manual marks as *not implemented* cannot be left in a file "harmlessly".
+
 Example of .msp file for BioSpring
 ----------------------------------
 
@@ -53,7 +58,11 @@ General Simulation Parameters Description
 
 Define the steps and IO settings. The values written here are the default values.
 
-* **simulation.timestep = 1** *(fs, float)* Timestep in fs used in this run
+* **simulation.timestep = 0.01** *(fs, float)* Timestep used in this run. The default is
+`defaultConfiguration()`'s own value and not a recommendation: it sits far below anything usable,
+so an `.msp` that forgets this line crawls instead of exploding. Every real run sets it -- see
+*Choosing `--stiffness` and `simulation.timestep`* below for the measured values, **3.0 fs** on a
+protein and **2.0 fs** on a nucleic acid, both at `--stiffness 650` kJ.mol-1.A-2.
 * **simulation.nbsteps = -1** *(integer)* Number of simulation steps. The run stops after this step.
 -1 defines an infinite run and you will have to kill the process manually. 
 * **simulation.samplerate = 100** *(integer)* Frequence at which energies are printed on the standard
@@ -140,9 +149,18 @@ which is why this is a knob and not a heuristic.
 * **csvsampling.frequency = 100** *(integer)* Frequence of energy logging.
 * **csvsampling.path = ""** *(string)* Name of the csv energies log.
 ---
-* **xtctrajectory.enable = 0** *(boolean)* Enables energies logging in xtc format.
-* **xtctrajectory.frequency = 100** *(integer)* Frequence of energy logging.
-* **xtctrajectory.path = ""** *(string)* Name of the xtc energies log.
+* **xtctrajectory.enable = 0** *(boolean)* Enables trajectory writing in xtc format.
+* **xtctrajectory.frequency = 100** *(integer)* Frequence at which frames are written.
+* **xtctrajectory.path = ""** *(string)* Name of the xtc trajectory file.
+
+The three writers share one rule: a frame goes out when the step counter is an exact multiple of
+`frequency`, and that counter starts at **0**. So step 0 always produces a frame, and a run of
+exactly `frequency` steps produces only that one -- `simulation.nbsteps = 1000` with
+`frequency = 1000` writes a single-frame trajectory of the input structure.
+
+`rigidbody.enable` and `rigidbody.enablesampling` together override `csvsampling.frequency` to
+1000000 at setup: the line is then written at the end of every rotation about the insertion
+vector, not on a step count.
 
 Spring Network Parameters Description
 -------------------------------------
@@ -206,6 +224,22 @@ and switchable, on its own. At build time it is opted in by `-dihedralbackbone`,
   safe (see the next section). Widening the `.rbody` group instead was measured and rejected:
   it restores the plane but freezes the terminal torsion, because nothing beyond the hub's
   substituents can be reached without crossing the rotatable bond.
+
+* **dihedralphi.scale = 1.0** *(dimensionless factor, float)* A multiplier on that family's
+torsion energy and torque, and so for each of the seven others: `dihedralpsi.scale`,
+`dihedralomega.scale`, `dihedralchi.scale`, `dihedralplanarity.scale`,
+`dihedralnucleicbackbone.scale`, `dihedralnucleicchi.scale` and `dihedralnucleicsugar.scale`, all
+`1.0` by default.
+
+  It is the only way to weigh torsions against the rest of the model. `spring.scale` does reach
+them, but the rigid-body mesh holding every bond and valence angle reads that same number, so
+turning the torsions down with it turns the bonds down too.
+* **dihedralphi.cutoff = 0** *(Angstroms, float)* Parsed, printed in the configuration dump, and
+read by nothing -- as are `dihedralpsi.cutoff`, `dihedralomega.cutoff`, `dihedralchi.cutoff`,
+`dihedralplanarity.cutoff`, `dihedralnucleicbackbone.cutoff`, `dihedralnucleicchi.cutoff` and
+`dihedralnucleicsugar.cutoff`. Every dihedral family is an `EnergySetting`, which carries the
+whole `enable`/`scale`/`cutoff` triplet, and a torsion is four named atoms rather than a search
+radius.
 
 **All eight default to enabled** (`defaultConfiguration()` sets them so deliberately): they are
 an opt-OUT knob for isolating one family's contribution, not an opt-in feature switch, so
@@ -331,10 +365,10 @@ and electrostatic (long-range) interactions. Steric interactions are simulated
 by a linear repulsive force or a Lennard-Jones potential. Electrostatic interactions
 are simulated by Coulomb equation.
 
-A pre-computed electrostatic potential grid from APBS[1] can be use 
-in some case, as well as an implicit membrane potential [2]. Details 
-for these features are given in the appropriate examples. **(TODO: define 
-which examples)**
+A pre-computed electrostatic potential grid from APBS[1] can be used in some cases, as well as an
+implicit membrane potential [2]. Both are shown by the examples that use them, in the
+Biospring-Example repository: `011.DNAseI`, `012.MgSite_GK` and `021.Pax5` for the APBS grid,
+`053.IMPALA_spheniscine`, `054.OmpA` and `057.TestIMP` for the implicit membrane.
 
 * **steric.enable = 0** *(boolean)* Enable steric interaction.
 * **steric.mode = linear** *(string)* Type of steric interaction Can be *linear, lennard-jones-8-6Lewitt, lennard-jones-8-6Zacharias, lennard-jones-12-6Amber*.
@@ -345,6 +379,35 @@ which examples)**
 (steric stiffness in the *linear* mode is a fixed kJ.mol-1.A-2 constant in the code; the
 Lennard-Jones modes use each particle's `epsilon`, in kJ.mol-1, from the .ff file).
 * **steric.cutoff = 1** *(Angstroms, float)* Cutoff distance for steric calculation.
+* **steric.radiusrule = default** *(string)* How a pair's two radii combine, for the
+Lennard-Jones modes: *default, sum, geometric-mean, arithmetic-mean*. `default` means the law's
+own rule, which is the rule of the parameter set that law was published with
+(`STERIC_RADIUS_RULE_*` in `forcefield/energy/steric.hpp`). Set it explicitly only when pairing a
+`.ff` with a law it did not come from, because **the `radius` column does not hold the same
+quantity in every file**:
+
+  | shipped `.ff` | what column 3 holds | rule its radii want |
+  |---|---|---|
+  | `amber*.ff` | AMBER's R\* = rmin/2, 0.6-2.0 A | sum |
+  | `model.ff`, `CAonlyBaaden.ff`, `CAallresBaaden.ff` | bead radius, 2.6-3.9 A | sum |
+  | `CAonlyLewitt.ff` | CA-CA **contact** distance, 5.0-7.4 A | geometric mean |
+  | `CGZaccharias.ff` | its own parameterisation | product, inside the law |
+
+  Each shipped file's header states its own. Getting it wrong is not subtle: summing Levitt's
+contact distances puts a residue pair's minimum at 10-13 A where a real protein's closest
+non-bonded CA pair is 3.71 A, and taking the geometric mean of AMBER's half-distances put two
+carbons at 1.91 A instead of 3.82, which left nucleobases stacked 3.4 A apart with no minimum at
+all -- the RNA hairpin's steric energy was -41.17 kJ.mol-1 where it should be -571.37. Zacharias'
+law ignores this setting: its product on the radius is inseparable from its product on epsilon.
+A multi-resolution network (a ribosome) needs both conventions at once, which is what made this
+selectable rather than fixed.
+
+  **Note that `steric.mode` defaults to `linear`, which is no Lennard-Jones at all**, so an
+`.msp` that enables sterics without naming a mode never reads a `radius` column written as
+rmin/2. The linear wall is soft: on Martini 3's large beads (rmin up to 5.28 A), with Coulomb on
+at an 11 A cutoff and 300 K asked of the thermostat, glucokinase ran at 1377 K and two neutral,
+unbonded beads were pushed from 7.69 A to 0.91 A -- where the same run under
+`lennard-jones-12-6Amber` held 301.3 K.
 ---
 * **coulomb.enable = 0** *(boolean)* Enables Coulomb interaction.
 * **coulomb.scale = 1.0** *(dimensionless factor, float)* Multiplier applied to electrostatic
@@ -353,6 +416,18 @@ forces (charges, in elementary charge units *e*, come from the .ff file).
 calculation
 * **coulomb.dielectric = 1.0** *(dimensionless, float)* Relative dielectric constant used in
 Coulomb's equation.
+* **coulomb.distancedependent = 0** *(boolean)* Makes the dielectric grow with distance,
+`epsilon(r) = coulomb.dielectric * r` with r in Angstrom (Warshel & Levitt 1976), instead of
+holding it constant.
+
+  A constant 78 screens a pair at contact exactly as hard as one 30 A away, and that is wrong in
+the direction that matters: no water fits between two atoms 3 A apart, so the short-range
+interaction is barely screened in reality. Measured on a native alpha-helix hydrogen bond of
+ubiquitin, the amide/carbonyl attraction is **-13.61 kJ.mol-1** unscreened and **-0.17 kJ.mol-1**
+at a constant 78.
+
+  Off by default: it changes every electrostatic energy in the model, so it is a modelling choice
+and not a correction.
 ---
 * **scale14.enable = 0** *(boolean)* Applies AMBER's 1-4 scale factors -- `scnb` on the
 Lennard-Jones, `scee` on the Coulomb -- to the pairs three covalent bonds apart.
@@ -412,6 +487,134 @@ so the DX file was never even read.
 * **densitygrid.scale = 1** *(dimensionless factor, float)* Multiplier applied to forces derived
 from the density grid (e.g. a SAXS/cryoEM-derived envelope). Independent from steric.gridscale
 and electrostaticgrid.scale.
+
+Dynamic Hydrogen Bonds
+----------------------
+
+A hydrogen bond here is a Morse well in the donor-acceptor **heavy-atom** distance, weighted at
+both ends by how well the bond lines up with the direction each side offers -- the donor's
+hydrogen standing in as "away from the antecedent", the acceptor's lone pairs standing in the
+same way (`forcefield/shared/hbond_shared.h`). There is no explicit hydrogen in the model, and
+the pairs are **not** fixed: they are re-assigned from the neighbour grid as the run goes, so a
+bond can break and another form. For springs that cannot break, see `pdb2spn --static-hbond`
+instead.
+
+The well's own three parameters are compiled in rather than `.msp` settings: De = **16.7
+kJ.mol-1**, re = **2.90 A**, a = **1.34 A-1** (`forcefield/ForceField.h`). `hbond.scale` is the
+only handle on the depth.
+
+* **hbond.enable = 0** *(boolean)* Enable the dynamic hydrogen-bond term.
+* **hbond.scale = 1.0** *(dimensionless factor, float)* Multiplier on the well depth and on the
+force. `1.0` means the 16.7 kJ.mol-1 above.
+* **hbond.cutoff = 7.0** *(Angstroms, float)* Sizes the cells of this term's own neighbour grid.
+It is the practical range of the Morse well -- under 1 % of the depth is left beyond ~7 A at the
+shipped De/re/a -- and not a long-range, electrostatics-style cutoff.
+* **hbond.path = ""** *(string)* The donor/acceptor table, a `.hbond` file: see
+`data/reducerules/ProteinDonorAcceptor.hbond`, `DNADonorAcceptor.hbond` and
+`RNADonorAcceptor.hbond`. It classifies each atom by its **group name**, the first column of the
+`.grp` the network was reduced with, so there is nothing to translate in the `.msp`. Empty leaves
+every atom neither donor nor acceptor, and the term with nothing to do.
+* **hbond.log = ""** *(string)* Where to write the list of bonds actually held, one line each, at
+every sample step. Empty writes nothing. A total energy and a bond count cannot say WHICH bonds
+are held, and that is the only thing that settles a disagreement about pairing: a fully extended
+chain reports a perfectly healthy count made entirely of contacts between neighbouring residues.
+
+### Isostericity (nucleic acids)
+
+A **reduction**, in [0, 1], on a pair of nucleotides whose base pair does not sit where a
+Watson-Crick pair sits *with respect to its own backbone* -- the C1'-C1' distance and the two
+glycosidic angles. It exists because the pairing term provably cannot see the difference: the
+distance and both angles are preserved exactly when the partner is turned 180 deg about the
+donor-acceptor axis, measured at **-0.00 +/- 0.01 kJ.mol-1** over 49 bonds, so without this a
+mirrored pair scores like the real one.
+
+* **hbond.isostericity = 0** *(boolean)* Enable the reduction. Off by default, because it is a
+factor on an already-calibrated depth: every existing `.msp` keeps the trajectory it had.
+* **hbond.isostericitytwosided = 0** *(boolean)* Whether the **distance** acceptance is a window
+(`1`, both sides) or a floor (`0`, the default, long distances unpenalised). A window is wrong for
+anything dynamic and measurably so: two bases on their way to pairing are FURTHER apart than the
+centre, so the Gaussian switches the well off during the approach -- the factor is 0.157 at a
+C1'-C1' of 12.5 A, 7e-4 at 14.5 A, and zero at the 18.6 A a free tRNA starts from. The parasites
+this term exists to reject are SHORTER than a real pair, not longer:
+
+  | form | native/parasite | approach kept |
+  |---|---:|---:|
+  | window (`= 1`) | 7.3 x | 5.3 % |
+  | **floor (`= 0`, default)** | **7.0 x** | **100.0 %** |
+
+  The window is kept only to reproduce the measurements that were made with it.
+* **hbond.isostericitydistance = 10.46** *(Angstroms, float)* The Watson-Crick C1'-C1' centre,
+measured on 8PKL over 1121 strict pairs (10.46 +/- 0.59 A).
+* **hbond.isostericitylambda = 54.9** *(degrees, float)* The glycosidic-angle centre, same
+measurement (54.9 +/- 5.6 deg).
+* **hbond.isostericitydistancewidth = 1.5** *(Angstroms, float)* Gaussian width on the distance.
+* **hbond.isostericitylambdawidth = 18.0** *(degrees, float)* Gaussian width on the angle.
+
+  The two widths are **not** the standard deviations above. They were scanned against the native,
+mirror and non-canonical populations at once, and came out wider, so that a real pair keeps 84 %
+of its well while its mirror keeps 4.7 %.
+
+Peptide Bond Formation
+----------------------
+
+The **second** stage of making a covalent bond during a run: once two residues have been held in
+the attack conformation long enough, the spring topology is REWRITTEN so the new bond exists and
+cannot come undone. The first stage -- bringing the nucleophile onto the electrophile -- is the
+hydrogen-bond term above with an out-of-plane lobe site, and nothing here duplicates it. What
+this adds is the irreversible part, which no potential well can express: a bond that has formed
+is a different molecule, not a deeper minimum of the same one.
+
+* **peptidebond.enable = 0** *(boolean)* Enable the topology rewrite. Off, and with no rules
+path: forming a covalent bond is never something an `.msp` should start doing because it was
+upgraded.
+* **peptidebond.path = ""** *(string)* The `.rbody` the network was built from. The new springs
+are created by the SAME rule that would have created them had the bond been there from the start,
+so the product is the model's own peptide and not a special case. Required: with `enable` on and
+this empty, setup dies.
+* **peptidebond.group = PSI** *(string)* Which rule describes the new bond -- the suffix after the
+residue code, so `PSI` picks up `A_PSI`, `R_PSI`, ...: {CA, C, O, +N, +H, +CA}, the peptide plane
+ahead of a residue.
+* **peptidebond.bond = C:N** *(string)* Which PAIR inside that group is the bond being made, as
+`<electrophile>:<nucleophile>`. The rule itself cannot say: it is six atoms sprung pairwise, with
+no distinguished pair among the fifteen.
+* **peptidebond.stiffness = 650** *(kJ.mol-1.A-2, float)* What the new springs get.
+* **peptidebond.distance = 3.2** *(Angstroms, float)* Below this the nucleophile counts as
+attacking.
+* **peptidebond.weight = 0.5** *(dimensionless, 0..1, float)* The angular factor both ends must
+reach together.
+* **peptidebond.dwell = 200** *(steps, integer)* How many CONSECUTIVE steps both conditions must
+hold. The gate is a duration, not an instant: one step too far apart, or one step past the angle,
+erases the count. The frame block on standard output reports the two extrema it watches --
+closest approach against `distance`, best weight against `weight` -- and they are not necessarily
+the same pair.
+* **peptidebond.ramp = 2000** *(steps, integer)* Over how many steps the new springs are drawn
+from the length they were BORN at -- the attack distance, so no energy appears out of nothing --
+to the length an ideal trans peptide plane gives them. `0` leaves them where they were born, which
+is a 2.9 A "peptide bond".
+* **peptidebond.leaving = ""** *(string)* The names an atom may have to be the LEAVING GROUP,
+space-separated (e.g. `OXT O3'`), empty by default. It is looked for among the atoms BONDED to the
+electrophile, wherever they live, and what breaks is every spring between it and the
+electrophile's residue.
+
+  That one rule covers both chemistries. A free acid's OXT is inside that residue, so all its
+springs go and it departs whole -- the water that leaves. An aminoacyl-tRNA's O3' belongs to the
+tRNA, so only the ester C-O goes and the oxygen stays on its ribose: the peptide transfers to the
+other tRNA and this one is left deacylated, which is peptidyl transfer. Breaking is both ways --
+a spring is also what keeps a pair out of the steric and Coulomb terms, so what pushes the group
+away afterwards is ordinary sterics.
+* **peptidebond.sites = ""** *(string)* The `.psite` file saying WHERE a carbonyl carbon may be
+attacked from: its antecedent, and the plane that splits its two faces. Its own file and its own
+reader on purpose -- a reactive site is not a hydrogen bond, and filing it in the `.hbond` table
+meant either file could silently overwrite the other's direction on an atom both named. Empty
+falls back to whatever the `.hbond` table tagged, which is what every configuration written
+before this setting existed relies on.
+* **peptidebond.naming = ""** *(string)* The `.grp` the network was REDUCED with, when it was.
+`amber.grp` renames every atom per residue -- C becomes AC for alanine, RC for arginine -- so on a
+reduced network the names in `bond` and in the `.rbody` rules find nothing without it. Same table
+and same purpose as `pdb2spn --rigidbody`'s own naming translation.
+* **peptidebond.log = ""** *(string)* Parsed, printed in the configuration dump, and **read by
+nothing** -- like `spring.cutoff` above. The per-step view of the gate goes to the standard-output
+frame block instead.
 
 Implicit Membrane (IMPALA)
 -----------------
@@ -487,16 +690,17 @@ The probe is a charged entity used to explore and characterize binding sites thr
 * **probe.charge = 0.0** *(e, float)* Sets the probe's charge
 
 
-Automatic Constraints Parameters (not available yet)
---------------------------------
+Automatic Constraints (NOT IMPLEMENTED -- do not put these in a file)
+--------------------------------------------------------------------
 
-You can define automatic constraints to push a group of particles toward another
-without manual interaction.
+There is no `constraint` setting group in the code. `Configuration` registers none, so
+`SafeConfigurationReader` kills the run on the first `constraint.*` line it reads
+(`invalid parameter "constraint.enable"`). The four parameters this section used to list --
+`enable`, `src`, `dest` and `scale`, the last in Da.A.fs-2 -- were a design note, never a feature,
+and an `.msp` carrying them does not start.
 
-* **constraint.enable = 0** *(boolean)* Enables constraint for this run
-* **constraint.src = ""** *(string)* The name of the first selection of atom
-* **constraint.dest = ""** *(string)* The name of the second selection of atom
-* **constraint.scale = 1.0** *(Da.A.fs-2, float)* Force module used for the constraint
+To pull one group of particles toward another, steer it interactively over MDDriver/IMD (see
+`doc/User_Manual.md`), optionally freezing the partner at build time with `pdb2spn --static`.
 
 
     
