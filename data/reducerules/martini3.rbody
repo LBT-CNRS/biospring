@@ -5,7 +5,8 @@
 # that Martini's own bonded graph is used instead.
 #
 # Every group here has exactly TWO atoms, so every group is exactly one
-# spring. Pair it with reducerules/martini3.grp, whose bead names these are.
+# spring. Pair it with data/reducerules/martini3.grp, whose bead names these
+# are.
 #
 # NO FORCE CONSTANT APPEARS IN THIS FILE and none belongs here: a spring's
 # stiffness is a construction input (pdb2spn's -stiffness, stored per spring

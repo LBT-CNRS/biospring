@@ -15,8 +15,8 @@
 # target_resname). So "+BB" on an alanine followed by a glycine resolves to
 # "SP1". The table it accepts must have EXACTLY ONE ATOM PER RULE --
 # _check_translation_is_one_atom_per_rule kills pdb2spn otherwise -- which is
-# why reducerules/martini3.grp cannot serve as the table and this file has to
-# exist.
+# why data/reducerules/martini3.grp cannot serve as the table and this file
+# has to exist.
 #
 # ENUMERATING THE NEIGHBOUR INSTEAD DOES NOT WORK, and that was measured, not
 # assumed: writing "+P1 +P2 +SP1 +SP2 +SP2a +Q5" in place of "+BB" built 1021

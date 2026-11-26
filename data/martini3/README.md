@@ -20,14 +20,22 @@ of that same line, 39 commits back, and neither feature exists there: a
 
 ## Files
 
+**Where the files are.** The six delivered files sit in `data/forcefield/` and
+`data/reducerules/`, **beside every other force field's** — amber, martini,
+model, CAonly\*, CGZaccharias. They lived in `data/martini3/forcefield/` and
+`data/martini3/reducerules/` until 2026-11-26, and the only thing that cost was
+discoverability: somebody looking for the model where the models are concluded
+it was not in the branch at all. This directory keeps the **generator** only,
+`prepare_martini3_data.py`, exactly as `data/martini/` keeps its own.
+
 | file | what it is | status |
 |---|---|---|
-| `reducerules/martini3.grp` | atom → bead grouping rules, AMBER atom names, heavy atoms | 0.028 Å from Martini's beads in the median |
-| `reducerules/martini3.rbody` | bonded topology: which springs exist, 171 groups of two atoms | Martini's graph exactly, minus the ±2/±3 terms |
-| `reducerules/martini3.names.grp` | naming table for `-rigidbody`, one atom per rule | required, see below |
-| `forcefield/martini3.bi.ff` | bonded force constants: 141 `STIFFNESS` + 2 ring impropers |
-| `forcefield/martini3.nbi.ff` | per-type charge / radius / epsilon / mass, 90 keys | charge, radius, mass, termini exact; **epsilon cannot be** |
-| `forcefield/martini3.ff` | byte-identical copy of the above | keep the two in sync |
+| `data/reducerules/martini3.grp` | atom → bead grouping rules, AMBER atom names, heavy atoms | 0.028 Å from Martini's beads in the median |
+| `data/reducerules/martini3.rbody` | bonded topology: which springs exist, 171 groups of two atoms | Martini's graph exactly, minus the ±2/±3 terms |
+| `data/reducerules/martini3.names.grp` | naming table for `-rigidbody`, one atom per rule | required, see below |
+| `data/reducerules/martini3.bi.ff` | bonded force constants: 141 `STIFFNESS` + 2 ring impropers |
+| `data/forcefield/martini3.nbi.ff` | per-type charge / radius / epsilon / mass, 90 keys | charge, radius, mass, termini exact; **epsilon cannot be** |
+| `data/forcefield/martini3.ff` | byte-identical copy of the above | keep the two in sync |
 | `prepare_martini3_data.py` | generator; every number's provenance is in its docstring | — |
 
 Run settings live in the examples, as everywhere else in this repository —
@@ -182,7 +190,7 @@ Martini does not give it.
 
 ## The bonded terms
 
-`reducerules/martini3.rbody` carries Martini's bonded **topology** — which
+`data/reducerules/martini3.rbody` carries Martini's bonded **topology** — which
 springs exist. It carries no force constant, and none belongs in it: a
 spring's stiffness is a construction input (`pdb2spn -stiffness`, stored per
 spring in the `.nc`, unreachable from the `.msp`), and the only option that
@@ -252,7 +260,7 @@ term at all. Here it is a real bead, so with no spring it would be held by
 nothing but the non-bonded terms and would drift out of the ring. It is tied
 to the four beads its virtual-site definition uses.
 
-### The force constants: `forcefield/martini3.bi.ff`
+### The force constants: `data/reducerules/martini3.bi.ff`
 
 Read only when `-bondstiffness` is given. **A `STIFFNESS` record retunes and
 creates nothing**, so every record names a pair `martini3.rbody` already
@@ -477,8 +485,8 @@ carries 129 of them for its own hydrogen-bond model, the same pipeline gives
 
 ```
 pdb2spn -s protein.pdb -o model.nc \
-        --grp data/martini3/reducerules/martini3.grp \
-        --ff  data/martini3/forcefield/martini3.nbi.ff \
+        --grp data/reducerules/martini3.grp \
+        --ff  data/forcefield/martini3.nbi.ff \
         --cutoff 6.0
 ```
 
@@ -492,11 +500,11 @@ so the reduction happens first, and the second run takes the `.nc` it wrote,
 where pdb2spn skips reduction and uses the table only for naming:
 
 ```
-pdb2spn -s protein.pdb -o beads.nc --grp data/martini3/reducerules/martini3.grp --ff data/martini3/forcefield/martini3.nbi.ff
+pdb2spn -s protein.pdb -o beads.nc --grp data/reducerules/martini3.grp --ff data/forcefield/martini3.nbi.ff
 ```
 
 ```
-pdb2spn -s beads.nc -o model.nc --rigidbody data/martini3/reducerules/martini3.rbody --grp data/martini3/reducerules/martini3.names.grp --ff data/martini3/forcefield/martini3.nbi.ff
+pdb2spn -s beads.nc -o model.nc --rigidbody data/reducerules/martini3.rbody --grp data/reducerules/martini3.names.grp --ff data/forcefield/martini3.nbi.ff
 ```
 
 `--ff` is mandatory whenever `--grp` is given, even in the second run where it
@@ -508,7 +516,7 @@ kJ·mol⁻¹·Å⁻²; pass `-stiffness` explicitly to choose otherwise.
 model the two are the same, and `all` says so:
 
 ```
-pdb2spn -s beads.nc -o model.nc --rigidbody data/martini3/reducerules/martini3.rbody --grp data/martini3/reducerules/martini3.names.grp --ff data/martini3/forcefield/martini3.nbi.ff --bondedinteraction data/martini3/forcefield/martini3.bi.ff --bondstiffness all --dihedralplanarity
+pdb2spn -s beads.nc -o model.nc --rigidbody data/reducerules/martini3.rbody --grp data/reducerules/martini3.names.grp --ff data/forcefield/martini3.nbi.ff --bondedinteraction data/reducerules/martini3.bi.ff --bondstiffness all --dihedralplanarity
 ```
 
 Without `-bondstiffness` the whole mesh stays at the uniform `-stiffness` and
